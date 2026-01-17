@@ -75,7 +75,7 @@ export function TenantIndicator({ className, collapsed, showLogout = true }: Ten
       {showLogout && (
         <button
           onClick={handleLogout}
-          className="flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-2.5 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
+          className="flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-2.5 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
           title="Switch Region"
         >
           <LogOut className="h-5 w-5" />

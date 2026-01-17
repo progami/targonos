@@ -489,7 +489,7 @@ function getAuditActionTheme(action: string): {
     case 'UPDATE_DETAILS':
       return {
         Icon: FileEdit,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
+        wrapperClassName: 'bg-slate-50 border-slate-200 dark:border-slate-700',
         iconClassName: 'text-slate-700',
       }
     case 'STATUS_TRANSITION':
@@ -535,7 +535,7 @@ function getAuditActionTheme(action: string): {
     default:
       return {
         Icon: History,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
+        wrapperClassName: 'bg-slate-50 border-slate-200 dark:border-slate-700',
         iconClassName: 'text-slate-700',
       }
   }
@@ -1696,7 +1696,7 @@ export default function PurchaseOrderDetailPage() {
                     setStageFormData(prev => ({ ...prev, [field.key]: value }))
                   }}
                   disabled={field.disabled}
-                  className="w-full px-3 py-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                 >
                   <option value="">
                     {field.key === 'warehouseCode'
@@ -1768,7 +1768,7 @@ export default function PurchaseOrderDetailPage() {
                       </div>
                     </div>
 
-                    <label className="inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                    <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
                       <Upload className="h-3.5 w-3.5" />
                       {existing ? 'Replace' : 'Upload'}
                       <input
@@ -1828,7 +1828,7 @@ export default function PurchaseOrderDetailPage() {
         <div className="flex flex-col gap-6">
           {/* Stage Progress Bar */}
           {!order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED' && (
-            <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-900 mb-4">Order Progress</h2>
 
               {/* Stage Progress - Clickable Navigation */}
@@ -1910,7 +1910,7 @@ export default function PurchaseOrderDetailPage() {
               </div>
 
               {order.status === 'WAREHOUSE' && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 p-4">
                   <div>
                     <p className="text-sm font-medium text-slate-900">
                       Shipping is handled via Fulfillment Orders
@@ -1957,7 +1957,7 @@ export default function PurchaseOrderDetailPage() {
           )}
 
           {/* Details, Cargo, Documents & History Tabs */}
-          <div className="rounded-xl border bg-white shadow-sm">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
             {/* Tab Headers */}
             <div className="flex items-center border-b">
               <button
@@ -2082,7 +2082,7 @@ export default function PurchaseOrderDetailPage() {
                               void ensureSkuBatchesLoaded(skuId)
                             }}
                             disabled={skusLoading || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           >
                             <option value="">Select SKU</option>
                             {skus.map(sku => (
@@ -2117,7 +2117,7 @@ export default function PurchaseOrderDetailPage() {
                               })
                             }}
                             disabled={!newLineDraft.skuId || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                           >
                             {!newLineDraft.skuId ? (
                               <option value="">Select SKU first</option>
@@ -2391,7 +2391,7 @@ export default function PurchaseOrderDetailPage() {
                           const isLast = idx === order.lines.length - 1
                           return (
                             <Fragment key={line.id}>
-                              <tr className="border-t border-slate-200 hover:bg-muted/10">
+                              <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
                                 <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
                                   {line.skuCode}
                                 </td>
@@ -2471,7 +2471,7 @@ export default function PurchaseOrderDetailPage() {
                               </tr>
                               {pkg ? (
                                 <tr
-                                  className={`bg-slate-50/40 ${!isLast ? 'border-b-2 border-slate-200' : ''}`}
+                                  className={`bg-slate-50/40 ${!isLast ? 'border-b-2 border-slate-200 dark:border-slate-700' : ''}`}
                                 >
                                   <td colSpan={canEdit ? 10 : 9} className="px-4 pb-2 pt-1">
                                     <div
@@ -2523,7 +2523,7 @@ export default function PurchaseOrderDetailPage() {
                                   </td>
                                 </tr>
                               ) : !isLast ? (
-                                <tr className="border-b-2 border-slate-200">
+                                <tr className="border-b-2 border-slate-200 dark:border-slate-700">
                                   <td colSpan={canEdit ? 11 : 10} className="h-0"></td>
                                 </tr>
                               ) : null}
@@ -2718,7 +2718,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'order-info'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -2860,7 +2860,7 @@ export default function PurchaseOrderDetailPage() {
                                     }))
                                   }
                                   disabled={orderInfoSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                 >
                                   <option value="">Select incoterms</option>
                                   {INCOTERMS_OPTIONS.map(option => (
@@ -2944,7 +2944,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'manufacturing'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3049,7 +3049,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'ocean'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3168,7 +3168,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'warehouse'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3264,7 +3264,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'shipped'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3452,7 +3452,7 @@ export default function PurchaseOrderDetailPage() {
                 setEditingLine(null)
               }}
             />
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Edit line item</h2>
@@ -3507,7 +3507,7 @@ export default function PurchaseOrderDetailPage() {
                             }))
                           }}
                           disabled={editLineSubmitting || batchesLoading || !skuId}
-                          className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                         >
                           <option value="">{!skuId ? 'Select SKU first' : 'Select batch'}</option>
                           {batchOptions.map(option => (
@@ -3684,7 +3684,7 @@ export default function PurchaseOrderDetailPage() {
               onClick={() => !transitioning && setAdvanceModalOpen(false)}
             />
             {/* Modal */}
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
                 <div>
@@ -3790,7 +3790,7 @@ export default function PurchaseOrderDetailPage() {
                 onClick={() => setPreviewDocument(null)}
               />
 
-              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white text-left shadow-xl">
+              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b px-6 py-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
@@ -3847,7 +3847,7 @@ export default function PurchaseOrderDetailPage() {
                       />
                     ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-                        <div className="rounded-full border bg-white p-3 text-slate-700 shadow-sm">
+                        <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 shadow-sm">
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>

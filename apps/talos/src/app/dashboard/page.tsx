@@ -285,7 +285,7 @@ export default function DashboardPage() {
  <div className="relative">
  <button
  onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
- className="flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-h-[44px] bg-white dark:bg-slate-900"
+ className="flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-h-[44px] bg-white dark:bg-slate-800 dark:bg-slate-900"
  >
  <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
  <span className="text-xs sm:text-sm">
@@ -295,7 +295,7 @@ export default function DashboardPage() {
  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
  </button>
  {showTimeRangeDropdown && (
- <div className="absolute right-0 mt-2 w-40 sm:w-44 md:w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10">
+ <div className="absolute right-0 mt-2 w-40 sm:w-44 md:w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg shadow-lg z-10">
  {Object.entries(timeRanges).map(([key, range]) => (
  <button
  key={key}
@@ -378,7 +378,7 @@ export default function DashboardPage() {
  {/* Main Dashboard Sections */}
  <div className="grid gap-4">
  {/* Market Section - Inventory Level Graph Only */}
- <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
+ <div className="border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
  <SectionHeader 
  title="Inventory Levels" 
  icon={TrendingUp} 

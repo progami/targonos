@@ -512,7 +512,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         </StatsCardGrid>
 
         {selectedRows.length > 0 ? (
-          <div className="rounded-xl border bg-white shadow-soft overflow-hidden">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
             <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Comparison</div>
@@ -583,7 +583,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">ASIN</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">ASIN</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center font-mono text-xs text-slate-600">
                         {row.sku.asin ?? '—'}
@@ -591,7 +591,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Item package dimensions</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Item package dimensions</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatDimensionsIn(row.comparison.reference.triplet)}
@@ -599,7 +599,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Item package weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Item package weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.reference.shipping.unitWeightLb, 3)}
@@ -607,7 +607,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Dimensional Weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Dimensional Weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.reference.shipping.dimensionalWeightLb, 3)}
@@ -615,7 +615,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Shipping Weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Shipping Weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.reference.shipping.shippingWeightLb, 2)}
@@ -623,7 +623,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Size Tier</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Size Tier</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700">
                         {row.comparison.reference.sizeTier ?? '—'}
@@ -631,7 +631,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Expected Fee (Ref)</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Expected Fee (Ref)</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatFee(row.comparison.reference.expectedFee, currencyCode)}
@@ -648,7 +648,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Listing Price</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Listing Price</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatFee(row.sku.amazonListingPrice, currencyCode)}
@@ -656,7 +656,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Item package dimensions</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Item package dimensions</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatDimensionsIn(row.comparison.amazon.triplet)}
@@ -664,7 +664,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Item package weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Item package weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.amazon.shipping.unitWeightLb, 3)}
@@ -672,7 +672,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Dimensional Weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Dimensional Weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.amazon.shipping.dimensionalWeightLb, 3)}
@@ -680,7 +680,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Shipping Weight</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Shipping Weight</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatWeightLb(row.comparison.amazon.shipping.shippingWeightLb, 2)}
@@ -688,7 +688,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Size Tier</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Size Tier</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700">
                         {row.comparison.amazon.sizeTier ?? '—'}
@@ -696,7 +696,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">FBA Fee (Amazon)</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">FBA Fee (Amazon)</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {formatFee(row.comparison.amazon.fee, currencyCode)}
@@ -713,7 +713,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">FBA Fee Match?</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">FBA Fee Match?</td>
                     {selectedRows.map(row => {
                       const s = row.comparison.status
                       const cellStyle =
@@ -746,7 +746,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     })}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Fee Difference</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Fee Difference</td>
                     {selectedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700">
                         {row.comparison.feeDifference === null
@@ -756,7 +756,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     ))}
                   </tr>
                   <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white">Status</td>
+                    <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white dark:bg-slate-800">Status</td>
                     {selectedRows.map(row => {
                       const s = row.comparison.status
                       const cellStyle =
@@ -794,7 +794,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
           </div>
         ) : null}
 
-        <div className="rounded-xl border bg-white shadow-soft overflow-hidden">
+        <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -809,7 +809,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
               <select
                 value={statusFilter}
                 onChange={event => setStatusFilter(event.target.value as AlertStatus | 'ALL')}
-                className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100"
               >
                 <option value="ALL">All statuses</option>
                 <option value="MISMATCH">Mismatch</option>

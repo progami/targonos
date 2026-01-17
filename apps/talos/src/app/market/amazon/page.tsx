@@ -289,7 +289,7 @@ export default function AmazonIntegrationPage() {
  onChange={(e) => setIsDemoMode(e.target.checked)}
  className="sr-only peer"
  />
- <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-600"></div>
+ <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:bg-slate-800 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-600"></div>
  </label>
  </div>
  </div>
@@ -389,7 +389,7 @@ export default function AmazonIntegrationPage() {
 
  {/* Summary Cards */}
  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
- <div className="bg-white border rounded-lg p-4">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg p-4">
  <div className="flex items-center justify-between">
  <div>
  <h3 className="text-sm font-medium text-slate-600">Warehouse Stock</h3>
@@ -401,7 +401,7 @@ export default function AmazonIntegrationPage() {
  <Package2 className="h-8 w-8 text-slate-400" />
  </div>
  </div>
- <div className="bg-white border rounded-lg p-4">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg p-4">
  <div className="flex items-center justify-between">
  <div>
  <h3 className="text-sm font-medium text-slate-600">Amazon FBA</h3>
@@ -413,7 +413,7 @@ export default function AmazonIntegrationPage() {
  <Package2 className="h-8 w-8 text-orange-400" />
  </div>
  </div>
- <div className="bg-white border rounded-lg p-4">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg p-4">
  <div className="flex items-center justify-between">
  <div>
  <h3 className="text-sm font-medium text-slate-600">Combined Total</h3>
@@ -425,7 +425,7 @@ export default function AmazonIntegrationPage() {
  <BarChart3 className="h-8 w-8 text-cyan-400" />
  </div>
  </div>
- <div className="bg-white border rounded-lg p-4">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg p-4">
  <div className="flex items-center justify-between">
  <div>
  <h3 className="text-sm font-medium text-slate-600">Stock Alerts</h3>
@@ -498,7 +498,7 @@ export default function AmazonIntegrationPage() {
  </div>
 
  {/* Inventory Table */}
- <div className="bg-white border rounded-lg overflow-hidden">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg overflow-hidden">
  <div className="overflow-x-auto">
  <table className="min-w-full divide-y divide-gray-200">
  <thead className="bg-slate-50">
@@ -520,7 +520,7 @@ export default function AmazonIntegrationPage() {
  </th>
  </tr>
  </thead>
- <tbody className="bg-white divide-y divide-gray-200">
+ <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
  {loading ? (
  <tr>
  <td colSpan={5} className="px-6 py-4 text-center">

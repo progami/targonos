@@ -437,7 +437,7 @@ export default function NewPurchaseOrderPage() {
       <PageContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Order Details */}
-          <div className="rounded-xl border bg-white p-5">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
             <h3 className="text-sm font-semibold mb-4">Order Details</h3>
 
             {/* Row 1: Supplier + Ship To */}
@@ -447,7 +447,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.supplierId}
                   onChange={e => handleSupplierChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select supplier...</option>
@@ -478,7 +478,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.currency}
                   onChange={e => handleCurrencyChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   {CURRENCY_OPTIONS.map(currency => (
@@ -501,7 +501,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.incoterms}
                   onChange={e => setFormData(prev => ({ ...prev, incoterms: e.target.value }))}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select...</option>
@@ -535,7 +535,7 @@ export default function NewPurchaseOrderPage() {
           </div>
 
           {/* Products Table with Tabs */}
-          <div className="rounded-xl border bg-white overflow-hidden">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
             <div className="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Products</h3>
@@ -606,13 +606,13 @@ export default function NewPurchaseOrderPage() {
                         : null
 
                       return (
-                        <tr key={item.id} className="border-t border-slate-200 hover:bg-slate-50/50">
+                        <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50">
                           {/* SKU */}
                           <td className="px-4 py-2.5">
                             <select
                               value={item.skuCode}
                               onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                              className="w-full min-w-[100px] h-9 px-2 border rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[100px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                               required
                             >
                               <option value="">Select...</option>
@@ -627,7 +627,7 @@ export default function NewPurchaseOrderPage() {
                             <select
                               value={item.batchLot}
                               onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                              className="w-full min-w-[90px] h-9 px-2 border rounded bg-white text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[90px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                               required
                               disabled={!item.skuId}
                             >
@@ -781,7 +781,7 @@ export default function NewPurchaseOrderPage() {
                         : null
 
                       return (
-                        <tr key={item.id} className="border-t border-slate-200 hover:bg-slate-50/50">
+                        <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50">
                           <td className="px-4 py-3 font-medium">{item.skuCode || '—'}</td>
                           <td className="px-4 py-3 text-slate-600">{item.batchLot || '—'}</td>
                           <td className="px-4 py-3">
@@ -849,8 +849,8 @@ export default function NewPurchaseOrderPage() {
                 className="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity"
                 onClick={() => setShowAttributesConfirm(false)}
               />
-              <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
-                <div className="bg-white px-6 pt-6 pb-4">
+              <div className="relative transform overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
+                <div className="bg-white dark:bg-slate-800 px-6 pt-6 pb-4">
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-cyan-100">
                       <Package className="h-6 w-6 text-cyan-600" />
