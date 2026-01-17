@@ -122,6 +122,7 @@ import {
   LayoutGrid,
   TableProperties,
   Boxes,
+  Layers,
 
   // Theme icons
   Moon,
@@ -236,6 +237,7 @@ export {
   LayoutGrid,
   TableProperties,
   Boxes,
+  Layers,
   Moon,
   Sun,
   type LucideIcon,
