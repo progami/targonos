@@ -485,7 +485,7 @@ export function PurchaseOrdersPanel({
         </div>
       </div>
 
-	      <div className="flex min-h-0 flex-col rounded-xl border bg-white shadow-soft">
+	      <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-soft">
 	        <div className="overflow-x-auto">
 	          <table className="w-full min-w-[960px] table-auto text-sm">
 	            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
