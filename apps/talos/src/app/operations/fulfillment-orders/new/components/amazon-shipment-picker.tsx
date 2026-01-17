@@ -289,7 +289,7 @@ export function AmazonShipmentPicker({
   const hasShipment = Boolean(amazonShipment.shipmentId)
 
   return (
-    <div className="rounded-xl border bg-white">
+    <div className="rounded-xl border bg-white dark:bg-slate-800">
       <div className="flex items-center justify-between border-b px-5 py-4">
         <div>
           <h3 className="text-sm font-semibold">Amazon Shipment</h3>
@@ -328,7 +328,7 @@ export function AmazonShipmentPicker({
           <select
             value={formData.warehouseCode}
             onChange={e => setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))}
-            className="w-full px-3 py-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
           >
             <option value="">Select warehouse</option>
             {warehouses.map(w => (
@@ -415,7 +415,7 @@ export function AmazonShipmentPicker({
                       </div>
                       <div className="flex-shrink-0">
                         {status && (
-                          <Badge className="bg-slate-100 text-slate-600 border border-slate-200 text-xs">
+                          <Badge className="bg-slate-100 text-slate-600 border border-slate-200 dark:border-slate-700 text-xs">
                             {status}
                           </Badge>
                         )}

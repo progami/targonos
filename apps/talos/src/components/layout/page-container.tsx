@@ -51,7 +51,7 @@ export function PageHeaderSection({
  metadata,
 }: PageHeaderProps) {
  return (
- <header className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-soft backdrop-blur-xl sm:px-6 lg:px-8">
+ <header className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800/95 dark:bg-slate-900/95 px-4 py-4 shadow-soft backdrop-blur-xl sm:px-6 lg:px-8">
  <div className="flex flex-col gap-4">
  <div className="flex items-center justify-between gap-4">
  <div className="flex items-center gap-3">

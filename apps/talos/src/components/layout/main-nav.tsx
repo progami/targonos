@@ -134,7 +134,7 @@ export function MainNav() {
  "hidden md:fixed md:inset-y-0 md:z-50 md:flex md:flex-col transition-all duration-300",
  isTabletCollapsed ? "md:w-16 lg:w-64" : "md:w-64"
  )}>
-       <div className="flex grow flex-col gap-y-3 overflow-y-auto scrollbar-gutter-stable border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 pb-3">
+       <div className="flex grow flex-col gap-y-3 overflow-y-auto scrollbar-gutter-stable border-r border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 dark:bg-slate-900 px-4 pb-3">
  <div className="flex h-16 shrink-0 items-center justify-between">
  <div className="flex items-center gap-3">
  <Link href="/dashboard" scroll={false} prefetch={false} className="flex items-center gap-3">
@@ -263,7 +263,7 @@ export function MainNav() {
 
           {/* Sidebar Footer - Region, Theme, Logout */}
           <div className={cn(
-            "mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2",
+            "mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 dark:border-slate-700 space-y-2",
             isTabletCollapsed && "md:hidden lg:block"
           )}>
             {/* Region Indicator */}
@@ -289,7 +289,7 @@ export function MainNav() {
  </div>
 
  {/* Mobile Navigation */}
- <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-white dark:bg-slate-900 px-4 py-4 shadow-soft border-b border-slate-200 dark:border-slate-700 sm:px-6 md:hidden">
+ <div className="sticky top-0 z-40 flex items-center gap-x-6 bg-white dark:bg-slate-800 dark:bg-slate-900 px-4 py-4 shadow-soft border-b border-slate-200 dark:border-slate-700 sm:px-6 md:hidden">
  <button
  type="button"
  className="-m-2.5 p-2.5 text-slate-700 dark:text-slate-300"
@@ -322,7 +322,7 @@ export function MainNav() {
  <X className="h-6 w-6 text-white" aria-hidden="true" />
  </button>
  </div>
- <div className="flex grow flex-col gap-y-5 overflow-y-auto scrollbar-gutter-stable bg-white dark:bg-slate-900 px-6 pb-4">
+ <div className="flex grow flex-col gap-y-5 overflow-y-auto scrollbar-gutter-stable bg-white dark:bg-slate-800 dark:bg-slate-900 px-6 pb-4">
  <div className="flex h-16 shrink-0 items-center">
  <Link href="/dashboard" scroll={false} prefetch={false} className="flex items-center gap-3">
  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-dark shadow-md">
@@ -386,7 +386,7 @@ export function MainNav() {
  </nav>
 
           {/* Mobile Sidebar Footer - Region, Theme, Logout */}
-          <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2 -mx-2">
+          <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 dark:border-slate-700 space-y-2 -mx-2">
             <TenantIndicator showLogout={false} />
             <ThemeToggle />
             <button

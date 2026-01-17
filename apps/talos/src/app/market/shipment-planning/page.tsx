@@ -315,7 +315,7 @@ export default function ShipmentPlanningPage() {
  <div className="flex items-center gap-2">
  <button
  onClick={() => setShowAmazonStatus(!showAmazonStatus)}
- className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+ className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50"
  >
  <LinkIcon className="h-4 w-4 mr-2" />
  Amazon Integration
@@ -323,7 +323,7 @@ export default function ShipmentPlanningPage() {
 	 <button
 	 onClick={handleRefresh}
 	 disabled={refreshing}
-	 className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+	 className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-50"
 	 >
 	 {refreshing ? (
 	 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -499,7 +499,7 @@ export default function ShipmentPlanningPage() {
  </th>
  </tr>
  </thead>
- <tbody className="bg-white divide-y divide-gray-200">
+ <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
  {filteredStockItems.map((item) => (
  <tr key={item.skuCode} className="hover:bg-slate-50">
  <td className="px-6 py-4 whitespace-nowrap">

@@ -281,7 +281,7 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  />
  <PageContent>
  <div className="max-w-4xl mx-auto space-y-6">
- <form onSubmit={handleSubmit} className="bg-white border rounded-lg p-6">
+ <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 border rounded-lg p-6">
  <div className="space-y-6">
  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <div>

@@ -862,7 +862,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -886,7 +886,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Search SKUs..."
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
               />
             </div>
           </div>
@@ -1002,7 +1002,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
       <PortalModal open={isModalOpen} className="items-center">
         <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-6 py-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-6 py-4">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {editingSku ? 'Edit SKU' : 'New SKU'}
             </h2>
@@ -1082,7 +1082,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     onChange={event =>
                       setFormState(prev => ({ ...prev, defaultSupplierId: event.target.value }))
                     }
-                    className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                     disabled={suppliersLoading}
                   >
                     <option value="">{suppliersLoading ? 'Loading…' : 'None'}</option>
@@ -1105,7 +1105,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                         secondarySupplierId: event.target.value,
                       }))
                     }
-                    className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                     disabled={suppliersLoading}
                   >
                     <option value="">{suppliersLoading ? 'Loading…' : 'None'}</option>
@@ -1201,7 +1201,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                       </TabsTrigger>
 	                    </TabsList>
 
-	                    <div className="rounded-lg border-2 border-slate-300 bg-white p-4">
+	                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
 	                      <div className="flex items-start justify-between gap-3 mb-3">
 		                        <div>
 		                          <h4 className="text-sm font-semibold text-slate-900 mb-1">
@@ -1223,7 +1223,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	                                id="category"
 	                                value={formState.category}
 	                                onChange={event => handleReferenceCategoryChange(event.target.value)}
-	                                className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+	                                className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
 	                              >
                                 <option value="">Select category</option>
                                 {AMAZON_REFERRAL_CATEGORIES_2026.map(category => (
@@ -1250,7 +1250,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	                                id="sizeTier"
 	                                value={formState.sizeTier}
 	                                onChange={event => handleReferenceSizeTierChange(event.target.value)}
-	                                className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+	                                className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
 	                              >
                                 <option value="">Select size tier</option>
                                 {AMAZON_SIZE_TIER_OPTIONS.map(sizeTier => (
@@ -1297,7 +1297,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
                           </div>
 
-                          <div className="border-t border-slate-200 pt-4">
+                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <p className="text-xs text-slate-500">
                               Item package dimensions and weight are batch-level. Use “View Batches” to edit the latest batch.
                             </p>
@@ -1353,7 +1353,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
                           </div>
 
-                          <div className="border-t border-slate-200 pt-4">
+                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <p className="text-xs text-slate-500">
                               Item package dimensions and weight are batch-level. Use “View Batches” to view the latest batch.
                             </p>
@@ -1402,7 +1402,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             },
                           }))
                         }
-                        className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                       >
                         <option value="">Optional</option>
                         <option value="BOX">Box</option>

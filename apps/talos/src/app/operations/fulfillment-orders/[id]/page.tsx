@@ -619,7 +619,7 @@ export default function FulfillmentOrderDetailPage() {
                   </div>
                 </div>
 
-                <label className="inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
                   <Upload className="h-3.5 w-3.5" />
                   {existing ? 'Replace' : 'Upload'}
                   <input
@@ -657,7 +657,7 @@ export default function FulfillmentOrderDetailPage() {
           backLabel="Back"
         />
         <PageContent>
-          <div className="rounded-xl border bg-white shadow-soft p-6 text-sm text-muted-foreground">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6 text-sm text-muted-foreground">
             Fulfillment order not found.
           </div>
         </PageContent>
@@ -691,7 +691,7 @@ export default function FulfillmentOrderDetailPage() {
         <PageContent>
           <div className="flex flex-col gap-6">
             {/* Order Type (read-only) - matches new page structure */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Order Type</h3>
@@ -726,7 +726,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Amazon Shipment Info (for Amazon FBA) - matches new page structure */}
             {isAmazonFBA && (
-              <div className="rounded-xl border bg-white p-5">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
                 <h3 className="text-sm font-semibold mb-4">Amazon Shipment</h3>
                 {order.amazonShipmentId ? (
                   <div className="space-y-4">
@@ -772,7 +772,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Destination Details (for non-Amazon) - matches new page structure */}
             {!isAmazonFBA && (
-              <div className="rounded-xl border bg-white p-5">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
                 <h3 className="text-sm font-semibold mb-4">Destination Details</h3>
                 <div className="grid gap-4 md:grid-cols-2 text-sm">
                   <div>
@@ -798,7 +798,7 @@ export default function FulfillmentOrderDetailPage() {
             )}
 
             {/* Line Items Section - matches new page structure */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Line Items</h3>
@@ -809,7 +809,7 @@ export default function FulfillmentOrderDetailPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border bg-white overflow-hidden">
+              <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
                 <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50">
                   <div className="col-span-3">SKU</div>
                   <div className="col-span-3">Batch</div>
@@ -851,7 +851,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Collapsible Freight Section (for Amazon FBA) - matches new page structure */}
             {isAmazonFBA && (
-              <div className="rounded-xl border bg-white overflow-hidden">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setFreightExpanded(!freightExpanded)}
@@ -1329,7 +1329,7 @@ export default function FulfillmentOrderDetailPage() {
             )}
 
             {/* Documents Section */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Documents</h3>
@@ -1348,7 +1348,7 @@ export default function FulfillmentOrderDetailPage() {
             </div>
 
             {/* Shipping Section */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Shipping</h3>

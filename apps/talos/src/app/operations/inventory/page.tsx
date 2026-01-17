@@ -155,7 +155,7 @@ function InventoryPage() {
 
   const headerActions = useMemo(
     () => (
-      <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+      <label className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
         <input
           type="checkbox"
           checked={showZeroStock}
@@ -229,7 +229,7 @@ function InventoryPage() {
   }, [balances, summary])
 
   const baseFilterInputClass =
-    'w-full rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
+    'w-full rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
 
   if (status === 'loading') {
     return (
@@ -273,7 +273,7 @@ function InventoryPage() {
             />
           </StatsCardGrid>
 
-          <div className="flex min-h-0 flex-col rounded-xl border bg-white shadow-soft overflow-x-auto flex-1">
+          <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-x-auto flex-1">
             {/* Scrollable table area */}
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
               <table className="w-full min-w-[1200px] table-auto text-sm">

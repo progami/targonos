@@ -48,9 +48,9 @@ export function TabbedContainer({ tabs, children, defaultTab, value, onChange }:
  const childrenArray = React.Children.toArray(children)
 
  return (
- <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
+ <div className="rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
  {/* Tab Headers */}
- <div className="border-b border-slate-200 dark:border-slate-700">
+ <div className="border-b border-slate-200 dark:border-slate-700 dark:border-slate-700">
  <nav className="flex space-x-6 px-6" aria-label="Tabs">
  {tabs.map((tab) => (
  <button
