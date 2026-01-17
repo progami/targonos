@@ -94,13 +94,13 @@ export function DataTable<T extends Record<string, unknown>>({
 
  const key = column.key as string
  if (sortColumn !== key) {
- return <ArrowUpDown className="h-4 w-4 text-slate-400" />
+ return <ArrowUpDown className="h-4 w-4 text-slate-400 dark:text-slate-500" />
  }
 
  return sortDirection === 'asc' ? (
- <ChevronUp className="h-4 w-4 text-cyan-600" />
+ <ChevronUp className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
  ) : (
- <ChevronDown className="h-4 w-4 text-cyan-600" />
+ <ChevronDown className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
  )
  }
 
@@ -114,7 +114,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
  if (data.length === 0) {
  return (
- <div className="text-center py-12 text-slate-500">
+ <div className="text-center py-12 text-slate-500 dark:text-slate-400">
  {emptyMessage}
  </div>
  )
@@ -143,7 +143,7 @@ export function DataTable<T extends Record<string, unknown>>({
  ))}
  </tr>
  </thead>
- <tbody className="bg-white">
+ <tbody className="bg-white dark:bg-slate-800">
  {sortedData.map((row, rowIndex) => {
  const key = getRowKey(row, rowIndex)
  const isExpanded = expandable?.isExpanded(row) || false
@@ -171,7 +171,7 @@ export function DataTable<T extends Record<string, unknown>>({
  </tr>
  {isExpanded && expandable && (
  <tr key={`${key}-expanded`}>
- <td colSpan={columns.length} className="px-6 py-4 bg-slate-50">
+ <td colSpan={columns.length} className="px-6 py-4 bg-slate-50 dark:bg-slate-900">
  {expandable.renderExpanded(row)}
  </td>
  </tr>
