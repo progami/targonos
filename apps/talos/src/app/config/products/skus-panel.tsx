@@ -18,7 +18,7 @@ import {
   getReferralFeePercent2026,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
-import { Edit2, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { Layers, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 
 type SkuModalTab = 'reference' | 'amazon'
 
@@ -862,14 +862,14 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-white shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <Package2 className="h-5 w-5 text-cyan-600" />
-              <h2 className="text-xl font-semibold text-slate-900">SKU Catalog</h2>
+              <Package2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">SKU Catalog</h2>
             </div>
-            <p className="text-sm text-slate-600">Manage product SKUs and their specifications</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Manage product SKUs and their specifications</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">
@@ -878,15 +878,15 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 items-center gap-3">
             <div className="relative flex-1 md:max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Search SKUs..."
-                className="w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
               />
             </div>
           </div>
@@ -894,16 +894,16 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
         {loading ? (
           <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : filteredSkus.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <Package2 className="h-10 w-10 text-slate-300" />
+            <Package2 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <div>
-              <p className="text-base font-semibold text-slate-900">
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 {searchTerm ? 'No SKUs found' : 'No SKUs yet'}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 {searchTerm
                   ? 'Clear your search or create a new SKU.'
                   : 'Create your first SKU to start receiving inventory.'}
@@ -919,7 +919,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full table-auto text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">SKU</th>
                   <th className="px-4 py-3 text-left font-semibold">Description</th>
@@ -931,56 +931,61 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                   <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredSkus.map(sku => {
                   const latestBatch = sku.batches?.[0]
                   const batchSummary = formatBatchSummary(latestBatch)
 
                   return (
-                    <tr key={sku.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
+                    <tr key={sku.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                         <div className="space-y-1">
                           <button
                             type="button"
+                            onClick={() => openEdit(sku)}
+                            className="text-cyan-700 dark:text-cyan-400 hover:underline"
+                          >
+                            {sku.skuCode}
+                          </button>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 xl:hidden">{batchSummary}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {sku.description}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {sku.asin ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap hidden xl:table-cell">
+                        <div className="space-y-1">
+                          <div className="font-mono text-slate-700 dark:text-slate-300">
+                            {latestBatch?.batchCode ?? '—'}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{batchSummary}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {sku._count?.inventoryTransactions ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() =>
                               router.push(
                                 `/config/products/batches?skuId=${encodeURIComponent(sku.id)}`
                               )
                             }
-                            className="text-cyan-700 hover:underline"
+                            title="View Batches"
                           >
-                            {sku.skuCode}
-                          </button>
-                          <div className="text-xs text-slate-500 xl:hidden">{batchSummary}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {sku.description}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                        {sku.asin ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap hidden xl:table-cell">
-                        <div className="space-y-1">
-                          <div className="font-mono text-slate-700">
-                            {latestBatch?.batchCode ?? '—'}
-                          </div>
-                          <div className="text-xs text-slate-500">{batchSummary}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500 whitespace-nowrap">
-                        {sku._count?.inventoryTransactions ?? 0}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEdit(sku)}>
-                            <Edit2 className="h-4 w-4" />
+                            <Layers className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setConfirmDelete(sku)}
-                            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                            className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -996,9 +1001,9 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       </div>
 
       <PortalModal open={isModalOpen} className="items-center">
-        <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
-            <h2 className="text-lg font-semibold text-slate-900">
+        <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-6 py-4">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {editingSku ? 'Edit SKU' : 'New SKU'}
             </h2>
             <div className="flex items-center gap-3">

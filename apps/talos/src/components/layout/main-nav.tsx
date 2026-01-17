@@ -78,7 +78,6 @@ export function MainNav() {
  const { data: session } = useSession()
  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
  const [isTabletCollapsed, setIsTabletCollapsed] = useState(false)
- const [userMenuOpen, setUserMenuOpen] = useState(false)
  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
 
  // Load collapsed sections from localStorage on mount
@@ -105,18 +104,6 @@ export function MainNav() {
      return newState
    })
  }, [])
-
- // Close user menu when clicking outside
- useEffect(() => {
- const handleClickOutside = (event: MouseEvent) => {
- if (userMenuOpen && !(event.target as HTMLElement).closest('.user-menu-container')) {
- setUserMenuOpen(false)
- }
- }
-
- document.addEventListener('mousedown', handleClickOutside)
- return () => document.removeEventListener('mousedown', handleClickOutside)
- }, [userMenuOpen])
 
  if (!session) return null
  
@@ -164,7 +151,7 @@ export function MainNav() {
  </Link>
  </div>
 
- {/* User info and tablet collapse */}
+ {/* Header actions */}
  <div className="flex items-center gap-2">
  {/* Search button */}
  <button
@@ -180,69 +167,26 @@ export function MainNav() {
  >
  <Search className="h-5 w-5 text-slate-500 dark:text-slate-400" />
  </button>
- {/* User avatar/menu */}
- <div className={cn("relative transition-all duration-300 user-menu-container", isTabletCollapsed && "md:hidden lg:block")}>
- <button
- onClick={() => setUserMenuOpen(!userMenuOpen)}
-                 className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
- >
- <div className="h-7 w-7 rounded-full bg-cyan-600/10 flex items-center justify-center">
- <span className="text-xs font-medium text-cyan-700 ">
+ {/* User avatar */}
+ <div className={cn("transition-all duration-300", isTabletCollapsed && "md:hidden lg:block")}>
+ <div className="h-7 w-7 rounded-full bg-cyan-600/10 dark:bg-cyan-400/10 flex items-center justify-center" title={session.user.name ?? 'User'}>
+ <span className="text-xs font-medium text-cyan-700 dark:text-cyan-300">
  {session.user.name?.charAt(0).toUpperCase()}
  </span>
  </div>
- </button>
- {/* Dropdown menu */}
- {userMenuOpen && (
-                 <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-soft-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
-                 <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-                 <p className="text-xs text-slate-500 dark:text-slate-400">Signed in as</p>
-                 <p className="text-sm font-medium truncate dark:text-slate-100">{session.user.name}</p>
-                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{session.user.email}</p>
- </div>
- 
-                 <button
-                 onClick={() => {
-                 const url = portalUrl('/api/auth/signout')
-                 url.searchParams.set('callbackUrl', `${window.location.origin}${withBasePath('/auth/login')}`)
-                 window.location.href = url.toString()
-                 }}
-                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 dark:text-slate-200"
-                 >
- <LogOut className="h-4 w-4" />
- Sign out
- </button>
- </div>
- )}
  </div>
  
  {/* Tablet collapse button */}
  <button
  onClick={() => setIsTabletCollapsed(!isTabletCollapsed)}
-                 className="hidden md:block lg:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="hidden md:block lg:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
  >
- <Menu className="h-5 w-5" />
+ <Menu className="h-5 w-5 text-slate-500 dark:text-slate-400" />
  </button>
  </div>
  </div>
 
-         {/* Tenant/Region Indicator */}
-         <div className={cn(
-           "border-b border-slate-200 dark:border-slate-700 pb-3 -mx-2",
-           isTabletCollapsed && "md:hidden lg:block"
-         )}>
-           <TenantIndicator collapsed={isTabletCollapsed} />
-         </div>
-
-         {/* Theme Toggle */}
-         <div className={cn(
-           "border-b border-slate-200 dark:border-slate-700 pb-3 -mx-2",
-           isTabletCollapsed && "md:hidden lg:block"
-         )}>
-           <ThemeToggle collapsed={isTabletCollapsed} />
-         </div>
-
-         <nav className="flex flex-1 flex-col">
+          <nav className="flex flex-1 flex-col">
  <ul role="list" className="flex flex-1 flex-col gap-y-7">
  <li>
  <ul role="list" className="-mx-2 space-y-3">
@@ -316,6 +260,31 @@ export function MainNav() {
  </li>
  </ul>
  </nav>
+
+          {/* Sidebar Footer - Region, Theme, Logout */}
+          <div className={cn(
+            "mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2",
+            isTabletCollapsed && "md:hidden lg:block"
+          )}>
+            {/* Region Indicator */}
+            <TenantIndicator collapsed={isTabletCollapsed} showLogout={false} />
+            
+            {/* Theme Toggle */}
+            <ThemeToggle collapsed={isTabletCollapsed} />
+            
+            {/* Logout Button */}
+            <button
+              onClick={() => {
+                const url = portalUrl('/api/auth/signout')
+                url.searchParams.set('callbackUrl', `${window.location.origin}${withBasePath('/auth/login')}`)
+                window.location.href = url.toString()
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <LogOut className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+              {!isTabletCollapsed && <span className="text-sm">Sign out</span>}
+            </button>
+          </div>
  </div>
  </div>
 
@@ -369,16 +338,6 @@ export function MainNav() {
  </Link>
  </div>
 
- {/* Tenant/Region Indicator - Mobile */}
- <div className="border-b border-slate-200 dark:border-slate-700 pb-3 -mx-2">
- <TenantIndicator />
- </div>
-
- {/* Theme Toggle - Mobile */}
- <div className="border-b border-slate-200 dark:border-slate-700 pb-3 -mx-2">
- <ThemeToggle />
- </div>
-
  <nav className="flex flex-1 flex-col">
  <ul role="list" className="flex flex-1 flex-col gap-y-7">
  <li>
@@ -425,6 +384,23 @@ export function MainNav() {
  </li>
  </ul>
  </nav>
+
+          {/* Mobile Sidebar Footer - Region, Theme, Logout */}
+          <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2 -mx-2">
+            <TenantIndicator showLogout={false} />
+            <ThemeToggle />
+            <button
+              onClick={() => {
+                const url = portalUrl('/api/auth/signout')
+                url.searchParams.set('callbackUrl', `${window.location.origin}${withBasePath('/auth/login')}`)
+                window.location.href = url.toString()
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <LogOut className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+              <span className="text-sm">Sign out</span>
+            </button>
+          </div>
  </div>
  </div>
  </div>
