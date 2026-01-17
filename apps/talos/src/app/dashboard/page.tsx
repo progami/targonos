@@ -8,12 +8,21 @@ import {
  Home,
  TrendingUp,
  Calendar,
- ChevronDown
+ ChevronDown,
+ Package,
+ FileText,
+ Warehouse,
+ Plus,
+ ArrowRight,
 } from '@/lib/lucide-icons'
+import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { SectionHeader } from '@/components/dashboard/section-header'
 import { MarketSection } from '@/components/dashboard/market-section'
+import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
+import { Button } from '@/components/ui/button'
+import { DashboardSkeleton } from '@/components/common/loading-state'
 import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
@@ -213,9 +222,9 @@ export default function DashboardPage() {
  if (loadingStats) {
  return (
  <DashboardLayout>
- <div className="flex items-center justify-center h-96">
- <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent " />
- </div>
+ <PageContainer>
+ <DashboardSkeleton />
+ </PageContainer>
  </DashboardLayout>
  )
  }
@@ -276,7 +285,7 @@ export default function DashboardPage() {
  <div className="relative">
  <button
  onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
- className="flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border rounded-lg hover:bg-slate-50 transition-colors min-h-[44px]"
+ className="flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-h-[44px] bg-white dark:bg-slate-900"
  >
  <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
  <span className="text-xs sm:text-sm">
@@ -286,7 +295,7 @@ export default function DashboardPage() {
  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
  </button>
  {showTimeRangeDropdown && (
- <div className="absolute right-0 mt-2 w-40 sm:w-44 md:w-48 bg-white border rounded-lg shadow-lg z-10">
+ <div className="absolute right-0 mt-2 w-40 sm:w-44 md:w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10">
  {Object.entries(timeRanges).map(([key, range]) => (
  <button
  key={key}
@@ -294,7 +303,7 @@ export default function DashboardPage() {
  setSelectedTimeRange(key)
  setShowTimeRangeDropdown(false)
  }}
- className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 ${selectedTimeRange === key ? 'bg-slate-100 ' : ''}`}
+ className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${selectedTimeRange === key ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
  >
  {range.label}
  </button>
@@ -305,11 +314,71 @@ export default function DashboardPage() {
  }
  />
  <PageContent>
+ {/* Quick Actions */}
+ <div className="flex flex-wrap gap-3 mb-6">
+ <Button asChild size="sm" className="gap-2">
+ <Link href="/operations/purchase-orders/new">
+ <Plus className="h-4 w-4" />
+ New Purchase Order
+ </Link>
+ </Button>
+ <Button asChild variant="outline" size="sm" className="gap-2">
+ <Link href="/operations/inventory">
+ <Package className="h-4 w-4" />
+ View Inventory
+ </Link>
+ </Button>
+ <Button asChild variant="outline" size="sm" className="gap-2">
+ <Link href="/config/products">
+ <ArrowRight className="h-4 w-4" />
+ Manage Products
+ </Link>
+ </Button>
+ </div>
+
+ {/* Stats Cards */}
+ <StatsCardGrid cols={4} className="mb-6">
+ <StatsCard
+ title="Total Inventory"
+ value={stats?.totalInventory ?? 0}
+ subtitle="units"
+ icon={Package}
+ variant={stats?.inventoryTrend === 'up' ? 'success' : stats?.inventoryTrend === 'down' ? 'danger' : 'default'}
+ trend={stats?.inventoryChange ? {
+ value: parseFloat(stats.inventoryChange.replace('%', '').replace('+', '')),
+ label: 'vs last period'
+ } : undefined}
+ />
+ <StatsCard
+ title="Active SKUs"
+ value={stats?.activeSkus ?? 0}
+ subtitle="products"
+ icon={FileText}
+ variant="info"
+ />
+ <StatsCard
+ title="Storage Cost"
+ value={stats?.storageCost ?? '$0'}
+ icon={Warehouse}
+ variant={stats?.costTrend === 'down' ? 'success' : stats?.costTrend === 'up' ? 'warning' : 'default'}
+ trend={stats?.costChange ? {
+ value: parseFloat(stats.costChange.replace('%', '').replace('+', '')),
+ label: 'vs last period'
+ } : undefined}
+ />
+ <StatsCard
+ title="Period"
+ value={timeRanges[selectedTimeRange].label}
+ icon={Calendar}
+ variant="default"
+ onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
+ />
+ </StatsCardGrid>
 
  {/* Main Dashboard Sections */}
- <div className="grid gap-2">
+ <div className="grid gap-4">
  {/* Market Section - Inventory Level Graph Only */}
- <div className="border rounded-lg p-2 bg-white ">
+ <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
  <SectionHeader 
  title="Inventory Levels" 
  icon={TrendingUp} 

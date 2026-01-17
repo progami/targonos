@@ -122,6 +122,10 @@ import {
   LayoutGrid,
   TableProperties,
   Boxes,
+
+  // Theme icons
+  Moon,
+  Sun,
 } from 'lucide-react'
 
 import type { LucideIcon } from 'lucide-react'
@@ -232,5 +236,7 @@ export {
   LayoutGrid,
   TableProperties,
   Boxes,
+  Moon,
+  Sun,
   type LucideIcon,
 }

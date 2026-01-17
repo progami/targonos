@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { CommandPalette } from '@/components/search/command-palette'
 
 const DISABLED_PATHS = new Set<string>(['/', '/500'])
 const DISABLED_PATH_PREFIXES = ['/auth', '/no-access', '/unauthorized', '/test']
@@ -13,5 +14,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isDisabled) return <>{children}</>
 
-  return <DashboardLayout>{children}</DashboardLayout>
+  return (
+    <>
+      <DashboardLayout>{children}</DashboardLayout>
+      <CommandPalette />
+    </>
+  )
 }
