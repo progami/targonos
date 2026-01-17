@@ -52,7 +52,7 @@ export default function S3UploadTestPage() {
  <div className="max-w-4xl mx-auto p-6">
  <h1 className="text-2xl font-bold mb-6">S3 Upload Test</h1>
  
- <div className="bg-white rounded-lg shadow p-6 space-y-4">
+ <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 space-y-4">
  <div>
  <label htmlFor="s3-test-file" className="block text-sm font-medium text-slate-700 mb-2">
  Select a file to test S3 upload

@@ -246,7 +246,7 @@ export function EditAttachmentsTab({ existingAttachments, onAttachmentsChange, t
 
  return (
  <div className="space-y-6">
- <div className="bg-white rounded-xl border">
+ <div className="bg-white dark:bg-slate-800 rounded-xl border">
  <div className="px-6 py-4 border-b bg-slate-50">
  <h3 className="text-lg font-semibold flex items-center gap-2">
  <FileText className="h-5 w-5" />
@@ -284,7 +284,7 @@ export function EditAttachmentsTab({ existingAttachments, onAttachmentsChange, t
  </div>
  
  {attachment && !isDeleted ? (
- <div className="bg-white p-3 rounded border border-slate-200">
+ <div className="bg-white dark:bg-slate-800 p-3 rounded border border-slate-200">
  <div className="flex items-center justify-between">
  <div className="flex items-center gap-2 flex-1 min-w-0">
  <FileText className="h-4 w-4 text-slate-500 flex-shrink-0" />

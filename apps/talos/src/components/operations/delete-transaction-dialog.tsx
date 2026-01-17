@@ -64,7 +64,7 @@ export function DeleteTransactionDialog({
  <div className="flex min-h-full items-center justify-center p-4">
  <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
  
- <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+ <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
  {/* Header */}
  <div className="bg-red-50 px-6 py-4 border-b border-red-200">
  <div className="flex items-center justify-between">
@@ -134,7 +134,7 @@ export function DeleteTransactionDialog({
  // Summarized view for many transactions
  <div className="space-y-3">
  {/* Summary Stats */}
- <div className="bg-white rounded border border-amber-200 p-3">
+ <div className="bg-white dark:bg-slate-800 rounded border border-amber-200 p-3">
  <div className="grid grid-cols-2 gap-4 text-sm">
  <div>
  <span className="text-slate-600">Total Dependent Transactions:</span>
@@ -150,7 +150,7 @@ export function DeleteTransactionDialog({
  </div>
 
  {/* Transaction Type Breakdown */}
- <div className="bg-white rounded border border-amber-200 p-3">
+ <div className="bg-white dark:bg-slate-800 rounded border border-amber-200 p-3">
  <p className="text-xs font-medium text-slate-700 mb-2">By Transaction Type:</p>
  <div className="space-y-1">
  {Object.entries(
@@ -178,7 +178,7 @@ export function DeleteTransactionDialog({
  <div className="space-y-2">
  <p className="text-xs font-medium text-slate-700">Recent Transactions:</p>
  {validation.details.dependentTransactions.slice(0, 3).map((dep) => (
- <div key={dep.id} className="bg-white rounded border border-amber-200 p-2">
+ <div key={dep.id} className="bg-white dark:bg-slate-800 rounded border border-amber-200 p-2">
  <div className="flex items-center justify-between">
  <div className="flex items-center gap-2">
  {dep.transactionType === 'SHIP' ? (
@@ -202,7 +202,7 @@ export function DeleteTransactionDialog({
  </div>
  
  {validation.details.dependentTransactions.slice(-2).map((dep) => (
- <div key={dep.id} className="bg-white rounded border border-amber-200 p-2">
+ <div key={dep.id} className="bg-white dark:bg-slate-800 rounded border border-amber-200 p-2">
  <div className="flex items-center justify-between">
  <div className="flex items-center gap-2">
  {dep.transactionType === 'SHIP' ? (
@@ -233,7 +233,7 @@ export function DeleteTransactionDialog({
  // Detailed view for few transactions (5 or less)
  <div className="space-y-2">
  {validation.details.dependentTransactions.map((dep) => (
- <div key={dep.id} className="bg-white rounded border border-amber-200 p-3">
+ <div key={dep.id} className="bg-white dark:bg-slate-800 rounded border border-amber-200 p-3">
  <div className="flex items-center justify-between">
  <div className="flex items-center gap-2">
  {dep.transactionType === 'SHIP' ? (
@@ -268,7 +268,7 @@ export function DeleteTransactionDialog({
  <button
  onClick={onClose}
  disabled={isDeleting}
- className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50"
+ className="px-4 py-2 text-sm font-medium text-slate-700 bg-white dark:bg-slate-800 border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50"
  >
  Cancel
  </button>

@@ -111,7 +111,7 @@ export default function LandingPage() {
  {features.map((feature, index) => (
  <div 
  key={index}
- className="bg-white rounded-xl p-6 shadow-soft hover:shadow-lg transition-shadow"
+ className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-soft hover:shadow-lg transition-shadow"
  >
  <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center mb-4 text-cyan-600 ">
  {feature.icon}
@@ -143,7 +143,7 @@ export default function LandingPage() {
  e.preventDefault()
  redirectToPortal('/login', `${window.location.origin}/dashboard`)
  }}
- className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium text-cyan-600 bg-white rounded-lg hover:bg-slate-100 transition-colors"
+ className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium text-cyan-600 bg-white dark:bg-slate-800 rounded-lg hover:bg-slate-100 transition-colors"
  >
  <span>Get Started</span>
  <ArrowRight className="h-5 w-5" />
@@ -152,7 +152,7 @@ export default function LandingPage() {
  </div>
 
  {/* Footer */}
- <footer className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-200 ">
+ <footer className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-200 dark:border-slate-700 ">
  <div className="mx-auto max-w-7xl text-center">
  <div className="flex items-center justify-center gap-2 mb-4">
  <Package2 className="h-8 w-8 text-cyan-600 " />

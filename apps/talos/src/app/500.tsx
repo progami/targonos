@@ -4,7 +4,7 @@ import Link from 'next/link'
 export default function InternalServerError() {
  return (
  <div className="min-h-screen flex items-center justify-center bg-slate-50">
- <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
+ <div className="max-w-md w-full bg-white dark:bg-slate-800 shadow-lg rounded-lg p-6">
  <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
  <AlertCircle className="w-6 h-6 text-red-600" />
  </div>

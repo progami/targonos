@@ -148,7 +148,7 @@ function ProductBatchesPageInner() {
         />
         <PageContent>
           {!skuId ? (
-            <div className="flex h-full items-center justify-center rounded-xl border bg-white p-10 text-center">
+            <div className="flex h-full items-center justify-center rounded-xl border bg-white dark:bg-slate-800 p-10 text-center">
               <div className="space-y-2">
                 <div className="text-base font-semibold text-slate-900">Select a SKU</div>
                 <div className="text-sm text-slate-500">
@@ -163,7 +163,7 @@ function ProductBatchesPageInner() {
           ) : sku ? (
             <SkuBatchesPanel sku={sku} key={sku.id} />
           ) : (
-            <div className="flex h-full items-center justify-center rounded-xl border bg-white p-10 text-center">
+            <div className="flex h-full items-center justify-center rounded-xl border bg-white dark:bg-slate-800 p-10 text-center">
               <div className="space-y-2">
                 <div className="text-base font-semibold text-slate-900">SKU not found</div>
                 <div className="text-sm text-slate-500">

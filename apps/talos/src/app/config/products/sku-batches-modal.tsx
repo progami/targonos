@@ -614,7 +614,7 @@ function SkuBatchesManager({
 
   return (
     <>
-      <div className="w-full overflow-hidden rounded-lg border bg-white shadow-soft">
+      <div className="w-full overflow-hidden rounded-lg border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-slate-900">Batches</h2>
@@ -647,7 +647,7 @@ function SkuBatchesManager({
             </Button>
           </div>
 
-          <div className="rounded-xl border bg-white shadow-soft">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
             {loading ? (
               <div className="flex h-40 items-center justify-center text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -754,7 +754,7 @@ function SkuBatchesManager({
 
       {isFormOpen ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div className="flex flex-col">
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -763,7 +763,7 @@ function SkuBatchesManager({
                 <p className="text-xs text-muted-foreground">{sku.skuCode}</p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 p-1">
                   <button
                     type="button"
                     onClick={() => applyUnitSystem('metric')}
@@ -912,7 +912,7 @@ function SkuBatchesManager({
                           packagingType: event.target.value as PackagingTypeOption,
                         }))
                       }
-                      className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                     >
                       <option value="">Optional</option>
                       <option value="BOX">Box</option>
@@ -922,7 +922,7 @@ function SkuBatchesManager({
 
                   <div className="md:col-span-2 pt-4 border-t">
                     <h3 className="text-sm font-semibold text-slate-900 mb-3">Item package dimensions</h3>
-                    <div className="rounded-lg border-2 border-slate-300 bg-white p-4">
+                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
                       <Tabs>
                         <TabsList className="w-full grid grid-cols-2 mb-4">
                           <TabsTrigger
@@ -1045,7 +1045,7 @@ function SkuBatchesManager({
 
                   <div className="md:col-span-2 pt-4 border-t">
                     <h3 className="text-sm font-semibold text-slate-900 mb-3">Carton Dimensions</h3>
-                    <div className="rounded-lg border-2 border-slate-300 bg-white p-4">
+                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-1">
                           <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>

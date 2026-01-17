@@ -151,7 +151,7 @@ export default function WarehouseRatesPage({
             backLabel="Back"
           />
           <PageContent>
-            <div className="rounded-xl border bg-white shadow-soft p-6 text-sm text-muted-foreground">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6 text-sm text-muted-foreground">
               Warehouse not found.
             </div>
           </PageContent>
@@ -222,7 +222,7 @@ export default function WarehouseRatesPage({
         />
 
         <PageContent>
-          <div className="rounded-xl border bg-white shadow-soft p-6">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6">
             <WarehouseRatesPanel
               warehouseId={warehouse.id}
               warehouseName={warehouse.name}

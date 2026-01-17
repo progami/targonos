@@ -32,7 +32,7 @@ export function LoadingState({
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white dark:bg-slate-900 bg-opacity-75 dark:bg-opacity-75 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-white dark:bg-slate-800 dark:bg-slate-900 bg-opacity-75 dark:bg-opacity-75 flex items-center justify-center z-50">
         {content}
       </div>
     )
@@ -56,7 +56,7 @@ export function LoadingOverlay({
     <div className="relative">
       {children}
       {loading && (
-        <div className="absolute inset-0 bg-white dark:bg-slate-900 bg-opacity-75 dark:bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+        <div className="absolute inset-0 bg-white dark:bg-slate-800 dark:bg-slate-900 bg-opacity-75 dark:bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
           <LoadingState message={message} />
         </div>
       )}
@@ -88,7 +88,7 @@ export function Skeleton({
 export function TableSkeleton({ rows = 5, columns = 4 }) {
   return (
     <div className="w-full">
-      <div className="bg-slate-50 dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700">
+      <div className="bg-slate-50 dark:bg-slate-800 p-4 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700">
         <div className="flex gap-4">
           {Array.from({ length: columns }).map((_, i) => (
             <Skeleton key={i} className="h-4 w-24" />
@@ -96,7 +96,7 @@ export function TableSkeleton({ rows = 5, columns = 4 }) {
         </div>
       </div>
       {Array.from({ length: rows }).map((_, rowIndex) => (
-        <div key={rowIndex} className="p-4 border-b border-slate-200 dark:border-slate-700">
+        <div key={rowIndex} className="p-4 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700">
           <div className="flex gap-4">
             {Array.from({ length: columns }).map((_, colIndex) => (
               <Skeleton 
@@ -127,7 +127,7 @@ export function CardSkeleton() {
 // Stats card skeleton for dashboard
 export function StatsCardSkeleton() {
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-3">
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-6 space-y-3">
       <div className="flex items-start justify-between">
         <div className="flex-1 space-y-3">
           <Skeleton className="h-3 w-20" />
@@ -183,7 +183,7 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Chart skeleton */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 p-4">
         <div className="flex items-center justify-between mb-4">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-4 w-24" />
@@ -208,7 +208,7 @@ export function PageSkeleton() {
       </div>
 
       {/* Tabs skeleton */}
-      <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700 pb-2">
+      <div className="flex gap-4 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 pb-2">
         <Skeleton className="h-8 w-20" />
         <Skeleton className="h-8 w-24" />
         <Skeleton className="h-8 w-20" />
@@ -246,7 +246,7 @@ export function ListSkeleton({ items = 5 }: { items?: number }) {
       {Array.from({ length: items }).map((_, i) => (
         <div 
           key={i} 
-          className="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+          className="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-700"
         >
           <Skeleton className="h-10 w-10 rounded-full" />
           <div className="flex-1 space-y-2">

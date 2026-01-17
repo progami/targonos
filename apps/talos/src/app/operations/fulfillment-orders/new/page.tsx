@@ -347,7 +347,7 @@ export default function NewFulfillmentOrderPage() {
       <PageContent>
         <div className="flex flex-col gap-6">
           {/* Source Type Selector */}
-          <div className="rounded-xl border bg-white p-5">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
             <h3 className="text-sm font-semibold mb-3">Order Type</h3>
             <div className="flex gap-3">
               {(['AMAZON_FBA', 'CUSTOMER', 'TRANSFER'] as DestinationType[]).map(type => (
@@ -387,7 +387,7 @@ export default function NewFulfillmentOrderPage() {
 
           {/* Warehouse & Destination (for non-Amazon) */}
           {!isAmazonFBA && (
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <h3 className="text-sm font-semibold mb-4">Destination Details</h3>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
@@ -397,7 +397,7 @@ export default function NewFulfillmentOrderPage() {
                     onChange={e =>
                       setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
                     }
-                    className="w-full px-3 py-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                     disabled={loading}
                     required
                   >
@@ -447,7 +447,7 @@ export default function NewFulfillmentOrderPage() {
           )}
 
           {/* Line Items Section (always visible) */}
-          <div className="rounded-xl border bg-white p-5">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-semibold">Line Items</h3>
@@ -462,7 +462,7 @@ export default function NewFulfillmentOrderPage() {
               </Button>
             </div>
 
-            <div className="rounded-lg border bg-white overflow-hidden">
+            <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
               <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50">
                 <div className="col-span-3">SKU</div>
                 <div className="col-span-3">Batch</div>
@@ -487,7 +487,7 @@ export default function NewFulfillmentOrderPage() {
                         <select
                           value={item.skuCode}
                           onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           required
                         >
                           <option value="">Select SKU</option>
@@ -503,7 +503,7 @@ export default function NewFulfillmentOrderPage() {
                         <select
                           value={item.batchLot}
                           onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           required
                           disabled={!item.skuCode}
                         >
@@ -574,7 +574,7 @@ export default function NewFulfillmentOrderPage() {
 
           {/* Collapsible Freight Section (for Amazon FBA only) */}
           {isAmazonFBA && (
-            <div className="rounded-xl border bg-white overflow-hidden">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
               <button
                 type="button"
                 onClick={() => setFreightExpanded(!freightExpanded)}

@@ -123,13 +123,13 @@ export default function WarehousesPanel() {
       case 'AMAZON_AWD':
         return { label: 'Amazon AWD', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' }
       default:
-        return { label: '3PL', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' }
+        return { label: '3PL', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:border-slate-700' }
     }
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-white shadow-soft">
+      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export default function WarehousesPanel() {
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search warehouses..."
-                className="w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
               />
             </div>
           </div>
@@ -163,7 +163,7 @@ export default function WarehousesPanel() {
         {loading ? (
           <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((item) => (
-              <div key={item} className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div key={item} className="animate-pulse rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 p-4">
                 <div className="h-4 w-24 rounded bg-slate-200" />
                 <div className="mt-3 h-5 w-3/4 rounded bg-slate-200" />
                 <div className="mt-2 h-4 w-2/3 rounded bg-slate-200" />
@@ -200,7 +200,7 @@ export default function WarehousesPanel() {
                     goToRatesPage(warehouse.id)
                   }
                 }}
-                className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 flex h-full"
+                className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 flex h-full"
               >
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-500 to-blue-600" />
                 <div className="p-5 flex h-full flex-col gap-4 w-full">
@@ -322,8 +322,8 @@ function MetricChip({
   value: number
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-3 py-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm border border-slate-100">
+    <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-gradient-to-br from-slate-50 to-white px-3 py-2.5">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-100">
         {icon}
       </div>
       <div className="flex flex-col leading-tight">

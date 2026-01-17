@@ -87,7 +87,7 @@ export function IncompleteTransactionsAlert() {
  </div>
 
  {showDetails && (
- <div className="mt-4 bg-white rounded-md p-3 border border-amber-200">
+ <div className="mt-4 bg-white dark:bg-slate-800 rounded-md p-3 border border-amber-200">
  <h4 className="text-sm font-medium text-slate-900 mb-2">
  Missing Information by Transaction Type:
  </h4>
