@@ -9,7 +9,10 @@ import { Label } from '@/components/ui/label'
 import { PortalModal } from '@/components/ui/portal-modal'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
+
+const PAGE_KEY = '/config/suppliers'
 
 interface SupplierRow {
   id: string
@@ -76,9 +79,11 @@ export default function SuppliersPanel({
   externalModalOpen,
   onExternalModalClose,
 }: SuppliersPanelProps) {
+  const pageState = usePageState(PAGE_KEY)
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
