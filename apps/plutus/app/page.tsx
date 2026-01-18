@@ -222,6 +222,14 @@ export default function HomePage() {
               accentColor="violet"
             />
 
+            <FeatureCard
+              href="/bills"
+              icon={<ReportsIcon />}
+              title="Bills"
+              description="PO memo guide + bill compliance scanner for bulk backfills."
+              accentColor="amber"
+            />
+
             <ComingSoonCard
               icon={<ReportsIcon />}
               title="Custom Reports"

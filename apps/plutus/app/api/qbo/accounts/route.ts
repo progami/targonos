@@ -42,7 +42,9 @@ export async function GET() {
     logger.info('Fetching QBO accounts', { requestId, realmId: connection.realmId, expiresAt: connection.expiresAt });
     await ensureServerQboConnection(connection);
 
-    const { accounts, updatedConnection } = await fetchAccounts(connection);
+    const { accounts, updatedConnection } = await fetchAccounts(connection, {
+      includeInactive: true,
+    });
 
     // Update cookie if token was refreshed
     if (updatedConnection) {
@@ -64,37 +66,38 @@ export async function GET() {
     // Transform all accounts for frontend (matching QBO's Chart of Accounts view)
     const allAccounts = accounts
       .map((a) => {
-	        // Calculate depth from FullyQualifiedName (count colons)
-	        const depth = (a.FullyQualifiedName?.split(':').length ?? 1) - 1;
-	        // Extract parent name from FullyQualifiedName
-	        const pathParts = a.FullyQualifiedName?.split(':') ?? [a.Name];
-	        const parentName = pathParts.length > 1 ? pathParts.slice(0, -1).join(':') : null;
+        const fullyQualifiedName = a.FullyQualifiedName ? a.FullyQualifiedName : a.Name;
+        const pathParts = fullyQualifiedName.split(':');
+        const depth = pathParts.length - 1;
+        const parentName = pathParts.length > 1 ? pathParts.slice(0, -1).join(':') : null;
+        const balance = a.CurrentBalance === undefined ? 0 : a.CurrentBalance;
 
-	        return {
-	          id: a.Id,
-	          name: a.Name,
-	          active: a.Active,
-	          type: a.AccountType,
-	          subType: a.AccountSubType,
-	          fullyQualifiedName: a.FullyQualifiedName,
-	          acctNum: a.AcctNum,
-	          balance: a.CurrentBalance ?? 0,
-          currency: a.CurrencyRef?.value ?? 'USD',
+        return {
+          id: a.Id,
+          name: a.Name,
+          active: a.Active,
+          type: a.AccountType,
+          subType: a.AccountSubType,
+          fullyQualifiedName,
+          acctNum: a.AcctNum,
+          balance,
+          currency: a.CurrencyRef ? a.CurrencyRef.value : 'USD',
           classification: a.Classification,
-          isSubAccount: a.SubAccount ?? false,
+          isSubAccount: a.SubAccount === true,
           parentName,
           depth,
         };
       })
       // Sort by Account Type (QBO order), then by FullyQualifiedName within each type
       .sort((a, b) => {
-        const typeOrderA = ACCOUNT_TYPE_ORDER[a.type] ?? 99;
-        const typeOrderB = ACCOUNT_TYPE_ORDER[b.type] ?? 99;
+        const rawOrderA = ACCOUNT_TYPE_ORDER[a.type];
+        const rawOrderB = ACCOUNT_TYPE_ORDER[b.type];
+        const typeOrderA = rawOrderA === undefined ? 99 : rawOrderA;
+        const typeOrderB = rawOrderB === undefined ? 99 : rawOrderB;
         if (typeOrderA !== typeOrderB) {
           return typeOrderA - typeOrderB;
         }
-        // Within same type, sort by FullyQualifiedName to maintain hierarchy
-        return (a.fullyQualifiedName ?? a.name).localeCompare(b.fullyQualifiedName ?? b.name);
+        return a.fullyQualifiedName.localeCompare(b.fullyQualifiedName);
       });
 
     logger.info('Fetched QBO accounts', { requestId, total: allAccounts.length });
