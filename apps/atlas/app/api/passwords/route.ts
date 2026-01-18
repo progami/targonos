@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
+import { getAllowedPasswordDepartments, getDepartmentRefsForEmployee } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
-import { isHROrAbove } from '@/lib/permissions'
 
 const PasswordDepartmentEnum = z.enum([
   'OPS',
@@ -41,10 +41,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const { searchParams } = new URL(req.url)
     const takeRaw = searchParams.get('take')
@@ -57,10 +59,18 @@ export async function GET(req: Request) {
 
     const where: any = {}
 
+    let departmentFilter = allowedDepartments
     if (departmentRaw) {
       const parsed = PasswordDepartmentEnum.safeParse(departmentRaw.toUpperCase())
-      if (parsed.success) where.department = parsed.data
+      if (parsed.success) {
+        if (!allowedDepartments.includes(parsed.data)) {
+          return NextResponse.json({ items: [], total: 0, allowedDepartments })
+        }
+        departmentFilter = [parsed.data]
+      }
     }
+
+    where.department = { in: departmentFilter }
 
     if (q) {
       where.OR = [
@@ -80,7 +90,7 @@ export async function GET(req: Request) {
       prisma.password.count({ where }),
     ])
 
-    return NextResponse.json({ items, total })
+    return NextResponse.json({ items, total, allowedDepartments })
   } catch (e) {
     return safeErrorResponse(e, 'Failed to fetch passwords')
   }
@@ -96,16 +106,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const body = await req.json()
     const validation = validateBody(CreatePasswordSchema, body)
     if (!validation.success) return validation.error
 
     const data = validation.data
+    if (!data.department) {
+      return NextResponse.json({ error: 'Department is required' }, { status: 400 })
+    }
+
+    if (!allowedDepartments.includes(data.department)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const password = await prisma.password.create({
       data: {
@@ -113,7 +132,7 @@ export async function POST(req: Request) {
         username: data.username ?? null,
         password: data.password,
         url: data.url ?? null,
-        department: data.department ?? 'OPS',
+        department: data.department,
         notes: data.notes ?? null,
       },
     })
