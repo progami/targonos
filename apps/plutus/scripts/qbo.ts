@@ -127,7 +127,9 @@ async function deactivateAccountsByName(accountNames: string[]): Promise<void> {
   let connection = await requireServerConnection();
 
   const { fetchAccounts, updateAccountActive } = await import('@/lib/qbo/api');
-  const { accounts, updatedConnection } = await fetchAccounts(connection);
+  const { accounts, updatedConnection } = await fetchAccounts(connection, {
+    includeInactive: true,
+  });
   if (updatedConnection) {
     connection = updatedConnection;
     await saveServerQboConnection(updatedConnection);

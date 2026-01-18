@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,24 @@ type Sku = {
   asin?: string;
 };
 
+type ParentAccountIds = {
+  inventoryAsset: string;
+  manufacturing: string;
+  freightAndDuty: string;
+  landFreight: string;
+  storage3pl: string;
+  mfgAccessories: string;
+  inventoryShrinkage: string;
+  amazonSales: string;
+  amazonRefunds: string;
+  amazonFbaInventoryReimbursement: string;
+  amazonSellerFees: string;
+  amazonFbaFees: string;
+  amazonStorageFees: string;
+  amazonAdvertisingCosts: string;
+  amazonPromotions: string;
+};
+
 type WizardState = {
   step: number;
   // Step 1: QBO Connection
@@ -78,6 +96,7 @@ type WizardState = {
   // Step 3: Brands
   brands: Brand[];
   // Step 4: Plutus Accounts
+  parentAccountIds: ParentAccountIds;
   parentsVerified: boolean;
   accountsCreated: boolean;
   accountsCreatedCount: number;
@@ -185,10 +204,9 @@ function ConnectQboStep({
         const data = await res.json();
         if (!cancelled && data.connected) {
           setIsConnected(true);
-          const name = data.companyName || 'Connected';
-          setCompany(name);
-          setHomeCurrency(data.homeCurrency || null);
-          setSubscription(data.subscription || null);
+          setCompany(data.companyName);
+          setHomeCurrency(data.homeCurrency);
+          setSubscription(data.subscription);
         }
       } catch {
         // Not connected
@@ -309,6 +327,18 @@ function VerifyLmbSetupStep({
   onNext: () => void;
   onBack: () => void;
 }) {
+  const [duplicateScanLoading, setDuplicateScanLoading] = useState(false);
+  const [duplicateScanResult, setDuplicateScanResult] = useState<
+    | null
+    | {
+        dryRun: boolean;
+        matched: Array<{ id: string; name: string; active: boolean }>;
+        missing: string[];
+        results: Array<{ name: string; id: string; active: boolean; status: 'deactivated' | 'skipped' }>;
+      }
+  >(null);
+  const [duplicateScanError, setDuplicateScanError] = useState<string | null>(null);
+
   return (
     <div className="space-y-6">
       <div>
@@ -321,17 +351,102 @@ function VerifyLmbSetupStep({
         </p>
       </div>
 
-      <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-        <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-3">
-          What to do in LMB for EACH connection (US, UK, etc.):
-        </p>
-        <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-2 list-decimal list-inside">
-          <li>Go to LMB → Accounts & Taxes → Setup Wizard</li>
-          <li>Step 1: Map transactions to accounts (use LMB defaults or your own names)</li>
-          <li>Step 2: Configure QuickBooks bank accounts</li>
-          <li>Step 3: Confirm tax rates</li>
-          <li>Complete the wizard</li>
-        </ol>
+      <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 space-y-4">
+        <div>
+          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-3">
+            What to do in LMB for EACH connection (US, UK, etc.):
+          </p>
+          <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-2 list-decimal list-inside">
+            <li>Go to LMB → Accounts & Taxes → Setup Wizard</li>
+            <li>Step 1: Map transactions to accounts (use LMB defaults or your own names)</li>
+            <li>Step 2: Configure QuickBooks bank accounts</li>
+            <li>Step 3: Confirm tax rates</li>
+            <li>Complete the wizard</li>
+          </ol>
+        </div>
+
+        <div className="rounded-lg border border-amber-200/60 bg-white/60 p-3 text-amber-900 dark:border-amber-800/60 dark:bg-black/20 dark:text-amber-100 space-y-3">
+          <div>
+            <p className="text-sm font-medium mb-1">Optional (migration only): deactivate duplicate Amazon accounts</p>
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              If your QBO Chart of Accounts already has legacy “Amazon …” accounts (from manual setup or prior tools),
+              you can make them inactive so reporting stays clean.
+            </p>
+          </div>
+
+          {duplicateScanError && <p className="text-xs text-red-700 dark:text-red-300">{duplicateScanError}</p>}
+
+          {duplicateScanResult && (
+            <div className="text-xs text-amber-900 dark:text-amber-100 space-y-1">
+              <p>
+                Matched: <span className="font-semibold">{duplicateScanResult.matched.length}</span> · Missing:{' '}
+                <span className="font-semibold">{duplicateScanResult.missing.length}</span>
+              </p>
+              {duplicateScanResult.results.length > 0 && (
+                <p>
+                  Deactivated: <span className="font-semibold">{duplicateScanResult.results.filter((r) => r.status === 'deactivated').length}</span>{' '}
+                  · Skipped: <span className="font-semibold">{duplicateScanResult.results.filter((r) => r.status === 'skipped').length}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={duplicateScanLoading}
+              onClick={async () => {
+                setDuplicateScanLoading(true);
+                setDuplicateScanError(null);
+                try {
+                  const res = await fetch(`${basePath}/api/qbo/accounts/deactivate-duplicates`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dryRun: true }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    throw new Error(data.error);
+                  }
+                  setDuplicateScanResult(data);
+                } catch (err) {
+                  setDuplicateScanError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setDuplicateScanLoading(false);
+                }
+              }}
+            >
+              {duplicateScanLoading ? 'Scanning…' : 'Dry Run Scan'}
+            </Button>
+
+            <Button
+              variant="outline"
+              disabled={duplicateScanLoading || duplicateScanResult === null || duplicateScanResult.matched.length === 0}
+              onClick={async () => {
+                setDuplicateScanLoading(true);
+                setDuplicateScanError(null);
+                try {
+                  const res = await fetch(`${basePath}/api/qbo/accounts/deactivate-duplicates`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dryRun: false }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    throw new Error(data.error);
+                  }
+                  setDuplicateScanResult(data);
+                } catch (err) {
+                  setDuplicateScanError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setDuplicateScanLoading(false);
+                }
+              }}
+            >
+              {duplicateScanLoading ? 'Working…' : 'Deactivate'}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <a
@@ -409,12 +524,16 @@ function BrandSetupStep({
     const trimmed = newBrandName.trim();
     if (trimmed && !brands.some((b) => b.name === trimmed)) {
       const marketplace = MARKETPLACES.find((m) => m.id === newBrandMarketplace);
+      if (!marketplace) {
+        return;
+      }
+
       onBrandsChange([
         ...brands,
         {
           name: trimmed,
           marketplace: newBrandMarketplace,
-          currency: marketplace?.currency || 'USD',
+          currency: marketplace.currency,
         },
       ]);
       setNewBrandName('');
@@ -426,13 +545,17 @@ function BrandSetupStep({
   };
 
   const updateBrandMarketplace = (index: number, marketplaceId: string) => {
-    const marketplace = MARKETPLACES.find((m) => m.id === marketplaceId);
-    const updated = [...brands];
-    updated[index] = {
-      ...updated[index],
-      marketplace: marketplaceId,
-      currency: marketplace?.currency || 'USD',
-    };
+      const marketplace = MARKETPLACES.find((m) => m.id === marketplaceId);
+      if (!marketplace) {
+        return;
+      }
+
+      const updated = [...brands];
+      updated[index] = {
+        ...updated[index],
+        marketplace: marketplaceId,
+        currency: marketplace.currency,
+      };
     onBrandsChange(updated);
   };
 
@@ -533,80 +656,192 @@ function BrandSetupStep({
 // Step 4: Plutus Account Setup
 function AccountSetupStep({
   brands,
+  parentAccountIds,
+  onParentAccountIdsChange,
+  parentsVerified,
+  accountsCreated,
   onVerified,
   onAccountsCreated,
   onNext,
   onBack,
 }: {
   brands: Brand[];
+  parentAccountIds: ParentAccountIds;
+  onParentAccountIdsChange: (ids: ParentAccountIds) => void;
+  parentsVerified: boolean;
+  accountsCreated: boolean;
   onVerified: () => void;
   onAccountsCreated: (count: number) => void;
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [phase, setPhase] = useState<'verify' | 'create' | 'done'>('verify');
+  type QboAccountOption = {
+    id: string;
+    name: string;
+    fullyQualifiedName: string;
+    type: string;
+    active: boolean;
+  };
+
+  const initialPhase: 'verify' | 'create' | 'done' = accountsCreated
+    ? 'done'
+    : parentsVerified
+      ? 'create'
+      : 'verify';
+
+  const [phase, setPhase] = useState<'verify' | 'create' | 'done'>(initialPhase);
   const [loading, setLoading] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plutusParentStatus, setPlutusParentStatus] = useState<
-    { name: string; type: string; status: 'pass' | 'fail' | 'pending' }[]
-  >(
-    PLUTUS_PARENT_ACCOUNTS.map((item) => ({ name: item.name, type: item.type, status: 'pending' })),
+  const [accounts, setAccounts] = useState<QboAccountOption[]>([]);
+  const [createResult, setCreateResult] = useState<{ created: number; skipped: number } | null>(null);
+
+  const loadAccounts = useCallback(async () => {
+    setLoadingAccounts(true);
+    setError(null);
+
+    const res = await fetch(`${basePath}/api/qbo/accounts`);
+    const data = await res.json();
+    if (!res.ok) {
+      setLoadingAccounts(false);
+      throw new Error(data.error);
+    }
+
+    const rawAccounts = data.accounts as Array<{
+      id: string;
+      name: string;
+      fullyQualifiedName?: string;
+      type?: string;
+      active?: boolean;
+    }>;
+
+    const options: QboAccountOption[] = rawAccounts.map((a) => {
+      const fullyQualifiedName = a.fullyQualifiedName ? a.fullyQualifiedName : a.name;
+      const type = a.type ? a.type : 'Unknown';
+
+      return {
+        id: a.id,
+        name: a.name,
+        fullyQualifiedName,
+        type,
+        active: a.active !== false,
+      };
+    });
+
+    setAccounts(options);
+    setLoadingAccounts(false);
+    return options;
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'verify') return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const options = await loadAccounts();
+        if (cancelled) return;
+
+        if (options.length === 0) {
+          setError('No accounts found in QBO.');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoadingAccounts(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAccounts, phase]);
+
+  const getAccountById = useCallback(
+    (id: string) => {
+      if (id === '') return undefined;
+      return accounts.find((a) => a.id === id);
+    },
+    [accounts],
   );
-  const [lmbParentStatus, setLmbParentStatus] = useState<
-    { name: string; type: string; status: 'pass' | 'fail' | 'pending' }[]
-  >(LMB_PARENT_ACCOUNTS.map((item) => ({ name: item.name, type: item.type, status: 'pending' })));
-  const [createResult, setCreateResult] = useState<{ created: number; skipped: number } | null>(
-    null,
+
+  const updateMapping = useCallback(
+    (key: keyof ParentAccountIds, nextId: string) => {
+      onParentAccountIdsChange({
+        ...parentAccountIds,
+        [key]: nextId,
+      });
+    },
+    [onParentAccountIdsChange, parentAccountIds],
+  );
+
+  const requiredKeys = useMemo<Array<keyof ParentAccountIds>>(
+    () => [
+      'inventoryAsset',
+      'manufacturing',
+      'freightAndDuty',
+      'landFreight',
+      'storage3pl',
+      'amazonSales',
+      'amazonRefunds',
+      'amazonFbaInventoryReimbursement',
+      'amazonSellerFees',
+      'amazonFbaFees',
+      'amazonStorageFees',
+      'amazonAdvertisingCosts',
+      'amazonPromotions',
+    ],
+    [],
+  );
+
+  const validateMapping = useCallback(
+    (accountOptions: QboAccountOption[]) => {
+      const missing: string[] = [];
+      const inactive: string[] = [];
+
+      for (const key of requiredKeys) {
+        const id = parentAccountIds[key];
+        if (id.trim() === '') {
+          missing.push(key);
+          continue;
+        }
+
+        const account = accountOptions.find((a) => a.id === id);
+        if (!account) {
+          missing.push(key);
+          continue;
+        }
+
+        if (!account.active) {
+          inactive.push(key);
+        }
+      }
+
+      return { missing, inactive };
+    },
+    [parentAccountIds, requiredKeys],
   );
 
   const verifyParents = async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(`${basePath}/api/qbo/accounts`);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || `Failed to fetch accounts (${res.status})`);
+      const accountOptions = accounts.length === 0 ? await loadAccounts() : accounts;
+      const { missing, inactive } = validateMapping(accountOptions);
+
+      if (missing.length > 0) {
+        throw new Error(`Select all required parent accounts (${missing.join(', ')}).`);
       }
 
-      const accounts: Array<{ name: string; parentName: string | null; active?: boolean }> =
-        data.accounts || [];
-
-      // Check Plutus parent accounts
-      const plutusResults = PLUTUS_PARENT_ACCOUNTS.map((item) => {
-        const account = accounts.find(
-          (a) => a.parentName === null && a.name.toLowerCase() === item.name.toLowerCase(),
-        );
-        const exists = account && account.active !== false;
-        return {
-          name: item.name,
-          type: item.type,
-          status: (exists ? 'pass' : 'fail') as 'pass' | 'fail',
-        };
-      });
-      setPlutusParentStatus(plutusResults);
-
-      // Check LMB parent accounts
-      const lmbResults = LMB_PARENT_ACCOUNTS.map((item) => {
-        const account = accounts.find(
-          (a) => a.parentName === null && a.name.toLowerCase() === item.name.toLowerCase(),
-        );
-        const exists = account && account.active !== false;
-        return {
-          name: item.name,
-          type: item.type,
-          status: (exists ? 'pass' : 'fail') as 'pass' | 'fail',
-        };
-      });
-      setLmbParentStatus(lmbResults);
-
-      const allPassed =
-        plutusResults.every((r) => r.status === 'pass' || AUTO_CREATE_PLUTUS_PARENTS.has(r.name)) &&
-        lmbResults.every((r) => r.status === 'pass');
-      if (allPassed) {
-        onVerified();
-        setPhase('create');
+      if (inactive.length > 0) {
+        throw new Error(`Selected parent accounts must be active (${inactive.join(', ')}).`);
       }
+
+      onVerified();
+      setPhase('create');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -614,26 +849,86 @@ function AccountSetupStep({
     }
   };
 
+  const brandCount = brands.length;
+  const expectedSubAccounts = brandCount * 19;
+
   const createAccounts = async () => {
     setLoading(true);
     setError(null);
+
     try {
+      const accountOptions = accounts.length === 0 ? await loadAccounts() : accounts;
+      const { missing, inactive } = validateMapping(accountOptions);
+
+      if (missing.length > 0) {
+        throw new Error(`Select all required parent accounts (${missing.join(', ')}).`);
+      }
+
+      if (inactive.length > 0) {
+        throw new Error(`Selected parent accounts must be active (${inactive.join(', ')}).`);
+      }
+
+      const payload: {
+        brandNames: string[];
+        parentAccountIds: {
+          inventoryAsset: string;
+          manufacturing: string;
+          freightAndDuty: string;
+          landFreight: string;
+          storage3pl: string;
+          mfgAccessories?: string;
+          inventoryShrinkage?: string;
+          amazonSales: string;
+          amazonRefunds: string;
+          amazonFbaInventoryReimbursement: string;
+          amazonSellerFees: string;
+          amazonFbaFees: string;
+          amazonStorageFees: string;
+          amazonAdvertisingCosts: string;
+          amazonPromotions: string;
+        };
+      } = {
+        brandNames: brands.map((b) => b.name),
+        parentAccountIds: {
+          inventoryAsset: parentAccountIds.inventoryAsset,
+          manufacturing: parentAccountIds.manufacturing,
+          freightAndDuty: parentAccountIds.freightAndDuty,
+          landFreight: parentAccountIds.landFreight,
+          storage3pl: parentAccountIds.storage3pl,
+          amazonSales: parentAccountIds.amazonSales,
+          amazonRefunds: parentAccountIds.amazonRefunds,
+          amazonFbaInventoryReimbursement: parentAccountIds.amazonFbaInventoryReimbursement,
+          amazonSellerFees: parentAccountIds.amazonSellerFees,
+          amazonFbaFees: parentAccountIds.amazonFbaFees,
+          amazonStorageFees: parentAccountIds.amazonStorageFees,
+          amazonAdvertisingCosts: parentAccountIds.amazonAdvertisingCosts,
+          amazonPromotions: parentAccountIds.amazonPromotions,
+        },
+      };
+
+      if (parentAccountIds.mfgAccessories !== '') {
+        payload.parentAccountIds.mfgAccessories = parentAccountIds.mfgAccessories;
+      }
+
+      if (parentAccountIds.inventoryShrinkage !== '') {
+        payload.parentAccountIds.inventoryShrinkage = parentAccountIds.inventoryShrinkage;
+      }
+
       const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          brandNames: brands.map((b) => b.name),
-        }),
+        body: JSON.stringify(payload),
       });
+
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || `Failed to create accounts (${res.status})`);
+        throw new Error(data.error);
       }
 
-      const created = data.created?.length || 0;
-      const skipped = data.skipped?.length || 0;
+      const created = data.created.length;
+      const skipped = data.skipped.length;
       setCreateResult({ created, skipped });
       onAccountsCreated(expectedSubAccounts);
       setPhase('done');
@@ -644,19 +939,6 @@ function AccountSetupStep({
     }
   };
 
-  const plutusHasFailed = plutusParentStatus.some(
-    (p) => p.status === 'fail' && !AUTO_CREATE_PLUTUS_PARENTS.has(p.name),
-  );
-  const plutusHasAutoCreatableMissingParents = plutusParentStatus.some(
-    (p) => p.status === 'fail' && AUTO_CREATE_PLUTUS_PARENTS.has(p.name),
-  );
-  const lmbHasFailed = lmbParentStatus.some((p) => p.status === 'fail');
-  const hasFailed = plutusHasFailed || lmbHasFailed;
-  const brandCount = brands.length;
-  // 4 Inv Asset + 7 COGS + 8 Revenue/Fee per brand = 19 per brand
-  const expectedSubAccounts = brandCount * 19;
-
-  // Sub-account names for preview
   const inventorySubAccounts = ['Manufacturing', 'Freight', 'Duty', 'Mfg Accessories'];
   const cogsSubAccounts = [
     'Manufacturing',
@@ -678,42 +960,70 @@ function AccountSetupStep({
     'Amazon Promotions',
   ];
 
-  const renderParentAccountRow = (item: {
-    name: string;
-    type: string;
-    status: 'pass' | 'fail' | 'pending';
-  }) => (
-    <div
-      key={item.name}
-      className={cn(
-        'px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-between',
-        item.status === 'pending' &&
-          'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
-        item.status === 'pass' &&
-          'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-        item.status === 'fail' && 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
-      )}
-    >
-      <span>
-        {item.status === 'pass' && '✓ '}
-        {item.status === 'fail' && '✗ '}
-        {item.name}
-      </span>
-      <span className="font-normal opacity-75 text-xs">({item.type})</span>
-    </div>
-  );
+  const allActiveAccounts = accounts.filter((a) => a.active);
+
+  const renderPicker = (input: {
+    label: string;
+    key: keyof ParentAccountIds;
+    required: boolean;
+    expectedType: string;
+    helper: string;
+  }) => {
+    const selected = getAccountById(parentAccountIds[input.key]);
+
+    const typedActive = allActiveAccounts.filter((a) => a.type === input.expectedType);
+    const options = typedActive.length > 0 ? typedActive : allActiveAccounts;
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            {input.label}{' '}
+            {input.required ? (
+              <span className="text-xs text-slate-500">(required)</span>
+            ) : (
+              <span className="text-xs text-slate-500">(optional)</span>
+            )}
+          </p>
+          {selected && (
+            <span
+              className={cn(
+                'text-xs font-medium',
+                selected.active ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+              )}
+            >
+              {selected.active ? '✓ selected' : '✗ inactive'}
+            </span>
+          )}
+        </div>
+
+        <select
+          value={parentAccountIds[input.key]}
+          onChange={(e) => updateMapping(input.key, e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm"
+        >
+          <option value="">— Select account —</option>
+          {options.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.fullyQualifiedName}
+            </option>
+          ))}
+        </select>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {input.helper} Expected type: {input.expectedType}.
+        </p>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Plutus Account Setup
-        </h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Plutus Account Setup</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {phase === 'verify' &&
-            'Verify parent accounts exist in QBO. Plutus will create sub-accounts under them.'}
-          {phase === 'create' && `Create sub-accounts for ${brandCount} brand(s).`}
-          {phase === 'done' && 'QBO accounts are ready.'}
+          Select the correct QBO parent accounts by ID (names vary between companies). Plutus creates
+          brand sub-accounts under these.
         </p>
       </div>
 
@@ -725,33 +1035,26 @@ function AccountSetupStep({
 
       {phase === 'verify' && (
         <>
-          {/* Plutus Accounts Section */}
-          <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-              PLUTUS ACCOUNTS (Inventory + COGS)
-            </h3>
-            <div className="space-y-2">{plutusParentStatus.map(renderParentAccountRow)}</div>
-            {plutusHasAutoCreatableMissingParents && (
-              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                Note: Mfg Accessories and Inventory Shrinkage will be created automatically when you
-                click &quot;Create All Sub-Accounts in QBO&quot;.
-              </p>
-            )}
-          </div>
-
-          {/* LMB Accounts Section */}
-          <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-              LMB ACCOUNTS (Revenue + Fees) - LMB posts here
-            </h3>
-            <div className="space-y-2">{lmbParentStatus.map(renderParentAccountRow)}</div>
-          </div>
-
-          {hasFailed && (
-            <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
-                Create the missing parent accounts in QuickBooks, then re-verify.
-              </p>
+          <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              If you aren&apos;t sure which account is which, open QBO Chart of Accounts and copy the
+              structure you want to use.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await loadAccounts();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                    setLoadingAccounts(false);
+                  }
+                }}
+                disabled={loadingAccounts}
+              >
+                {loadingAccounts ? 'Loading…' : 'Reload Accounts'}
+              </Button>
               <a
                 href={QBO_CHART_OF_ACCOUNTS_URL}
                 target="_blank"
@@ -761,7 +1064,130 @@ function AccountSetupStep({
                 Open QBO Chart of Accounts →
               </a>
             </div>
-          )}
+          </div>
+
+          <div className="space-y-5">
+            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">
+                Plutus Parents (Inventory + COGS)
+              </h3>
+              <div className="space-y-4">
+                {renderPicker({
+                  label: 'Inventory Asset',
+                  key: 'inventoryAsset',
+                  required: true,
+                  expectedType: 'Other Current Asset',
+                  helper: 'Parent for Inv Manufacturing/Freight/Duty accounts.',
+                })}
+                {renderPicker({
+                  label: 'Manufacturing',
+                  key: 'manufacturing',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Parent for Manufacturing - <Brand> COGS accounts.',
+                })}
+                {renderPicker({
+                  label: 'Freight & Custom Duty',
+                  key: 'freightAndDuty',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Parent for Freight - <Brand> and Duty - <Brand> COGS.',
+                })}
+                {renderPicker({
+                  label: 'Land Freight',
+                  key: 'landFreight',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Parent for Land Freight - <Brand> COGS.',
+                })}
+                {renderPicker({
+                  label: 'Storage 3PL',
+                  key: 'storage3pl',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Parent for Storage 3PL - <Brand> COGS.',
+                })}
+                {renderPicker({
+                  label: 'Mfg Accessories',
+                  key: 'mfgAccessories',
+                  required: false,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Optional: select if it already exists; otherwise Plutus can create it.',
+                })}
+                {renderPicker({
+                  label: 'Inventory Shrinkage',
+                  key: 'inventoryShrinkage',
+                  required: false,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'Optional: select if it already exists; otherwise Plutus can create it.',
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">
+                LMB Parents (Revenue + Fees)
+              </h3>
+              <div className="space-y-4">
+                {renderPicker({
+                  label: 'Amazon Sales',
+                  key: 'amazonSales',
+                  required: true,
+                  expectedType: 'Income',
+                  helper: 'LMB posts sales totals here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon Refunds',
+                  key: 'amazonRefunds',
+                  required: true,
+                  expectedType: 'Income',
+                  helper: 'LMB posts refund totals here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon FBA Inventory Reimbursement',
+                  key: 'amazonFbaInventoryReimbursement',
+                  required: true,
+                  expectedType: 'Other Income',
+                  helper: 'LMB posts reimbursements here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon Seller Fees',
+                  key: 'amazonSellerFees',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'LMB posts seller fees here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon FBA Fees',
+                  key: 'amazonFbaFees',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'LMB posts FBA fees here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon Storage Fees',
+                  key: 'amazonStorageFees',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'LMB posts storage fees here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon Advertising Costs',
+                  key: 'amazonAdvertisingCosts',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'LMB posts ad spend here.',
+                })}
+                {renderPicker({
+                  label: 'Amazon Promotions',
+                  key: 'amazonPromotions',
+                  required: true,
+                  expectedType: 'Cost of Goods Sold',
+                  helper: 'LMB posts promotions here.',
+                })}
+              </div>
+            </div>
+          </div>
         </>
       )}
 
@@ -796,9 +1222,7 @@ function AccountSetupStep({
                 </div>
 
                 <div>
-                  <p className="font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    COGS Sub-Accounts:
-                  </p>
+                  <p className="font-medium text-slate-600 dark:text-slate-400 mb-1">COGS Sub-Accounts:</p>
                   <div className="flex flex-wrap gap-1">
                     {cogsSubAccounts.map((sub) => (
                       <span
@@ -840,12 +1264,10 @@ function AccountSetupStep({
                 {inventorySubAccounts.length} per brand)
               </li>
               <li>
-                • {brandCount * cogsSubAccounts.length} COGS sub-accounts ({cogsSubAccounts.length}{' '}
-                per brand)
+                • {brandCount * cogsSubAccounts.length} COGS sub-accounts ({cogsSubAccounts.length} per brand)
               </li>
               <li>
-                • {brandCount * lmbSubAccounts.length} Revenue/Fee sub-accounts (
-                {lmbSubAccounts.length} per brand)
+                • {brandCount * lmbSubAccounts.length} Revenue/Fee sub-accounts ({lmbSubAccounts.length} per brand)
               </li>
             </ul>
           </div>
@@ -860,23 +1282,24 @@ function AccountSetupStep({
         </div>
       )}
 
-      {phase === 'done' && createResult && (
+      {phase === 'done' && (
         <div className="p-6 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-center">
-          <p className="text-lg font-semibold text-green-700 dark:text-green-400 mb-3">
-            Accounts Ready!
-          </p>
-          <div className="flex justify-center gap-8">
-            <div>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {createResult.created}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Created</p>
+          <p className="text-lg font-semibold text-green-700 dark:text-green-400 mb-3">Accounts Ready!</p>
+          {createResult && (
+            <div className="flex justify-center gap-8">
+              <div>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{createResult.created}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Created</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-400">{createResult.skipped}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Already Existed</p>
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-400">{createResult.skipped}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Already Existed</p>
-            </div>
-          </div>
+          )}
+          {!createResult && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">You already completed this step.</p>
+          )}
         </div>
       )}
 
@@ -885,12 +1308,18 @@ function AccountSetupStep({
           Back
         </Button>
         {phase === 'verify' && (
+          <Button onClick={verifyParents} disabled={loading} className="flex-1 bg-teal-500 hover:bg-teal-600 text-white">
+            {loading ? 'Checking...' : 'Verify Mapping'}
+          </Button>
+        )}
+        {phase === 'create' && (
           <Button
-            onClick={verifyParents}
+            onClick={() => setPhase('verify')}
+            variant="outline"
+            className="flex-1"
             disabled={loading}
-            className="flex-1 bg-teal-500 hover:bg-teal-600 text-white"
           >
-            {loading ? 'Checking...' : 'Verify Parents'}
+            Edit Mapping
           </Button>
         )}
         {phase === 'done' && (
@@ -919,7 +1348,7 @@ function SkuSetupStep({
 }) {
   const [newSku, setNewSku] = useState('');
   const [newProductName, setNewProductName] = useState('');
-  const [newBrand, setNewBrand] = useState(brands[0]?.name || '');
+  const [newBrand, setNewBrand] = useState(brands[0].name);
   const [newAsin, setNewAsin] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -927,14 +1356,15 @@ function SkuSetupStep({
   const addSku = () => {
     const trimmedSku = newSku.trim();
     const trimmedName = newProductName.trim();
-    if (trimmedSku && newBrand && !skus.some((s) => s.sku === trimmedSku)) {
+    const selectedBrand = newBrand.trim();
+    if (trimmedSku && selectedBrand !== '' && !skus.some((s) => s.sku === trimmedSku)) {
       onSkusChange([
         ...skus,
         {
           sku: trimmedSku,
           productName: trimmedName,
-          brand: newBrand,
-          asin: newAsin.trim() || undefined,
+          brand: selectedBrand,
+          asin: newAsin.trim() === '' ? undefined : newAsin.trim(),
         },
       ]);
       setNewSku('');
@@ -1006,7 +1436,7 @@ function SkuSetupStep({
             sku,
             productName,
             brand: matchedBrand.name,
-            asin: asin || undefined,
+            asin: asin === '' ? undefined : asin,
           });
         }
       }
@@ -1096,7 +1526,7 @@ function SkuSetupStep({
                 <tr key={index} className="bg-white dark:bg-slate-900">
                   <td className="px-4 py-2 font-mono text-slate-900 dark:text-white">{sku.sku}</td>
                   <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {sku.productName || '-'}
+                    {sku.productName === '' ? '-' : sku.productName}
                   </td>
                   <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{sku.brand}</td>
                   <td className="px-4 py-2">
@@ -1376,11 +1806,19 @@ function BillGuidelinesStep({
         <div className="px-4 py-3 rounded bg-white dark:bg-slate-900 font-mono text-teal-600 dark:text-teal-400 border border-slate-200 dark:border-slate-700">
           PO: PO-2026-001
         </div>
-        <ul className="mt-3 text-xs text-slate-500 dark:text-slate-400 space-y-1">
+        <ul className="mt-3 text-sm text-slate-600 dark:text-slate-400 space-y-1">
           <li>• Start with &quot;PO: &quot; (including the space)</li>
-          <li>• Follow with your PO number (e.g., PO-2026-001)</li>
-          <li>• Keep the memo EXACTLY this format - no extra text</li>
+          <li>• Keep exactly this format - no extra text</li>
+          <li>• Same PO memo on manufacturing + freight + duty bills</li>
         </ul>
+        <div className="mt-4">
+          <Link
+            href="/bills"
+            className="inline-flex items-center gap-2 text-sm text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200 font-medium"
+          >
+            Open Bill Guide + Compliance Scanner →
+          </Link>
+        </div>
       </div>
 
       <div className="p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
@@ -1395,8 +1833,8 @@ function BillGuidelinesStep({
           <div>Manufacturing Bill (PO: PO-2026-001) → $5,000 / 1000 units</div>
           <div>+ Freight Bill (PO: PO-2026-001) → $500 / 1000 units</div>
           <div>+ Duty Bill (PO: PO-2026-001) → $200 / 1000 units</div>
-          <div className="border-t border-teal-300 dark:border-teal-700 pt-1 font-semibold">
-            = Total Landed Cost → $5.70 per unit
+          <div className="pt-1 border-t border-teal-200 dark:border-teal-800">
+            = Unit Cost: $5.70
           </div>
         </div>
       </div>
@@ -1497,11 +1935,11 @@ function CatchUpStep({
   // For from_date mode, we need: date + inventory file + valuation source (+ valuation file if accountant) + qboInitMethod
   const fromDateValid =
     mode === 'from_date' &&
-    startDate &&
-    inventoryFile &&
-    valuationSource &&
-    (valuationSource === 'bills' || (valuationSource === 'accountant' && valuationFile)) &&
-    qboInitMethod;
+    startDate !== null &&
+    inventoryFile !== null &&
+    valuationSource !== null &&
+    (valuationSource === 'bills' || (valuationSource === 'accountant' && valuationFile !== null)) &&
+    qboInitMethod !== null;
 
   const canProceed = mode === 'none' || mode === 'full' || fromDateValid;
 
@@ -1576,7 +2014,7 @@ function CatchUpStep({
                   </label>
                   <input
                     type="date"
-                    value={startDate || ''}
+                    value={startDate ? startDate : ''}
                     onChange={(e) => onStartDateChange(e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
                     className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/30"
@@ -1611,7 +2049,7 @@ function CatchUpStep({
               <input
                 type="file"
                 accept=".csv,.xlsx"
-                onChange={(e) => setInventoryFile(e.target.files?.[0] || null)}
+                onChange={(e) => setInventoryFile(e.target.files ? e.target.files[0] : null)}
                 className="hidden"
               />
               {inventoryFile ? inventoryFile.name : 'Choose File'}
@@ -1696,7 +2134,7 @@ function CatchUpStep({
                     <input
                       type="file"
                       accept=".csv,.xlsx"
-                      onChange={(e) => setValuationFile(e.target.files?.[0] || null)}
+                      onChange={(e) => setValuationFile(e.target.files ? e.target.files[0] : null)}
                       className="hidden"
                     />
                     {valuationFile ? valuationFile.name : 'Upload Valuation File'}
@@ -1712,7 +2150,7 @@ function CatchUpStep({
           </div>
 
           {/* Step 3: QBO Initialization Journal Entry */}
-          {valuationSource && (inventoryFile || valuationSource === 'bills') && (
+          {valuationSource !== null && (inventoryFile !== null || valuationSource === 'bills') && (
             <div className="space-y-3 pt-3 border-t border-amber-300 dark:border-amber-700">
               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Step 3: QBO Initialization Journal Entry
@@ -2022,6 +2460,23 @@ export default function SetupPage() {
       marketplace: i === 0 ? 'amazon.co.uk' : 'amazon.com',
       currency: i === 0 ? 'GBP' : 'USD',
     })),
+    parentAccountIds: {
+      inventoryAsset: '',
+      manufacturing: '',
+      freightAndDuty: '',
+      landFreight: '',
+      storage3pl: '',
+      mfgAccessories: '',
+      inventoryShrinkage: '',
+      amazonSales: '',
+      amazonRefunds: '',
+      amazonFbaInventoryReimbursement: '',
+      amazonSellerFees: '',
+      amazonFbaFees: '',
+      amazonStorageFees: '',
+      amazonAdvertisingCosts: '',
+      amazonPromotions: '',
+    },
     parentsVerified: false,
     accountsCreated: false,
     accountsCreatedCount: 0,
@@ -2071,6 +2526,23 @@ export default function SetupPage() {
         marketplace: i === 0 ? 'amazon.co.uk' : 'amazon.com',
         currency: i === 0 ? 'GBP' : 'USD',
       })),
+      parentAccountIds: {
+        inventoryAsset: '',
+        manufacturing: '',
+        freightAndDuty: '',
+        landFreight: '',
+        storage3pl: '',
+        mfgAccessories: '',
+        inventoryShrinkage: '',
+        amazonSales: '',
+        amazonRefunds: '',
+        amazonFbaInventoryReimbursement: '',
+        amazonSellerFees: '',
+        amazonFbaFees: '',
+        amazonStorageFees: '',
+        amazonAdvertisingCosts: '',
+        amazonPromotions: '',
+      },
       parentsVerified: false,
       accountsCreated: false,
       accountsCreatedCount: 0,
@@ -2124,21 +2596,30 @@ export default function SetupPage() {
                 onBack={() => setStep(1)}
               />
             )}
-            {state.step === 3 && (
+              {state.step === 3 && (
               <BrandSetupStep
                 brands={state.brands}
-                onBrandsChange={(brands) => saveState({ brands })}
+                onBrandsChange={(brands) =>
+                  saveState({
+                    brands,
+                    parentsVerified: false,
+                    accountsCreated: false,
+                    accountsCreatedCount: 0,
+                  })
+                }
                 onNext={() => setStep(4)}
                 onBack={() => setStep(2)}
               />
             )}
-            {state.step === 4 && (
+              {state.step === 4 && (
               <AccountSetupStep
                 brands={state.brands}
+                parentAccountIds={state.parentAccountIds}
+                onParentAccountIdsChange={(ids) => saveState({ parentAccountIds: ids })}
+                parentsVerified={state.parentsVerified}
+                accountsCreated={state.accountsCreated}
                 onVerified={() => saveState({ parentsVerified: true })}
-                onAccountsCreated={(count) =>
-                  saveState({ accountsCreated: true, accountsCreatedCount: count })
-                }
+                onAccountsCreated={(count) => saveState({ accountsCreated: true, accountsCreatedCount: count })}
                 onNext={() => setStep(5)}
                 onBack={() => setStep(3)}
               />

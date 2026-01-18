@@ -33,6 +33,14 @@ function requireAccountByName(accounts: QboAccount[], name: string): QboAccount 
   return found;
 }
 
+function requireAccountById(accounts: QboAccount[], id: string, label: string): QboAccount {
+  const found = accounts.find((a) => a.Id === id);
+  if (!found) {
+    throw new Error(`Missing required QBO account for ${label} (id=${id}).`);
+  }
+  return found;
+}
+
 function findSubAccountByParentId(
   accounts: QboAccount[],
   parentAccountId: string,
@@ -121,12 +129,31 @@ export async function ensurePlutusQboLmbPlanAccounts(
   connection: QboConnection,
   input: {
     brandNames: string[];
+    parentAccountIds?: {
+      inventoryAsset: string;
+      manufacturing: string;
+      freightAndDuty: string;
+      landFreight: string;
+      storage3pl: string;
+      mfgAccessories?: string;
+      inventoryShrinkage?: string;
+      amazonSales: string;
+      amazonRefunds: string;
+      amazonFbaInventoryReimbursement: string;
+      amazonSellerFees: string;
+      amazonFbaFees: string;
+      amazonStorageFees: string;
+      amazonAdvertisingCosts: string;
+      amazonPromotions: string;
+    };
   },
 ): Promise<EnsureResult> {
   const brandNames = requireValidBrandNames(input.brandNames);
   let currentConnection = connection;
 
-  const { accounts, updatedConnection: refreshedOnFetch } = await fetchAccounts(currentConnection);
+  const { accounts, updatedConnection: refreshedOnFetch } = await fetchAccounts(currentConnection, {
+    includeInactive: true,
+  });
   if (refreshedOnFetch) {
     currentConnection = refreshedOnFetch;
   }
@@ -134,25 +161,54 @@ export async function ensurePlutusQboLmbPlanAccounts(
   const created: QboAccount[] = [];
   const skipped: Array<{ name: string; parentName?: string }> = [];
 
+  const parentAccountIds = input.parentAccountIds;
+
   // Plutus parent accounts
-  const inventoryAssetParent = requireAccountByName(accounts, 'Inventory Asset');
-  const manufacturingParent = requireAccountByName(accounts, 'Manufacturing');
-  const freightAndDutyParent = requireAccountByName(accounts, 'Freight & Custom Duty');
-  const landFreightParent = requireAccountByName(accounts, 'Land Freight');
-  const storage3plParent = requireAccountByName(accounts, 'Storage 3PL');
+  const inventoryAssetParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.inventoryAsset, 'Inventory Asset')
+    : requireAccountByName(accounts, 'Inventory Asset');
+  const manufacturingParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.manufacturing, 'Manufacturing')
+    : requireAccountByName(accounts, 'Manufacturing');
+  const freightAndDutyParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.freightAndDuty, 'Freight & Custom Duty')
+    : requireAccountByName(accounts, 'Freight & Custom Duty');
+  const landFreightParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.landFreight, 'Land Freight')
+    : requireAccountByName(accounts, 'Land Freight');
+  const storage3plParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.storage3pl, 'Storage 3PL')
+    : requireAccountByName(accounts, 'Storage 3PL');
 
   // LMB parent accounts (created by LMB wizard, Plutus creates sub-accounts under these)
-  const amazonSalesParent = requireAccountByName(accounts, 'Amazon Sales');
-  const amazonRefundsParent = requireAccountByName(accounts, 'Amazon Refunds');
-  const amazonFbaInventoryReimbursementParent = requireAccountByName(
-    accounts,
-    'Amazon FBA Inventory Reimbursement',
-  );
-  const amazonSellerFeesParent = requireAccountByName(accounts, 'Amazon Seller Fees');
-  const amazonFbaFeesParent = requireAccountByName(accounts, 'Amazon FBA Fees');
-  const amazonStorageFeesParent = requireAccountByName(accounts, 'Amazon Storage Fees');
-  const amazonAdvertisingCostsParent = requireAccountByName(accounts, 'Amazon Advertising Costs');
-  const amazonPromotionsParent = requireAccountByName(accounts, 'Amazon Promotions');
+  const amazonSalesParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonSales, 'Amazon Sales')
+    : requireAccountByName(accounts, 'Amazon Sales');
+  const amazonRefundsParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonRefunds, 'Amazon Refunds')
+    : requireAccountByName(accounts, 'Amazon Refunds');
+  const amazonFbaInventoryReimbursementParent = parentAccountIds
+    ? requireAccountById(
+        accounts,
+        parentAccountIds.amazonFbaInventoryReimbursement,
+        'Amazon FBA Inventory Reimbursement',
+      )
+    : requireAccountByName(accounts, 'Amazon FBA Inventory Reimbursement');
+  const amazonSellerFeesParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonSellerFees, 'Amazon Seller Fees')
+    : requireAccountByName(accounts, 'Amazon Seller Fees');
+  const amazonFbaFeesParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonFbaFees, 'Amazon FBA Fees')
+    : requireAccountByName(accounts, 'Amazon FBA Fees');
+  const amazonStorageFeesParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonStorageFees, 'Amazon Storage Fees')
+    : requireAccountByName(accounts, 'Amazon Storage Fees');
+  const amazonAdvertisingCostsParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonAdvertisingCosts, 'Amazon Advertising Costs')
+    : requireAccountByName(accounts, 'Amazon Advertising Costs');
+  const amazonPromotionsParent = parentAccountIds
+    ? requireAccountById(accounts, parentAccountIds.amazonPromotions, 'Amazon Promotions')
+    : requireAccountByName(accounts, 'Amazon Promotions');
 
   const inventoryTemplate = getTemplateFromAccount(inventoryAssetParent);
   const manufacturingTemplate = getTemplateFromAccount(manufacturingParent);
@@ -169,45 +225,63 @@ export async function ensurePlutusQboLmbPlanAccounts(
   const lmbAdvertisingTemplate = getTemplateFromAccount(amazonAdvertisingCostsParent);
   const lmbPromotionsTemplate = getTemplateFromAccount(amazonPromotionsParent);
 
-  // Ensure Plutus-created parents exist
-  const {
-    account: mfgAccessoriesParent,
-    created: createdMfgAccessoriesParent,
-    updatedConnection: updatedOnMfgAccessories,
-  } = await ensureParentAccount(currentConnection, accounts, {
-    name: 'Mfg Accessories',
-    accountType: manufacturingTemplate.accountType,
-    accountSubType: manufacturingTemplate.accountSubType,
-  });
-
-  if (updatedOnMfgAccessories) {
-    currentConnection = updatedOnMfgAccessories;
-  }
-
-  if (createdMfgAccessoriesParent) {
-    created.push(mfgAccessoriesParent);
+  let mfgAccessoriesParent: QboAccount;
+  if (parentAccountIds?.mfgAccessories) {
+    mfgAccessoriesParent = requireAccountById(accounts, parentAccountIds.mfgAccessories, 'Mfg Accessories');
   } else {
-    skipped.push({ name: mfgAccessoriesParent.Name });
+    // Ensure Plutus-created parent exists
+    const {
+      account,
+      created: createdMfgAccessoriesParent,
+      updatedConnection: updatedOnMfgAccessories,
+    } = await ensureParentAccount(currentConnection, accounts, {
+      name: 'Mfg Accessories',
+      accountType: manufacturingTemplate.accountType,
+      accountSubType: manufacturingTemplate.accountSubType,
+    });
+
+    mfgAccessoriesParent = account;
+
+    if (updatedOnMfgAccessories) {
+      currentConnection = updatedOnMfgAccessories;
+    }
+
+    if (createdMfgAccessoriesParent) {
+      created.push(mfgAccessoriesParent);
+    } else {
+      skipped.push({ name: mfgAccessoriesParent.Name });
+    }
   }
 
-  const {
-    account: inventoryShrinkageParent,
-    created: createdInventoryShrinkageParent,
-    updatedConnection: updatedOnShrinkage,
-  } = await ensureParentAccount(currentConnection, accounts, {
-    name: 'Inventory Shrinkage',
-    accountType: manufacturingTemplate.accountType,
-    accountSubType: 'OtherCostsOfServiceCos',
-  });
-
-  if (updatedOnShrinkage) {
-    currentConnection = updatedOnShrinkage;
-  }
-
-  if (createdInventoryShrinkageParent) {
-    created.push(inventoryShrinkageParent);
+  let inventoryShrinkageParent: QboAccount;
+  if (parentAccountIds?.inventoryShrinkage) {
+    inventoryShrinkageParent = requireAccountById(
+      accounts,
+      parentAccountIds.inventoryShrinkage,
+      'Inventory Shrinkage',
+    );
   } else {
-    skipped.push({ name: inventoryShrinkageParent.Name });
+    const {
+      account,
+      created: createdInventoryShrinkageParent,
+      updatedConnection: updatedOnShrinkage,
+    } = await ensureParentAccount(currentConnection, accounts, {
+      name: 'Inventory Shrinkage',
+      accountType: manufacturingTemplate.accountType,
+      accountSubType: 'OtherCostsOfServiceCos',
+    });
+
+    inventoryShrinkageParent = account;
+
+    if (updatedOnShrinkage) {
+      currentConnection = updatedOnShrinkage;
+    }
+
+    if (createdInventoryShrinkageParent) {
+      created.push(inventoryShrinkageParent);
+    } else {
+      skipped.push({ name: inventoryShrinkageParent.Name });
+    }
   }
 
   const mfgAccessoriesTemplate = getTemplateFromAccount(mfgAccessoriesParent);
