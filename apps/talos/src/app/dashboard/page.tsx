@@ -311,37 +311,6 @@ export default function DashboardPage() {
  title="Dashboard"
  description="Home"
  icon={Home}
- metadata={
- <div className="relative">
- <button
- onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
- className="flex items-center gap-2 px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-h-[44px] bg-white dark:bg-slate-800 dark:bg-slate-900"
- >
- <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
- <span className="text-xs sm:text-sm">
- <span className="sm:hidden">{selectedTimeRange === 'yearToDate' ? 'YTD' : selectedTimeRange === 'current' ? 'Current' : selectedTimeRange === 'last30' ? '30d' : selectedTimeRange === 'last90' ? '90d' : selectedTimeRange === 'lastMonth' ? 'Last Mo' : 'Last Yr'}</span>
- <span className="hidden sm:inline">{timeRanges[selectedTimeRange].label}</span>
- </span>
- <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
- </button>
- {showTimeRangeDropdown && (
- <div className="absolute right-0 mt-2 w-40 sm:w-44 md:w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg shadow-lg z-10">
- {Object.entries(timeRanges).map(([key, range]) => (
- <button
- key={key}
- onClick={() => {
- setSelectedTimeRange(key)
- setShowTimeRangeDropdown(false)
- }}
- className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${selectedTimeRange === key ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
- >
- {range.label}
- </button>
- ))}
- </div>
- )}
- </div>
- }
  />
  <PageContent>
  {/* Quick Actions */}
@@ -415,11 +384,41 @@ export default function DashboardPage() {
 
  {/* Inventory Levels Chart */}
  <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800 mb-6">
- <SectionHeader 
- title="Inventory Levels" 
- icon={TrendingUp} 
- description={`Daily inventory trend - ${timeRanges[selectedTimeRange].label}`}
- />
+ <div className="flex items-center justify-between mb-4">
+   <div className="flex items-center gap-3">
+     <TrendingUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+     <div>
+       <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Inventory Levels</h3>
+       <p className="text-xs text-slate-500 dark:text-slate-400">Daily inventory trend</p>
+     </div>
+   </div>
+   <div className="relative">
+     <button
+       onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
+       className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm bg-white dark:bg-slate-800"
+     >
+       <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+       <span className="text-slate-700 dark:text-slate-300">{timeRanges[selectedTimeRange].label}</span>
+       <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+     </button>
+     {showTimeRangeDropdown && (
+       <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10">
+         {Object.entries(timeRanges).map(([key, range]) => (
+           <button
+             key={key}
+             onClick={() => {
+               setSelectedTimeRange(key)
+               setShowTimeRangeDropdown(false)
+             }}
+             className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${selectedTimeRange === key ? 'bg-slate-100 dark:bg-slate-700 text-cyan-600 dark:text-cyan-400' : 'text-slate-700 dark:text-slate-300'}`}
+           >
+             {range.label}
+           </button>
+         ))}
+       </div>
+     )}
+   </div>
+ </div>
  <MarketSection data={marketData.data} loading={loadingStats} />
  </div>
 
