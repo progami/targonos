@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from '@/hooks/usePortalSession'
+import { usePageState } from '@/lib/store/page-state'
 import { useRouter } from 'next/navigation'
 import { useClientLogger } from '@/hooks/useClientLogger'
 import {
@@ -11,7 +12,6 @@ import {
  ChevronDown,
  Package,
  FileText,
- Warehouse,
  Plus,
  AlertTriangle,
  DollarSign,
@@ -19,7 +19,6 @@ import {
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { SectionHeader } from '@/components/dashboard/section-header'
 import { MarketSection } from '@/components/dashboard/market-section'
 import { OrderPipeline } from '@/components/dashboard/order-pipeline'
 import { CostBreakdown } from '@/components/dashboard/cost-breakdown'
@@ -97,14 +96,18 @@ interface ChartData {
  plannedShipments?: number
 }
 
+const PAGE_KEY = '/dashboard'
+
 export default function DashboardPage() {
  const { data: session, status } = useSession()
  const router = useRouter()
  const { logAction, logPerformance, logError } = useClientLogger()
+ const pageState = usePageState(PAGE_KEY)
  const [stats, setStats] = useState<DashboardStats | null>(null)
  const [chartData, setChartData] = useState<ChartData | null>(null)
  const [loadingStats, setLoadingStats] = useState(true)
- const [selectedTimeRange, setSelectedTimeRange] = useState('yearToDate')
+ const selectedTimeRange = (pageState.custom?.timeRange as string) ?? 'yearToDate'
+ const setSelectedTimeRange = (value: string) => pageState.setCustom('timeRange', value)
  const [showTimeRangeDropdown, setShowTimeRangeDropdown] = useState(false)
  const [hasError, setHasError] = useState(false)
  
