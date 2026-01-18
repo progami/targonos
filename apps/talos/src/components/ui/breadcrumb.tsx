@@ -67,32 +67,32 @@ export function Breadcrumb() {
 
  const homeLink = '/dashboard'
 
- return (
- <nav className="flex items-center space-x-1 text-sm text-slate-600 mb-4">
- <Link
- href={homeLink}
- className="flex items-center hover:text-slate-900 transition-colors"
- >
- <Home className="h-4 w-4" />
- </Link>
- 
- {breadcrumbs.map((breadcrumb, index) => (
- <div key={breadcrumb.href} className="flex items-center">
- <ChevronRight className="h-4 w-4 mx-1 text-slate-400" />
- {index === breadcrumbs.length - 1 ? (
- <span className="font-medium text-slate-900">
- {breadcrumb.label}
- </span>
- ) : (
- <Link
- href={breadcrumb.href}
- className="hover:text-slate-900 transition-colors"
- >
- {breadcrumb.label}
- </Link>
- )}
- </div>
- ))}
- </nav>
- )
+  return (
+  <nav className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400 mb-4">
+  <Link
+  href={homeLink}
+  className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+  >
+  <Home className="h-4 w-4" />
+  </Link>
+  
+  {breadcrumbs.map((breadcrumb, index) => (
+  <div key={breadcrumb.href} className="flex items-center">
+  <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+  {index === breadcrumbs.length - 1 ? (
+  <span className="font-medium text-slate-900 dark:text-slate-100">
+  {breadcrumb.label}
+  </span>
+  ) : (
+  <Link
+  href={breadcrumb.href}
+  className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+  >
+  {breadcrumb.label}
+  </Link>
+  )}
+  </div>
+  ))}
+  </nav>
+  )
 }
