@@ -5,7 +5,7 @@
     "website": { "lifecycle": "active" },
     "kairos": { "lifecycle": "active" },
     "atlas": { "lifecycle": "active" },
-    "x-plan": { "lifecycle": "active" },
+    "xplan": { "lifecycle": "active" },
     "plutus": { "lifecycle": "active" },
     "fcc": { "lifecycle": "archived" },
     "margin-master": { "lifecycle": "archived" },
