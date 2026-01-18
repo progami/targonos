@@ -1,9 +1,10 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { DollarSign, Loader2, Upload, Download, Trash2 } from '@/lib/lucide-icons'
+import { DollarSign, Loader2, Upload, Download, Trash2, ChevronRight, Home } from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { toast } from 'react-hot-toast'
@@ -129,9 +130,27 @@ export default function WarehouseRatesPage({
     }
   }
 
+  const customBreadcrumb = warehouse ? (
+    <nav className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400 mb-4">
+      <Link href="/dashboard" className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        <Home className="h-4 w-4" />
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        Configuration
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        Warehouses
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <span className="font-medium text-slate-900 dark:text-slate-100">{warehouse.name}</span>
+    </nav>
+  ) : null
+
   if (loading) {
     return (
-      <DashboardLayout>
+      <DashboardLayout hideBreadcrumb>
         <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
         </div>
@@ -141,7 +160,7 @@ export default function WarehouseRatesPage({
 
   if (!warehouse) {
     return (
-      <DashboardLayout>
+      <DashboardLayout hideBreadcrumb>
         <PageContainer>
           <PageHeaderSection
             title="Warehouse not found"
@@ -161,7 +180,7 @@ export default function WarehouseRatesPage({
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout customBreadcrumb={customBreadcrumb}>
       <PageContainer>
         <PageHeaderSection
           title={warehouse.name}
