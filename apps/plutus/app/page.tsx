@@ -167,7 +167,7 @@ function TerminalIcon({ className }: { className?: string }) {
 
 export default function HomePage() {
   return (
-    <main className="relative min-h-screen flex flex-col">
+    <main className="relative flex-1 flex flex-col">
       {/* Background layers */}
       <div className="fixed inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-[#0a1628] dark:via-[#0d1d32] dark:to-[#0a1628]" />
 
