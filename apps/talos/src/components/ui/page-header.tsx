@@ -25,7 +25,7 @@ export function PageHeader({
  actions
 }: PageHeaderProps) {
  return (
- <div className="bg-white border rounded-lg p-6">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg p-6">
  <div className="flex items-center justify-between mb-4">
  <div>
  <h1 className="text-3xl font-bold mb-2">{title}</h1>

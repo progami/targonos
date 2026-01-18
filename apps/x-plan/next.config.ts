@@ -1,14 +1,20 @@
 import type { NextConfig } from "next";
 import { createRequire } from "module";
 
-const appBasePath = process.env.BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH || '';
+function normalizeBasePath(value?: string) {
+  if (!value || value === '/') return '';
+  const trimmed = value.replace(/\/+$/g, '');
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+const appBasePath = normalizeBasePath(process.env.BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH);
 
 const require = createRequire(import.meta.url);
 const { version } = require("./package.json") as { version: string };
 const resolvedVersion = process.env.NEXT_PUBLIC_VERSION || version;
 
 const nextConfig: NextConfig = {
-  // Base path configuration - set BASE_PATH env var if needed
+  // Base path configuration - set BASE_PATH (or NEXT_PUBLIC_BASE_PATH) env var if needed
   basePath: appBasePath,
   assetPrefix: appBasePath,
 

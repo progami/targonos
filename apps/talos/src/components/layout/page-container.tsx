@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { ArrowLeft } from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
+import { HistoryBackButton } from '@/components/ui/history-back-button'
 
 interface PageContainerProps {
  children: React.ReactNode
@@ -34,7 +35,7 @@ interface PageContentProps {
 
 export function PageContainer({ children, className }: PageContainerProps) {
  return (
- <div className={cn('flex flex-1 min-h-0 flex-col bg-slate-50', className)}>
+ <div className={cn('flex flex-1 min-h-0 flex-col bg-slate-50 dark:bg-slate-950', className)}>
  {children}
  </div>
  )
@@ -50,7 +51,7 @@ export function PageHeaderSection({
  metadata,
 }: PageHeaderProps) {
  return (
- <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 shadow-soft backdrop-blur-xl sm:px-6 lg:px-8">
+ <header className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800/95 dark:bg-slate-900/95 px-4 py-4 shadow-soft backdrop-blur-xl sm:px-6 lg:px-8">
  <div className="flex flex-col gap-4">
  <div className="flex items-center justify-between gap-4">
  <div className="flex items-center gap-3">
@@ -61,19 +62,21 @@ export function PageHeaderSection({
  {backLabel}
  </Link>
  </Button>
- ) : null}
+ ) : (
+ <HistoryBackButton label="Back" />
+ )}
  {Icon && (
- <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-600 shadow-md ">
- <Icon className="h-5 w-5 text-white " />
+ <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-600 shadow-md">
+ <Icon className="h-5 w-5 text-white" />
  </div>
  )}
  <div className="flex flex-col gap-0.5">
  {description && (
- <span className="text-xs font-bold uppercase tracking-[0.1em] text-cyan-700/70 ">
+ <span className="text-xs font-bold uppercase tracking-[0.1em] text-cyan-700/70 dark:text-cyan-400/70">
  {description}
  </span>
  )}
- <h1 className="text-2xl font-semibold text-slate-900 ">{title}</h1>
+ <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
  </div>
  </div>
  {actions && <div className="flex shrink-0 items-center gap-3">{actions}</div>}

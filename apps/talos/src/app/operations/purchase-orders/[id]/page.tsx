@@ -489,8 +489,8 @@ function getAuditActionTheme(action: string): {
     case 'UPDATE_DETAILS':
       return {
         Icon: FileEdit,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
-        iconClassName: 'text-slate-700',
+        wrapperClassName: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        iconClassName: 'text-slate-700 dark:text-slate-300',
       }
     case 'STATUS_TRANSITION':
       return {
@@ -535,8 +535,8 @@ function getAuditActionTheme(action: string): {
     default:
       return {
         Icon: History,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
-        iconClassName: 'text-slate-700',
+        wrapperClassName: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        iconClassName: 'text-slate-700 dark:text-slate-300',
       }
   }
 }
@@ -944,14 +944,22 @@ export default function PurchaseOrderDetailPage() {
           return
         }
 
+        const uploadBody = await file.arrayBuffer()
         const uploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': file.type },
-          body: file,
+          body: uploadBody,
         })
 
         if (!uploadResponse.ok) {
-          toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+          const errorText = await uploadResponse.text().catch(() => '')
+          const code = errorText.match(/<Code>([^<]+)<\/Code>/)?.[1]?.trim()
+          const message = errorText.match(/<Message>([^<]+)<\/Message>/)?.[1]?.trim()
+          if (code && message) {
+            toast.error(`${code}: ${message}`)
+          } else {
+            toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+          }
           return
         }
 
@@ -1599,7 +1607,7 @@ export default function PurchaseOrderDetailPage() {
 
             return (
               <div className="space-y-3">
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-slate-700 dark:text-slate-300">
                   Marking this PO as issued means the supplier accepted it (signed PI received).
                   This locks draft edits.
                 </p>
@@ -1679,7 +1687,7 @@ export default function PurchaseOrderDetailPage() {
         <div className="grid grid-cols-1 gap-4">
           {fields.map(field => (
             <div key={field.key} className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">{field.label}</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{field.label}</label>
               {field.type === 'select' ? (
                 <select
                   value={stageFormData[field.key] || ''}
@@ -1688,7 +1696,7 @@ export default function PurchaseOrderDetailPage() {
                     setStageFormData(prev => ({ ...prev, [field.key]: value }))
                   }}
                   disabled={field.disabled}
-                  className="w-full px-3 py-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                 >
                   <option value="">
                     {field.key === 'warehouseCode'
@@ -1720,7 +1728,7 @@ export default function PurchaseOrderDetailPage() {
         {requiredDocs.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h5 className="text-sm font-semibold text-slate-900">Required Documents</h5>
+              <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Required Documents</h5>
               {documentsLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
             </div>
             <div className="space-y-2">
@@ -1732,7 +1740,7 @@ export default function PurchaseOrderDetailPage() {
                 return (
                   <div
                     key={key}
-                    className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 px-3 py-2.5"
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {existing ? (
@@ -1741,7 +1749,7 @@ export default function PurchaseOrderDetailPage() {
                         <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
                       )}
                       <div className="min-w-0">
-                        <span className="text-sm font-medium text-slate-900">{doc.label}</span>
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{doc.label}</span>
                         {existing ? (
                           <a
                             href={existing.viewUrl}
@@ -1760,7 +1768,7 @@ export default function PurchaseOrderDetailPage() {
                       </div>
                     </div>
 
-                    <label className="inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                    <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
                       <Upload className="h-3.5 w-3.5" />
                       {existing ? 'Replace' : 'Upload'}
                       <input
@@ -1820,8 +1828,8 @@ export default function PurchaseOrderDetailPage() {
         <div className="flex flex-col gap-6">
           {/* Stage Progress Bar */}
           {!order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED' && (
-            <div className="rounded-xl border bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900 mb-4">Order Progress</h2>
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Order Progress</h2>
 
               {/* Stage Progress - Clickable Navigation */}
               <div className="flex items-center justify-between relative">
@@ -1869,7 +1877,7 @@ export default function PurchaseOrderDetailPage() {
                           isViewing
                             ? 'text-emerald-600'
                             : isCompleted || isCurrent
-                              ? 'text-slate-900 group-hover:text-emerald-600'
+                              ? 'text-slate-900 dark:text-slate-100 group-hover:text-emerald-600'
                               : 'text-slate-400'
                         }`}
                       >
@@ -1902,9 +1910,9 @@ export default function PurchaseOrderDetailPage() {
               </div>
 
               {order.status === 'WAREHOUSE' && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-4">
                   <div>
-                    <p className="text-sm font-medium text-slate-900">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                       Shipping is handled via Fulfillment Orders
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -1924,7 +1932,7 @@ export default function PurchaseOrderDetailPage() {
           {/* Cancelled banner */}
           {order.status === 'CANCELLED' && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
                 This order has been cancelled and cannot be modified.
               </p>
             </div>
@@ -1933,7 +1941,7 @@ export default function PurchaseOrderDetailPage() {
           {/* Rejected banner */}
           {order.status === 'REJECTED' && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
                 This PO was rejected by the supplier. Reopen it as a draft to revise and re-issue.
               </p>
               <Button
@@ -1949,7 +1957,7 @@ export default function PurchaseOrderDetailPage() {
           )}
 
           {/* Details, Cargo, Documents & History Tabs */}
-          <div className="rounded-xl border bg-white shadow-sm">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
             {/* Tab Headers */}
             <div className="flex items-center border-b">
               <button
@@ -2048,7 +2056,7 @@ export default function PurchaseOrderDetailPage() {
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-[420px] space-y-4">
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-900">Add line item</h4>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Add line item</h4>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             Add another SKU to this purchase order.
                           </p>
@@ -2074,7 +2082,7 @@ export default function PurchaseOrderDetailPage() {
                               void ensureSkuBatchesLoaded(skuId)
                             }}
                             disabled={skusLoading || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           >
                             <option value="">Select SKU</option>
                             {skus.map(sku => (
@@ -2109,7 +2117,7 @@ export default function PurchaseOrderDetailPage() {
                               })
                             }}
                             disabled={!newLineDraft.skuId || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                           >
                             {!newLineDraft.skuId ? (
                               <option value="">Select SKU first</option>
@@ -2306,13 +2314,13 @@ export default function PurchaseOrderDetailPage() {
             {/* Tab Content */}
             {activeBottomTab === 'cargo' && (
               <div>
-                <div className="border-b bg-slate-50/50 px-4 py-3">
+                <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Units
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {totalUnits.toLocaleString()}
                       </p>
                     </div>
@@ -2320,7 +2328,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Cartons
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {totalCartons.toLocaleString()}
                       </p>
                     </div>
@@ -2328,7 +2336,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Pallets
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalPallets?.toLocaleString() ?? '—'}
                       </p>
                     </div>
@@ -2336,7 +2344,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Weight (kg)
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalWeightKg?.toLocaleString() ?? '—'}
                       </p>
                     </div>
@@ -2344,7 +2352,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Volume (CBM)
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalVolumeCbm?.toLocaleString() ?? '—'}
                       </p>
                     </div>
@@ -2383,7 +2391,7 @@ export default function PurchaseOrderDetailPage() {
                           const isLast = idx === order.lines.length - 1
                           return (
                             <Fragment key={line.id}>
-                              <tr className="border-t border-slate-200 hover:bg-muted/10">
+                              <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
                                 <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
                                   {line.skuCode}
                                 </td>
@@ -2463,7 +2471,7 @@ export default function PurchaseOrderDetailPage() {
                               </tr>
                               {pkg ? (
                                 <tr
-                                  className={`bg-slate-50/40 ${!isLast ? 'border-b-2 border-slate-200' : ''}`}
+                                  className={`bg-slate-50/40 dark:bg-slate-700/40 ${!isLast ? 'border-b-2 border-slate-200 dark:border-slate-700' : ''}`}
                                 >
                                   <td colSpan={canEdit ? 10 : 9} className="px-4 pb-2 pt-1">
                                     <div
@@ -2476,38 +2484,38 @@ export default function PurchaseOrderDetailPage() {
                                       <div>
                                         <span className="text-muted-foreground">Carton</span>
                                         <p
-                                          className={`font-medium ${pkg.cartonDims ? 'text-slate-700' : 'text-amber-600'}`}
+                                          className={`font-medium ${pkg.cartonDims ? 'text-slate-700 dark:text-slate-300' : 'text-amber-600'}`}
                                         >
                                           {pkg.cartonDims ?? 'Not set'}
                                         </p>
                                       </div>
                                       <div>
                                         <span className="text-muted-foreground">CBM/ctn</span>
-                                        <p className="font-medium text-slate-700">
+                                        <p className="font-medium text-slate-700 dark:text-slate-300">
                                           {pkg.cbmPerCarton ?? '—'}
                                         </p>
                                       </div>
                                       <div>
                                         <span className="text-muted-foreground">CBM Total</span>
-                                        <p className="font-medium text-slate-700">
+                                        <p className="font-medium text-slate-700 dark:text-slate-300">
                                           {pkg.cbmTotal ?? '—'}
                                         </p>
                                       </div>
                                       <div>
                                         <span className="text-muted-foreground">KG/ctn</span>
-                                        <p className="font-medium text-slate-700">
+                                        <p className="font-medium text-slate-700 dark:text-slate-300">
                                           {pkg.kgPerCarton ?? '—'}
                                         </p>
                                       </div>
                                       <div>
                                         <span className="text-muted-foreground">KG Total</span>
-                                        <p className="font-medium text-slate-700">
+                                        <p className="font-medium text-slate-700 dark:text-slate-300">
                                           {pkg.kgTotal ?? '—'}
                                         </p>
                                       </div>
                                       <div>
                                         <span className="text-muted-foreground">Pkg Type</span>
-                                        <p className="font-medium text-slate-700">
+                                        <p className="font-medium text-slate-700 dark:text-slate-300">
                                           {pkg.packagingType ?? '—'}
                                         </p>
                                       </div>
@@ -2515,7 +2523,7 @@ export default function PurchaseOrderDetailPage() {
                                   </td>
                                 </tr>
                               ) : !isLast ? (
-                                <tr className="border-b-2 border-slate-200">
+                                <tr className="border-b-2 border-slate-200 dark:border-slate-700">
                                   <td colSpan={canEdit ? 11 : 10} className="h-0"></td>
                                 </tr>
                               ) : null}
@@ -2697,7 +2705,7 @@ export default function PurchaseOrderDetailPage() {
               <div className="p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-900">Order Details</h4>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Order Details</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Consolidated view of all essential information across stages.
                     </p>
@@ -2710,7 +2718,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'order-info'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -2719,14 +2727,14 @@ export default function PurchaseOrderDetailPage() {
                               [sectionKey]: !isCollapsed,
                             }))
                           }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 text-slate-700">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                               <FileEdit className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">Order Info</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Order Info</p>
                               <p className="text-xs text-muted-foreground">Basic order details</p>
                             </div>
                           </div>
@@ -2782,7 +2790,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 PO Number
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {order.poNumber || order.orderNumber}
                               </p>
                             </div>
@@ -2803,7 +2811,7 @@ export default function PurchaseOrderDetailPage() {
                                   disabled={orderInfoSaving}
                                 />
                               ) : (
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                   {order.counterpartyName || '—'}
                                 </p>
                               )}
@@ -2812,7 +2820,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Destination
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {tenantDestination || '—'}
                               </p>
                             </div>
@@ -2833,7 +2841,7 @@ export default function PurchaseOrderDetailPage() {
                                   disabled={orderInfoSaving}
                                 />
                               ) : (
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                   {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
                                 </p>
                               )}
@@ -2852,7 +2860,7 @@ export default function PurchaseOrderDetailPage() {
                                     }))
                                   }
                                   disabled={orderInfoSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                 >
                                   <option value="">Select incoterms</option>
                                   {INCOTERMS_OPTIONS.map(option => (
@@ -2862,7 +2870,7 @@ export default function PurchaseOrderDetailPage() {
                                   ))}
                                 </select>
                               ) : (
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                   {order.incoterms || '—'}
                                 </p>
                               )}
@@ -2884,7 +2892,7 @@ export default function PurchaseOrderDetailPage() {
                                   disabled={orderInfoSaving}
                                 />
                               ) : (
-                                <p className="text-sm font-medium text-slate-900">
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                   {order.paymentTerms || '—'}
                                 </p>
                               )}
@@ -2893,7 +2901,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Created
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(order.createdAt) || '—'}
                                 {order.createdByName ? ` by ${order.createdByName}` : ''}
                               </p>
@@ -2915,7 +2923,7 @@ export default function PurchaseOrderDetailPage() {
                                   className="min-h-[88px]"
                                 />
                               ) : (
-                                <p className="text-sm text-slate-700">{order.notes}</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-300">{order.notes}</p>
                               )}
                             </div>
                           )}
@@ -2936,7 +2944,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'manufacturing'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -2945,14 +2953,14 @@ export default function PurchaseOrderDetailPage() {
                               [sectionKey]: !isCollapsed,
                             }))
                           }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-amber-50 text-amber-700">
                               <Factory className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">Manufacturing</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manufacturing</p>
                               <p className="text-xs text-muted-foreground">Production details</p>
                             </div>
                           </div>
@@ -2968,7 +2976,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Proforma Invoice
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {mfg?.proformaInvoiceNumber || '—'}
                               </p>
                             </div>
@@ -2976,7 +2984,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Start Date
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(
                                   mfg?.manufacturingStartDate || mfg?.manufacturingStart
                                 ) || '—'}
@@ -2986,7 +2994,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Expected Completion
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
                               </p>
                             </div>
@@ -2994,7 +3002,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Cartons
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {mfg?.totalCartons?.toLocaleString() || '—'}
                               </p>
                             </div>
@@ -3002,7 +3010,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Pallets
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {mfg?.totalPallets?.toLocaleString() || '—'}
                               </p>
                             </div>
@@ -3010,7 +3018,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Weight (kg)
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {mfg?.totalWeightKg?.toLocaleString() || '—'}
                               </p>
                             </div>
@@ -3018,7 +3026,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Volume (CBM)
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
                               </p>
                             </div>
@@ -3041,7 +3049,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'ocean'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3050,14 +3058,14 @@ export default function PurchaseOrderDetailPage() {
                               [sectionKey]: !isCollapsed,
                             }))
                           }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-blue-50 text-blue-700">
                               <Ship className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">In Transit</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">In Transit</p>
                               <p className="text-xs text-muted-foreground">Shipping & logistics</p>
                             </div>
                           </div>
@@ -3073,7 +3081,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 House B/L
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.houseBillOfLading || '—'}
                               </p>
                             </div>
@@ -3081,7 +3089,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Master B/L
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.masterBillOfLading || '—'}
                               </p>
                             </div>
@@ -3089,7 +3097,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Vessel
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.vesselName || '—'}
                               </p>
                             </div>
@@ -3097,7 +3105,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Voyage
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.voyageNumber || '—'}
                               </p>
                             </div>
@@ -3105,7 +3113,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Port of Loading
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.portOfLoading || '—'}
                               </p>
                             </div>
@@ -3113,7 +3121,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Port of Discharge
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.portOfDischarge || '—'}
                               </p>
                             </div>
@@ -3121,7 +3129,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 ETD
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(ocean?.estimatedDeparture) || '—'}
                               </p>
                             </div>
@@ -3129,7 +3137,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 ETA
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(ocean?.estimatedArrival) || '—'}
                               </p>
                             </div>
@@ -3137,7 +3145,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Commercial Invoice
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {ocean?.commercialInvoiceNumber || '—'}
                               </p>
                             </div>
@@ -3160,7 +3168,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'warehouse'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3169,14 +3177,14 @@ export default function PurchaseOrderDetailPage() {
                               [sectionKey]: !isCollapsed,
                             }))
                           }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-purple-50 text-purple-700">
                               <Warehouse className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">Warehouse</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Warehouse</p>
                               <p className="text-xs text-muted-foreground">Receiving & customs</p>
                             </div>
                           </div>
@@ -3192,7 +3200,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Warehouse
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {wh?.warehouseName || wh?.warehouseCode || '—'}
                               </p>
                             </div>
@@ -3200,7 +3208,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Customs Entry
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {wh?.customsEntryNumber || '—'}
                               </p>
                             </div>
@@ -3208,7 +3216,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Customs Cleared
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(wh?.customsClearedDate) || '—'}
                               </p>
                             </div>
@@ -3216,7 +3224,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Duty Amount
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {wh?.dutyAmount != null
                                   ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
                                   : '—'}
@@ -3226,7 +3234,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Received Date
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(wh?.receivedDate) || '—'}
                               </p>
                             </div>
@@ -3236,7 +3244,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                                 Discrepancy Notes
                               </p>
-                              <p className="text-sm text-slate-700">{wh.discrepancyNotes}</p>
+                              <p className="text-sm text-slate-700 dark:text-slate-300">{wh.discrepancyNotes}</p>
                             </div>
                           )}
                         </div>
@@ -3256,7 +3264,7 @@ export default function PurchaseOrderDetailPage() {
                     const sectionKey = 'shipped'
                     const isCollapsed = collapsedDetailSections[sectionKey] ?? false
                     return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -3265,14 +3273,14 @@ export default function PurchaseOrderDetailPage() {
                               [sectionKey]: !isCollapsed,
                             }))
                           }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-emerald-50 text-emerald-700">
                               <Package2 className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">Shipped</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Shipped</p>
                               <p className="text-xs text-muted-foreground">Delivery details</p>
                             </div>
                           </div>
@@ -3288,7 +3296,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Ship To
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {[
                                   shipped?.shipToName,
                                   shipped?.shipToAddress,
@@ -3303,7 +3311,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Carrier
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {shipped?.shippingCarrier || '—'}
                               </p>
                             </div>
@@ -3311,7 +3319,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Method
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {shipped?.shippingMethod || '—'}
                               </p>
                             </div>
@@ -3319,7 +3327,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Tracking
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {shipped?.trackingNumber || '—'}
                               </p>
                             </div>
@@ -3327,7 +3335,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Shipped Date
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
                               </p>
                             </div>
@@ -3335,7 +3343,7 @@ export default function PurchaseOrderDetailPage() {
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Delivered Date
                               </p>
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateOnly(shipped?.deliveredDate) || '—'}
                               </p>
                             </div>
@@ -3444,10 +3452,10 @@ export default function PurchaseOrderDetailPage() {
                 setEditingLine(null)
               }}
             />
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Edit line item</h2>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit line item</h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {editingLine.skuCode} • {editingLine.batchLot || '—'}
                   </p>
@@ -3459,7 +3467,7 @@ export default function PurchaseOrderDetailPage() {
                     setEditLineOpen(false)
                     setEditingLine(null)
                   }}
-                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
                   disabled={editLineSubmitting}
                 >
                   <X className="h-5 w-5" />
@@ -3499,7 +3507,7 @@ export default function PurchaseOrderDetailPage() {
                             }))
                           }}
                           disabled={editLineSubmitting || batchesLoading || !skuId}
-                          className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                         >
                           <option value="">{!skuId ? 'Select SKU first' : 'Select batch'}</option>
                           {batchOptions.map(option => (
@@ -3636,7 +3644,7 @@ export default function PurchaseOrderDetailPage() {
                 })()}
               </div>
 
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -3676,11 +3684,11 @@ export default function PurchaseOrderDetailPage() {
               onClick={() => !transitioning && setAdvanceModalOpen(false)}
             />
             {/* Modal */}
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                     Advance to {nextStage.label}
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
@@ -3691,7 +3699,7 @@ export default function PurchaseOrderDetailPage() {
                 <button
                   type="button"
                   onClick={() => !transitioning && setAdvanceModalOpen(false)}
-                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
                   disabled={transitioning}
                 >
                   <X className="h-5 w-5" />
@@ -3702,7 +3710,7 @@ export default function PurchaseOrderDetailPage() {
               <div className="flex-1 overflow-y-auto px-6 py-5">{renderStageTransitionForm()}</div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
                 <Button
                   variant="outline"
                   onClick={() => setAdvanceModalOpen(false)}
@@ -3782,15 +3790,15 @@ export default function PurchaseOrderDetailPage() {
                 onClick={() => setPreviewDocument(null)}
               />
 
-              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white text-left shadow-xl">
+              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b px-6 py-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 text-slate-700">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {PreviewStageIcon && <PreviewStageIcon className="h-4 w-4" />}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 truncate">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {previewDocument.fileName}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -3824,7 +3832,7 @@ export default function PurchaseOrderDetailPage() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50">
+                <div className="bg-slate-50 dark:bg-slate-700">
                   <div className="h-[75vh] w-full">
                     {previewIsImage ? (
                       <div
@@ -3839,11 +3847,11 @@ export default function PurchaseOrderDetailPage() {
                       />
                     ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-                        <div className="rounded-full border bg-white p-3 text-slate-700 shadow-sm">
+                        <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                             Preview not available
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">

@@ -25,7 +25,7 @@ export function WarehouseMap({
  // Google Maps implementation temporarily disabled - needs @types/google.maps
  return (
  <div 
- className="bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-center" 
+ className="bg-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center" 
  style={{ height }}
  >
  <div className="text-center">

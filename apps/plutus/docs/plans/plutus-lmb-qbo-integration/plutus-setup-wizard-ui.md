@@ -303,34 +303,39 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 │  │ US-DUST SHEETS                                          │   │
 │  │ ─────────────────────────────────────────────────────── │   │
 │  │                                                         │   │
-│  │ INVENTORY ASSET SUB-ACCOUNTS (Plutus)                   │   │
+│  │ INVENTORY ASSET SUB-ACCOUNTS (Plutus posts)             │   │
 │  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Manufacturing  [Inv Asset: Mfg - US-Dust Sheets  ] │ │   │
-│  │ │ Freight        [Inv Asset: Freight - US-Dust She ] │ │   │
-│  │ │ Duty           [Inv Asset: Duty - US-Dust Sheets ] │ │   │
-│  │ │ Mfg Accessories[Inv Asset: MfgAcc - US-Dust Sheet] │ │   │
+│  │ │ Manufacturing  [Inv Manufacturing - US-Dust Sheets] │ │   │
+│  │ │ Freight        [Inv Freight - US-Dust Sheets      ] │ │   │
+│  │ │ Duty           [Inv Duty - US-Dust Sheets         ] │ │   │
+│  │ │ Mfg Accessories[Inv Mfg Accessories - US-Dust She ] │ │   │
 │  │ └─────────────────────────────────────────────────────┘ │   │
 │  │                                                         │   │
-│  │ COGS SUB-ACCOUNTS (Plutus)                              │   │
+│  │ COGS SUB-ACCOUNTS (Plutus posts)                        │   │
 │  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Manufacturing  [Manufacturing - US-Dust Sheets   ] │ │   │
-│  │ │ Freight        [Freight - US-Dust Sheets         ] │ │   │
-│  │ │ Duty           [Duty - US-Dust Sheets            ] │ │   │
-│  │ │ Land Freight   [Land Freight - US-Dust Sheets    ] │ │   │
-│  │ │ Storage 3PL    [Storage 3PL - US-Dust Sheets     ] │ │   │
-│  │ │ Mfg Accessories[Mfg Accessories - US-Dust Sheets ] │ │   │
+│  │ │ Manufacturing  [Manufacturing - US-Dust Sheets    ] │ │   │
+│  │ │ Freight        [Freight - US-Dust Sheets          ] │ │   │
+│  │ │ Duty           [Duty - US-Dust Sheets             ] │ │   │
+│  │ │ Mfg Accessories[Mfg Accessories - US-Dust Sheets  ] │ │   │
+│  │ │ Shrinkage      [Inventory Shrinkage - US-Dust Shee] │ │   │
+│  │ └─────────────────────────────────────────────────────┘ │   │
+│  │                                                         │   │
+│  │ COGS SUB-ACCOUNTS (Manual - user enters bills)          │   │
+│  │ ┌─────────────────────────────────────────────────────┐ │   │
+│  │ │ Land Freight   [Land Freight - US-Dust Sheets     ] │ │   │
+│  │ │ Storage 3PL    [Storage 3PL - US-Dust Sheets      ] │ │   │
 │  │ └─────────────────────────────────────────────────────┘ │   │
 │  │                                                         │   │
 │  │ REVENUE/FEE SUB-ACCOUNTS (for LMB Product Groups)       │   │
 │  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Sales          [Amazon Sales - US-Dust Sheets    ] │ │   │
-│  │ │ Refunds        [Amazon Refunds - US-Dust Sheets  ] │ │   │
-│  │ │ FBA Fees       [Amazon FBA Fees - US-Dust Sheets ] │ │   │
-│  │ │ Seller Fees    [Amazon Seller Fees - US-Dust She ] │ │   │
-│  │ │ Storage Fees   [Amazon Storage Fees - US-Dust Sh ] │ │   │
-│  │ │ Advertising    [Amazon Advertising - US-Dust She ] │ │   │
-│  │ │ Promotions     [Amazon Promotions - US-Dust Shee ] │ │   │
-│  │ │ Reimbursement  [Amazon FBA Inv Reimb - US-Dust S ] │ │   │
+│  │ │ Sales          [Amazon Sales - US-Dust Sheets     ] │ │   │
+│  │ │ Refunds        [Amazon Refunds - US-Dust Sheets   ] │ │   │
+│  │ │ FBA Fees       [Amazon FBA Fees - US-Dust Sheets  ] │ │   │
+│  │ │ Seller Fees    [Amazon Seller Fees - US-Dust Sheet] │ │   │
+│  │ │ Storage Fees   [Amazon Storage Fees - US-Dust She ] │ │   │
+│  │ │ Advertising    [Amazon Advertising - US-Dust Sheet] │ │   │
+│  │ │ Promotions     [Amazon Promotions - US-Dust Sheets] │ │   │
+│  │ │ Reimbursement  [Amazon FBA Inv Reimb - US-Dust She] │ │   │
 │  │ └─────────────────────────────────────────────────────┘ │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
@@ -340,9 +345,9 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 │  │ (same structure as above)                               │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  SUMMARY: 37 sub-accounts to create                             │
+│  SUMMARY: 38 sub-accounts to create                             │
 │  • 8 Inventory Asset sub-accounts (4 per brand)                 │
-│  • 12 COGS sub-accounts (6 per brand)                           │
+│  • 14 COGS sub-accounts (7 per brand)                           │
 │  • 16 Revenue/Fee sub-accounts (8 per brand)                    │
 │                                                                 │
 │  [Create All Sub-Accounts in QBO]                               │
@@ -355,7 +360,7 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 **After Creation:**
 
 ```
-│  ✅ 37 sub-accounts created successfully                        │
+│  ✅ 38 sub-accounts created successfully                        │
 │                                                                 │
 │  [Back]                                        [Next →]         │
 ```
@@ -553,7 +558,7 @@ CS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456
 │  1. Go to QBO → Expenses → Bills → Create Bill                  │
 │  2. Enter vendor, date, amount                                  │
 │  3. In the Memo field, enter: PO: PO-2026-001                   │
-│  4. Select account: Inventory Asset: Mfg - [Brand]              │
+│  4. Select account: Inv Manufacturing - [Brand]                 │
 │  5. Save                                                        │
 │                                                                 │
 │  ─────────────────────────────────────────────────────────────  │
@@ -677,6 +682,34 @@ Plutus queries bills using `PrivateNote` field:
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│  STEP 3: QBO INITIALIZATION JOURNAL ENTRY                       │
+│                                                                 │
+│  ⚠️ IMPORTANT: Your QBO inventory sub-accounts are currently   │
+│  at $0. Without an initialization JE, they will go NEGATIVE    │
+│  when you post your first COGS.                                │
+│                                                                 │
+│  ○ Let Plutus create the initialization JE automatically       │
+│    (Recommended)                                                │
+│                                                                 │
+│  ○ I'll create it manually / have my accountant do it          │
+│    [Download JE Details]                                        │
+│                                                                 │
+│  Preview of Initialization JE:                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Date: 2025-01-01                                        │   │
+│  │                                                         │   │
+│  │ DEBITS:                                                 │   │
+│  │   Inv Manufacturing - US-Dust Sheets  $1,250.00         │   │
+│  │   Inv Freight - US-Dust Sheets        $150.00           │   │
+│  │   Inv Manufacturing - UK-Dust Sheets  $800.00           │   │
+│  │   ...                                                   │   │
+│  │                                                         │   │
+│  │ CREDITS:                                                │   │
+│  │   Opening Balance Equity              $2,400.00         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ─────────────────────────────────────────────────────────────  │
 │  [Back]                           [Create Opening Snapshot →]   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -687,6 +720,7 @@ Plutus queries bills using `PrivateNote` field:
   - Amazon inventory report must be uploaded
   - Valuation source must be selected (bills or accountant file)
   - If accountant file, must have required columns
+  - QBO initialization method must be selected
 
 **Data Captured:**
 - `catchUpMode: 'none' | 'from_date' | 'full'`
@@ -694,6 +728,8 @@ Plutus queries bills using `PrivateNote` field:
 - `openingSnapshotFile: File | null` (Amazon inventory report)
 - `valuationSource: 'bills' | 'accountant' | null`
 - `valuationFile: File | null` (accountant spreadsheet)
+- `qboInitMethod: 'auto' | 'manual' | null`
+- `qboInitJeId: String | null` (if auto-created)
 
 **What happens after wizard completes:**
 
@@ -741,7 +777,7 @@ This keeps the architecture simple and avoids issues with LMB posting Journal En
 │                                                                 │
 │  ACCOUNTS                                                       │
 │  ✅ 15 parent accounts verified                                 │
-│  ✅ 37 sub-accounts created                                     │
+│  ✅ 38 sub-accounts created                                     │
 │  ✅ Bill memo format guidelines acknowledged                    │
 │                                                                 │
 │  SKUS                                                           │
@@ -798,52 +834,52 @@ This keeps the architecture simple and avoids issues with LMB posting Journal En
 ```typescript
 model SetupState {
   id                    String   @id @default(cuid())
-  
+
   // Step 1: QBO Connection
   qboConnected          Boolean  @default(false)
   qboRealmId            String?
   qboCompanyName        String?
-  
+
   // Step 2: LMB Setup Acknowledgment
   lmbSetupAcknowledged  Boolean  @default(false)
   lmbSetupAcknowledgedAt DateTime?
-  
+
   // Step 3: Brands
   brandsConfigured      Boolean  @default(false)
   brandCount            Int      @default(0)
-  
+
   // Step 4: Plutus Accounts
   parentAccountsVerified Boolean @default(false)
   subAccountsCreated    Boolean  @default(false)
   subAccountsCreatedAt  DateTime?
-  
+
   // Step 5: SKUs
   skusConfigured        Boolean  @default(false)
   skuCount              Int      @default(0)
-  
+
   // Step 6: LMB Product Groups (external)
   lmbProductGroupsConfigured Boolean @default(false)
   lmbProductGroupsConfiguredAt DateTime?
-  
+
   // Step 7: Bill Entry Guidelines
   billGuidelinesAcknowledged Boolean @default(false)
   billGuidelinesAcknowledgedAt DateTime?
-  
+
   // Step 8: Historical Catch-Up
   catchUpMode           String?  // 'none' | 'from_date' | 'full'
   catchUpStartDate      DateTime?
   catchUpComplete       Boolean  @default(false)
-  
+
   // Opening Snapshot (required if catchUpMode = 'from_date')
   openingSnapshotFileId String?  // Reference to uploaded Amazon inventory report
   valuationSource       String?  // 'bills' | 'accountant'
   valuationFileId       String?  // Reference to accountant valuation file (if applicable)
   openingSnapshotCreated Boolean @default(false)
-  
+
   // Step 9: Complete
   setupComplete         Boolean  @default(false)
   setupCompletedAt      DateTime?
-  
+
   // Metadata
   currentStep           Int      @default(1)
   createdAt             DateTime @default(now())

@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import { getApiBaseUrl } from '@/lib/qbo/client';
 import { getValidToken, type QboConnection } from '@/lib/qbo/api';
-import type { QboConnectionStatus, QboCompanyInfoResponse } from '@/lib/qbo/types';
+import type { QboConnectionStatus, QboCompanyInfoResponse, QboPreferences } from '@/lib/qbo/types';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-status' });
@@ -89,10 +89,30 @@ export async function GET() {
     const data = (await response.json()) as QboCompanyInfoResponse;
     const companyInfo = data.QueryResponse.CompanyInfo?.[0];
 
+    // Also fetch preferences to get home currency
+    let homeCurrency: string | undefined;
+    try {
+      const prefsResponse = await fetch(`${baseUrl}/v3/company/${connection.realmId}/preferences`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      });
+      if (prefsResponse.ok) {
+        const prefsData = (await prefsResponse.json()) as { Preferences: QboPreferences };
+        homeCurrency = prefsData.Preferences?.CurrencyPrefs?.HomeCurrency?.value;
+      }
+    } catch (prefsError) {
+      logger.warn('Failed to fetch preferences', {
+        error: prefsError instanceof Error ? prefsError.message : String(prefsError),
+      });
+    }
+
     return NextResponse.json<QboConnectionStatus>({
       connected: true,
       realmId: connection.realmId,
       companyName: companyInfo?.CompanyName,
+      homeCurrency,
     });
   } catch (error) {
     // Network error - assume still connected, just can't verify

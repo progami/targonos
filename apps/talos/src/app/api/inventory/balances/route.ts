@@ -63,105 +63,109 @@ export const GET = withAuth(async (req, session) => {
  }
  }
 
- const transactions = await prisma.inventoryTransaction.findMany({
- where: transactionWhere,
- orderBy: [
- { transactionDate: 'asc' },
- { createdAt: 'asc' }
- ],
- include: {
- purchaseOrder: {
- select: { orderNumber: true }
- },
- fulfillmentOrder: {
- select: { foNumber: true }
- }
- }
- })
+  const { skip, take } = getPaginationSkipTake(paginationParams)
 
- const ledgerTransactions = transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
- ...transaction,
- purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
- fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
- }))
+  const transactions = await prisma.inventoryTransaction.findMany({
+    where: transactionWhere,
+    orderBy: [
+      { transactionDate: 'asc' },
+      { createdAt: 'asc' }
+    ],
+    include: {
+      purchaseOrder: {
+        select: { orderNumber: true }
+      },
+      fulfillmentOrder: {
+        select: { foNumber: true }
+      }
+    }
+  })
 
- const aggregated = aggregateInventoryTransactions(ledgerTransactions, {
- includeZeroStock: showZeroStock
- })
+  const ledgerTransactions = transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
+    ...transaction,
+    purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
+    fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
+  }))
 
- const warehouseCodes = [...new Set(transactions.map(t => t.warehouseCode))]
- const warehouses = await prisma.warehouse.findMany({
- where: { code: { in: warehouseCodes } },
- select: { id: true, code: true }
- })
- const warehouseMap = new Map(warehouses.map(w => [w.code, w.id]))
+  const aggregated = aggregateInventoryTransactions(ledgerTransactions, {
+    includeZeroStock: showZeroStock
+  })
 
- const skuCodes = [...new Set(transactions.map(t => t.skuCode))]
- const skus = await prisma.sku.findMany({
- where: { skuCode: { in: skuCodes } },
- select: { id: true, skuCode: true }
- })
- const skuMap = new Map(skus.map(s => [s.skuCode, s.id]))
+  const paginatedBalances = date
+    ? aggregated.balances
+    : aggregated.balances.slice(skip, skip + take)
 
- const results = aggregated.balances.map(balance => {
- const receiveTransaction = balance.firstReceive
- ? {
- createdBy: {
- fullName: balance.firstReceive.createdByName ?? 'Unknown'
- },
- transactionDate: balance.firstReceive.transactionDate,
- createdById: balance.firstReceive.createdById ?? undefined
- }
- : undefined
+  const warehouseCodes = [...new Set(paginatedBalances.map(b => b.warehouseCode))]
+  const warehouses = await prisma.warehouse.findMany({
+    where: { code: { in: warehouseCodes } },
+    select: { id: true, code: true }
+  })
+  const warehouseMap = new Map(warehouses.map(w => [w.code, w.id]))
 
- return {
- id: balance.id,
- warehouseId: warehouseMap.get(balance.warehouseCode) || balance.warehouseCode,
- warehouse: {
- code: balance.warehouseCode,
- name: balance.warehouseName
- },
- skuId: skuMap.get(balance.skuCode) || balance.skuCode,
- sku: {
- skuCode: balance.skuCode,
- description: balance.skuDescription,
- unitsPerCarton: balance.unitsPerCarton
- },
- batchLot: balance.batchLot,
- currentCartons: balance.currentCartons,
- currentPallets: balance.currentPallets,
- currentUnits: balance.currentUnits,
- storageCartonsPerPallet: balance.storageCartonsPerPallet ?? undefined,
- shippingCartonsPerPallet: balance.shippingCartonsPerPallet ?? undefined,
- lastTransactionDate: balance.lastTransactionDate,
- lastTransactionId: balance.lastTransactionId ?? undefined,
- lastTransactionType: balance.lastTransactionType ?? undefined,
- lastTransactionReference: balance.lastTransactionReference ?? undefined,
- purchaseOrderId: balance.purchaseOrderId ?? null,
- purchaseOrderNumber: balance.purchaseOrderNumber ? toPublicOrderNumber(balance.purchaseOrderNumber) : null,
- fulfillmentOrderId: balance.fulfillmentOrderId ?? null,
- fulfillmentOrderNumber: balance.fulfillmentOrderNumber ?? null,
- receiveTransaction
- }
- })
+  const skuCodes = [...new Set(paginatedBalances.map(b => b.skuCode))]
+  const skus = await prisma.sku.findMany({
+    where: { skuCode: { in: skuCodes } },
+    select: { id: true, skuCode: true }
+  })
+  const skuMap = new Map(skus.map(s => [s.skuCode, s.id]))
 
- const summary = aggregated.summary
+  const results = paginatedBalances.map(balance => {
+    const receiveTransaction = balance.firstReceive
+      ? {
+          createdBy: {
+            fullName: balance.firstReceive.createdByName ?? 'Unknown'
+          },
+          transactionDate: balance.firstReceive.transactionDate,
+          createdById: balance.firstReceive.createdById ?? undefined
+        }
+      : undefined
 
- if (date) {
- return NextResponse.json({
- data: results,
- summary
- })
- }
+    return {
+      id: balance.id,
+      warehouseId: warehouseMap.get(balance.warehouseCode) || balance.warehouseCode,
+      warehouse: {
+        code: balance.warehouseCode,
+        name: balance.warehouseName
+      },
+      skuId: skuMap.get(balance.skuCode) || balance.skuCode,
+      sku: {
+        skuCode: balance.skuCode,
+        description: balance.skuDescription,
+        unitsPerCarton: balance.unitsPerCarton
+      },
+      batchLot: balance.batchLot,
+      currentCartons: balance.currentCartons,
+      currentPallets: balance.currentPallets,
+      currentUnits: balance.currentUnits,
+      storageCartonsPerPallet: balance.storageCartonsPerPallet ?? undefined,
+      shippingCartonsPerPallet: balance.shippingCartonsPerPallet ?? undefined,
+      lastTransactionDate: balance.lastTransactionDate,
+      lastTransactionId: balance.lastTransactionId ?? undefined,
+      lastTransactionType: balance.lastTransactionType ?? undefined,
+      lastTransactionReference: balance.lastTransactionReference ?? undefined,
+      purchaseOrderId: balance.purchaseOrderId ?? null,
+      purchaseOrderNumber: balance.purchaseOrderNumber ? toPublicOrderNumber(balance.purchaseOrderNumber) : null,
+      fulfillmentOrderId: balance.fulfillmentOrderId ?? null,
+      fulfillmentOrderNumber: balance.fulfillmentOrderNumber ?? null,
+      receiveTransaction
+    }
+  })
 
- const { skip, take } = getPaginationSkipTake(paginationParams)
- const paginatedResults = results.slice(skip, skip + take)
- const paginatedResponse = createPaginatedResponse(paginatedResults, results.length, paginationParams)
+  const summary = aggregated.summary
 
- return NextResponse.json({
- ...paginatedResponse,
- summary
- })
+  if (date) {
+    return NextResponse.json({
+      data: results,
+      summary
+    })
+  }
+
+  const paginatedResponse = createPaginatedResponse(results, aggregated.balances.length, paginationParams)
+
+  return NextResponse.json({
+    ...paginatedResponse,
+    summary
+  })
  } catch (_error) {
  return NextResponse.json(
  {

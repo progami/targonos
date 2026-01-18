@@ -6,7 +6,6 @@ import { checkRateLimit, rateLimitConfigs } from '@/lib/security/rate-limiter';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 
-const _MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ['.xlsx', '.xls', '.csv'];
 
 export const POST = withAuth(async (request, _session) => {
@@ -86,7 +85,7 @@ export const POST = withAuth(async (request, _session) => {
  const rowSchema = z.object({
  SKU: z.string().min(1),
  Name: z.string().min(1),
- Quantity: z.number().positive().int(),
+ Quantity: z.coerce.number().positive().int(),
  Warehouse: z.string().min(1),
  BatchNumber: z.string().optional()
  });

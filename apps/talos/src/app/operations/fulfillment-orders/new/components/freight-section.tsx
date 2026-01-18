@@ -24,7 +24,7 @@ export function FreightSection({
   const contentId = `${id}-content`
 
   return (
-    <div className="rounded-lg border bg-white overflow-hidden">
+    <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
       <button
         type="button"
         id={buttonId}

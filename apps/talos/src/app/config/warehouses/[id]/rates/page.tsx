@@ -1,9 +1,10 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { DollarSign, Loader2, Upload, Download, Trash2 } from '@/lib/lucide-icons'
+import { DollarSign, Loader2, Upload, Download, Trash2, ChevronRight, Home } from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { toast } from 'react-hot-toast'
@@ -129,9 +130,27 @@ export default function WarehouseRatesPage({
     }
   }
 
+  const customBreadcrumb = warehouse ? (
+    <nav className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400 mb-4">
+      <Link href="/dashboard" className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        <Home className="h-4 w-4" />
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        Configuration
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+        Warehouses
+      </Link>
+      <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+      <span className="font-medium text-slate-900 dark:text-slate-100">{warehouse.name}</span>
+    </nav>
+  ) : null
+
   if (loading) {
     return (
-      <DashboardLayout>
+      <DashboardLayout hideBreadcrumb>
         <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
         </div>
@@ -141,7 +160,7 @@ export default function WarehouseRatesPage({
 
   if (!warehouse) {
     return (
-      <DashboardLayout>
+      <DashboardLayout hideBreadcrumb>
         <PageContainer>
           <PageHeaderSection
             title="Warehouse not found"
@@ -151,7 +170,7 @@ export default function WarehouseRatesPage({
             backLabel="Back"
           />
           <PageContent>
-            <div className="rounded-xl border bg-white shadow-soft p-6 text-sm text-muted-foreground">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6 text-sm text-muted-foreground">
               Warehouse not found.
             </div>
           </PageContent>
@@ -161,7 +180,7 @@ export default function WarehouseRatesPage({
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout customBreadcrumb={customBreadcrumb}>
       <PageContainer>
         <PageHeaderSection
           title={warehouse.name}
@@ -172,11 +191,11 @@ export default function WarehouseRatesPage({
           actions={
             <div className="flex items-center gap-3">
               {/* Rate List Attachment Actions */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-                <span className="text-xs text-slate-600">Rate List:</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <span className="text-xs text-slate-600 dark:text-slate-400">Rate List:</span>
                 {warehouse.rateListAttachment ? (
                   <>
-                    <span className="text-xs font-medium text-slate-700 max-w-[150px] truncate">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 max-w-[150px] truncate">
                       {warehouse.rateListAttachment.fileName}
                     </span>
                     <Button
@@ -198,7 +217,7 @@ export default function WarehouseRatesPage({
                     </Button>
                   </>
                 ) : (
-                  <span className="text-xs text-slate-400">None</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">None</span>
                 )}
                 <Button
                   variant="ghost"
@@ -222,7 +241,7 @@ export default function WarehouseRatesPage({
         />
 
         <PageContent>
-          <div className="rounded-xl border bg-white shadow-soft p-6">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6">
             <WarehouseRatesPanel
               warehouseId={warehouse.id}
               warehouseName={warehouse.name}

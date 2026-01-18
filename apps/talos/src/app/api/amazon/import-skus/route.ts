@@ -10,7 +10,12 @@ import {
 } from '@/lib/amazon/client'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
-import { getReferralFeePercent2026, parseAmazonProductFees, calculateSizeTier } from '@/lib/amazon/fees'
+import {
+  getReferralFeePercent2026,
+  normalizeReferralCategory2026,
+  parseAmazonProductFees,
+  calculateSizeTier,
+} from '@/lib/amazon/fees'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
@@ -207,6 +212,7 @@ function parseCatalogCategories(catalog: { summaries?: unknown }): { category: s
         typeof displayGroupRaw === 'string' && displayGroupRaw.trim()
           ? sanitizeForDisplay(displayGroupRaw.trim())
           : null
+      const normalizedCategory = displayGroup ? normalizeReferralCategory2026(displayGroup) : ''
 
       const browse = summaryRecord.browseClassification
       const browseDisplayRaw =
@@ -216,7 +222,7 @@ function parseCatalogCategories(catalog: { summaries?: unknown }): { category: s
           ? sanitizeForDisplay(browseDisplayRaw.trim())
           : null
 
-      return { category: displayGroup ?? null, subcategory: browseDisplay ?? null }
+      return { category: normalizedCategory ? normalizedCategory : null, subcategory: browseDisplay ?? null }
     }
   }
   return { category: null, subcategory: null }

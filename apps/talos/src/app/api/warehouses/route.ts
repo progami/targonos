@@ -63,7 +63,7 @@ const parseRateListAttachment = (value: Prisma.JsonValue | null): RateListAttach
 }
 
 // Validation schemas with sanitization
-const createWarehouseSchema = z.object({
+const _createWarehouseSchema = z.object({
   code: warehouseCodeSchema,
   name: z
     .string()

@@ -86,7 +86,7 @@ pnpm --filter @targon/x-plan type-check  # tsc in noEmit mode
 - Handsontable-based grids for each workbook sheet with keyboard navigation, copy/paste, and inline editing.
 - Sheet-specific APIs (`/api/v1/x-plan/*`) that persist changes to PostgreSQL and keep derived totals in sync.
 - Automatic supplier invoice generation (manufacturing deposit/production/final, freight, tariff) so new purchase orders surface immediately in planning and cash views.
-- Prisma schema scoped to the `xplan` schema inside the portal database so the platform can grow without siloed databases.
+- Prisma schema scoped to the `xplan` schema inside the portal database.
 
 ## Using X-Plan
 

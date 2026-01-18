@@ -175,7 +175,7 @@ function validateNumeric(value: string): boolean {
 
 function parseNumericInput(value: string | null | undefined): number | null {
   if (!value) return null;
-  const cleaned = value.replace(/[$,%]/g, '').trim();
+  const cleaned = value.replace(/[,$%\s]/g, '').trim();
   const num = parseFloat(cleaned);
   return Number.isNaN(num) ? null : num;
 }

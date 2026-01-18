@@ -437,7 +437,7 @@ export default function NewPurchaseOrderPage() {
       <PageContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Order Details */}
-          <div className="rounded-xl border bg-white p-5">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
             <h3 className="text-sm font-semibold mb-4">Order Details</h3>
 
             {/* Row 1: Supplier + Ship To */}
@@ -447,7 +447,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.supplierId}
                   onChange={e => handleSupplierChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select supplier...</option>
@@ -465,7 +465,7 @@ export default function NewPurchaseOrderPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Ship To</label>
-                <div className="h-10 px-3 flex items-center border rounded-md bg-slate-50 text-sm text-muted-foreground">
+                <div className="h-10 px-3 flex items-center border rounded-md bg-slate-50 dark:bg-slate-700 text-sm text-muted-foreground">
                   {tenantDestination}
                 </div>
               </div>
@@ -478,7 +478,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.currency}
                   onChange={e => handleCurrencyChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   {CURRENCY_OPTIONS.map(currency => (
@@ -501,7 +501,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.incoterms}
                   onChange={e => setFormData(prev => ({ ...prev, incoterms: e.target.value }))}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select...</option>
@@ -535,7 +535,7 @@ export default function NewPurchaseOrderPage() {
           </div>
 
           {/* Products Table with Tabs */}
-          <div className="rounded-xl border bg-white overflow-hidden">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
             <div className="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Products</h3>
@@ -551,14 +551,14 @@ export default function NewPurchaseOrderPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b bg-slate-50/50">
+            <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
               <button
                 type="button"
                 onClick={() => setActiveTab('details')}
                 className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                   activeTab === 'details'
-                    ? 'text-cyan-700 border-b-2 border-cyan-600 bg-white -mb-px'
-                    : 'text-muted-foreground hover:text-slate-700'
+                    ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                    : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 <FileText className="h-4 w-4" />
@@ -569,8 +569,8 @@ export default function NewPurchaseOrderPage() {
                 onClick={() => setActiveTab('attributes')}
                 className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                   activeTab === 'attributes'
-                    ? 'text-cyan-700 border-b-2 border-cyan-600 bg-white -mb-px'
-                    : 'text-muted-foreground hover:text-slate-700'
+                    ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                    : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 <Package className="h-4 w-4" />
@@ -583,7 +583,7 @@ export default function NewPurchaseOrderPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[800px]">
                   <thead>
-                    <tr className="border-b bg-slate-50/50">
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">SKU</th>
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Batch</th>
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Description</th>
@@ -606,13 +606,13 @@ export default function NewPurchaseOrderPage() {
                         : null
 
                       return (
-                        <tr key={item.id} className="border-t border-slate-200 hover:bg-slate-50/50">
-                          {/* SKU */}
+                                      <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                          {/* SKU */}
                           <td className="px-4 py-2.5">
                             <select
                               value={item.skuCode}
                               onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                              className="w-full min-w-[100px] h-9 px-2 border rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[100px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                               required
                             >
                               <option value="">Select...</option>
@@ -627,7 +627,7 @@ export default function NewPurchaseOrderPage() {
                             <select
                               value={item.batchLot}
                               onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                              className="w-full min-w-[90px] h-9 px-2 border rounded bg-white text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[90px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                               required
                               disabled={!item.skuId}
                             >
@@ -751,7 +751,7 @@ export default function NewPurchaseOrderPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[900px]">
                   <thead>
-                    <tr className="border-b bg-slate-50/50">
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">SKU</th>
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Batch</th>
                       <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Carton Size</th>
@@ -781,31 +781,31 @@ export default function NewPurchaseOrderPage() {
                         : null
 
                       return (
-                        <tr key={item.id} className="border-t border-slate-200 hover:bg-slate-50/50">
-                          <td className="px-4 py-3 font-medium">{item.skuCode || '—'}</td>
-                          <td className="px-4 py-3 text-slate-600">{item.batchLot || '—'}</td>
-                          <td className="px-4 py-3">
-                            {cartonTriplet ? `${formatDimensionTripletCm(cartonTriplet)} cm` : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {cbmPerCarton !== null ? cbmPerCarton.toFixed(3) : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums font-medium">
-                            {cbmPerCarton !== null && cartons ? (cbmPerCarton * cartons).toFixed(3) : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {batch?.cartonWeightKg ? batch.cartonWeightKg.toFixed(2) : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums font-medium">
-                            {batch?.cartonWeightKg && cartons ? (batch.cartonWeightKg * cartons).toFixed(2) : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {batch?.packagingType ? (
-                              <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 text-slate-700">
-                                {batch.packagingType}
-                              </span>
-                            ) : <span className="text-slate-400">—</span>}
-                          </td>
+                                        <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                          <td className="px-4 py-3 font-medium text-foreground">{item.skuCode || '—'}</td>
+                                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{item.batchLot || '—'}</td>
+                                          <td className="px-4 py-3 text-foreground">
+                                            {cartonTriplet ? `${formatDimensionTripletCm(cartonTriplet)} cm` : <span className="text-muted-foreground">—</span>}
+                                          </td>
+                                          <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                                            {cbmPerCarton !== null ? cbmPerCarton.toFixed(3) : <span className="text-muted-foreground">—</span>}
+                                          </td>
+                                          <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">
+                                            {cbmPerCarton !== null && cartons ? (cbmPerCarton * cartons).toFixed(3) : <span className="text-muted-foreground">—</span>}
+                                          </td>
+                                          <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                                            {batch?.cartonWeightKg ? batch.cartonWeightKg.toFixed(2) : <span className="text-muted-foreground">—</span>}
+                                          </td>
+                                          <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">
+                                            {batch?.cartonWeightKg && cartons ? (batch.cartonWeightKg * cartons).toFixed(2) : <span className="text-muted-foreground">—</span>}
+                                          </td>
+                                          <td className="px-4 py-3 text-center">
+                                            {batch?.packagingType ? (
+                                              <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                                {batch.packagingType}
+                                              </span>
+                                            ) : <span className="text-muted-foreground">—</span>}
+                                          </td>
                         </tr>
                       )
                     })}
@@ -849,17 +849,17 @@ export default function NewPurchaseOrderPage() {
                 className="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity"
                 onClick={() => setShowAttributesConfirm(false)}
               />
-              <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
-                <div className="bg-white px-6 pt-6 pb-4">
+              <div className="relative transform overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
+                <div className="bg-white dark:bg-slate-800 px-6 pt-6 pb-4">
                   <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-cyan-100">
-                      <Package className="h-6 w-6 text-cyan-600" />
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900">
+                      <Package className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-slate-900">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                         Verify Product Attributes
                       </h3>
-                      <p className="text-sm text-slate-500 mt-1">
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                         Please review the carton dimensions and weights before creating the purchase order.
                       </p>
                     </div>
@@ -868,13 +868,13 @@ export default function NewPurchaseOrderPage() {
                   <div className="mt-4 overflow-x-auto border rounded-lg">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-slate-50">
-                          <th className="text-left font-medium text-slate-600 px-4 py-2">SKU</th>
-                          <th className="text-left font-medium text-slate-600 px-4 py-2">Batch</th>
-                          <th className="text-left font-medium text-slate-600 px-4 py-2">Carton Size</th>
-                          <th className="text-right font-medium text-slate-600 px-4 py-2">CBM Total</th>
-                          <th className="text-right font-medium text-slate-600 px-4 py-2">KG Total</th>
-                          <th className="text-center font-medium text-slate-600 px-4 py-2">Pkg Type</th>
+                        <tr className="border-b bg-slate-50 dark:bg-slate-700">
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">SKU</th>
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Batch</th>
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Carton Size</th>
+                          <th className="text-right font-medium text-slate-600 dark:text-slate-300 px-4 py-2">CBM Total</th>
+                          <th className="text-right font-medium text-slate-600 dark:text-slate-300 px-4 py-2">KG Total</th>
+                          <th className="text-center font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Pkg Type</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -894,12 +894,11 @@ export default function NewPurchaseOrderPage() {
                           const cbmPerCarton = cartonTriplet
                             ? (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
                             : null
-                          const hasData = cartonTriplet || batch?.cartonWeightKg
 
                           return (
-                            <tr key={item.id} className="border-t">
-                              <td className="px-4 py-2 font-medium">{item.skuCode}</td>
-                              <td className="px-4 py-2 text-slate-600">{item.batchLot}</td>
+                            <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700">
+                              <td className="px-4 py-2 font-medium text-foreground">{item.skuCode}</td>
+                              <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.batchLot}</td>
                               <td className="px-4 py-2">
                                 {cartonTriplet ? (
                                   `${formatDimensionTripletCm(cartonTriplet)} cm`
@@ -926,11 +925,11 @@ export default function NewPurchaseOrderPage() {
                               </td>
                               <td className="px-4 py-2 text-center">
                                 {batch?.packagingType ? (
-                                  <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100">
+                                  <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                                     {batch.packagingType}
                                   </span>
                                 ) : (
-                                  <span className="text-slate-400">—</span>
+                                  <span className="text-muted-foreground">—</span>
                                 )}
                               </td>
                             </tr>
@@ -959,7 +958,7 @@ export default function NewPurchaseOrderPage() {
                   )}
                 </div>
 
-                <div className="bg-slate-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
+                <div className="bg-slate-50 dark:bg-slate-700 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
                   <Button
                     onClick={handleConfirmAndCreate}
                     disabled={submitting}

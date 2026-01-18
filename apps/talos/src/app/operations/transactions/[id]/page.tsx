@@ -183,7 +183,7 @@ export default function TransactionDetailPage() {
           backLabel="Back"
         />
         <PageContent>
-          <div className="rounded-xl border bg-white shadow-soft p-6 text-sm text-muted-foreground">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6 text-sm text-muted-foreground">
             Transaction not found.
           </div>
         </PageContent>
@@ -407,7 +407,7 @@ export default function TransactionDetailPage() {
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
                   {cargoItems.map((item, _index) => (
                     <tr key={item.id}>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -527,7 +527,7 @@ export default function TransactionDetailPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
                     {transaction.calculatedCosts.map((cost, index) => (
                       <tr key={index}>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -581,7 +581,7 @@ export default function TransactionDetailPage() {
                 <p className="text-sm mt-2">No documents have been attached to this transaction</p>
               </div>
             ) : (
-              <div className="bg-white rounded-xl border">
+              <div className="bg-white dark:bg-slate-800 rounded-xl border">
                 <div className="px-6 py-4 border-b bg-slate-50">
                   <h3 className="text-lg font-semibold">Transaction Documents</h3>
                 </div>

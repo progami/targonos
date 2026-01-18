@@ -5,7 +5,13 @@ import 'flatpickr/dist/themes/light.css';
 import { Providers } from '@/components/providers';
 import { clsx } from 'clsx';
 
-const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '';
+function normalizeBasePath(value?: string | null) {
+  if (!value || value === '/') return '';
+  const trimmed = value.replace(/\/+$/g, '');
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH);
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 

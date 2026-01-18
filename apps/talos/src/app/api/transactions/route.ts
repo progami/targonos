@@ -663,32 +663,33 @@ export const POST = withAuth(async (request, session) => {
         batchValidationCache.set(cacheKey, true)
       }
 
-      // For SHIP and ADJUST_OUT transactions, verify inventory availability
-      if (['SHIP', 'ADJUST_OUT'].includes(txType)) {
-        // Calculate current balance from transactions
-        const transactions = await prisma.inventoryTransaction.findMany({
-          where: {
-            warehouseCode: warehouse.code,
-            skuCode: sku.skuCode,
-            batchLot: item.batchLot,
-            transactionDate: { lte: transactionDateObj },
-          },
-        })
-
-        let currentCartons = 0
-        for (const txn of transactions) {
-          currentCartons += txn.cartonsIn - txn.cartonsOut
-        }
-
-        if (currentCartons < item.cartons) {
-          return NextResponse.json(
-            {
-              error: `Insufficient inventory for SKU ${item.skuCode} batch ${item.batchLot}. Available: ${currentCartons}, Requested: ${item.cartons}`,
-            },
-            { status: 400 }
-          )
-        }
-      }
+        // For SHIP and ADJUST_OUT transactions, verify inventory availability
+       if (['SHIP', 'ADJUST_OUT'].includes(txType)) {
+         // Calculate current balance using DB aggregation (avoid pulling full history)
+         const totals = await prisma.inventoryTransaction.aggregate({
+           where: {
+             warehouseCode: warehouse.code,
+             skuCode: sku.skuCode,
+             batchLot: item.batchLot,
+             transactionDate: { lte: transactionDateObj },
+           },
+           _sum: {
+             cartonsIn: true,
+             cartonsOut: true,
+           },
+         })
+ 
+         const currentCartons = (totals._sum.cartonsIn ?? 0) - (totals._sum.cartonsOut ?? 0)
+ 
+         if (currentCartons < item.cartons) {
+           return NextResponse.json(
+             {
+               error: `Insufficient inventory for SKU ${item.skuCode} batch ${item.batchLot}. Available: ${currentCartons}, Requested: ${item.cartons}`,
+             },
+             { status: 400 }
+           )
+         }
+       }
     }
 
     // Start performance tracking

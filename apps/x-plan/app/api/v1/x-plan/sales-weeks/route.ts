@@ -22,7 +22,8 @@ const updateSchema = z.object({
 
 function parseIntValue(value: string | null | undefined) {
   if (!value) return null;
-  const parsed = Number(value);
+  const cleaned = value.replace(/[,$\s]/g, '');
+  const parsed = Number(cleaned);
   if (Number.isNaN(parsed)) return null;
   return Math.round(parsed);
 }

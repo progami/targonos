@@ -114,7 +114,7 @@ export function computeProfitAndLoss(
 
   const calendar = options.calendar ?? buildWeekCalendar(sales as unknown as SalesWeekInput[]);
   const asOfDate = options.asOfDate ?? new Date();
-  const currentWeekNumber = weekNumberForDate(asOfDate, calendar) ?? Number.NEGATIVE_INFINITY;
+  const currentWeekNumber = weekNumberForDate(asOfDate, calendar) ?? Number.POSITIVE_INFINITY;
 
   const weekly: ProfitAndLossWeekDerived[] = [];
 

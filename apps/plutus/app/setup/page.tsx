@@ -88,6 +88,8 @@ type WizardState = {
   // Step 8: Historical Catch-Up
   catchUpMode: 'none' | 'from_date' | 'full' | null;
   catchUpStartDate: string | null;
+  qboInitMethod: 'auto' | 'manual' | null;
+  qboInitJeId: string | null;
   // Step 9: Complete
   setupComplete: boolean;
 };
@@ -605,7 +607,7 @@ function AccountSetupStep({
 
   // Sub-account names for preview
   const inventorySubAccounts = ['Mfg', 'Freight', 'Duty', 'MfgAcc'];
-  const cogsSubAccounts = ['Manufacturing', 'Freight & Custom Duty', 'Land Freight', 'Storage 3PL', 'Mfg Accessories', 'Inventory Shrinkage'];
+  const cogsSubAccounts = ['Manufacturing', 'Freight', 'Duty', 'Land Freight', 'Storage 3PL', 'Mfg Accessories', 'Inventory Shrinkage'];
   const lmbSubAccounts = ['Sales', 'Refunds', 'FBA Fees', 'Seller Fees', 'Storage Fees', 'Advertising', 'Promotions', 'FBA Inv Reimb'];
 
   const renderParentAccountRow = (item: { name: string; type: string; status: 'pass' | 'fail' | 'pending' }) => (
@@ -1287,15 +1289,21 @@ function BillGuidelinesStep({
 function CatchUpStep({
   mode,
   startDate,
+  qboInitMethod,
+  brands,
   onModeChange,
   onStartDateChange,
+  onQboInitMethodChange,
   onNext,
   onBack,
 }: {
   mode: 'none' | 'from_date' | 'full' | null;
   startDate: string | null;
+  qboInitMethod: 'auto' | 'manual' | null;
+  brands: Brand[];
   onModeChange: (mode: 'none' | 'from_date' | 'full') => void;
   onStartDateChange: (date: string | null) => void;
+  onQboInitMethodChange: (method: 'auto' | 'manual') => void;
   onNext: () => void;
   onBack: () => void;
 }) {
@@ -1321,13 +1329,14 @@ function CatchUpStep({
     },
   ];
 
-  // For from_date mode, we need: date + inventory file + valuation source (+ valuation file if accountant)
+  // For from_date mode, we need: date + inventory file + valuation source (+ valuation file if accountant) + qboInitMethod
   const fromDateValid =
     mode === 'from_date' &&
     startDate &&
     inventoryFile &&
     valuationSource &&
-    (valuationSource === 'bills' || (valuationSource === 'accountant' && valuationFile));
+    (valuationSource === 'bills' || (valuationSource === 'accountant' && valuationFile)) &&
+    qboInitMethod;
 
   const canProceed = mode === 'none' || mode === 'full' || fromDateValid;
 
@@ -1507,6 +1516,98 @@ function CatchUpStep({
               )}
             </div>
           </div>
+
+          {/* Step 3: QBO Initialization Journal Entry */}
+          {valuationSource && (inventoryFile || valuationSource === 'bills') && (
+            <div className="space-y-3 pt-3 border-t border-amber-300 dark:border-amber-700">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Step 3: QBO Initialization Journal Entry
+              </p>
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                <p className="text-xs text-red-700 dark:text-red-300">
+                  <span className="font-semibold">IMPORTANT:</span> Your QBO inventory sub-accounts are currently at $0.
+                  Without an initialization JE, they will go <span className="font-semibold">NEGATIVE</span> when you post your first COGS.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => onQboInitMethodChange('auto')}
+                  className={cn(
+                    'w-full p-3 rounded-lg border text-left text-sm',
+                    qboInitMethod === 'auto'
+                      ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        'w-4 h-4 rounded-full border-2',
+                        qboInitMethod === 'auto' ? 'border-teal-500 bg-teal-500' : 'border-slate-300'
+                      )}
+                    >
+                      {qboInitMethod === 'auto' && <div className="w-2 h-2 rounded-full bg-white m-0.5" />}
+                    </div>
+                    <span className="font-medium">Let Plutus create the initialization JE automatically</span>
+                    <span className="text-xs text-teal-600 dark:text-teal-400 font-medium">(Recommended)</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => onQboInitMethodChange('manual')}
+                  className={cn(
+                    'w-full p-3 rounded-lg border text-left text-sm',
+                    qboInitMethod === 'manual'
+                      ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        'w-4 h-4 rounded-full border-2',
+                        qboInitMethod === 'manual' ? 'border-teal-500 bg-teal-500' : 'border-slate-300'
+                      )}
+                    >
+                      {qboInitMethod === 'manual' && <div className="w-2 h-2 rounded-full bg-white m-0.5" />}
+                    </div>
+                    <span className="font-medium">I&apos;ll create it manually / have my accountant do it</span>
+                  </div>
+                  {qboInitMethod === 'manual' && (
+                    <div className="ml-6 mt-2">
+                      <button className="text-xs text-teal-600 dark:text-teal-400 hover:underline font-medium">
+                        Download JE Details
+                      </button>
+                    </div>
+                  )}
+                </button>
+              </div>
+
+              {/* Preview of Initialization JE */}
+              {qboInitMethod && (
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Preview of Initialization JE:</p>
+                  <div className="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-1">
+                    <p className="font-semibold">Date: {startDate}</p>
+                    <div className="mt-2">
+                      <p className="text-slate-500">DEBITS:</p>
+                      {brands.map((brand) => (
+                        <div key={brand.name} className="ml-2">
+                          <p>Inv Asset: Manufacturing - {brand.name} <span className="text-slate-400">$X,XXX.XX</span></p>
+                          <p>Inv Asset: Freight - {brand.name} <span className="text-slate-400">$XXX.XX</span></p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-slate-500">CREDITS:</p>
+                      <p className="ml-2">Opening Balance Equity <span className="text-slate-400">$X,XXX.XX</span></p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1680,6 +1781,8 @@ export default function SetupPage() {
     billGuidelinesAcknowledged: false,
     catchUpMode: null,
     catchUpStartDate: null,
+    qboInitMethod: null,
+    qboInitJeId: null,
     setupComplete: false,
   });
 
@@ -1724,6 +1827,8 @@ export default function SetupPage() {
       billGuidelinesAcknowledged: false,
       catchUpMode: null,
       catchUpStartDate: null,
+      qboInitMethod: null,
+      qboInitJeId: null,
       setupComplete: false,
     });
   };
@@ -1814,8 +1919,11 @@ export default function SetupPage() {
               <CatchUpStep
                 mode={state.catchUpMode}
                 startDate={state.catchUpStartDate}
+                qboInitMethod={state.qboInitMethod}
+                brands={state.brands}
                 onModeChange={(mode) => saveState({ ...state, catchUpMode: mode })}
                 onStartDateChange={(date) => saveState({ ...state, catchUpStartDate: date })}
+                onQboInitMethodChange={(method) => saveState({ ...state, qboInitMethod: method })}
                 onNext={() => setStep(9)}
                 onBack={() => setStep(7)}
               />

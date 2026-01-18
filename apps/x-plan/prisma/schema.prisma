@@ -51,7 +51,7 @@ enum StrategyRegion {
   UK
 }
 
-/// Represents a SKU in the Cross Plan workbook ("1. Product Setup")
+/// Represents a SKU in the X-Plan workbook ("1. Product Setup")
 model Product {
   id                 String             @id @default(cuid())
   strategyId         String
