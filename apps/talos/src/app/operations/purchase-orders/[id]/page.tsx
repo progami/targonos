@@ -44,10 +44,10 @@ import {
   XCircle,
 } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
-import { withBasePath } from '@/lib/utils/base-path'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
 // 5-Stage State Machine Types
@@ -733,7 +733,7 @@ export default function PurchaseOrderDetailPage() {
     if (!session) {
       redirectToPortal(
         '/login',
-        `${window.location.origin}/operations/purchase-orders/${params.id}`
+        `${window.location.origin}${withBasePath(`/operations/purchase-orders/${params.id}`)}`
       )
       return
     }

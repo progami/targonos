@@ -4,6 +4,7 @@ import { getTenantPrisma } from '@/lib/tenant/server'
 import { Prisma } from '@targon/prisma-talos'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import { parseLocalDate } from '@/lib/utils/date-helpers'
+import { isRecord } from '@/lib/utils/type-coercion'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +83,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
  sanitizedData.shippingCartonsPerPallet = shippingCartonsPerPallet
  }
  
- // Handle attachments with notes
+ // Handle attachments + notes
  if (attachments !== undefined || notes !== undefined) {
  // Get existing transaction to preserve other attachments
  const existingTx = await prisma.inventoryTransaction.findUnique({
@@ -90,25 +91,52 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
  select: { attachments: true }
  })
  
- let updatedAttachments: unknown[] = []
- 
- // Handle existing attachments
- if (existingTx?.attachments && Array.isArray(existingTx.attachments)) {
- // Remove existing notes attachment
- updatedAttachments = (existingTx.attachments as unknown[]).filter((att: unknown) => (att as Record<string, unknown>).type !== 'notes')
+ const updatedAttachments: Record<string, unknown> = (() => {
+ if (!existingTx?.attachments) {
+ return {}
  }
  
- // Add new notes if provided
- if (notes) {
- updatedAttachments.push({ type: 'notes', content: sanitizeForDisplay(notes) })
+ if (Array.isArray(existingTx.attachments)) {
+ return Object.fromEntries(
+ (existingTx.attachments as unknown[])
+ .map(entry => {
+ if (!isRecord(entry)) return null
+ const category = typeof entry.type === 'string' ? entry.type : undefined
+ if (!category || category === 'notes') {
+ return null
+ }
+ return [category, entry] as const
+ })
+ .filter((pair): pair is readonly [string, Record<string, unknown>] => pair !== null)
+ )
  }
  
- // Merge with new attachments if provided
- if (attachments && Array.isArray(attachments)) {
- updatedAttachments = [...updatedAttachments, ...attachments]
+ if (typeof existingTx.attachments === 'object') {
+ return { ...(existingTx.attachments as Record<string, unknown>) }
  }
  
- sanitizedData.attachments = updatedAttachments.length > 0 
+ return {}
+ })()
+ 
+ if (notes !== undefined) {
+ const sanitizedNotes = notes ? sanitizeForDisplay(notes) : null
+ if (sanitizedNotes) {
+ updatedAttachments.notes = sanitizedNotes
+ } else {
+ delete updatedAttachments.notes
+ }
+ }
+ 
+ if (attachments !== undefined) {
+ if (isRecord(attachments)) {
+ for (const [key, value] of Object.entries(attachments)) {
+ updatedAttachments[key] = value
+ }
+ }
+ }
+ 
+ const keys = Object.keys(updatedAttachments)
+ sanitizedData.attachments = keys.length > 0
  ? (updatedAttachments as unknown as Prisma.InputJsonValue)
  : Prisma.JsonNull
  }

@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { PageLoading } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
   Check,
@@ -218,7 +219,7 @@ export default function FulfillmentOrderDetailPage() {
     if (!session) {
       redirectToPortal(
         '/login',
-        `${window.location.origin}/operations/fulfillment-orders/${params.id}`
+        `${window.location.origin}${withBasePath(`/operations/fulfillment-orders/${params.id}`)}`
       )
       return
     }
