@@ -69,5 +69,5 @@ todo-atlas.md
 xplan-todo.md
 cookies.txt
 
-# Claude Code local files
-.claude/*.local.*
+# Claude Code
+.claude/
