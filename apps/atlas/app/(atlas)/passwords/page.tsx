@@ -102,6 +102,7 @@ export default function PasswordsPage() {
   const [items, setItems] = useState<Password[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [allowedDepartments, setAllowedDepartments] = useState<PasswordDepartment[]>([])
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
@@ -119,10 +120,12 @@ export default function PasswordsPage() {
       setError(null)
       const data = await PasswordsApi.list()
       setItems(data.items)
+      setAllowedDepartments(data.allowedDepartments)
     } catch (e) {
       console.error('Failed to load passwords', e)
       setItems([])
       setError(e instanceof Error ? e.message : 'Failed to load passwords')
+      setAllowedDepartments([])
     } finally {
       setLoading(false)
     }
@@ -133,12 +136,21 @@ export default function PasswordsPage() {
   }, [load])
 
   const openCreateModal = () => {
+    if (!allowedDepartments.length) {
+      setError('No department access configured')
+      return
+    }
     setEditingId(null)
-    setFormData(defaultFormData)
+    setFormData({ ...defaultFormData, department: allowedDepartments[0] })
     setModalOpen(true)
   }
 
   const openEditModal = (password: Password) => {
+    // Validate user still has access to this password's department
+    if (!allowedDepartments.includes(password.department)) {
+      setError('You no longer have access to edit this password')
+      return
+    }
     setEditingId(password.id)
     setFormData({
       title: password.title,
@@ -285,6 +297,10 @@ export default function PasswordsPage() {
   )
 
   const passwordToDelete = items.find(p => p.id === deleteId)
+  const departmentOptions = useMemo(
+    () => DEPARTMENT_OPTIONS.filter((opt) => allowedDepartments.includes(opt.value)),
+    [allowedDepartments]
+  )
 
   return (
     <>
@@ -378,7 +394,7 @@ export default function PasswordsPage() {
               name="department"
               value={formData.department}
               onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value as PasswordDepartment }))}
-              options={DEPARTMENT_OPTIONS.map(d => ({ value: d.value, label: d.label }))}
+              options={departmentOptions.map(d => ({ value: d.value, label: d.label }))}
             />
 
             <TextareaField
