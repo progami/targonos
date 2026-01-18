@@ -172,11 +172,11 @@ export default function WarehouseRatesPage({
           actions={
             <div className="flex items-center gap-3">
               {/* Rate List Attachment Actions */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-                <span className="text-xs text-slate-600">Rate List:</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <span className="text-xs text-slate-600 dark:text-slate-400">Rate List:</span>
                 {warehouse.rateListAttachment ? (
                   <>
-                    <span className="text-xs font-medium text-slate-700 max-w-[150px] truncate">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 max-w-[150px] truncate">
                       {warehouse.rateListAttachment.fileName}
                     </span>
                     <Button
@@ -198,7 +198,7 @@ export default function WarehouseRatesPage({
                     </Button>
                   </>
                 ) : (
-                  <span className="text-xs text-slate-400">None</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">None</span>
                 )}
                 <Button
                   variant="ghost"
