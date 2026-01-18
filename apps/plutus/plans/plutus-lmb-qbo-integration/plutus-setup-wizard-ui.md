@@ -368,7 +368,7 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 **Validation:**
 - All parent accounts exist (or created)
 - All sub-accounts created in QBO
-- No duplicate account names
+- No duplicate account names (user responsibility; handle via optional manual cleanup script if needed)
 
 **Data Captured:**
 - `qboAccountId` for all accounts

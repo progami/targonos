@@ -327,18 +327,6 @@ function VerifyLmbSetupStep({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [duplicateScanLoading, setDuplicateScanLoading] = useState(false);
-  const [duplicateScanResult, setDuplicateScanResult] = useState<
-    | null
-    | {
-        dryRun: boolean;
-        matched: Array<{ id: string; name: string; active: boolean }>;
-        missing: string[];
-        results: Array<{ name: string; id: string; active: boolean; status: 'deactivated' | 'skipped' }>;
-      }
-  >(null);
-  const [duplicateScanError, setDuplicateScanError] = useState<string | null>(null);
-
   return (
     <div className="space-y-6">
       <div>
@@ -365,88 +353,7 @@ function VerifyLmbSetupStep({
           </ol>
         </div>
 
-        <div className="rounded-lg border border-amber-200/60 bg-white/60 p-3 text-amber-900 dark:border-amber-800/60 dark:bg-black/20 dark:text-amber-100 space-y-3">
-          <div>
-            <p className="text-sm font-medium mb-1">Optional (migration only): deactivate duplicate Amazon accounts</p>
-            <p className="text-xs text-amber-800 dark:text-amber-200">
-              If your QBO Chart of Accounts already has legacy “Amazon …” accounts (from manual setup or prior tools),
-              you can make them inactive so reporting stays clean.
-            </p>
-          </div>
 
-          {duplicateScanError && <p className="text-xs text-red-700 dark:text-red-300">{duplicateScanError}</p>}
-
-          {duplicateScanResult && (
-            <div className="text-xs text-amber-900 dark:text-amber-100 space-y-1">
-              <p>
-                Matched: <span className="font-semibold">{duplicateScanResult.matched.length}</span> · Missing:{' '}
-                <span className="font-semibold">{duplicateScanResult.missing.length}</span>
-              </p>
-              {duplicateScanResult.results.length > 0 && (
-                <p>
-                  Deactivated: <span className="font-semibold">{duplicateScanResult.results.filter((r) => r.status === 'deactivated').length}</span>{' '}
-                  · Skipped: <span className="font-semibold">{duplicateScanResult.results.filter((r) => r.status === 'skipped').length}</span>
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={duplicateScanLoading}
-              onClick={async () => {
-                setDuplicateScanLoading(true);
-                setDuplicateScanError(null);
-                try {
-                  const res = await fetch(`${basePath}/api/qbo/accounts/deactivate-duplicates`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dryRun: true }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    throw new Error(data.error);
-                  }
-                  setDuplicateScanResult(data);
-                } catch (err) {
-                  setDuplicateScanError(err instanceof Error ? err.message : String(err));
-                } finally {
-                  setDuplicateScanLoading(false);
-                }
-              }}
-            >
-              {duplicateScanLoading ? 'Scanning…' : 'Dry Run Scan'}
-            </Button>
-
-            <Button
-              variant="outline"
-              disabled={duplicateScanLoading || duplicateScanResult === null || duplicateScanResult.matched.length === 0}
-              onClick={async () => {
-                setDuplicateScanLoading(true);
-                setDuplicateScanError(null);
-                try {
-                  const res = await fetch(`${basePath}/api/qbo/accounts/deactivate-duplicates`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dryRun: false }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    throw new Error(data.error);
-                  }
-                  setDuplicateScanResult(data);
-                } catch (err) {
-                  setDuplicateScanError(err instanceof Error ? err.message : String(err));
-                } finally {
-                  setDuplicateScanLoading(false);
-                }
-              }}
-            >
-              {duplicateScanLoading ? 'Working…' : 'Deactivate'}
-            </Button>
-          </div>
-        </div>
       </div>
 
       <a
