@@ -56,8 +56,8 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
-      name: 'dev-x-plan',
-      cwd: path.join(DEV_DIR, 'apps/x-plan'),
+      name: 'dev-xplan',
+      cwd: path.join(DEV_DIR, 'apps/xplan'),
       script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3108',
       interpreter: 'node',
@@ -154,8 +154,8 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
-      name: 'main-x-plan',
-      cwd: path.join(MAIN_DIR, 'apps/x-plan'),
+      name: 'main-xplan',
+      cwd: path.join(MAIN_DIR, 'apps/xplan'),
       script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3008',
       interpreter: 'node',

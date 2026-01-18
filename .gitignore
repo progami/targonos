@@ -21,7 +21,7 @@ __pycache__/
 .turbo/
 packages/**/prisma/generated/
 packages/prisma-wms/generated/
-packages/prisma-x-plan/generated/
+packages/prisma-xplan/generated/
 packages/prisma-atlas/generated/
 packages/prisma-kairos/generated/
 packages/prisma-talos/generated/
@@ -50,7 +50,7 @@ apps/archived/**/prisma/*.db*
 .env*
 *.mcp.json
 !apps/wms/.env.dev.ci
-!apps/x-plan/.env.dev.ci
+!apps/xplan/.env.dev.ci
 !apps/kairos/.env.dev.ci
 !apps/atlas/.env.dev.ci
 !apps/sso/.env.dev.ci

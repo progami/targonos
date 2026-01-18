@@ -339,7 +339,7 @@ jobs:
           if grep -qx 'apps/talos/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-talos/generated/' <<< "$CHANGED_FILES"; then
             unsafe_parallel="true"
           fi
-          if grep -qx 'apps/x-plan/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-x-plan/generated/' <<< "$CHANGED_FILES"; then
+          if grep -qx 'apps/xplan/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-xplan/generated/' <<< "$CHANGED_FILES"; then
             unsafe_parallel="true"
           fi
           if grep -qx 'apps/kairos/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-kairos/generated/' <<< "$CHANGED_FILES"; then
