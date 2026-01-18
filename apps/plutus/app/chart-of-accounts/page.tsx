@@ -155,8 +155,12 @@ export default function ChartOfAccountsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const accounts = data?.accounts ?? [];
-  const total = data?.total ?? 0;
+  const accounts = useMemo(() => {
+    return data ? data.accounts : [];
+  }, [data]);
+  const total = useMemo(() => {
+    return data ? data.total : 0;
+  }, [data]);
 
   const accountTypes = useMemo(() => {
     const types = new Set(accounts.map((a) => a.type));
