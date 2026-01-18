@@ -119,24 +119,24 @@ export default function WarehousesPanel() {
   const kindMeta = (kind?: string) => {
     switch (kind) {
       case 'AMAZON_FBA':
-        return { label: 'Amazon FBA', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' }
+        return { label: 'Amazon FBA', badgeClass: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600' }
       case 'AMAZON_AWD':
-        return { label: 'Amazon AWD', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' }
+        return { label: 'Amazon AWD', badgeClass: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600' }
       default:
-        return { label: '3PL', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:border-slate-700' }
+        return { label: '3PL', badgeClass: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600' }
     }
   }
 
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-cyan-600" />
-              <h2 className="text-xl font-semibold text-slate-900">Warehouse Network</h2>
+              <Building2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Warehouse Network</h2>
             </div>
-            <p className="text-sm text-slate-600">Manage warehouses and configure cost rates</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Manage warehouses and configure cost rates</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">
@@ -146,15 +146,15 @@ export default function WarehousesPanel() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 items-center gap-3">
             <div className="relative flex-1 md:max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search warehouses..."
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
               />
             </div>
           </div>
@@ -178,10 +178,10 @@ export default function WarehousesPanel() {
           </div>
         ) : filteredWarehouses.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <Building2 className="h-10 w-10 text-slate-300" />
+            <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <div>
-              <p className="text-base font-semibold text-slate-900">No warehouses to show</p>
-              <p className="text-sm text-slate-500">
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">No warehouses to show</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Contact an administrator to configure warehouses.
               </p>
             </div>
@@ -214,7 +214,7 @@ export default function WarehousesPanel() {
                           {kindMeta(warehouse.kind).label}
                         </Badge>
                       </div>
-                      <h3 className="text-lg font-semibold text-slate-900">{warehouse.name}</h3>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{warehouse.name}</h3>
                     </div>
                     <Button
                       asChild
@@ -231,56 +231,56 @@ export default function WarehousesPanel() {
 
                   <div className="flex-1 flex flex-col gap-3">
                     {warehouse.address && (
-                      <p className="flex items-center gap-1 text-sm text-slate-500">
-                        <MapPin className="h-4 w-4 text-slate-400" />
+                      <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
+                        <MapPin className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                         <span className="max-w-[240px] truncate">{warehouse.address}</span>
                       </p>
                     )}
                     {(warehouse.contactPhone || warehouse.contactEmail) && (
-                      <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+                      <div className="flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400">
                         {warehouse.contactPhone && (
                           <span className="inline-flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5 text-slate-400" />
+                            <Phone className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                             {warehouse.contactPhone}
                           </span>
                         )}
                         {warehouse.contactEmail && (
                           <span className="inline-flex items-center gap-1">
-                            <Mail className="h-3.5 w-3.5 text-slate-400" />
+                            <Mail className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                             <span className="truncate max-w-[180px]">{warehouse.contactEmail}</span>
                           </span>
                         )}
                       </div>
                     )}
                     {!warehouse.address && !warehouse.contactPhone && !warehouse.contactEmail && (
-                      <p className="text-xs text-slate-400">No address or contacts on file</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">No address or contacts on file</p>
                     )}
                     {warehouse.rateListAttachment ? (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         Rate list:{' '}
-                        <span className="font-medium text-slate-700">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {warehouse.rateListAttachment.fileName}
                         </span>
                       </p>
                     ) : (
-                      <p className="text-xs text-slate-400">Rate list not uploaded yet</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">Rate list not uploaded yet</p>
                     )}
 
                     <div className="flex-1" />
 
-                    <div className="grid grid-cols-3 gap-3 text-xs text-slate-600">
+                    <div className="grid grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400">
                       <MetricChip
-                        icon={<DollarSign className="h-3.5 w-3.5 text-cyan-600" />}
+                        icon={<DollarSign className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />}
                         label="Cost rates"
                         value={warehouse._count.costRates}
                       />
                       <MetricChip
-                        icon={<Boxes className="h-3.5 w-3.5 text-indigo-600" />}
+                        icon={<Boxes className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />}
                         label="Inventory"
                         value={warehouse._count.inventoryTransactions}
                       />
                       <MetricChip
-                        icon={<Users className="h-3.5 w-3.5 text-emerald-600" />}
+                        icon={<Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />}
                         label="Team"
                         value={warehouse._count.users}
                       />
@@ -322,13 +322,13 @@ function MetricChip({
   value: number
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-gradient-to-br from-slate-50 to-white px-3 py-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-100">
+    <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2.5">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700">
         {icon}
       </div>
       <div className="flex flex-col leading-tight">
-        <span className="text-sm font-bold text-slate-900">{value}</span>
-        <span className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</span>
+        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{value}</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">{label}</span>
       </div>
     </div>
   )
