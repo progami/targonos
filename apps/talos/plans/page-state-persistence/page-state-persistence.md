@@ -39,7 +39,7 @@ function MyPage() {
 
 ## Complete Pages Inventory
 
-### Implemented (11 pages/components)
+### Implemented (14 pages/components)
 
 | # | Page | File | State Persisted | Status |
 |---|------|------|-----------------|--------|
@@ -54,15 +54,9 @@ function MyPage() {
 | 9 | Warehouse Rates | `/config/warehouses/warehouse-rates-panel.tsx` | `activeTab` | Implemented |
 | 10 | Permissions | `/config/permissions/permissions-panel.tsx` | `search` | Implemented |
 | 11 | SKU Batches Panel | `/config/products/sku-batches-modal.tsx` | `search`, `activeTab` | Implemented |
-
-### Using URL Params (2 pages)
-
-These pages use URL params for tab state, which is acceptable but doesn't survive navigation to other pages and back.
-
-| # | Page | File | State | Current Approach |
-|---|------|------|-------|------------------|
-| 12 | Purchase Orders | `/operations/purchase-orders/page.tsx` | Status tab | `useSearchParams()` |
-| 13 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | Status tab | `useSearchParams()` |
+| 12 | Dashboard | `/dashboard/page.tsx` | `timeRange` | Implemented |
+| 13 | Purchase Orders | `/operations/purchase-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
+| 14 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
 
 ### Batches List Page
 
@@ -106,7 +100,6 @@ These pages use URL params for tab state, which is acceptable but doesn't surviv
 | Page | File | Notes |
 |------|------|-------|
 | Home | `/page.tsx` | Redirects to dashboard |
-| Dashboard | `/dashboard/page.tsx` | No persistable state |
 | Config Index | `/config/page.tsx` | Tab container |
 | Finance Index | `/finance/page.tsx` | Tab container |
 | Market Index | `/market/page.tsx` | Tab container |
@@ -185,6 +178,25 @@ These pages use URL params for tab state, which is acceptable but doesn't surviv
   - State: `batchSearch`, `batchModalTab`
   - PAGE_KEY: `/config/products/batches/${skuId}` (dynamic)
 
+### Phase 4: Additional Pages - COMPLETED
+
+- [x] **12. Dashboard**
+  - File: `apps/talos/src/app/dashboard/page.tsx`
+  - State: `timeRange`
+  - PAGE_KEY: `/dashboard`
+
+- [x] **13. Purchase Orders**
+  - File: `apps/talos/src/app/operations/purchase-orders/page.tsx`
+  - State: `activeTab` (status filter)
+  - PAGE_KEY: `/operations/purchase-orders`
+  - Note: Also uses URL params for shareability
+
+- [x] **14. Fulfillment Orders**
+  - File: `apps/talos/src/app/operations/fulfillment-orders/page.tsx`
+  - State: `activeTab` (status filter)
+  - PAGE_KEY: `/operations/fulfillment-orders`
+  - Note: Also uses URL params for shareability
+
 ---
 
 ## Implementation Pattern
@@ -253,13 +265,12 @@ For each page, verify:
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Implemented | 11 | Complete |
-| Using URL Params | 2 | Acceptable |
+| Implemented | 14 | Complete |
 | Batches Pages | 2 | Uses SkuBatchesPanel |
 | Redirect Pages | 4 | N/A |
 | Under Construction | 3 | N/A |
 | Detail/Create Pages | 8 | N/A |
-| Index/Landing Pages | 9 | N/A |
+| Index/Landing Pages | 8 | N/A |
 | Auth/Error Pages | 4 | N/A |
 | Test Pages | 1 | N/A |
 | **Total Pages** | **44** | |

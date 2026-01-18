@@ -17,16 +17,16 @@ The desired end-state is **PO P&L** that is **derived from FIFO allocation**, wi
 
 ## Current code reality (source of truth)
 ### FIFO allocation exists and is already used by Weekly P&L
-- FIFO + sales planning: `apps/x-plan/lib/calculations/sales.ts`
+- FIFO + sales planning: `apps/xplan/lib/calculations/sales.ts`
   - `allocateSalesFIFO`
   - `computeSalesPlan` → emits `SalesWeekDerived.batchAllocations[]`
-- Weekly P&L consumes FIFO allocations: `apps/x-plan/lib/calculations/finance.ts`
+- Weekly P&L consumes FIFO allocations: `apps/xplan/lib/calculations/finance.ts`
   - `computeProfitAndLoss` (“Use batch allocations if available (FIFO costing)”)
 
 ### “PO Profitability” is currently PO/batch unit-econ (not FIFO sold units)
-- View builder: `apps/x-plan/app/[sheet]/page.tsx`
+- View builder: `apps/xplan/app/[sheet]/page.tsx`
   - `getPOProfitabilityView` computes per-batch profit using full batch quantities.
-- UI: `apps/x-plan/components/sheets/po-profitability-section.tsx`
+- UI: `apps/xplan/components/sheets/po-profitability-section.tsx`
   - Aggregates per-batch rows to per-PO when “All SKUs” selected.
 
 ## Goals
@@ -204,7 +204,7 @@ Today everything formats USD in PO profitability UI; if UK needs GBP, ensure for
 ## Implementation steps (after the in-flight PR lands)
 1. **Rebase/merge dependency PR** (the UI overhaul PR) and ensure `dev` is green.
 2. Add new calculation module:
-   - `apps/x-plan/lib/calculations/allocation-ledger.ts` (or similar)
+   - `apps/xplan/lib/calculations/allocation-ledger.ts` (or similar)
    - Unit test the ledger and aggregations.
 3. Refactor `computeProfitAndLoss` to use ledger (or add parallel path).
 4. Implement `computePoPnL({ ledger, weeklyFixedCosts, scope, mode })`.

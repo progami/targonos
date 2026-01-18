@@ -17,6 +17,7 @@ import {
   Truck,
 } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
   AmazonShipmentPicker,
@@ -138,7 +139,7 @@ export default function NewFulfillmentOrderPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/fulfillment-orders/new`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/fulfillment-orders/new')}`)
       return
     }
   }, [session, status])

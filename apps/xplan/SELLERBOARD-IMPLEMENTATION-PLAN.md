@@ -21,11 +21,11 @@ Currently X-Plan uses Sunday as week start for US region. This needs to change t
 ### Task 1.1: Identify all week calculation locations
 
 Files to update:
-- `apps/x-plan/lib/calculations/sales.ts` - `resolveWeekNumber()`, `getWeekStartDate()`
-- `apps/x-plan/lib/calculations/ops.ts` - Week number calculations for PO dates
-- `apps/x-plan/lib/calculations/finance.ts` - P&L and Cash Flow week aggregations
-- `apps/x-plan/lib/integrations/sellerboard-us-actual-sales-sync.ts` - Sellerboard sync week parsing
-- `apps/x-plan/components/sheets/sales-planning-grid.tsx` - `PLANNING_ANCHOR_DATE`, `PLANNING_ANCHOR_WEEK`
+- `apps/xplan/lib/calculations/sales.ts` - `resolveWeekNumber()`, `getWeekStartDate()`
+- `apps/xplan/lib/calculations/ops.ts` - Week number calculations for PO dates
+- `apps/xplan/lib/calculations/finance.ts` - P&L and Cash Flow week aggregations
+- `apps/xplan/lib/integrations/sellerboard-us-actual-sales-sync.ts` - Sellerboard sync week parsing
+- `apps/xplan/components/sheets/sales-planning-grid.tsx` - `PLANNING_ANCHOR_DATE`, `PLANNING_ANCHOR_WEEK`
 - Any other files using `getDay()`, `startOfWeek()`, or week calculations
 
 ### Task 1.2: Update planning anchor
@@ -84,9 +84,9 @@ const WEEK_START_DAY = 1; // Monday for all regions
 
 Ensure Sellerboard CSV dates are aggregated using Monday-Sunday week boundaries.
 
-Current file: `apps/x-plan/lib/integrations/sellerboard-us-actual-sales-sync.ts`
+Current file: `apps/xplan/lib/integrations/sellerboard/sync.ts`
 
-Update `getWeekNumberFromDate()` to use Monday as week start.
+Update week parsing to use Monday as week start.
 
 ### Task 1.6: Database migration consideration
 
@@ -117,7 +117,7 @@ Example: "Week 3 (Jan 13-19)" instead of "Week 3 (Jan 12-18)"
 
 ### Task 2.1: Create unified Sellerboard service folder structure
 
-Location: `apps/x-plan/lib/integrations/sellerboard/`
+Location: `apps/xplan/lib/integrations/sellerboard/`
 
 ```
 sellerboard/
@@ -218,11 +218,11 @@ export function hashCsvContent(content: string): string {
 ### Task 2.4: Migrate existing Orders sync
 
 Move from:
-- `apps/x-plan/lib/integrations/sellerboard-us-actual-sales-sync.ts`
-- `apps/x-plan/lib/integrations/sellerboard-orders.ts`
+- `apps/xplan/lib/integrations/sellerboard-us-actual-sales-sync.ts`
+- `apps/xplan/lib/integrations/sellerboard-orders.ts`
 
 To:
-- `apps/x-plan/lib/integrations/sellerboard/orders.ts`
+- `apps/xplan/lib/integrations/sellerboard/orders.ts`
 
 Preserve all existing functionality:
 - CSV parsing
@@ -453,7 +453,7 @@ await prisma.salesWeek.update({
 
 ### Task 5.1: Update data loader to include `hasActualData`
 
-In the page data loader (`apps/x-plan/app/[sheet]/page.tsx`), ensure `hasActualData` is included in the sales week data passed to components.
+In the page data loader (`apps/xplan/app/[sheet]/page.tsx`), ensure `hasActualData` is included in the sales week data passed to components.
 
 ```typescript
 const salesWeeks = await prisma.salesWeek.findMany({
@@ -567,7 +567,7 @@ Add a small legend explaining the indicators:
 
 ### Task 6.1: Sales Planning Sheet (4-sales-planning)
 
-File: `apps/x-plan/components/sheets/sales-planning-grid.tsx`
+File: `apps/xplan/components/sheets/sales-planning-grid.tsx`
 
 Updates:
 - [ ] Week column headers show green indicator when `hasActualData = true`
@@ -577,7 +577,7 @@ Updates:
 
 ### Task 6.2: P&L Sheet (5-fin-planning-pl)
 
-File: `apps/x-plan/components/sheets/profit-and-loss-grid.tsx`
+File: `apps/xplan/components/sheets/profit-and-loss-grid.tsx`
 
 Updates:
 - [ ] Week column headers show green indicator
@@ -587,7 +587,7 @@ Updates:
 
 ### Task 6.3: PO P&L Sheet (6-po-profitability)
 
-File: `apps/x-plan/components/sheets/po-profitability-section.tsx`
+File: `apps/xplan/components/sheets/po-profitability-section.tsx`
 
 Updates:
 - [ ] REAL mode toggle only uses weeks with `hasActualData = true`
@@ -597,7 +597,7 @@ Updates:
 
 ### Task 6.4: Cash Flow Sheet (7-fin-planning-cash-flow)
 
-File: `apps/x-plan/components/sheets/cash-flow-grid.tsx`
+File: `apps/xplan/components/sheets/cash-flow-grid.tsx`
 
 Updates:
 - [ ] Week column headers show green indicator
@@ -607,7 +607,7 @@ Updates:
 
 ### Task 6.5: Ops Planning Sheet (3-ops-planning)
 
-File: `apps/x-plan/components/sheets/ops-planning/`
+File: `apps/xplan/components/sheets/ops-planning/`
 
 Updates:
 - [ ] PO arrival weeks calculated with Monday start
@@ -620,7 +620,7 @@ Updates:
 
 ### Task 7.1: Update P&L calculation to use actual data when available
 
-In `apps/x-plan/lib/calculations/finance.ts`:
+In `apps/xplan/lib/calculations/finance.ts`:
 
 ```typescript
 function calculateWeeklyPnL(weekNumber: number, products: Product[], salesWeeks: SalesWeek[], financials: SalesWeekFinancials[]) {
@@ -712,14 +712,14 @@ SELLERBOARD_US_CASHFLOW_REPORT_URL=https://...
 
 ### Task 9.1: Create test strategy
 
-1. Go to https://targonos.targonglobal.com/x-plan/1-strategies
+1. Go to https://targonos.targonglobal.com/xplan/1-strategies
 2. Create new strategy named "TEST - Sellerboard Integration"
 3. Use this strategy for ALL testing below
 4. Delete test strategy after testing is complete
 
 ### Task 9.2: Test Week System (Monday Start)
 
-**URL:** https://targonos.targonglobal.com/x-plan/4-sales-planning?year=2026
+**URL:** https://targonos.targonglobal.com/xplan/4-sales-planning?year=2026
 
 Browser tests:
 - [ ] Open Sales Planning sheet
@@ -730,7 +730,7 @@ Browser tests:
 
 ### Task 9.3: Test Sellerboard Sync
 
-**URL:** https://targonos.targonglobal.com/x-plan/4-sales-planning
+**URL:** https://targonos.targonglobal.com/xplan/4-sales-planning
 
 Browser tests:
 - [ ] Trigger Sellerboard sync via UI control
@@ -741,7 +741,7 @@ Browser tests:
 
 ### Task 9.4: Test Real Week Indicators
 
-**URL:** https://targonos.targonglobal.com/x-plan/4-sales-planning
+**URL:** https://targonos.targonglobal.com/xplan/4-sales-planning
 
 Browser tests:
 - [ ] Weeks with actual data show green indicator (emerald dot)
@@ -752,7 +752,7 @@ Browser tests:
 
 ### Task 9.5: Test P&L Sheet
 
-**URL:** https://targonos.targonglobal.com/x-plan/5-fin-planning-pl
+**URL:** https://targonos.targonglobal.com/xplan/5-fin-planning-pl
 
 Browser tests:
 - [ ] Week dates show Mon-Sun range
@@ -763,7 +763,7 @@ Browser tests:
 
 ### Task 9.6: Test PO P&L Sheet
 
-**URL:** https://targonos.targonglobal.com/x-plan/6-po-profitability
+**URL:** https://targonos.targonglobal.com/xplan/6-po-profitability
 
 Browser tests:
 - [ ] Toggle between REAL and PROJECTED modes
@@ -773,7 +773,7 @@ Browser tests:
 
 ### Task 9.7: Test Cash Flow Sheet
 
-**URL:** https://targonos.targonglobal.com/x-plan/7-fin-planning-cash-flow
+**URL:** https://targonos.targonglobal.com/xplan/7-fin-planning-cash-flow
 
 Browser tests:
 - [ ] Week dates show Mon-Sun range
@@ -783,7 +783,7 @@ Browser tests:
 
 ### Task 9.8: Test Ops Planning Sheet
 
-**URL:** https://targonos.targonglobal.com/x-plan/3-ops-planning
+**URL:** https://targonos.targonglobal.com/xplan/3-ops-planning
 
 Browser tests:
 - [ ] PO arrival weeks show correct Monday-start week numbers

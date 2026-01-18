@@ -596,10 +596,12 @@ export default function TransactionDetailPage() {
                         commercial_invoice: 'Commercial Invoice',
                         bill_of_lading: 'Bill of Lading',
                         packing_list: 'Packing List',
+                        movement_note: 'Movement Note',
                         delivery_note: 'Movement Note',
                         cube_master: 'Cube Master',
                         transaction_certificate: 'TC GRS',
                         custom_declaration: 'CDS',
+                        proof_of_pickup: 'Proof of Pickup',
                       }
 
                       return (
