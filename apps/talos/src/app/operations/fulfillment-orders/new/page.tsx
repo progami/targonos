@@ -357,8 +357,8 @@ export default function NewFulfillmentOrderPage() {
                   onClick={() => setSourceType(type)}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
                     sourceType === type
-                      ? 'bg-cyan-50 border-cyan-500 text-cyan-700'
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400 text-cyan-700 dark:text-cyan-300'
+                      : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
                   }`}
                 >
                   {type === 'AMAZON_FBA'
@@ -463,7 +463,7 @@ export default function NewFulfillmentOrderPage() {
             </div>
 
             <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50">
+              <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
                 <div className="col-span-3">SKU</div>
                 <div className="col-span-3">Batch</div>
                 <div className="col-span-3">Description</div>
@@ -578,7 +578,7 @@ export default function NewFulfillmentOrderPage() {
               <button
                 type="button"
                 onClick={() => setFreightExpanded(!freightExpanded)}
-                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Truck className="h-4 w-4 text-muted-foreground" />

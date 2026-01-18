@@ -617,7 +617,7 @@ function SkuBatchesManager({
       <div className="w-full overflow-hidden rounded-lg border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900">Batches</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
             <p className="text-xs text-muted-foreground">
               {sku.skuCode} — {sku.description}
             </p>
@@ -706,43 +706,44 @@ function SkuBatchesManager({
                         typeof batch.description === 'string' ? batch.description : '—'
                       const canDelete = batches.length > 1
 
-                      return (
-                        <tr key={batch.id} className="odd:bg-muted/20">
-                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                            {batchCode}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                            {batchDescription}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {batch.packSize ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {batch.unitsPerCarton ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {formatTriplet(unitTriplet)}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {formatTriplet(cartonTriplet)}
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-2">
-                              <Button variant="outline" size="sm" onClick={() => openEdit(batch)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setConfirmDelete(batch)}
-                                disabled={!canDelete}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
+                                      return (
+                                        <tr key={batch.id} className="odd:bg-muted/20">
+                                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                            <button
+                                              type="button"
+                                              onClick={() => openEdit(batch)}
+                                              className="text-left hover:text-primary hover:underline transition-colors"
+                                            >
+                                              {batchCode}
+                                            </button>
+                                          </td>
+                                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                            {batchDescription}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {batch.packSize ?? '—'}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {batch.unitsPerCarton ?? '—'}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {formatTriplet(unitTriplet)}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {formatTriplet(cartonTriplet)}
+                                          </td>
+                                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => setConfirmDelete(batch)}
+                                              disabled={!canDelete}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </td>
+                                        </tr>
+                                      )
                     })}
                   </tbody>
                 </table>
@@ -757,21 +758,21 @@ function SkuBatchesManager({
           <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div className="flex flex-col">
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                   {editingBatch ? 'Edit Batch' : 'New Batch'}
                 </h2>
                 <p className="text-xs text-muted-foreground">{sku.skuCode}</p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 p-1">
+                <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-1">
                   <button
                     type="button"
                     onClick={() => applyUnitSystem('metric')}
                     className={cn(
                       'rounded px-2.5 py-1 text-xs font-medium transition-colors',
                       unitSystem === 'metric'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     )}
                     aria-pressed={unitSystem === 'metric'}
                   >
@@ -783,8 +784,8 @@ function SkuBatchesManager({
                     className={cn(
                       'rounded px-2.5 py-1 text-xs font-medium transition-colors',
                       unitSystem === 'imperial'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     )}
                     aria-pressed={unitSystem === 'imperial'}
                   >
@@ -921,8 +922,8 @@ function SkuBatchesManager({
                   </div>
 
                   <div className="md:col-span-2 pt-4 border-t">
-                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Item package dimensions</h3>
-                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Item package dimensions</h3>
+                    <div className="rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4">
                       <Tabs>
                         <TabsList className="w-full grid grid-cols-2 mb-4">
                           <TabsTrigger
@@ -943,7 +944,7 @@ function SkuBatchesManager({
 
                         <TabsContent className={batchModalTab === 'reference' ? '' : 'hidden'}>
                           <div className="space-y-4">
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
                               Team reference values (editable).
                             </p>
                             <div className="space-y-1">
@@ -989,7 +990,7 @@ function SkuBatchesManager({
 
                         <TabsContent className={batchModalTab === 'amazon' ? '' : 'hidden'}>
                           <div className="space-y-4">
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
                               Imported from Amazon (read-only).
                             </p>
                             <div className="space-y-1">
@@ -1005,19 +1006,19 @@ function SkuBatchesManager({
                                       <Input
                                         value={side1 === null ? '' : formatNumber(side1, 2)}
                                         disabled
-                                        className="bg-slate-100 text-slate-500"
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                         placeholder="S1"
                                       />
                                       <Input
                                         value={side2 === null ? '' : formatNumber(side2, 2)}
                                         disabled
-                                        className="bg-slate-100 text-slate-500"
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                         placeholder="S2"
                                       />
                                       <Input
                                         value={side3 === null ? '' : formatNumber(side3, 2)}
                                         disabled
-                                        className="bg-slate-100 text-slate-500"
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                         placeholder="S3"
                                       />
                                     </>
@@ -1033,7 +1034,7 @@ function SkuBatchesManager({
                                   return weight === null ? '' : formatNumber(weight, 3)
                                 })()}
                                 disabled
-                                className="bg-slate-100 text-slate-500"
+                                className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                                 placeholder="—"
                               />
                             </div>
@@ -1044,8 +1045,8 @@ function SkuBatchesManager({
                   </div>
 
                   <div className="md:col-span-2 pt-4 border-t">
-                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Carton Dimensions</h3>
-                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Carton Dimensions</h3>
+                    <div className="rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4">
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-1">
                           <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
