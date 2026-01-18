@@ -40,7 +40,7 @@ LMB creates the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc). Plu
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Appendix A (Optional QBO Cleanup) | ✅ COMPLETE | Optional migration tooling: deactivate duplicate Amazon accounts (via Setup Wizard). |
+| Appendix A (Optional QBO Cleanup) | ✅ COMPLETE (Manual) | Optional migration step: run a one-off script to deactivate legacy duplicate Amazon accounts in QBO. Not part of the app UI. |
 | Phase 1 (QBO Accounts) | ✅ COMPLETE | Setup Wizard includes Parent Account Mapping (by QBO account ID) and creates all required brand sub-accounts. |
 | Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API: Plutus provides deep links + checklist UX; user completes in LMB for BOTH connections. |
 | Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in Setup Wizard and in the persistent Bills tooling. |
