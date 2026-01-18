@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
-import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee } from '@/lib/department-access'
+import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee, hasExecutiveAccess } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
 
 const ContractorStatusEnum = z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'TERMINATED'])
@@ -48,6 +48,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
+    const isExecutive = hasExecutiveAccess(deptRefs)
     const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
@@ -57,7 +58,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
     }
 
+    // Executives can access all contractors
     if (
+      !isExecutive &&
       contractor.department &&
       contractor.department.length &&
       !allowedDepartments.some((d) => d.toLowerCase() === contractor.department!.toLowerCase())
@@ -86,6 +89,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
+    const isExecutive = hasExecutiveAccess(deptRefs)
     const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
@@ -95,7 +99,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
     }
 
+    // Executives can update all contractors
     if (
+      !isExecutive &&
       existing.department &&
       existing.department.length &&
       !allowedDepartments.some((d) => d.toLowerCase() === existing.department!.toLowerCase())
@@ -111,7 +117,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const departmentUpdate =
       data.department === undefined ? undefined : data.department && data.department.length ? data.department : null
 
-    if (departmentUpdate && !allowedDepartments.some((d) => d.toLowerCase() === departmentUpdate.toLowerCase())) {
+    // Executives can update to any department
+    if (
+      !isExecutive &&
+      departmentUpdate &&
+      !allowedDepartments.some((d) => d.toLowerCase() === departmentUpdate.toLowerCase())
+    ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -161,6 +172,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
+    const isExecutive = hasExecutiveAccess(deptRefs)
     const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
@@ -170,7 +182,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
     }
 
+    // Executives can delete all contractors
     if (
+      !isExecutive &&
       existing.department &&
       existing.department.length &&
       !allowedDepartments.some((d) => d.toLowerCase() === existing.department!.toLowerCase())

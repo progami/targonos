@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
-import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee } from '@/lib/department-access'
+import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee, hasExecutiveAccess } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
 
 const ContractorStatusEnum = z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'TERMINATED'])
@@ -48,6 +48,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
+    const isExecutive = hasExecutiveAccess(deptRefs)
     const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { searchParams } = new URL(req.url)
@@ -59,13 +60,22 @@ export async function GET(req: Request) {
     const take = Math.min(parseInt(takeRaw ?? '50', 10), 100)
     const skip = parseInt(skipRaw ?? '0', 10)
 
-    const accessOr = [
-      { department: null },
-      { department: '' },
-      ...allowedDepartments.map((d) => ({ department: { equals: d, mode: 'insensitive' as const } })),
-    ]
+    // Executives can see all contractors
+    const where: any = isExecutive
+      ? {}
+      : {
+          AND: [
+            {
+              OR: [
+                { department: null },
+                { department: '' },
+                ...allowedDepartments.map((d) => ({ department: { equals: d, mode: 'insensitive' as const } })),
+              ],
+            },
+          ],
+        }
 
-    const where: any = { AND: [{ OR: accessOr }] }
+    if (!where.AND) where.AND = []
 
     if (statusRaw) {
       const parsed = ContractorStatusEnum.safeParse(statusRaw.toUpperCase())
@@ -114,6 +124,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
 
+    const isExecutive = hasExecutiveAccess(deptRefs)
     const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const body = await req.json()
@@ -128,7 +139,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Department is required' }, { status: 400 })
     }
 
-    if (!allowedDepartments.some((d) => d.toLowerCase() === department.toLowerCase())) {
+    // Executives can create contractors in any department
+    if (!isExecutive && !allowedDepartments.some((d) => d.toLowerCase() === department.toLowerCase())) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
