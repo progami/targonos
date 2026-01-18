@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { Boxes, Edit2, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { cn } from '@/lib/utils'
@@ -265,7 +266,9 @@ function SkuBatchesManager({
   onRequestClose?: () => void
   onBatchesUpdated?: () => void
 }) {
-  const [batchSearch, setBatchSearch] = useState('')
+  const pageState = usePageState(`/config/products/batches/${sku.id}`)
+  const batchSearch = pageState.search ?? ''
+  const setBatchSearch = pageState.setSearch
   const [batches, setBatches] = useState<BatchRow[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -281,7 +284,8 @@ function SkuBatchesManager({
   )
 
   const [confirmDelete, setConfirmDelete] = useState<BatchRow | null>(null)
-  const [batchModalTab, setBatchModalTab] = useState<BatchModalTab>('reference')
+  const batchModalTab = (pageState.activeTab as BatchModalTab) ?? 'reference'
+  const setBatchModalTab = (tab: BatchModalTab) => pageState.setActiveTab(tab)
 
   useEffect(() => {
     try {

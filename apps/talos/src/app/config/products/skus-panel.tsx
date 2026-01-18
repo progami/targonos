@@ -18,7 +18,10 @@ import {
   getReferralFeePercent2026,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
+import { usePageState } from '@/lib/store/page-state'
 import { Layers, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+
+const PAGE_KEY = '/config/products'
 
 type SkuModalTab = 'reference' | 'amazon'
 
@@ -383,9 +386,11 @@ interface SkusPanelProps {
 
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
   const router = useRouter()
+  const pageState = usePageState(PAGE_KEY)
   const [skus, setSkus] = useState<SkuRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [suppliersLoading, setSuppliersLoading] = useState(false)
 

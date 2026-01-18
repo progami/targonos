@@ -8,6 +8,7 @@ import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
 import { calculateSizeTier } from '@/lib/amazon/fees'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { usePageState } from '@/lib/store/page-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,8 @@ import {
   X,
   XCircle,
 } from '@/lib/lucide-icons'
+
+const PAGE_KEY = '/amazon/fba-fee-discrepancies'
 
 type AlertStatus =
   | 'UNKNOWN'
@@ -343,12 +346,15 @@ function StatusBadge({ status }: { status: AlertStatus }) {
 export default function AmazonFbaFeeDiscrepanciesPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
+  const pageState = usePageState(PAGE_KEY)
 
   const [loading, setLoading] = useState(false)
   const [skus, setSkus] = useState<ApiSkuRow[]>([])
   const [currencyCode, setCurrencyCode] = useState<string>('USD')
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<AlertStatus | 'ALL'>('ALL')
+  const search = pageState.search ?? ''
+  const setSearch = pageState.setSearch
+  const statusFilter = (pageState.custom?.statusFilter as AlertStatus | 'ALL') ?? 'ALL'
+  const setStatusFilter = (value: AlertStatus | 'ALL') => pageState.setCustom('statusFilter', value)
   const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([])
 
   const isAllowed = useMemo(() => {

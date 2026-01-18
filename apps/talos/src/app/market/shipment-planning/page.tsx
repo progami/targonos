@@ -25,7 +25,10 @@ import {
  RestockCalculationResult 
 } from '@/lib/algorithms/restock-algorithm'
 import { RestockAlertCard } from '@/components/operations/restock-alert-card'
+import { usePageState } from '@/lib/store/page-state'
 import { redirectToPortal } from '@/lib/portal'
+
+const PAGE_KEY = '/market/shipment-planning'
 
 interface FBAStockItem {
  skuId: string
@@ -56,16 +59,21 @@ interface ShipmentSuggestion {
 export default function ShipmentPlanningPage() {
  const router = useRouter()
  const { data: session, status } = useSession()
+ const pageState = usePageState(PAGE_KEY)
  const [loading, setLoading] = useState(true)
  const [refreshing, setRefreshing] = useState(false)
  const [stockItems, setStockItems] = useState<FBAStockItem[]>([])
  const [suggestions, setSuggestions] = useState<ShipmentSuggestion[]>([])
  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
- const [showOnlyLowStock, setShowOnlyLowStock] = useState(true)
- const [searchQuery, setSearchQuery] = useState('')
+ const showOnlyLowStock = (pageState.custom?.showOnlyLowStock as boolean) ?? true
+ const setShowOnlyLowStock = (value: boolean) => pageState.setCustom('showOnlyLowStock', value)
+ const searchQuery = pageState.search ?? ''
+ const setSearchQuery = pageState.setSearch
  const [lowStockCount, setLowStockCount] = useState(0)
- const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
- const [showAmazonStatus, setShowAmazonStatus] = useState(false)
+ const viewMode = (pageState.custom?.viewMode as 'table' | 'cards') ?? 'table'
+ const setViewMode = (value: 'table' | 'cards') => pageState.setCustom('viewMode', value)
+ const showAmazonStatus = (pageState.custom?.showAmazonStatus as boolean) ?? false
+ const setShowAmazonStatus = (value: boolean) => pageState.setCustom('showAmazonStatus', value)
 
  useEffect(() => {
  if (status === 'loading') return
