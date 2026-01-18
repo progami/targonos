@@ -61,15 +61,15 @@ These pages use URL params for tab state, which is acceptable but doesn't surviv
 
 | # | Page | File | State | Current Approach |
 |---|------|------|-------|------------------|
-| 7 | Purchase Orders | `/operations/purchase-orders/page.tsx` | Status tab | `useSearchParams()` |
-| 8 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | Status tab | `useSearchParams()` |
+| 12 | Purchase Orders | `/operations/purchase-orders/page.tsx` | Status tab | `useSearchParams()` |
+| 13 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | Status tab | `useSearchParams()` |
 
 ### Batches List Page
 
 | # | Page | File | Notes |
 |---|------|------|-------|
-| 12 | Batches List Page | `/config/products/batches/page.tsx` | Uses `SkuBatchesPanel` - inherits state from #11 |
-| 13 | Batch Detail Page | `/config/products/batches/[batchId]/page.tsx` | Detail view - N/A |
+| 14 | Batches List Page | `/config/products/batches/page.tsx` | Uses `SkuBatchesPanel` - inherits state from #11 |
+| 15 | Batch Detail Page | `/config/products/batches/[batchId]/page.tsx` | Detail view - N/A |
 
 ### Redirect Pages (No State Needed)
 
