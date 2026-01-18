@@ -47,7 +47,7 @@ function findXPlanSource() {
       }
     }
   }
-  const pnpmApp = path.join(repoRoot, 'apps/x-plan/node_modules/.pnpm');
+  const pnpmApp = path.join(repoRoot, 'apps/xplan/node_modules/.pnpm');
   if (fs.existsSync(pnpmApp)) {
     for (const entry of fs.readdirSync(pnpmApp)) {
       if (entry.startsWith('@prisma+client@')) {
@@ -55,13 +55,13 @@ function findXPlanSource() {
       }
     }
   }
-  candidates.push(path.join(repoRoot, 'apps/x-plan/node_modules/.prisma/client'));
+  candidates.push(path.join(repoRoot, 'apps/xplan/node_modules/.prisma/client'));
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
 const xplanSource = findXPlanSource();
-const xplanDest = path.resolve(repoRoot, 'apps/x-plan/node_modules/.prisma/client');
-copyDir('x-plan', xplanSource, xplanDest);
+const xplanDest = path.resolve(repoRoot, 'apps/xplan/node_modules/.prisma/client');
+copyDir('xplan', xplanSource, xplanDest);
 
 if (process.exitCode) {
   process.exit(process.exitCode);

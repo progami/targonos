@@ -79,7 +79,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 | --- | --- | --- | --- |
 | Portal | `@targon/sso` | `/` | Central auth (NextAuth v5) + app navigation |
 | Talos | `@targon/talos` | `/talos` | Uses `apps/talos/server.js`, Redis, and S3 presigned uploads |
-| X‑Plan | `@targon/x-plan` | `/x-plan` | Prisma schema `xplan`; vitest tests |
+| xplan | `@targon/xplan` | `/xplan` | Prisma schema `xplan`; vitest tests |
 | Atlas | `@targon/atlas` | `/atlas` | Prisma schema `atlas`; Playwright tests |
 | Plutus | `@targon/plutus` | `/plutus` | Finance workspace (FCC rebrand); scaffold-only |
 | Website | `@targon/website` | `/` | Separate hostname (`targonglobal.com`) |
@@ -140,7 +140,7 @@ pnpm dev
 # Single app
 pnpm --filter @targon/sso dev
 pnpm --filter @targon/talos dev
-pnpm --filter @targon/x-plan dev
+pnpm --filter @targon/xplan dev
 pnpm --filter @targon/atlas dev
 pnpm --filter @targon/website dev
 ```

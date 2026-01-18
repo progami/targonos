@@ -26,10 +26,10 @@ case "$app_key" in
     app_dir="$repo_root/apps/website"
     pm2_name="dev-website"
     ;;
-  xplan|x-plan)
-    workspace="@targon/x-plan"
-    app_dir="$repo_root/apps/x-plan"
-    pm2_name="dev-x-plan"
+  xplan)
+    workspace="@targon/xplan"
+    app_dir="$repo_root/apps/xplan"
+    pm2_name="dev-xplan"
     ;;
   kairos)
     workspace="@targon/kairos"

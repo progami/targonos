@@ -113,10 +113,10 @@ const BASE_APPS: AppBase[] = [
     devUrl: 'http://localhost:3010',
   },
   {
-    id: 'x-plan',
-    name: 'X-Plan',
+    id: 'xplan',
+    name: 'xplan',
     description: 'Collaborative planning workspace for sales, operations, and finance.',
-    url: joinBaseUrl(PORTAL_BASE_URL, '/x-plan/1-strategies'),
+    url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-strategies'),
     category: 'Product',
     devUrl: 'http://localhost:3008',
   },

@@ -85,7 +85,7 @@ function defaultPortalAdminApps() {
     { slug: 'atlas', name: 'Atlas', departments: ['People Ops'] },
     { slug: 'website', name: 'Website', departments: [] },
     { slug: 'kairos', name: 'Kairos', departments: ['Product'] },
-    { slug: 'x-plan', name: 'X-Plan', departments: ['Product'] },
+     { slug: 'xplan', name: 'xplan', departments: ['Product'] },
   ]
 }
 
@@ -217,7 +217,7 @@ function buildDemoUser(): AuthenticatedUser {
     atlas: { departments: ['People Ops'] },
     website: { departments: [] },
     kairos: { departments: ['Product'] },
-    'x-plan': { departments: ['Product'] },
+    'xplan': { departments: ['Product'] },
   }
 
   return {

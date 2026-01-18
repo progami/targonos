@@ -32,8 +32,8 @@ jobs:
           cp apps/sso/.env.dev.ci apps/sso/.env.local
           cp apps/talos/.env.dev.ci apps/talos/.env.dev
           cp apps/talos/.env.dev.ci apps/talos/.env.local
-          cp apps/x-plan/.env.dev.ci apps/x-plan/.env.dev
-          cp apps/x-plan/.env.dev.ci apps/x-plan/.env.local
+          cp apps/xplan/.env.dev.ci apps/xplan/.env.dev
+          cp apps/xplan/.env.dev.ci apps/xplan/.env.local
           cp apps/kairos/.env.dev.ci apps/kairos/.env.dev
           cp apps/kairos/.env.dev.ci apps/kairos/.env.local
           cp apps/atlas/.env.dev.ci apps/atlas/.env.dev
@@ -45,7 +45,7 @@ jobs:
       - name: Generate Prisma clients (parallel)
         run: |
           pnpm --filter @targon/talos db:generate &
-          pnpm --filter @targon/x-plan prisma:generate &
+          pnpm --filter @targon/xplan prisma:generate &
           pnpm --filter @targon/kairos prisma:generate &
           pnpm --filter @targon/atlas db:generate &
           wait

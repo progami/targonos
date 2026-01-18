@@ -143,10 +143,10 @@ case "$app_key" in
     prisma_cmd=""
     build_cmd="pnpm --filter $workspace build"
     ;;
-  xplan|x-plan)
-    workspace="@targon/x-plan"
-    app_dir="$REPO_DIR/apps/x-plan"
-    pm2_name="${PM2_PREFIX}-x-plan"
+  xplan)
+    workspace="@targon/xplan"
+    app_dir="$REPO_DIR/apps/xplan"
+    pm2_name="${PM2_PREFIX}-xplan"
     prisma_cmd="pnpm --filter $workspace prisma:generate"
     migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace exec next build"
@@ -490,8 +490,8 @@ if [[ -n "$prisma_cmd" ]]; then
           run_prisma_generate="true"
         fi
         ;;
-      xplan|x-plan)
-        if any_changed "apps/x-plan/prisma/schema.prisma" && ! any_changed_under "packages/prisma-x-plan/generated/"; then
+      xplan)
+        if any_changed "apps/xplan/prisma/schema.prisma" && ! any_changed_under "packages/prisma-xplan/generated/"; then
           run_prisma_generate="true"
         fi
         ;;
@@ -531,8 +531,8 @@ if [[ -n "$migrate_cmd" ]]; then
           run_migrations="true"
         fi
         ;;
-      xplan|x-plan)
-        if any_changed "apps/x-plan/prisma/schema.prisma" || any_changed_under "apps/x-plan/prisma/migrations/"; then
+      xplan)
+        if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then
           run_migrations="true"
         fi
         ;;
