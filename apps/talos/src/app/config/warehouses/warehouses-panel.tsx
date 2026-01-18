@@ -17,9 +17,12 @@ import {
   Phone,
 } from '@/lib/lucide-icons'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+
+const PAGE_KEY = '/config/warehouses'
 
 interface Warehouse {
   id: string
@@ -47,9 +50,11 @@ interface Warehouse {
 
 export default function WarehousesPanel() {
   const router = useRouter()
+  const pageState = usePageState(PAGE_KEY)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
 
   const loadWarehouses = useCallback(async () => {
     setLoading(true)

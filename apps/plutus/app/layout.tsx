@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body
         className={clsx(
-          'min-h-screen bg-slate-50 font-sans antialiased dark:bg-slate-950',
+          'min-h-screen flex flex-col bg-slate-50 font-sans antialiased dark:bg-slate-950',
           dmSans.variable,
           instrumentSerif.variable,
         )}

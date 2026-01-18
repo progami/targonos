@@ -28,16 +28,16 @@ Cloudflared routes hostnames to local nginx listener ports (`~/.cloudflared/conf
 
 | Hostname | Purpose | Origin |
 | --- | --- | --- |
-| `targonos.targonglobal.com` | Main Portal (+ `/talos`, `/x-plan`, `/atlas`) | `http://localhost:8080` |
-| `dev-targonos.targonglobal.com` | Dev Portal (+ `/talos`, `/x-plan`, `/atlas`) | `http://localhost:8081` |
+| `targonos.targonglobal.com` | Main Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8080` |
+| `dev-targonos.targonglobal.com` | Dev Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8081` |
 | `www.targonglobal.com` / `targonglobal.com` | Main Website | `http://localhost:8082` |
 | `dev.targonglobal.com` | Dev Website | `http://localhost:8083` |
 | `db.targonglobal.com` | PostgreSQL (TCP) | `tcp://localhost:5432` |
 
 nginx then routes paths to the correct app ports (macOS/Homebrew default path: `/opt/homebrew/etc/nginx/servers/targonos.conf`):
 
-- Main: `3000` (portal), `3001` (talos), `3005` (website), `3006` (atlas), `3008` (x-plan), `3010` (kairos), `3012` (plutus)
-- Dev: `3100` (portal), `3101` (talos), `3105` (website), `3106` (atlas), `3108` (x-plan), `3110` (kairos), `3112` (plutus)
+- Main: `3000` (portal), `3001` (talos), `3005` (website), `3006` (atlas), `3008` (xplan), `3010` (kairos), `3012` (plutus)
+- Dev: `3100` (portal), `3101` (talos), `3105` (website), `3106` (atlas), `3108` (xplan), `3110` (kairos), `3112` (plutus)
 
 ### “Two environments” on one host
 
@@ -56,7 +56,7 @@ PM2 process definitions live in `ecosystem.config.js` and reference these direct
 apps/
   sso/          # Portal (auth + navigation hub)
   talos/        # Warehouse Management (custom server.js)
-  x-plan/       # X‑Plan (Next.js app)
+  xplan/       # xplan (Next.js app)
   atlas/         # Atlas (Next.js app)
   plutus/       # Plutus (Next.js app)
   website/      # Marketing site
@@ -79,7 +79,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 | --- | --- | --- | --- |
 | Portal | `@targon/sso` | `/` | Central auth (NextAuth v5) + app navigation |
 | Talos | `@targon/talos` | `/talos` | Uses `apps/talos/server.js`, Redis, and S3 presigned uploads |
-| X‑Plan | `@targon/x-plan` | `/x-plan` | Prisma schema `xplan`; vitest tests |
+| xplan | `@targon/xplan` | `/xplan` | Prisma schema `xplan`; vitest tests |
 | Atlas | `@targon/atlas` | `/atlas` | Prisma schema `atlas`; Playwright tests |
 | Plutus | `@targon/plutus` | `/plutus` | Finance workspace (FCC rebrand); scaffold-only |
 | Website | `@targon/website` | `/` | Separate hostname (`targonglobal.com`) |
@@ -106,7 +106,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 Common variables across apps:
 
 - `PORT`, `HOST`
-- `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH` (for path-based apps like `/talos`, `/x-plan`, `/atlas`)
+- `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH` (for path-based apps like `/talos`, `/xplan`, `/atlas`)
 - `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
 - `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, `PORTAL_AUTH_SECRET`
 - `COOKIE_DOMAIN`
@@ -140,7 +140,7 @@ pnpm dev
 # Single app
 pnpm --filter @targon/sso dev
 pnpm --filter @targon/talos dev
-pnpm --filter @targon/x-plan dev
+pnpm --filter @targon/xplan dev
 pnpm --filter @targon/atlas dev
 pnpm --filter @targon/website dev
 ```
@@ -187,8 +187,8 @@ Workflow: `.github/workflows/cd.yml`
 ```bash
 pm2 status
 pm2 logs main-targonos --lines 100
-pm2 restart dev-targonos dev-talos dev-x-plan dev-atlas dev-website --update-env
-pm2 restart main-targonos main-talos main-x-plan main-atlas main-website --update-env
+pm2 restart dev-targonos dev-talos dev-xplan dev-atlas dev-website --update-env
+pm2 restart main-targonos main-talos main-xplan main-atlas main-website --update-env
 pm2 save
 ```
 

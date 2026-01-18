@@ -1428,7 +1428,9 @@ export const PasswordsApi = {
     if (params.skip != null) qp.set('skip', String(params.skip))
     if (params.department) qp.set('department', params.department)
     const qs = qp.toString()
-    return request<{ items: Password[]; total: number }>(`/api/passwords${qs ? `?${qs}` : ''}`)
+    return request<{ items: Password[]; total: number; allowedDepartments: PasswordDepartment[] }>(
+      `/api/passwords${qs ? `?${qs}` : ''}`
+    )
   },
   get(id: string) {
     return request<Password>(`/api/passwords/${encodeURIComponent(id)}`)

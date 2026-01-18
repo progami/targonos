@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Suspense, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
+import { usePageState } from '@/lib/store/page-state'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import { PageTabs } from '@/components/ui/page-tabs'
@@ -44,14 +45,21 @@ const STATUS_CONFIGS: StatusConfig[] = [
   },
 ]
 
+const PAGE_KEY = '/operations/fulfillment-orders'
+
 function FulfillmentOrdersPageContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pageState = usePageState(PAGE_KEY)
 
+  // Get status from URL first, then Zustand state, then default to DRAFT
   const statusFromUrl = searchParams.get('status') as FulfillmentOrderStatus | null
+  const persistedStatus = pageState.activeTab as FulfillmentOrderStatus | undefined
   const currentStatus: FulfillmentOrderStatus =
-    statusFromUrl && STATUS_CONFIGS.some(s => s.value === statusFromUrl) ? statusFromUrl : 'DRAFT'
+    (statusFromUrl && STATUS_CONFIGS.some(s => s.value === statusFromUrl) ? statusFromUrl : null) ??
+    (persistedStatus && STATUS_CONFIGS.some(s => s.value === persistedStatus) ? persistedStatus : null) ??
+    'DRAFT'
 
   useEffect(() => {
     if (status === 'loading') return
@@ -67,6 +75,9 @@ function FulfillmentOrdersPageContent() {
   }, [session, status, router])
 
   const handleStatusChange = (newStatus: string) => {
+    // Persist to Zustand
+    pageState.setActiveTab(newStatus)
+    // Update URL
     const params = new URLSearchParams(searchParams.toString())
     params.set('status', newStatus)
     router.push(`/operations/fulfillment-orders?${params.toString()}`)

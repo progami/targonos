@@ -11,9 +11,12 @@ import {
   X,
 } from '@/lib/lucide-icons'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+
+const PAGE_KEY = '/config/permissions'
 
 interface Permission {
   id: string
@@ -34,10 +37,12 @@ interface UserWithPermissions {
 }
 
 export default function PermissionsPanel() {
+  const pageState = usePageState(PAGE_KEY)
   const [users, setUsers] = useState<UserWithPermissions[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
   const [savingPermission, setSavingPermission] = useState<string | null>(null)
 

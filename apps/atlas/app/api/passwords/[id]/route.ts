@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
+import { getAllowedPasswordDepartments, getDepartmentRefsForEmployee } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
-import { isHROrAbove } from '@/lib/permissions'
 
 const PasswordDepartmentEnum = z.enum([
   'OPS',
@@ -32,16 +32,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const { id } = await params
     const password = await prisma.password.findUnique({ where: { id } })
 
     if (!password) {
       return NextResponse.json({ error: 'Password not found' }, { status: 404 })
+    }
+
+    if (!allowedDepartments.includes(password.department)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     return NextResponse.json(password)
@@ -60,10 +66,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const { id } = await params
     const existing = await prisma.password.findUnique({ where: { id } })
@@ -72,11 +80,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Password not found' }, { status: 404 })
     }
 
+    if (!allowedDepartments.includes(existing.department)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await req.json()
     const validation = validateBody(UpdatePasswordSchema, body)
     if (!validation.success) return validation.error
 
     const data = validation.data
+    if (data.department && !allowedDepartments.includes(data.department)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const password = await prisma.password.update({
       where: { id },
@@ -106,16 +121,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const { id } = await params
     const existing = await prisma.password.findUnique({ where: { id } })
 
     if (!existing) {
       return NextResponse.json({ error: 'Password not found' }, { status: 404 })
+    }
+
+    if (!allowedDepartments.includes(existing.department)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     await prisma.password.delete({ where: { id } })

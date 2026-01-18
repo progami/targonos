@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
+import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee, hasExecutiveAccess } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
-import { isHROrAbove } from '@/lib/permissions'
 
 const ContractorStatusEnum = z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'TERMINATED'])
 
@@ -43,10 +43,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const isExecutive = hasExecutiveAccess(deptRefs)
+    const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { searchParams } = new URL(req.url)
     const takeRaw = searchParams.get('take')
@@ -57,20 +60,37 @@ export async function GET(req: Request) {
     const take = Math.min(parseInt(takeRaw ?? '50', 10), 100)
     const skip = parseInt(skipRaw ?? '0', 10)
 
-    const where: any = {}
+    // Executives can see all contractors
+    const where: any = isExecutive
+      ? {}
+      : {
+          AND: [
+            {
+              OR: [
+                { department: null },
+                { department: '' },
+                ...allowedDepartments.map((d) => ({ department: { equals: d, mode: 'insensitive' as const } })),
+              ],
+            },
+          ],
+        }
+
+    if (!where.AND) where.AND = []
 
     if (statusRaw) {
       const parsed = ContractorStatusEnum.safeParse(statusRaw.toUpperCase())
-      if (parsed.success) where.status = parsed.data
+      if (parsed.success) where.AND.push({ status: parsed.data })
     }
 
     if (q) {
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { company: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-        { role: { contains: q, mode: 'insensitive' } },
-      ]
+      where.AND.push({
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { company: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { role: { contains: q, mode: 'insensitive' } },
+        ],
+      })
     }
 
     const [items, total] = await Promise.all([
@@ -99,16 +119,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const isExecutive = hasExecutiveAccess(deptRefs)
+    const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const body = await req.json()
     const validation = validateBody(CreateContractorSchema, body)
     if (!validation.success) return validation.error
 
     const data = validation.data
+    const department = data.department?.trim()
+
+    // Require department to prevent orphan contractors visible to everyone
+    if (!department) {
+      return NextResponse.json({ error: 'Department is required' }, { status: 400 })
+    }
+
+    // Executives can create contractors in any department
+    if (!isExecutive && !allowedDepartments.some((d) => d.toLowerCase() === department.toLowerCase())) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const departmentValue = department
 
     const contractor = await prisma.contractor.create({
       data: {
@@ -117,7 +153,7 @@ export async function POST(req: Request) {
         email: data.email ?? null,
         phone: data.phone ?? null,
         role: data.role ?? null,
-        department: data.department ?? null,
+        department: departmentValue,
         hourlyRate: data.hourlyRate ?? null,
         currency: data.currency ?? 'USD',
         contractStart: data.contractStart ? new Date(data.contractStart) : null,

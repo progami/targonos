@@ -1,13 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import type { QboConnection } from '@/lib/qbo/api';
 import { ensurePlutusQboLmbPlanAccounts } from '@/lib/qbo/plutus-qbo-lmb-plan';
+import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-create-plutus-lmb-accounts' });
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const requestId = randomUUID();
 
   try {
@@ -20,9 +21,38 @@ export async function POST() {
     }
 
     const connection: QboConnection = JSON.parse(connectionCookie);
-    logger.info('Ensuring Plutus LMB plan accounts', { requestId, realmId: connection.realmId, expiresAt: connection.expiresAt });
+    logger.info('Ensuring Plutus LMB plan accounts', {
+      requestId,
+      realmId: connection.realmId,
+      expiresAt: connection.expiresAt,
+    });
+    await ensureServerQboConnection(connection);
 
-    const result = await ensurePlutusQboLmbPlanAccounts(connection);
+    const body = (await request.json()) as {
+      brandNames: string[];
+      parentAccountIds?: {
+        inventoryAsset: string;
+        manufacturing: string;
+        freightAndDuty: string;
+        landFreight: string;
+        storage3pl: string;
+        mfgAccessories?: string;
+        inventoryShrinkage?: string;
+        amazonSales: string;
+        amazonRefunds: string;
+        amazonFbaInventoryReimbursement: string;
+        amazonSellerFees: string;
+        amazonFbaFees: string;
+        amazonStorageFees: string;
+        amazonAdvertisingCosts: string;
+        amazonPromotions: string;
+      };
+    };
+
+    const result = await ensurePlutusQboLmbPlanAccounts(connection, {
+      brandNames: body.brandNames,
+      parentAccountIds: body.parentAccountIds,
+    });
 
     if (result.updatedConnection) {
       logger.info('QBO access token refreshed during account creation', {
@@ -37,6 +67,7 @@ export async function POST() {
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
       });
+      await saveServerQboConnection(result.updatedConnection);
     }
 
     logger.info('Plutus LMB plan accounts ensured', {
@@ -64,7 +95,7 @@ export async function POST() {
         details: error instanceof Error ? error.message : String(error),
         requestId,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
