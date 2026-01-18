@@ -8,7 +8,7 @@ All apps share `portal_db` on localhost:5432 with separate schemas per app. Conn
 |-----|--------|
 | talos | dev_wms_us, dev_wms_uk |
 | atlas | dev_hrms |
-| x-plan | dev_xplan |
+| xplan | dev_xplan |
 | kairos | chronos |
 | sso | dev_auth |
 | plutus | (no DB - uses QuickBooks API) |
@@ -30,9 +30,9 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ### Branch Naming
 
-Use app name as prefix: `atlas/`, `x-plan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
+Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
 
-Examples: `x-plan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
+Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
 
 ### PR Workflow
 

@@ -7,16 +7,16 @@
 
 ## Testing
 
-- Prefer verifying changes on the deployed app at `https://targonos.targonglobal.com/<app>` (e.g., `https://targonos.targonglobal.com/x-plan`) when feasible.
+- Prefer verifying changes on the deployed app at `https://targonos.targonglobal.com/<app>` (e.g., `https://targonos.targonglobal.com/xplan`) when feasible.
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
 
 ## Git Workflow
 
 ### Branch Naming
 
-Use app name as prefix: `atlas/`, `x-plan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
+Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
 
-Examples: `x-plan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
+Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
 
 ### PR Workflow
 
