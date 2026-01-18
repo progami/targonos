@@ -13,13 +13,17 @@ import {
  FileText,
  Warehouse,
  Plus,
- ArrowRight,
+ AlertTriangle,
+ DollarSign,
 } from '@/lib/lucide-icons'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { SectionHeader } from '@/components/dashboard/section-header'
 import { MarketSection } from '@/components/dashboard/market-section'
+import { OrderPipeline } from '@/components/dashboard/order-pipeline'
+import { CostBreakdown } from '@/components/dashboard/cost-breakdown'
+import { WarehouseInventory } from '@/components/dashboard/warehouse-inventory'
 import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { Button } from '@/components/ui/button'
 import { DashboardSkeleton } from '@/components/common/loading-state'
@@ -34,6 +38,32 @@ interface DashboardStats {
  costChange: string
  costTrend: 'up' | 'down' | 'neutral'
  activeSkus: number
+ costBreakdown: {
+   inbound: number
+   outbound: number
+   storage: number
+   forwarding: number
+   other: number
+   total: number
+ }
+ fbaDiscrepancies: {
+   total: number
+   mismatch: number
+   warnings: number
+ }
+ orderPipeline: {
+   draft: number
+   issued: number
+   manufacturing: number
+   inTransit: number
+   atWarehouse: number
+ }
+ pendingFulfillmentOrders: number
+ topWarehouses: Array<{
+   code: string
+   name: string
+   cartons: number
+ }>
 }
 
 
@@ -323,15 +353,15 @@ export default function DashboardPage() {
  </Link>
  </Button>
  <Button asChild variant="outline" size="sm" className="gap-2">
- <Link href="/operations/inventory">
- <Package className="h-4 w-4" />
- View Inventory
+ <Link href="/operations/fulfillment-orders/new">
+ <Plus className="h-4 w-4" />
+ New Fulfillment Order
  </Link>
  </Button>
  <Button asChild variant="outline" size="sm" className="gap-2">
- <Link href="/config/products">
- <ArrowRight className="h-4 w-4" />
- Manage Products
+ <Link href="/amazon/fba-fee-discrepancies">
+ <AlertTriangle className="h-4 w-4" />
+ Check Discrepancies
  </Link>
  </Button>
  </div>
@@ -341,9 +371,9 @@ export default function DashboardPage() {
  <StatsCard
  title="Total Inventory"
  value={stats?.totalInventory ?? 0}
- subtitle="units"
+ subtitle="cartons"
  icon={Package}
- variant={stats?.inventoryTrend === 'up' ? 'success' : stats?.inventoryTrend === 'down' ? 'danger' : 'default'}
+ variant={stats?.inventoryTrend === 'up' ? 'success' : stats?.inventoryTrend === 'down' ? 'default' : 'default'}
  trend={stats?.inventoryChange ? {
  value: parseFloat(stats.inventoryChange.replace('%', '').replace('+', '')),
  label: 'vs last period'
@@ -357,28 +387,34 @@ export default function DashboardPage() {
  variant="info"
  />
  <StatsCard
- title="Storage Cost"
- value={stats?.storageCost ?? '$0'}
- icon={Warehouse}
- variant={stats?.costTrend === 'down' ? 'success' : stats?.costTrend === 'up' ? 'warning' : 'default'}
- trend={stats?.costChange ? {
- value: parseFloat(stats.costChange.replace('%', '').replace('+', '')),
- label: 'vs last period'
- } : undefined}
+ title="Monthly Costs"
+ value={`£${(stats?.costBreakdown?.total ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+ icon={DollarSign}
+ variant="default"
  />
  <StatsCard
- title="Period"
- value={timeRanges[selectedTimeRange].label}
- icon={Calendar}
- variant="default"
- onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
+ title="FBA Discrepancies"
+ value={(stats?.fbaDiscrepancies?.mismatch ?? 0) + (stats?.fbaDiscrepancies?.warnings ?? 0)}
+ subtitle="need attention"
+ icon={AlertTriangle}
+ variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
+ onClick={() => window.location.href = '/amazon/fba-fee-discrepancies'}
  />
  </StatsCardGrid>
 
- {/* Main Dashboard Sections */}
- <div className="grid gap-4">
- {/* Market Section - Inventory Level Graph Only */}
- <div className="border border-slate-200 dark:border-slate-700 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
+ {/* Order Pipeline and Cost Breakdown */}
+ <div className="grid gap-4 md:grid-cols-2 mb-6">
+ <OrderPipeline
+   pipeline={stats?.orderPipeline ?? { draft: 0, issued: 0, manufacturing: 0, inTransit: 0, atWarehouse: 0 }}
+   pendingFulfillmentOrders={stats?.pendingFulfillmentOrders ?? 0}
+ />
+ <CostBreakdown
+   costs={stats?.costBreakdown ?? { inbound: 0, outbound: 0, storage: 0, forwarding: 0, other: 0, total: 0 }}
+ />
+ </div>
+
+ {/* Inventory Levels Chart */}
+ <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800 mb-6">
  <SectionHeader 
  title="Inventory Levels" 
  icon={TrendingUp} 
@@ -386,7 +422,11 @@ export default function DashboardPage() {
  />
  <MarketSection data={marketData.data} loading={loadingStats} />
  </div>
- </div>
+
+ {/* Inventory by Warehouse */}
+ <WarehouseInventory
+   warehouses={stats?.topWarehouses ?? []}
+ />
 
  </PageContent>
  </PageContainer>
