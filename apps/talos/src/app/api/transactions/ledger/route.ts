@@ -256,7 +256,16 @@ function processAttachments(attachments: unknown): ProcessedAttachmentResult {
  if (typeof attachments === 'object') {
  const record = attachments as Record<string, unknown>
  const notes = typeof record.notes === 'string' ? record.notes : null
- return { notes, docs: record }
+ 
+ const docs: Record<string, unknown> = {}
+ for (const [key, value] of Object.entries(record)) {
+ if (key === 'notes') {
+ continue
+ }
+ docs[key] = value
+ }
+ 
+ return { notes, docs }
  }
 
  return { notes: null, docs: {} }

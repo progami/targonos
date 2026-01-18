@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FileEdit, Loader2, Plus, Trash2, AlertTriangle, Package, FileText } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
@@ -97,7 +98,7 @@ export default function NewPurchaseOrderPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/purchase-orders/new`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/purchase-orders/new')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

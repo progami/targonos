@@ -22,6 +22,7 @@ import {
 } from '@/lib/lucide-icons'
 import { PurchaseOrdersPanel } from '../inventory/purchase-orders-panel'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import type { LucideIcon } from 'lucide-react'
 
 // 5-Stage State Machine Status Types
@@ -113,7 +114,7 @@ function OrdersPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/purchase-orders`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/purchase-orders')}`)
       return
     }
 

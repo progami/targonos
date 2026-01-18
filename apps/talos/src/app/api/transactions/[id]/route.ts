@@ -1,43 +1,156 @@
 import { NextResponse } from 'next/server'
 import { withAuthAndParams } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma } from '@/lib/tenant/server'
+import { withBasePath } from '@/lib/utils/base-path'
 import { Prisma } from '@targon/prisma-talos'
 import { getS3Service } from '@/services/s3.service'
 
 export const dynamic = 'force-dynamic'
 
-type TransactionAttachment = {
- id?: string
- s3Key?: string
+type ApiAttachment = {
+ fileName?: string
  name?: string
+ contentType?: string
  type?: string
+ size?: number
+ s3Key?: string
+ s3Url?: string
  uploadedAt?: string
  uploadedBy?: string
 }
 
-type ProcessedAttachment = TransactionAttachment & {
- s3Url?: string
-}
-
-const toSafeString = (value: unknown): string | undefined => {
+const toOptionalString = (value: unknown): string | undefined => {
  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
-function parseAttachmentList(value: unknown): TransactionAttachment[] {
- if (!Array.isArray(value)) {
- return []
+const toOptionalNumber = (value: unknown): number | undefined => {
+ return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeAttachmentRecord(value: unknown): Record<string, ApiAttachment> {
+ const result: Record<string, ApiAttachment> = {}
+
+ if (!value) {
+ return result
  }
 
- return value
- .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
- .map((item) => ({
- id: toSafeString(item.id),
- s3Key: toSafeString(item.s3Key),
- name: toSafeString(item.name),
- type: toSafeString(item.type),
- uploadedAt: toSafeString(item.uploadedAt),
- uploadedBy: toSafeString(item.uploadedBy),
- }))
+ if (Array.isArray(value)) {
+ for (const entry of value) {
+ if (!entry || typeof entry !== 'object') continue
+ const record = entry as Record<string, unknown>
+ const category = toOptionalString(record.type)
+ if (!category || category === 'notes') continue
+
+ const attachment: ApiAttachment = {}
+ const s3Key = toOptionalString(record.s3Key)
+ if (s3Key) {
+ attachment.s3Key = s3Key
+ }
+ const name = toOptionalString(record.name)
+ if (name) {
+ attachment.fileName = name
+ attachment.name = name
+ }
+ const uploadedAt = toOptionalString(record.uploadedAt)
+ if (uploadedAt) {
+ attachment.uploadedAt = uploadedAt
+ }
+ const uploadedBy = toOptionalString(record.uploadedBy)
+ if (uploadedBy) {
+ attachment.uploadedBy = uploadedBy
+ }
+
+ result[category] = attachment
+ }
+
+ return result
+ }
+
+ if (typeof value === 'object') {
+ const record = value as Record<string, unknown>
+ for (const [key, entry] of Object.entries(record)) {
+ if (!entry || typeof entry !== 'object') continue
+
+ const entryRecord = entry as Record<string, unknown>
+ const s3Key = toOptionalString(entryRecord.s3Key)
+ if (!s3Key) continue
+
+ const attachment: ApiAttachment = {}
+ attachment.s3Key = s3Key
+
+ const fileName = toOptionalString(entryRecord.fileName)
+ if (fileName) {
+ attachment.fileName = fileName
+ }
+ const name = toOptionalString(entryRecord.name)
+ if (name) {
+ attachment.name = name
+ }
+ const contentType = toOptionalString(entryRecord.contentType)
+ if (contentType) {
+ attachment.contentType = contentType
+ }
+ const type = toOptionalString(entryRecord.type)
+ if (type) {
+ attachment.type = type
+ }
+ const size = toOptionalNumber(entryRecord.size)
+ if (size !== undefined) {
+ attachment.size = size
+ }
+ const uploadedAt = toOptionalString(entryRecord.uploadedAt)
+ if (uploadedAt) {
+ attachment.uploadedAt = uploadedAt
+ }
+ const uploadedBy = toOptionalString(entryRecord.uploadedBy)
+ if (uploadedBy) {
+ attachment.uploadedBy = uploadedBy
+ }
+
+ result[key] = attachment
+ }
+ }
+
+ return result
+}
+
+async function addPresignedUrls(
+ attachments: Record<string, ApiAttachment>
+): Promise<Record<string, ApiAttachment>> {
+ const entries = Object.entries(attachments)
+ if (entries.length === 0) {
+ return attachments
+ }
+
+ const s3Service = getS3Service()
+
+ const processed = await Promise.all(
+ entries.map(async ([category, attachment]) => {
+ if (!attachment.s3Key) {
+ return [category, attachment] as const
+ }
+
+ let filename = attachment.fileName
+ if (!filename) {
+ filename = attachment.name
+ }
+ if (!filename) {
+ filename = attachment.s3Key
+ }
+
+ try {
+ const s3Url = await s3Service.getPresignedUrl(attachment.s3Key, 'get', {
+ responseContentDisposition: `attachment; filename="${filename}"`,
+ expiresIn: 3600,
+ })
+ return [category, { ...attachment, s3Url }] as const
+ } catch (_error) {
+ return [category, attachment] as const
+ }
+ })
+ )
+
+ return Object.fromEntries(processed)
 }
 
 export const GET = withAuthAndParams(async (request, params, _session) => {
@@ -99,30 +212,9 @@ export const GET = withAuthAndParams(async (request, params, _session) => {
  }
  })
 
- // Process attachments to add presigned URLs
- const attachmentsList = parseAttachmentList(transaction.attachments)
- const s3Service = attachmentsList.length > 0 ? getS3Service() : null
-
- const processedAttachments: ProcessedAttachment[] = s3Service
- ? await Promise.all(
- attachmentsList.map(async (attachment) => {
- if (!attachment.s3Key) {
- return attachment
- }
-
- try {
- const filename = attachment.name ?? attachment.s3Key
- const s3Url = await s3Service.getPresignedUrl(attachment.s3Key, 'get', {
- responseContentDisposition: `attachment; filename="${filename}"`,
- expiresIn: 3600,
- })
- return { ...attachment, s3Url }
- } catch (_error) {
- return attachment
- }
- })
- )
- : attachmentsList
+  // Process attachments to add presigned URLs
+  const attachmentRecord = normalizeAttachmentRecord(transaction.attachments)
+  const processedAttachments = await addPresignedUrls(attachmentRecord)
 
  // Create response object with transaction and costs
  // Transform to match expected format with nested objects
@@ -222,20 +314,13 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
 
  const prisma = await getTenantPrisma()
  // First validate if this transaction can be deleted
- const nextAuthBaseUrl = process.env.NEXTAUTH_URL
- if (!nextAuthBaseUrl) {
- return NextResponse.json({ error: 'Server misconfiguration: NEXTAUTH_URL is not defined.' }, { status: 500 })
- }
+  const validationResponse = await fetch(withBasePath(`/api/transactions/${id}/validate-edit`), {
+  method: 'GET',
+  headers: {
+  'Cookie': request.headers.get('cookie') || ''
+  }
+  })
 
- const validationResponse = await fetch(
- `${nextAuthBaseUrl}/api/transactions/${id}/validate-edit`,
- {
- method: 'GET',
- headers: {
- 'Cookie': request.headers.get('cookie') || ''
- }
- }
- )
 
  if (!validationResponse.ok) {
  return NextResponse.json({ error: 'Failed to validate transaction' }, { status: 500 })

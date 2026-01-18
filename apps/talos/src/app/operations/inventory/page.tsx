@@ -23,6 +23,7 @@ import { LoadingSpinner, PageLoading } from '@/components/ui/loading-spinner'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import {
   useInventoryFilters,
   type InventoryBalance,
@@ -107,7 +108,7 @@ function InventoryPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/inventory`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/inventory')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
