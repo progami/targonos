@@ -10,6 +10,36 @@ interface DashboardStatsResponse {
   costChange: string
   costTrend: 'up' | 'down' | 'neutral'
   activeSkus: number
+  // New: Cost breakdown by type
+  costBreakdown: {
+    inbound: number
+    outbound: number
+    storage: number
+    forwarding: number
+    other: number
+    total: number
+  }
+  // New: FBA discrepancies
+  fbaDiscrepancies: {
+    total: number
+    mismatch: number
+    warnings: number
+  }
+  // New: Order pipeline
+  orderPipeline: {
+    draft: number
+    issued: number
+    manufacturing: number
+    inTransit: number
+    atWarehouse: number
+  }
+  pendingFulfillmentOrders: number
+  // New: Top warehouses by inventory
+  topWarehouses: Array<{
+    code: string
+    name: string
+    cartons: number
+  }>
   chartData: {
     inventoryTrend: Array<{ date: string; inventory: number }>
     costTrend: Array<{ date: string; cost: number }>
@@ -66,6 +96,11 @@ export const GET = withAuth(async (request, session) => {
     activeSkusGroup,
     warehouseInventoryGroups,
     recentCostEntries,
+    // New queries for dashboard redesign
+    costsByCategory,
+    purchaseOrdersByStage,
+    pendingFOs,
+    skusWithFbaData,
   ] = await Promise.all([
     prisma.inventoryTransaction.aggregate({
       where: warehouseFilter,
@@ -141,6 +176,42 @@ export const GET = withAuth(async (request, session) => {
         createdAt: true,
         totalCost: true,
       },
+    }),
+    // Cost breakdown by category for selected period
+    prisma.costLedger.groupBy({
+      by: ['costCategory'],
+      where: {
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+        ...warehouseFilter,
+      },
+      _sum: {
+        totalCost: true,
+      },
+    }),
+    // Purchase orders count by status
+    prisma.purchaseOrder.findMany({
+      where: {
+        status: {
+          in: ['DRAFT', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE'],
+        },
+      },
+      select: {
+        status: true,
+      },
+    }),
+    // Pending fulfillment orders (draft status)
+    prisma.fulfillmentOrder.count({
+      where: {
+        status: 'DRAFT',
+      },
+    }),
+    // FBA fee alerts for discrepancy count
+    prisma.amazonFbaFeeAlert.groupBy({
+      by: ['status'],
+      _count: true,
     }),
   ])
 
@@ -314,8 +385,88 @@ export const GET = withAuth(async (request, session) => {
  percentage: totalCartons > 0 ? (balance / totalCartons) * 100 : 0,
  }
  })
- .filter(w => w.value > 0)
+  .filter(w => w.value > 0)
  .sort((a, b) => b.value - a.value)
+
+  // Calculate cost breakdown by category
+  const costBreakdown = {
+    inbound: 0,
+    outbound: 0,
+    storage: 0,
+    forwarding: 0,
+    other: 0,
+    total: 0,
+  }
+  for (const cat of costsByCategory) {
+    const amount = Number(cat._sum.totalCost || 0)
+    costBreakdown.total += amount
+    switch (cat.costCategory) {
+      case 'Inbound':
+        costBreakdown.inbound += amount
+        break
+      case 'Outbound':
+        costBreakdown.outbound += amount
+        break
+      case 'Storage':
+        costBreakdown.storage += amount
+        break
+      case 'Forwarding':
+        costBreakdown.forwarding += amount
+        break
+      default:
+        costBreakdown.other += amount
+    }
+  }
+
+  // Calculate order pipeline counts
+  const orderPipeline = {
+    draft: 0,
+    issued: 0,
+    manufacturing: 0,
+    inTransit: 0,
+    atWarehouse: 0,
+  }
+  for (const po of purchaseOrdersByStage) {
+    switch (po.status) {
+      case 'DRAFT':
+        orderPipeline.draft++
+        break
+      case 'ISSUED':
+        orderPipeline.issued++
+        break
+      case 'MANUFACTURING':
+        orderPipeline.manufacturing++
+        break
+      case 'OCEAN':
+        orderPipeline.inTransit++
+        break
+      case 'WAREHOUSE':
+        orderPipeline.atWarehouse++
+        break
+    }
+  }
+
+  // Calculate FBA discrepancies
+  const fbaDiscrepancies = {
+    total: 0,
+    mismatch: 0,
+    warnings: 0,
+  }
+  for (const alert of skusWithFbaData) {
+    fbaDiscrepancies.total += alert._count
+    if (alert.status === 'MISMATCH') {
+      fbaDiscrepancies.mismatch += alert._count
+    } else if (alert.status === 'MISSING_REFERENCE' || alert.status === 'NO_ASIN' || alert.status === 'ERROR') {
+      fbaDiscrepancies.warnings += alert._count
+    }
+  }
+
+  // Top 3 warehouses by inventory
+  const topWarehouses = warehouseDistribution.slice(0, 3).map(w => ({
+    code: w.name || 'Unknown',
+    name: w.name || 'Unknown',
+    cartons: w.value,
+  }))
 
  return ApiResponses.success<DashboardStatsResponse>({
  totalInventory: currentInventory,
@@ -325,6 +476,11 @@ export const GET = withAuth(async (request, session) => {
  costChange: costChange.toFixed(1),
  costTrend: costChange > 0 ? 'up' : costChange < 0 ? 'down' : 'neutral',
  activeSkus: activeSkusCount,
+ costBreakdown,
+ fbaDiscrepancies,
+ orderPipeline,
+ pendingFulfillmentOrders: pendingFOs,
+ topWarehouses,
  chartData: {
   inventoryTrend,
   costTrend,
