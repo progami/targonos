@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { PortalModal } from '@/components/ui/portal-modal'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
-import { Edit2, Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
+import { Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
 
 interface SupplierRow {
   id: string
@@ -313,7 +313,13 @@ export default function SuppliersPanel({
                 {filteredSuppliers.map(supplier => (
                   <tr key={supplier.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                      {supplier.name}
+                      <button
+                        type="button"
+                        onClick={() => openEdit(supplier)}
+                        className="text-left hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
+                      >
+                        {supplier.name}
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                       {supplier.contactName ?? '—'}
@@ -352,9 +358,6 @@ export default function SuppliersPanel({
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(supplier)}>
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
