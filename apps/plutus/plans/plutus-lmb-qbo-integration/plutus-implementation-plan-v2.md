@@ -36,21 +36,21 @@ LMB creates the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc). Plu
 
 ---
 
-## Current Status (2026-01-16)
+## Current Status (2026-01-18)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Appendix A (Optional QBO Cleanup) | ✅ COMPLETE (Targon only) | Migration artifact: duplicate Amazon accounts made inactive. Not required for all clients. |
-| Phase 1 (QBO Accounts) | 🟡 PARTIAL | Setup Wizard creates required accounts. Remaining work: implement Parent Account Mapping (by QBO account ID) so Plutus works across arbitrary client account names. |
-| Phase 2 (LMB Config) | 🟡 MANUAL | No LMB API: Plutus provides deep links + checklist UX; user completes in LMB for BOTH connections. |
-| Phase 3 (Bill Entry Setup) | 🟡 PARTIAL | Memo-based PO linking policy documented and shown in Setup Wizard. Still needed: persistent Bill Entry Guide + QBO Bill Compliance Scanner (migration-friendly for bulk backfills). |
-| Phase 4 (Bill SOP) | 🟡 PARTIAL | SOP documented; still needed: operational tooling (scanner + templates) so users don't rely on revisiting the wizard. |
-| Phase 5 (Plutus Dev) | ❌ NOT STARTED | Build the app (includes Setup Wizard) |
+| Appendix A (Optional QBO Cleanup) | ✅ COMPLETE | Optional migration tooling: deactivate duplicate Amazon accounts (via Setup Wizard). |
+| Phase 1 (QBO Accounts) | ✅ COMPLETE | Setup Wizard includes Parent Account Mapping (by QBO account ID) and creates all required brand sub-accounts. |
+| Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API: Plutus provides deep links + checklist UX; user completes in LMB for BOTH connections. |
+| Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in Setup Wizard and in the persistent Bills tooling. |
+| Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Persistent Bill Guide + Bill Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
+| Phase 5 (Plutus Dev) | ❌ NOT STARTED | Build the core app (ledger/settlement engine) |
 | Phase 6 (Workflows) | ❌ NOT STARTED | Settlement + Returns + Reconciliation |
 | Phase 7 (Testing) | ❌ NOT STARTED | Unit + Integration + Parallel run |
 | Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
 
-**Next Action:** Finish Phase 1 by implementing Parent Account Mapping (QBO account IDs) in the Setup Wizard so account creation works for arbitrary client charts of accounts.
+**Next Action:** Start Phase 5 (core Plutus engine) once setup-only phases are stable in production.
 
 ---
 
