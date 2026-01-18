@@ -32,8 +32,8 @@ export async function fetchWithCSRF(url: string, options: RequestInit = {}): Pro
  try {
  const data = await response.clone().json();
  if (data.error === 'Invalid CSRF token') {
- // Get a new CSRF token by making a GET request
- await fetch('/api/health', { credentials: 'include' });
+  // Get a new CSRF token by making a GET request
+  await fetch('/api/csrf', { credentials: 'include' });
  
  // Retry the original request with the new token
  const newCsrfToken = getCookie('csrf-token');

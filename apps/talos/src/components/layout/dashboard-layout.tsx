@@ -37,7 +37,7 @@ const appName = 'Talos'
  {children}
  </div>
  </main>
- <footer className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800/95 dark:bg-slate-900/95 backdrop-blur-sm">
+ <footer className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/95 backdrop-blur-sm">
  <div className="px-4 sm:px-6 md:px-8 py-4">
  <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
  {appName}{' '}

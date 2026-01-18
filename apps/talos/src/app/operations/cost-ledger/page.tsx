@@ -23,6 +23,7 @@ import { formatCurrency } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
 import type { CostLedgerBucketTotals, CostLedgerGroupResult } from '@targon/ledger'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { usePageState } from '@/lib/store'
 
 const baseFilterInputClass =
@@ -99,7 +100,7 @@ export default function CostLedgerPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/cost-ledger`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/cost-ledger')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

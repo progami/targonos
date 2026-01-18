@@ -673,18 +673,19 @@ export async function generatePoNumber(): Promise<string> {
   const prefix = `TG-${tenant.code}-`
   const startingNumber = 2601
 
-  // Find the highest existing PO number with this tenant's prefix
-  const lastPo = await prisma.purchaseOrder.findFirst({
-    where: {
-      poNumber: { startsWith: prefix },
-    },
-    orderBy: { poNumber: 'desc' },
-    select: { poNumber: true },
-  })
+  const lastPoRows = await prisma.$queryRaw<{ po_number: string | null }[]>`
+    SELECT po_number
+    FROM purchase_orders
+    WHERE po_number LIKE ${`${prefix}%`}
+    ORDER BY CAST(substring(po_number FROM '\\d+$') AS bigint) DESC
+    LIMIT 1
+  `
+
+  const lastPoNumber = lastPoRows.length > 0 ? lastPoRows[0]?.po_number : null
 
   let nextNumber = startingNumber
-  if (lastPo?.poNumber) {
-    const match = lastPo.poNumber.match(new RegExp(`${prefix}(\\d+)`))
+  if (typeof lastPoNumber === 'string') {
+    const match = lastPoNumber.match(new RegExp(`^${prefix}(\\d+)$`))
     if (match) {
       nextNumber = parseInt(match[1], 10) + 1
     }
@@ -817,10 +818,10 @@ export async function createPurchaseOrder(
         throw new ValidationError('SKU code is required for all line items')
       }
 
-      const key = line.skuCode.toLowerCase()
+      const key = `${line.skuCode.toLowerCase()}::${line.batchLot?.trim().toUpperCase()}`
       if (keySet.has(key)) {
         throw new ValidationError(
-          `Duplicate SKU line detected: ${line.skuCode}. Combine quantities into a single line.`
+          `Duplicate SKU/batch line detected: ${line.skuCode} ${line.batchLot}. Combine quantities into a single line.`
         )
       }
       keySet.add(key)

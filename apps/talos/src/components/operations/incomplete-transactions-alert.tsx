@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AlertCircle, Upload, X } from '@/lib/lucide-icons';
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface IncompleteTransaction {
  id: string;
@@ -77,10 +78,10 @@ export function IncompleteTransactionsAlert() {
  >
  {showDetails ? 'Hide' : 'Show'} Details
  </button>
- <a
- href="/operations/inventory/incomplete"
- className="inline-flex items-center text-sm font-medium text-amber-900 hover:text-amber-800"
- >
+  <a
+  href={withBasePath('/operations/inventory/incomplete')}
+  className="inline-flex items-center text-sm font-medium text-amber-900 hover:text-amber-800"
+  >
  <Upload className="h-4 w-4 mr-1" />
  Complete Transactions
  </a>

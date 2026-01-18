@@ -119,7 +119,7 @@ export const GET = withAuth(async (request, _session) => {
     const prisma = await getTenantPrisma()
 
     const searchParams = request.nextUrl.searchParams
-    const limit = parseInt(searchParams.get('limit') || '100')
+    const limit = parseInt(searchParams.get('limit') ?? '100')
     const _includeAttachments = searchParams.get('includeAttachments') === 'true'
 
     const transactions = await prisma.inventoryTransaction.findMany({
@@ -139,7 +139,7 @@ export const GET = withAuth(async (request, _session) => {
         shipName: true,
         trackingNumber: true,
         pickupDate: true,
-        attachments: true,
+        attachments: _includeAttachments,
         storageCartonsPerPallet: true,
         shippingCartonsPerPallet: true,
         unitsPerCarton: true,
@@ -158,13 +158,22 @@ export const GET = withAuth(async (request, _session) => {
 
     // Extract notes from attachments for each transaction and add nested objects for backward compatibility
     const transactionsWithNotes = transactions.map(transaction => {
-      let notes = null
-      if (transaction.attachments && Array.isArray(transaction.attachments)) {
-        const notesAttachment = (
-          transaction.attachments as Array<{ type: string; content: string }>
-        ).find(att => att.type === 'notes')
-        if (notesAttachment) {
-          notes = notesAttachment.content
+      let notes: string | null = null
+
+      if (_includeAttachments && transaction.attachments) {
+        if (Array.isArray(transaction.attachments)) {
+          const notesAttachment = (
+            transaction.attachments as Array<{ type?: string; content?: string }>
+          ).find(att => att.type === 'notes')
+
+          if (typeof notesAttachment?.content === 'string') {
+            notes = notesAttachment.content
+          }
+        } else if (typeof transaction.attachments === 'object') {
+          const record = transaction.attachments as Record<string, unknown>
+          if (typeof record.notes === 'string') {
+            notes = record.notes
+          }
         }
       }
 
@@ -257,11 +266,12 @@ export const POST = withAuth(async (request, session) => {
     const sanitizedSupplier = supplier ? sanitizeForDisplay(supplier) : null
 
     // Handle both 'type' and 'transactionType' fields for backward compatibility
-    const txType = type || transactionType
+    const txType = type ?? transactionType
     errorContext.txType = txType
-    const refNumber = sanitizedReferenceNumber || sanitizedReferenceId
+    const refNumber = sanitizedReferenceNumber ?? sanitizedReferenceId
     errorContext.referenceNumber = refNumber
-    const txDate = date || transactionDate
+    const txDate = date ?? transactionDate
+
 
     // Validate transaction type
     if (!txType || !['RECEIVE', 'SHIP', 'ADJUST_IN', 'ADJUST_OUT'].includes(txType)) {
@@ -372,9 +382,9 @@ export const POST = withAuth(async (request, session) => {
           {
             error: 'Missing required fields: PI/CI/PO number, date, and items',
             debug: {
-              refNumber: refNumber || 'MISSING',
-              txDate: txDate || 'MISSING',
-              itemsLength: itemsArray?.length || 0,
+              refNumber: refNumber ?? 'MISSING',
+              txDate: txDate ?? 'MISSING',
+              itemsLength: itemsArray.length,
             },
           },
           { status: 400 }
@@ -413,7 +423,7 @@ export const POST = withAuth(async (request, session) => {
       return NextResponse.json({ error: 'Staff users cannot specify a different warehouse' }, { status: 403 })
     }
 
-    const warehouseId = session.user.warehouseId || bodyWarehouseId
+     const warehouseId = session.user.warehouseId ?? bodyWarehouseId
     errorContext.warehouseId = warehouseId
 
     if (!warehouseId) {
@@ -431,7 +441,7 @@ export const POST = withAuth(async (request, session) => {
       // console.error(`User lookup failed for session user ID: ${session.user.id}`)
     }
 
-    const createdByName = currentUser?.fullName || currentUser?.username || 'Unknown User'
+     const createdByName = currentUser?.fullName ?? currentUser?.username ?? 'Unknown User'
 
     // Duplicate check removed - businesses may have legitimate duplicate references
     // (e.g., multiple shipments with same PO number)
@@ -509,12 +519,12 @@ export const POST = withAuth(async (request, session) => {
             where: {
               sku: {
                 skuCode: {
-                  equals: normalizedSkuCode || item.skuCode,
+                  equals: normalizedSkuCode ?? item.skuCode,
                   mode: 'insensitive',
                 },
               },
               batchCode: {
-                equals: normalizedBatchCode || item.batchLot,
+                equals: normalizedBatchCode ?? item.batchLot,
                 mode: 'insensitive',
               },
             },
@@ -575,8 +585,8 @@ export const POST = withAuth(async (request, session) => {
 
       const sanitizedBatchLot = sanitizeForDisplay(item.batchLot)
       const sanitizedSkuCode = sanitizeForDisplay(item.skuCode)
-      item.batchLot = sanitizedBatchLot || item.batchLot
-      item.skuCode = sanitizedSkuCode || item.skuCode
+      item.batchLot = sanitizedBatchLot ?? item.batchLot
+      item.skuCode = sanitizedSkuCode ?? item.skuCode
     }
 
     // Check for duplicate SKU/batch combinations in the request
@@ -854,15 +864,30 @@ export const POST = withAuth(async (request, session) => {
                   ? (resolvedShippingCartonsPerPallet ?? null)
                   : null,
             shipName: sanitizedShipName,
-            trackingNumber: sanitizedTrackingNumber || null,
+             trackingNumber: sanitizedTrackingNumber ?? null,
             supplier: txType === 'RECEIVE' ? sanitizedSupplier : null,
-            attachments: (() => {
-              const combinedAttachments = [...attachmentList]
-              if (sanitizedNotes) {
-                combinedAttachments.push({ type: 'notes', content: sanitizedNotes })
-              }
-              return combinedAttachments.length > 0 ? combinedAttachments : null
-            })(),
+             attachments: (() => {
+               const combinedEntries = attachmentList
+                 .map(entry => {
+                   const category = entry.type
+                   if (!category) {
+                     return null
+                   }
+                   return [category, entry] as const
+                 })
+                 .filter((entry): entry is readonly [string, AttachmentPayload] => entry !== null)
+
+               const combinedAttachments: Record<string, unknown> = Object.fromEntries(combinedEntries)
+
+               if (sanitizedNotes) {
+                 combinedAttachments.notes = sanitizedNotes
+               }
+
+               const combinedKeys = Object.keys(combinedAttachments)
+               return combinedKeys.length > 0
+                 ? (combinedAttachments as unknown as Prisma.InputJsonValue)
+                 : null
+             })(),
             transactionDate: transactionDateObj,
             pickupDate: pickupDateObj,
             createdById: session.user.id,
