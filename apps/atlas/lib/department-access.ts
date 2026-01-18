@@ -58,6 +58,22 @@ function normalizeDepartmentToken(raw: string): string {
     .replace(/^_+|_+$/g, '')
 }
 
+function isExecutiveDepartment(ref: DepartmentRef): boolean {
+  const name = normalizeDepartmentToken(ref.name)
+  const code = ref.code ? normalizeDepartmentToken(ref.code) : null
+  return (
+    name === 'EXECUTIVE' ||
+    name === 'EXECUTIVE_SUPERVISION' ||
+    name === 'EXECUTIVES' ||
+    code === 'EXEC' ||
+    code === 'EXECUTIVE'
+  )
+}
+
+export function hasExecutiveAccess(refs: DepartmentRef[]): boolean {
+  return refs.some(isExecutiveDepartment)
+}
+
 export function mapDepartmentRefToPasswordDepartment(ref: DepartmentRef): PasswordDepartment | null {
   if (ref.code) {
     const code = normalizeDepartmentToken(ref.code)
@@ -89,6 +105,13 @@ export function mapDepartmentRefToPasswordDepartment(ref: DepartmentRef): Passwo
 }
 
 export function getAllowedPasswordDepartments(refs: DepartmentRef[]): PasswordDepartment[] {
+  // Executives have access to all departments
+  for (const ref of refs) {
+    if (isExecutiveDepartment(ref)) {
+      return [...PASSWORD_DEPARTMENTS]
+    }
+  }
+
   const unique = new Set<PasswordDepartment>()
   for (const ref of refs) {
     const mapped = mapDepartmentRefToPasswordDepartment(ref)
