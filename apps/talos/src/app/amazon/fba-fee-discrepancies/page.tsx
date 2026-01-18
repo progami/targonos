@@ -307,16 +307,16 @@ function computeComparison(row: ApiSkuRow): Comparison {
 function StatusIcon({ status }: { status: AlertStatus }) {
   switch (status) {
     case 'MATCH':
-      return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+      return <CheckCircle2 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
     case 'MISMATCH':
-      return <XCircle className="h-4 w-4 text-rose-500" />
+      return <XCircle className="h-4 w-4 text-slate-600 dark:text-slate-400" />
     case 'NO_ASIN':
     case 'MISSING_REFERENCE':
-      return <AlertTriangle className="h-4 w-4 text-amber-500" />
+      return <AlertTriangle className="h-4 w-4 text-slate-500 dark:text-slate-400" />
     case 'ERROR':
-      return <XCircle className="h-4 w-4 text-slate-400" />
+      return <XCircle className="h-4 w-4 text-slate-400 dark:text-slate-500" />
     default:
-      return <Clock className="h-4 w-4 text-slate-300" />
+      return <Clock className="h-4 w-4 text-slate-300 dark:text-slate-600" />
   }
 }
 
@@ -532,16 +532,16 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
 
             {anySelectedMissingReference ? (
               <div className="px-4 pt-4">
-                <Alert className="bg-amber-50 border-amber-100">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <AlertTitle>Missing reference data</AlertTitle>
-                  <AlertDescription>
+                <Alert className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                  <AlertTriangle className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  <AlertTitle className="text-slate-900 dark:text-slate-100">Missing reference data</AlertTitle>
+                  <AlertDescription className="text-slate-600 dark:text-slate-400">
                     <p>
                       Fill the latest batch <span className="font-medium">Item package dimensions</span> +{' '}
                       <span className="font-medium">Item package weight</span> and the SKU{' '}
                       <span className="font-medium">Reference FBA fulfillment fee</span>.
                       Go to{' '}
-                      <Link href="/config/products" className="text-cyan-700 hover:underline">
+                      <Link href="/config/products" className="text-cyan-600 dark:text-cyan-400 hover:underline">
                         Products
                       </Link>{' '}
                       → Edit SKU → View Batches (latest).
@@ -577,7 +577,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   <tr>
                     <td
                       colSpan={selectedRows.length + 1}
-                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-cyan-700 text-white"
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-cyan-600 dark:bg-cyan-700 text-white"
                     >
                       User Provided / Ground Truth
                     </td>
@@ -642,7 +642,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   <tr>
                     <td
                       colSpan={selectedRows.length + 1}
-                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-orange-600 text-white"
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-600 dark:bg-slate-700 text-white"
                     >
                       Amazon Data (Imported)
                     </td>
@@ -718,12 +718,12 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                       const s = row.comparison.status
                       const cellStyle =
                         s === 'MATCH'
-                          ? 'bg-emerald-50 text-emerald-700'
+                          ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
                           : s === 'MISMATCH'
-                            ? 'bg-rose-50 text-rose-700'
+                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                             : s === 'NO_ASIN' || s === 'MISSING_REFERENCE'
-                              ? 'bg-amber-50 text-amber-700'
-                              : 'bg-slate-50 text-slate-600'
+                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
 
                       const label =
                         s === 'MATCH'
@@ -731,11 +731,11 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                           : s === 'MISMATCH'
                             ? '✗ Mismatch'
                             : s === 'MISSING_REFERENCE'
-                              ? '⚠ Missing reference'
+                              ? '— Missing reference'
                               : s === 'NO_ASIN'
-                                ? '⚠ No ASIN'
+                                ? '— No ASIN'
                                 : s === 'ERROR'
-                                  ? '⚠ Error'
+                                  ? '— Error'
                                   : 'Pending'
 
                       return (
@@ -761,24 +761,24 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                       const s = row.comparison.status
                       const cellStyle =
                         s === 'MATCH'
-                          ? 'bg-emerald-50 text-emerald-700'
+                          ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
                           : s === 'MISMATCH'
-                            ? 'bg-rose-50 text-rose-700'
+                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                             : s === 'NO_ASIN' || s === 'MISSING_REFERENCE'
-                              ? 'bg-amber-50 text-amber-700'
-                              : 'bg-slate-50 text-slate-600'
+                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
 
                       const label =
                         s === 'MATCH'
                           ? '✓ Correct'
                           : s === 'MISMATCH'
-                            ? '⚠ Fee mismatch'
+                            ? 'Fee mismatch'
                             : s === 'MISSING_REFERENCE'
-                              ? '⚠ Fill reference fields'
+                              ? 'Fill reference fields'
                             : s === 'NO_ASIN'
-                              ? '⚠ Add ASIN'
+                              ? 'Add ASIN'
                                 : s === 'ERROR'
-                                  ? '⚠ Review Amazon data'
+                                  ? 'Review Amazon data'
                                   : 'Pending'
 
                       return (
@@ -858,7 +858,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     return (
                       <tr
                         key={sku.id}
-                        className={`transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-700/50 ${isMismatch ? 'bg-rose-50/30 dark:bg-rose-900/20' : ''}`}
+                        className={`transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-700/50 ${isMismatch ? 'bg-slate-100/50 dark:bg-slate-700/30' : ''}`}
                       >
                         <td className="px-4 py-3">
                           <input
@@ -891,7 +891,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">{comparison.reference.sizeTier ?? '—'}</div>
                             {comparison.reference.missingFields.length > 0 ? (
-                              <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                                 Missing: {comparison.reference.missingFields.join(', ')}
                               </div>
                             ) : null}
@@ -909,7 +909,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                               </div>
                             ) : null}
                             {comparison.amazon.missingFields.length > 0 ? (
-                              <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                                 Missing: {comparison.amazon.missingFields.join(', ')}
                               </div>
                             ) : null}

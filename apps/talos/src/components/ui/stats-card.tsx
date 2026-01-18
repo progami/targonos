@@ -26,20 +26,20 @@ const variantStyles = {
  },
  success: {
  container: 'bg-white dark:bg-slate-800',
- icon: 'text-green-600 dark:text-green-400',
- value: 'text-green-600 dark:text-green-400',
+ icon: 'text-cyan-600 dark:text-cyan-400',
+ value: 'text-cyan-600 dark:text-cyan-400',
  border: 'border-slate-200 dark:border-slate-700'
  },
  warning: {
  container: 'bg-white dark:bg-slate-800',
- icon: 'text-amber-600 dark:text-amber-400',
- value: 'text-amber-600 dark:text-amber-400',
+ icon: 'text-slate-500 dark:text-slate-400',
+ value: 'text-slate-700 dark:text-slate-300',
  border: 'border-slate-200 dark:border-slate-700'
  },
  danger: {
  container: 'bg-white dark:bg-slate-800',
- icon: 'text-red-600 dark:text-red-400',
- value: 'text-red-600 dark:text-red-400',
+ icon: 'text-slate-600 dark:text-slate-400',
+ value: 'text-slate-700 dark:text-slate-300',
  border: 'border-slate-200 dark:border-slate-700'
  },
  info: {
