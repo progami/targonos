@@ -143,13 +143,12 @@ export function QboStatusIndicator() {
       onClick={handleConnect}
       className={cn(
         'flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors',
-        'bg-red-50 dark:bg-red-900/30',
-        'hover:bg-red-100 dark:hover:bg-red-900/50'
+        'bg-slate-100 dark:bg-white/10',
+        'hover:bg-slate-200 dark:hover:bg-white/20'
       )}
     >
-      <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
-      <span className="text-sm font-medium text-red-700 dark:text-red-400">
-        QBO
+      <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+        Connect QBO
       </span>
     </button>
   );
