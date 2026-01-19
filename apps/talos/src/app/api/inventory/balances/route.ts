@@ -17,7 +17,7 @@ export const GET = withAuth(async (req, session) => {
  try {
  const prisma = await getTenantPrisma()
  const searchParams = req.nextUrl.searchParams
- const warehouseId = searchParams.get('warehouseId') || session.user.warehouseId
+ const warehouseId = searchParams.get('warehouseId') ?? session.user.warehouseId
  const date = searchParams.get('date')
  const showZeroStock = searchParams.get('showZeroStock') === 'true'
  const skuCode = searchParams.get('skuCode')
@@ -39,7 +39,7 @@ export const GET = withAuth(async (req, session) => {
  if (staffWarehouse) {
  transactionWhere.warehouseCode = staffWarehouse.code
  }
- } else if (warehouseId) {
+ } else if (warehouseId && warehouseId.trim()) {
  const warehouse = await prisma.warehouse.findUnique({
  where: { id: warehouseId },
  select: { code: true }
