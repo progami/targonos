@@ -787,8 +787,9 @@ Because account names vary between companies, Plutus does not assume literal nam
 - Inventory Asset
 - Manufacturing
 - Freight & Custom Duty
-- Land Freight
-- Storage 3PL
+- Land Freight (legacy parent; may be replaced by Warehousing:3PL)
+- Storage 3PL (legacy parent; may be replaced by Warehousing:3PL)
+- Warehousing (new parent; contains Amazon FC, AWD, 3PL)
 
 **Plutus-created parents (create if missing):**
 - Mfg Accessories
@@ -842,15 +843,16 @@ This is the complete list of accounts needed. The Plutus Setup Wizard creates su
 | 1 | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | ❌ MISSING |
 | 2 | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | ❌ MISSING |
 
-### EXISTING PLUTUS PARENT ACCOUNTS (5 accounts - verify these exist)
+### EXISTING PLUTUS PARENT ACCOUNTS (6 accounts - verify these exist)
 
 | # | Account Name | Account Type | Detail Type | Purpose |
 |---|--------------|--------------|-------------|---------|
 | 1 | Inventory Asset | Other Current Assets | Inventory | Parent for inventory component sub-accounts |
 | 2 | Manufacturing | Cost of Goods Sold | Supplies & Materials - COGS | Parent for manufacturing COGS sub-accounts |
 | 3 | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for freight + duty COGS sub-accounts |
-| 4 | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for land freight COGS sub-accounts |
-| 5 | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for 3PL storage COGS sub-accounts |
+| 4 | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Legacy parent for land freight COGS sub-accounts |
+| 5 | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Legacy parent for 3PL storage COGS sub-accounts |
+| 6 | Warehousing | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for warehousing strategy buckets (Amazon FC, AWD, 3PL) |
 
 ### LMB PARENT ACCOUNTS (created by LMB Accounts & Taxes Wizard)
 
@@ -927,10 +929,10 @@ Plutus does not need to know Amazon → QBO mapping details (LMB handles that in
 | 4 | Freight - UK-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
 | 5 | Duty - US-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
 | 6 | Duty - UK-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
-| 7 | Land Freight - US-Dust Sheets | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 8 | Land Freight - UK-Dust Sheets | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 9 | Storage 3PL - US-Dust Sheets | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 10 | Storage 3PL - UK-Dust Sheets | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
+| 7 | Land Freight - US-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
+| 8 | Land Freight - UK-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
+| 9 | Storage 3PL - US-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
+| 10 | Storage 3PL - UK-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
 | 11 | Mfg Accessories - US-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
 | 12 | Mfg Accessories - UK-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
 | 13 | Inventory Shrinkage - US-Dust Sheets | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | Plutus |
