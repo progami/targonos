@@ -164,10 +164,9 @@ function InventoryPage() {
           className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
         />
         Show zero stock
-        {loading ? <LoadingSpinner size="sm" className="ml-1" /> : null}
       </label>
     ),
-    [loading, showZeroStock]
+    [showZeroStock]
   )
 
   const tableTotals = useMemo(() => {
