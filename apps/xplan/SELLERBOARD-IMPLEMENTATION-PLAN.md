@@ -1,9 +1,9 @@
-# X-Plan Sellerboard Standardization & Week System Overhaul
+# xplan Sellerboard Standardization & Week System Overhaul
 
 ## Overview
 
 **Goals:**
-1. Standardize Sellerboard endpoint usage across X-Plan
+1. Standardize Sellerboard endpoint usage across xplan
 2. Visually distinguish "real" weeks (with actual Sellerboard data) from "projected" weeks
 3. Change week start day from Sunday to Monday globally (for all regions)
 
@@ -13,7 +13,7 @@
 
 ### Background
 
-Currently X-Plan uses Sunday as week start for US region. This needs to change to Monday everywhere to align with:
+Currently xplan uses Sunday as week start for US region. This needs to change to Monday everywhere to align with:
 - Sellerboard (uses Monday-Sunday weeks)
 - Standard business week convention
 - International consistency
@@ -84,7 +84,7 @@ const WEEK_START_DAY = 1; // Monday for all regions
 
 Ensure Sellerboard CSV dates are aggregated using Monday-Sunday week boundaries.
 
-Current file: `apps/xplan/lib/integrations/sellerboard/sync.ts`
+Current file: `apps/xplan/lib/integrations/sellerboard-us-actual-sales-sync.ts`
 
 Update week parsing to use Monday as week start.
 
@@ -914,8 +914,8 @@ If issues arise:
 
 ## Success Metrics
 
-1. **Data Accuracy**: Sellerboard units match X-Plan display exactly
-2. **Week Alignment**: X-Plan weeks match Sellerboard Dashboard by day weekly totals
+1. **Data Accuracy**: Sellerboard units match xplan display exactly
+2. **Week Alignment**: xplan weeks match Sellerboard Dashboard by day weekly totals
 3. **Visual Clarity**: Users can instantly see which weeks have real data
 4. **Financial Accuracy**: P&L with actual financials matches Sellerboard profit calculations within 1%
 5. **E2E Verification**: All features tested and working in Chrome browser
