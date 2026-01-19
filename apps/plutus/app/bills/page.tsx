@@ -137,7 +137,7 @@ export default function BillsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const { data: connection } = useQuery({
+  const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
     queryFn: fetchConnectionStatus,
   });
@@ -173,7 +173,7 @@ export default function BillsPage() {
     return { all, compliant, partial, nonCompliant };
   }, [rows]);
 
-  if (connection && connection.connected === false) {
+  if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Bills" />;
   }
 
@@ -331,7 +331,7 @@ export default function BillsPage() {
                       {rows.length === 0 && (
                         <tr>
                           <td colSpan={5} className="px-4 py-10 text-center text-slate-500 dark:text-slate-400">
-                            {billsQuery.isFetching ? 'Loading…' : 'No bills found for this range.'}
+                            {isCheckingConnection || billsQuery.isFetching ? 'Loading…' : 'No bills found for this range.'}
                           </td>
                         </tr>
                       )}

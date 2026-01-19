@@ -25,6 +25,15 @@ interface Account {
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
 
+interface ConnectionStatus {
+  connected: boolean;
+}
+
+async function fetchConnectionStatus(): Promise<ConnectionStatus> {
+  const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
+
 async function fetchAccounts(): Promise<{ accounts: Account[]; total: number }> {
   const res = await fetch(`${basePath}/api/qbo/accounts`);
   if (!res.ok) {
@@ -197,10 +206,17 @@ export default function ChartOfAccountsPage() {
   const [selectedDetailTypes, setSelectedDetailTypes] = useState<Set<string>>(new Set());
   const [selectedCurrencies, setSelectedCurrencies] = useState<Set<string>>(new Set());
 
+  const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
+    queryKey: ['qbo-status'],
+    queryFn: fetchConnectionStatus,
+    staleTime: 30 * 1000,
+  });
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['qbo-accounts-full'],
     queryFn: fetchAccounts,
     staleTime: 5 * 60 * 1000,
+    enabled: connectionStatus?.connected === true,
   });
 
   const accounts = useMemo(() => {
@@ -249,11 +265,13 @@ export default function ChartOfAccountsPage() {
     setSearch('');
   };
 
+  // Show not connected screen once we know connection status is false
+  if (!isCheckingConnection && connectionStatus?.connected === false) {
+    return <NotConnectedScreen title="Chart of Accounts" />;
+  }
+
   if (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to load accounts';
-    if (errorMessage === 'Not connected to QBO') {
-      return <NotConnectedScreen title="Chart of Accounts" />;
-    }
 
     return (
       <div className="min-h-screen bg-background p-8">
@@ -327,7 +345,7 @@ export default function ChartOfAccountsPage() {
 
         {/* Accounts Table */}
         <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-slate-900">
-          {isLoading ? (
+          {isLoading || isCheckingConnection ? (
             <div className="divide-y divide-slate-100 dark:divide-white/5">
               {Array.from({ length: 15 }).map((_, i) => (
                 <div key={i} className="px-4 py-3 flex items-center gap-4">
