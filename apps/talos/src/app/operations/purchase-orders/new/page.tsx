@@ -585,15 +585,16 @@ export default function NewPurchaseOrderPage() {
                 <table className="w-full text-sm min-w-[800px]">
                   <thead>
                     <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                      <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">SKU</th>
-                      <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Batch</th>
-                      <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Description</th>
-                      <th className="text-right font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Units</th>
-                      <th className="text-right font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Units/Ctn</th>
-                      <th className="text-right font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Cartons</th>
-                      <th className="text-right font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Total</th>
-                      <th className="text-left font-medium text-muted-foreground px-4 py-3 whitespace-nowrap">Notes</th>
-                      <th className="w-[44px]"></th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
+                      <th className="w-[36px]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -608,12 +609,12 @@ export default function NewPurchaseOrderPage() {
 
                       return (
                                       <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                          {/* SKU */}
-                          <td className="px-4 py-2.5">
+                          {/* SKU */}
+                          <td className="px-3 py-2">
                             <select
                               value={item.skuCode}
                               onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                              className="w-full min-w-[100px] h-9 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                              className="w-full min-w-[90px] h-8 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                             >
                               <option value="">Select...</option>
@@ -624,11 +625,11 @@ export default function NewPurchaseOrderPage() {
                           </td>
 
                           {/* Batch */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <select
                               value={item.batchLot}
                               onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                              className="w-full min-w-[100px] h-9 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+                              className="w-full min-w-[90px] h-8 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                               disabled={!item.skuId}
                             >
@@ -652,29 +653,29 @@ export default function NewPurchaseOrderPage() {
                           </td>
 
                           {/* Description (auto-filled, editable) */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               value={item.skuDescription}
                               onChange={e => updateLineItem(item.id, 'skuDescription', e.target.value)}
                               placeholder="Description"
-                              className="h-9 text-sm min-w-[140px] bg-white dark:bg-slate-800"
+                              className="h-8 text-sm min-w-[120px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
                           {/* Units */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="1"
                               value={item.unitsOrdered}
                               onChange={e => updateLineItem(item.id, 'unitsOrdered', parseInt(e.target.value) || 0)}
-                              className="h-9 text-sm text-right tabular-nums min-w-[70px] bg-white dark:bg-slate-800"
+                              className="h-8 text-sm text-right tabular-nums w-[70px] bg-white dark:bg-slate-800"
                               required
                             />
                           </td>
 
                           {/* Units/Ctn */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="1"
@@ -684,22 +685,22 @@ export default function NewPurchaseOrderPage() {
                                 updateLineItem(item.id, 'unitsPerCarton', Number.isInteger(parsed) && parsed > 0 ? parsed : null)
                               }}
                               placeholder="—"
-                              className="h-9 text-sm text-right tabular-nums min-w-[70px] bg-white dark:bg-slate-800 disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400"
+                              className="h-8 text-sm text-right tabular-nums w-[60px] bg-white dark:bg-slate-800 disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400"
                               disabled={!item.skuId || !item.batchLot}
                               required
                             />
                           </td>
 
                           {/* Cartons (calculated) */}
-                          <td className="px-4 py-2.5">
-                            <div className="h-9 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm">
+                          <td className="px-3 py-2">
+                            <div className="h-8 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm w-[50px]">
                               {cartons ?? '—'}
                             </div>
                           </td>
 
                           {/* Total */}
-                          <td className="px-4 py-2.5">
-                            <div className="relative min-w-[90px]">
+                          <td className="px-3 py-2">
+                            <div className="relative w-[100px]">
                               <Input
                                 type="number"
                                 step="0.01"
@@ -707,38 +708,42 @@ export default function NewPurchaseOrderPage() {
                                 value={item.totalCost}
                                 onChange={e => updateLineItem(item.id, 'totalCost', e.target.value)}
                                 placeholder="0.00"
-                                className="h-9 text-sm text-right tabular-nums pr-11 bg-white dark:bg-slate-800"
+                                className="h-8 text-sm text-right tabular-nums pr-10 bg-white dark:bg-slate-800"
                               />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">
                                 {item.currency}
                               </span>
                             </div>
-                            {unitCost && (
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500 text-right mt-0.5">Unit: {unitCost}</p>
-                            )}
+                          </td>
+
+                          {/* Unit Cost (calculated) */}
+                          <td className="px-3 py-2">
+                            <div className="h-8 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm">
+                              {unitCost ?? '—'}
+                            </div>
                           </td>
 
                           {/* Notes */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               value={item.notes}
                               onChange={e => updateLineItem(item.id, 'notes', e.target.value)}
                               placeholder="Notes..."
-                              className="h-9 text-sm min-w-[100px] bg-white dark:bg-slate-800"
+                              className="h-8 text-sm min-w-[80px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
                           {/* Delete */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-2 py-2">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => removeLineItem(item.id)}
                               disabled={lineItems.length === 1}
-                              className="h-9 w-9 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-20"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-20"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </td>
                         </tr>
