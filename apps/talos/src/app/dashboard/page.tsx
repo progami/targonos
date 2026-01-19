@@ -12,11 +12,9 @@ import {
  ChevronDown,
  Package,
  FileText,
- Plus,
  AlertTriangle,
  DollarSign,
 } from '@/lib/lucide-icons'
-import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { MarketSection } from '@/components/dashboard/market-section'
@@ -24,7 +22,6 @@ import { OrderPipeline } from '@/components/dashboard/order-pipeline'
 import { CostBreakdown } from '@/components/dashboard/cost-breakdown'
 import { WarehouseInventory } from '@/components/dashboard/warehouse-inventory'
 import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
-import { Button } from '@/components/ui/button'
 import { DashboardSkeleton } from '@/components/common/loading-state'
 import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
@@ -315,30 +312,8 @@ export default function DashboardPage() {
  description="Home"
  icon={Home}
  />
- <PageContent>
- {/* Quick Actions */}
- <div className="flex flex-wrap gap-3 mb-6">
- <Button asChild size="sm" className="gap-2">
- <Link href="/operations/purchase-orders/new">
- <Plus className="h-4 w-4" />
- New Purchase Order
- </Link>
- </Button>
- <Button asChild variant="outline" size="sm" className="gap-2">
- <Link href="/operations/fulfillment-orders/new">
- <Plus className="h-4 w-4" />
- New Fulfillment Order
- </Link>
- </Button>
- <Button asChild variant="outline" size="sm" className="gap-2">
- <Link href="/amazon/fba-fee-discrepancies">
- <AlertTriangle className="h-4 w-4" />
- Check Discrepancies
- </Link>
- </Button>
- </div>
-
- {/* Stats Cards */}
+  <PageContent>
+  {/* Stats Cards */}
  <StatsCardGrid cols={4} className="mb-6">
  <StatsCard
  title="Total Inventory"
