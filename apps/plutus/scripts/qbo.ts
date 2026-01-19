@@ -27,6 +27,15 @@ const AMAZON_DUPLICATE_ACCOUNTS = [
   'Amazon Sales Tax Collected',
 ] as const;
 
+const LMB_PNL_DUPLICATE_ACCOUNTS = [
+  'Amazon Sales (LMB)',
+  'Amazon Refunds (LMB)',
+  'Amazon Seller Fees (LMB)',
+  'Amazon FBA Fees (LMB)',
+  'Amazon Storage Fees (LMB)',
+  'Amazon Advertising Costs (LMB)',
+] as const;
+
 type QboConnection = {
   realmId: string;
   accessToken: string;
@@ -41,13 +50,15 @@ function printUsage(): void {
   console.log('  connection:show');
   console.log('  accounts:deactivate <name...>');
   console.log('  accounts:deactivate-amazon-duplicates');
+  console.log('  accounts:deactivate-lmb-pnl-duplicates');
   console.log('  accounts:create-plutus-qbo-lmb-plan');
   console.log('');
 }
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
   let line = rawLine.trim();
-  if (line === '' || line.startsWith('#')) return null;
+  if (line === '') return null;
+  if (line.startsWith('#')) return null;
 
   if (line.startsWith('export ')) {
     line = line.slice('export '.length).trim();
@@ -63,7 +74,11 @@ function parseDotenvLine(rawLine: string): { key: string; value: string } | null
 
   const hasSingleQuotes = value.startsWith("'") && value.endsWith("'");
   const hasDoubleQuotes = value.startsWith('"') && value.endsWith('"');
-  if (hasSingleQuotes || hasDoubleQuotes) {
+  if (hasSingleQuotes) {
+    value = value.slice(1, -1);
+  }
+
+  if (hasDoubleQuotes) {
     value = value.slice(1, -1);
   }
 
@@ -120,10 +135,21 @@ async function showConnection(): Promise<void> {
 }
 
 async function deactivateAmazonDuplicateAccounts(): Promise<void> {
-  await deactivateAccountsByName([...AMAZON_DUPLICATE_ACCOUNTS]);
+  await deactivateAccountsByName([...AMAZON_DUPLICATE_ACCOUNTS], { dryRun: false });
 }
 
-async function deactivateAccountsByName(accountNames: string[]): Promise<void> {
+async function deactivateLmbPnlDuplicateAccounts(): Promise<void> {
+  await deactivateAccountsByName([...LMB_PNL_DUPLICATE_ACCOUNTS], { dryRun: false });
+}
+
+async function deactivateLmbPnlDuplicateAccountsDryRun(): Promise<void> {
+  await deactivateAccountsByName([...LMB_PNL_DUPLICATE_ACCOUNTS], { dryRun: true });
+}
+
+async function deactivateAccountsByName(
+  accountNames: string[],
+  options: { dryRun: boolean },
+): Promise<void> {
   let connection = await requireServerConnection();
 
   const { fetchAccounts, updateAccountActive } = await import('@/lib/qbo/api');
@@ -144,6 +170,16 @@ async function deactivateAccountsByName(accountNames: string[]): Promise<void> {
   console.log(JSON.stringify({ totalTargets: accountNames.length, matched: matches.length, missing: missing.length }, null, 2));
 
   for (const account of matches) {
+    if (account.Active === false) {
+      console.log(JSON.stringify({ alreadyInactive: account.Name, id: account.Id }, null, 2));
+      continue;
+    }
+
+    if (options.dryRun) {
+      console.log(JSON.stringify({ wouldDeactivate: account.Name, id: account.Id }, null, 2));
+      continue;
+    }
+
     const result = await updateAccountActive(connection, account.Id, account.SyncToken, account.Name, false);
     if (result.updatedConnection) {
       connection = result.updatedConnection;
@@ -545,12 +581,24 @@ async function main(): Promise<void> {
       return;
     }
 
-    await deactivateAccountsByName(accountNames);
+    await deactivateAccountsByName(accountNames, { dryRun: false });
     return;
   }
 
   if (command === 'accounts:deactivate-amazon-duplicates') {
     await deactivateAmazonDuplicateAccounts();
+    return;
+  }
+
+  if (command === 'accounts:deactivate-lmb-pnl-duplicates') {
+    await deactivateLmbPnlDuplicateAccountsDryRun();
+
+    if (process.env.CONFIRM !== '1') {
+      console.log('Dry run complete. Re-run with CONFIRM=1 to deactivate.');
+      return;
+    }
+
+    await deactivateLmbPnlDuplicateAccounts();
     return;
   }
 
