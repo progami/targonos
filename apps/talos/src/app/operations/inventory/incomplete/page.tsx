@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Paperclip,
-  RefreshCw,
   Upload,
 } from '@/lib/lucide-icons'
 
@@ -69,7 +68,6 @@ export default function InventoryIncompletePage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [transactions, setTransactions] = useState<IncompleteTransaction[]>([])
 
   const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({})
@@ -104,7 +102,6 @@ export default function InventoryIncompletePage() {
       toast.error(error instanceof Error ? error.message : 'Failed to load incomplete transactions')
     } finally {
       setLoading(false)
-      setRefreshing(false)
     }
   }, [])
 
@@ -133,11 +130,6 @@ export default function InventoryIncompletePage() {
     return { receiveCount, shipCount, otherCount }
   }, [transactions])
 
-  const handleRefresh = () => {
-    setRefreshing(true)
-    void loadTransactions()
-  }
-
   const handleUpload = async (transactionId: string, documentType: string, file: File) => {
     try {
       const body = new FormData()
@@ -155,7 +147,6 @@ export default function InventoryIncompletePage() {
       }
 
       toast.success('Document uploaded')
-      setRefreshing(true)
       void loadTransactions()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Upload failed')
@@ -188,7 +179,6 @@ export default function InventoryIncompletePage() {
       }
 
       toast.success('Transaction updated')
-      setRefreshing(true)
       void loadTransactions()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update transaction')
@@ -211,14 +201,6 @@ export default function InventoryIncompletePage() {
         icon={AlertTriangle}
         backHref={withBasePath('/operations/inventory')}
         backLabel="Inventory"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-              Refresh
-            </Button>
-          </div>
-        }
         metadata={
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="outline">{transactions.length} total</Badge>
