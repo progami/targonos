@@ -21,7 +21,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Check,
-  ChevronDown,
   ChevronRight,
   Download,
   ExternalLink,
@@ -718,12 +717,8 @@ export default function PurchaseOrderDetailPage() {
   const [activeBottomTab, setActiveBottomTab] = useState<
     'cargo' | 'documents' | 'details' | 'history'
   >('details')
+  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [previewDocument, setPreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
-
-  // Collapsible sections state for Details tab
-  const [collapsedDetailSections, setCollapsedDetailSections] = useState<Record<string, boolean>>(
-    {}
-  )
 
   // Advance stage modal
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false)
@@ -2253,6 +2248,7 @@ export default function PurchaseOrderDetailPage() {
             {/* Tab Content */}
             {activeBottomTab === 'cargo' && (
               <div>
+                {/* Summary Stats */}
                 <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     <div className="space-y-1">
@@ -2298,181 +2294,219 @@ export default function PurchaseOrderDetailPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full table-auto text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-semibold">SKU</th>
-                        <th className="px-4 py-2 text-left font-semibold">Batch</th>
-                        <th className="px-4 py-2 text-left font-semibold">Description</th>
-                        <th className="px-4 py-2 text-right font-semibold">Units</th>
-                        <th className="px-4 py-2 text-right font-semibold">Units/Ctn</th>
-                        <th className="px-4 py-2 text-right font-semibold">Cartons</th>
-                        <th className="px-4 py-2 text-right font-semibold">Total</th>
-                        <th className="px-4 py-2 text-left font-semibold">Notes</th>
-                        <th className="px-4 py-2 text-right font-semibold">Cartons Received</th>
-                        {canEdit && <th className="px-4 py-2 text-right font-semibold">Actions</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.lines.length === 0 ? (
+                {/* Sub-tabs */}
+                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setCargoSubTab('details')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cargoSubTab === 'details'
+                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCargoSubTab('attributes')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cargoSubTab === 'attributes'
+                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <Package2 className="h-4 w-4" />
+                    Attributes
+                  </button>
+                </div>
+
+                {/* Details Sub-tab */}
+                {cargoSubTab === 'details' && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-auto text-sm">
+                      <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                         <tr>
-                          <td
-                            colSpan={canEdit ? 10 : 9}
-                            className="px-4 py-6 text-center text-muted-foreground"
-                          >
-                            No lines added to this order yet.
-                          </td>
+                          <th className="px-4 py-2 text-left font-semibold">SKU</th>
+                          <th className="px-4 py-2 text-left font-semibold">Batch</th>
+                          <th className="px-4 py-2 text-left font-semibold">Description</th>
+                          <th className="px-4 py-2 text-right font-semibold">Units</th>
+                          <th className="px-4 py-2 text-right font-semibold">Units/Ctn</th>
+                          <th className="px-4 py-2 text-right font-semibold">Cartons</th>
+                          <th className="px-4 py-2 text-right font-semibold">Total</th>
+                          <th className="px-4 py-2 text-left font-semibold">Notes</th>
+                          <th className="px-4 py-2 text-right font-semibold">Cartons Received</th>
+                          {canEdit && <th className="px-4 py-2 text-right font-semibold">Actions</th>}
                         </tr>
-                      ) : (
-                        order.lines.map((line, idx) => {
-                          const pkg = buildLinePackagingDetails(line)
-                          const isLast = idx === order.lines.length - 1
-                          return (
-                            <Fragment key={line.id}>
-                              <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
+                      </thead>
+                      <tbody>
+                        {order.lines.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={canEdit ? 10 : 9}
+                              className="px-4 py-6 text-center text-muted-foreground"
+                            >
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          order.lines.map((line) => (
+                            <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
+                              <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                                {line.skuCode}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                                {line.batchLot || '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap max-w-[220px] truncate">
+                                {line.skuDescription || '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                                {line.unitsOrdered.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
+                                {line.unitsPerCarton.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                                {line.quantity.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                <div className="text-right">
+                                  <div className="font-semibold text-foreground">
+                                    {line.totalCost !== null
+                                      ? `${line.totalCost.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })} ${(line.currency || tenantCurrency).toUpperCase()}`
+                                      : '—'}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Unit:{' '}
+                                    {line.unitCost !== null
+                                      ? Number(line.unitCost).toFixed(4)
+                                      : '—'}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground max-w-[220px] truncate">
+                                {line.lineNotes || '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
+                                {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
+                              </td>
+                              {canEdit && (
+                                <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => openLineEditor(line)}
+                                      title="Edit line"
+                                    >
+                                      <FileEdit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-rose-700 hover:text-rose-800"
+                                      onClick={() =>
+                                        setConfirmDialog({
+                                          open: true,
+                                          type: 'delete-line',
+                                          title: 'Remove line item',
+                                          message: `Remove SKU ${line.skuCode} (${line.batchLot || '—'}) from this draft PO?`,
+                                          lineId: line.id,
+                                        })
+                                      }
+                                      title="Remove line"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Attributes Sub-tab */}
+                {cargoSubTab === 'attributes' && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-auto text-sm">
+                      <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold">SKU</th>
+                          <th className="px-4 py-2 text-left font-semibold">Batch</th>
+                          <th className="px-4 py-2 text-left font-semibold">Carton Size</th>
+                          <th className="px-4 py-2 text-right font-semibold">CBM/ctn</th>
+                          <th className="px-4 py-2 text-right font-semibold">CBM Total</th>
+                          <th className="px-4 py-2 text-right font-semibold">KG/ctn</th>
+                          <th className="px-4 py-2 text-right font-semibold">KG Total</th>
+                          <th className="px-4 py-2 text-center font-semibold">Pkg Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.lines.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          order.lines.map((line) => {
+                            const pkg = buildLinePackagingDetails(line)
+                            return (
+                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
                                 <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
                                   {line.skuCode}
                                 </td>
                                 <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                                   {line.batchLot || '—'}
                                 </td>
-                                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap max-w-[220px] truncate">
-                                  {line.skuDescription || '—'}
+                                <td className="px-4 py-2.5 text-foreground whitespace-nowrap">
+                                  {pkg?.cartonDims ? (
+                                    pkg.cartonDims
+                                  ) : (
+                                    <span className="text-amber-600">Not set</span>
+                                  )}
                                 </td>
-                                <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
-                                  {line.unitsOrdered.toLocaleString()}
+                                <td className="px-4 py-2.5 text-right tabular-nums text-foreground whitespace-nowrap">
+                                  {pkg?.cbmPerCarton ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
-                                  {line.unitsPerCarton.toLocaleString()}
+                                <td className="px-4 py-2.5 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                  {pkg?.cbmTotal ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
-                                  {line.quantity.toLocaleString()}
+                                <td className="px-4 py-2.5 text-right tabular-nums text-foreground whitespace-nowrap">
+                                  {pkg?.kgPerCarton ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                                  <div className="text-right">
-                                    <div className="font-semibold text-foreground">
-                                      {line.totalCost !== null
-                                        ? `${line.totalCost.toLocaleString(undefined, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })} ${(line.currency || tenantCurrency).toUpperCase()}`
-                                        : '—'}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Unit:{' '}
-                                      {line.unitCost !== null
-                                        ? Number(line.unitCost).toFixed(4)
-                                        : '—'}
-                                    </div>
-                                  </div>
+                                <td className="px-4 py-2.5 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                  {pkg?.kgTotal ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-muted-foreground max-w-[220px] truncate">
-                                  {line.lineNotes || '—'}
+                                <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                                  {pkg?.packagingType ? (
+                                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {pkg.packagingType}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
                                 </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
-                                  {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
-                                </td>
-                                {canEdit && (
-                                  <td className="px-4 py-2.5 whitespace-nowrap text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0"
-                                        onClick={() => openLineEditor(line)}
-                                        title="Edit line"
-                                      >
-                                        <FileEdit className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0 text-rose-700 hover:text-rose-800"
-                                        onClick={() =>
-                                          setConfirmDialog({
-                                            open: true,
-                                            type: 'delete-line',
-                                            title: 'Remove line item',
-                                            message: `Remove SKU ${line.skuCode} (${line.batchLot || '—'}) from this draft PO?`,
-                                            lineId: line.id,
-                                          })
-                                        }
-                                        title="Remove line"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                )}
                               </tr>
-                              {pkg ? (
-                                <tr
-                                  className={`bg-slate-50/40 dark:bg-slate-700/40 ${!isLast ? 'border-b-2 border-slate-200 dark:border-slate-700' : ''}`}
-                                >
-                                  <td colSpan={canEdit ? 10 : 9} className="px-4 pb-2 pt-1">
-                                    <div
-                                      className={`grid grid-cols-6 gap-3 text-xs border-l-2 ${
-                                        pkg.hasWarning
-                                          ? 'border-amber-400 bg-amber-50/30'
-                                          : 'border-cyan-400 bg-transparent'
-                                      } pl-3 py-1`}
-                                    >
-                                      <div>
-                                        <span className="text-muted-foreground">Carton</span>
-                                        <p
-                                          className={`font-medium ${pkg.cartonDims ? 'text-slate-700 dark:text-slate-300' : 'text-amber-600'}`}
-                                        >
-                                          {pkg.cartonDims ?? 'Not set'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">CBM/ctn</span>
-                                        <p className="font-medium text-slate-700 dark:text-slate-300">
-                                          {pkg.cbmPerCarton ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">CBM Total</span>
-                                        <p className="font-medium text-slate-700 dark:text-slate-300">
-                                          {pkg.cbmTotal ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">KG/ctn</span>
-                                        <p className="font-medium text-slate-700 dark:text-slate-300">
-                                          {pkg.kgPerCarton ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">KG Total</span>
-                                        <p className="font-medium text-slate-700 dark:text-slate-300">
-                                          {pkg.kgTotal ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">Pkg Type</span>
-                                        <p className="font-medium text-slate-700 dark:text-slate-300">
-                                          {pkg.packagingType ?? '—'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ) : !isLast ? (
-                                <tr className="border-b-2 border-slate-200 dark:border-slate-700">
-                                  <td colSpan={canEdit ? 11 : 10} className="h-0"></td>
-                                </tr>
-                              ) : null}
-                            </Fragment>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2642,656 +2676,507 @@ export default function PurchaseOrderDetailPage() {
 
             {activeBottomTab === 'details' && (
               <div className="p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Order Details</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Consolidated view of all essential information across stages.
-                    </p>
+                {/* Order Info Section */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Order Info
+                    </h4>
+                    {canEdit && (
+                      <div className="flex items-center gap-2">
+                        {orderInfoEditing ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setOrderInfoEditing(false)}
+                              disabled={orderInfoSaving}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handleSaveOrderInfo()}
+                              disabled={orderInfoSaving || !orderInfoDraft.counterpartyName.trim()}
+                              className="gap-2"
+                            >
+                              {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                              Save
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setOrderInfoEditing(true)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        PO Number
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {order.poNumber || order.orderNumber}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Supplier
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          value={orderInfoDraft.counterpartyName}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              counterpartyName: e.target.value,
+                            }))
+                          }
+                          placeholder="Supplier"
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.counterpartyName || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Destination
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {tenantDestination || '—'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Cargo Ready Date
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          type="date"
+                          value={orderInfoDraft.expectedDate}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              expectedDate: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Incoterms
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <select
+                          value={orderInfoDraft.incoterms}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              incoterms: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                        >
+                          <option value="">Select incoterms</option>
+                          {INCOTERMS_OPTIONS.map(option => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.incoterms || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Payment Terms
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          value={orderInfoDraft.paymentTerms}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              paymentTerms: e.target.value,
+                            }))
+                          }
+                          placeholder="Payment terms"
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.paymentTerms || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Created
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {formatDateOnly(order.createdAt) || '—'}
+                        {order.createdByName ? ` by ${order.createdByName}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  {(order.notes || (canEdit && orderInfoEditing)) && (
+                    <div className="mt-4">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                        Notes
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Textarea
+                          value={orderInfoDraft.notes}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
+                          }
+                          placeholder="Optional internal notes..."
+                          disabled={orderInfoSaving}
+                          className="min-h-[88px]"
+                        />
+                      ) : (
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{order.notes}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-4">
-                  {/* Order Info Section */}
-                  {(() => {
-                    const sectionKey = 'order-info'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                              <FileEdit className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Order Info</p>
-                              <p className="text-xs text-muted-foreground">Basic order details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          {canEdit && (
-                            <div className="mb-4 flex items-center justify-end gap-2">
-                              {orderInfoEditing ? (
-                                <>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setOrderInfoEditing(false)}
-                                    disabled={orderInfoSaving}
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => void handleSaveOrderInfo()}
-                                    disabled={
-                                      orderInfoSaving || !orderInfoDraft.counterpartyName.trim()
-                                    }
-                                    className="gap-2"
-                                  >
-                                    {orderInfoSaving && (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    )}
-                                    Save
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setOrderInfoEditing(true)}
-                                >
-                                  Edit
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                PO Number
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {order.poNumber || order.orderNumber}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Supplier
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  value={orderInfoDraft.counterpartyName}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      counterpartyName: e.target.value,
-                                    }))
-                                  }
-                                  placeholder="Supplier"
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {order.counterpartyName || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Destination
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {tenantDestination || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Cargo Ready Date
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  type="date"
-                                  value={orderInfoDraft.expectedDate}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      expectedDate: e.target.value,
-                                    }))
-                                  }
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Incoterms
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <select
-                                  value={orderInfoDraft.incoterms}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      incoterms: e.target.value,
-                                    }))
-                                  }
-                                  disabled={orderInfoSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                >
-                                  <option value="">Select incoterms</option>
-                                  {INCOTERMS_OPTIONS.map(option => (
-                                    <option key={option} value={option}>
-                                      {option}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {order.incoterms || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Payment Terms
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  value={orderInfoDraft.paymentTerms}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      paymentTerms: e.target.value,
-                                    }))
-                                  }
-                                  placeholder="Payment terms"
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {order.paymentTerms || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Created
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(order.createdAt) || '—'}
-                                {order.createdByName ? ` by ${order.createdByName}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          {(order.notes || (canEdit && orderInfoEditing)) && (
-                            <div className="mt-4 pt-3 border-t">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                Notes
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Textarea
-                                  value={orderInfoDraft.notes}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
-                                  }
-                                  placeholder="Optional internal notes..."
-                                  disabled={orderInfoSaving}
-                                  className="min-h-[88px]"
-                                />
-                              ) : (
-                                <p className="text-sm text-slate-700 dark:text-slate-300">{order.notes}</p>
-                              )}
-                            </div>
-                          )}
+                {/* Manufacturing Section */}
+                {(() => {
+                  const mfg = order.stageData.manufacturing
+                  const hasData =
+                    mfg?.proformaInvoiceNumber ||
+                    mfg?.manufacturingStartDate ||
+                    mfg?.totalCartons ||
+                    mfg?.totalWeightKg
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Manufacturing
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Proforma Invoice
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.proformaInvoiceNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Start Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(mfg?.manufacturingStartDate || mfg?.manufacturingStart) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Expected Completion
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Cartons
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalCartons?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Pallets
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalPallets?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Weight (kg)
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalWeightKg?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Volume (CBM)
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
+                          </p>
                         </div>
                       </div>
-                    )
-                  })()}
+                    </div>
+                  )
+                })()}
 
-                  {/* Manufacturing Section */}
-                  {(() => {
-                    const mfg = order.stageData.manufacturing
-                    const hasData =
-                      mfg?.proformaInvoiceNumber ||
-                      mfg?.manufacturingStartDate ||
-                      mfg?.totalCartons ||
-                      mfg?.totalWeightKg
-                    if (!hasData) return null
-                    const sectionKey = 'manufacturing'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-amber-50 text-amber-700">
-                              <Factory className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manufacturing</p>
-                              <p className="text-xs text-muted-foreground">Production details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Proforma Invoice
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {mfg?.proformaInvoiceNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Start Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(
-                                  mfg?.manufacturingStartDate || mfg?.manufacturingStart
-                                ) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Expected Completion
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Cartons
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {mfg?.totalCartons?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Pallets
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {mfg?.totalPallets?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Weight (kg)
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {mfg?.totalWeightKg?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Volume (CBM)
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                          </div>
+                {/* In Transit Section */}
+                {(() => {
+                  const ocean = order.stageData.ocean
+                  const hasData =
+                    ocean?.houseBillOfLading ||
+                    ocean?.masterBillOfLading ||
+                    ocean?.vesselName ||
+                    ocean?.portOfLoading ||
+                    ocean?.estimatedDeparture
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        In Transit
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            House B/L
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.houseBillOfLading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Master B/L
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.masterBillOfLading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Vessel
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.vesselName || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Voyage
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.voyageNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Port of Loading
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.portOfLoading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Port of Discharge
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.portOfDischarge || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            ETD
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(ocean?.estimatedDeparture) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            ETA
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(ocean?.estimatedArrival) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Commercial Invoice
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.commercialInvoiceNumber || '—'}
+                          </p>
                         </div>
                       </div>
-                    )
-                  })()}
+                    </div>
+                  )
+                })()}
 
-                  {/* In Transit Section */}
-                  {(() => {
-                    const ocean = order.stageData.ocean
-                    const hasData =
-                      ocean?.houseBillOfLading ||
-                      ocean?.masterBillOfLading ||
-                      ocean?.vesselName ||
-                      ocean?.portOfLoading ||
-                      ocean?.estimatedDeparture
-                    if (!hasData) return null
-                    const sectionKey = 'ocean'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-blue-50 text-blue-700">
-                              <Ship className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">In Transit</p>
-                              <p className="text-xs text-muted-foreground">Shipping & logistics</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                House B/L
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.houseBillOfLading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Master B/L
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.masterBillOfLading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Vessel
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.vesselName || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Voyage
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.voyageNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Port of Loading
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.portOfLoading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Port of Discharge
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.portOfDischarge || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                ETD
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(ocean?.estimatedDeparture) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                ETA
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(ocean?.estimatedArrival) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Commercial Invoice
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {ocean?.commercialInvoiceNumber || '—'}
-                              </p>
-                            </div>
-                          </div>
+                {/* Warehouse Section */}
+                {(() => {
+                  const wh = order.stageData.warehouse
+                  const hasData =
+                    wh?.warehouseName ||
+                    wh?.warehouseCode ||
+                    wh?.customsEntryNumber ||
+                    wh?.customsClearedDate ||
+                    wh?.receivedDate
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Warehouse
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Warehouse
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.warehouseName || wh?.warehouseCode || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Customs Entry
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.customsEntryNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Customs Cleared
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(wh?.customsClearedDate) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Duty Amount
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.dutyAmount != null
+                              ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Received Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(wh?.receivedDate) || '—'}
+                          </p>
                         </div>
                       </div>
-                    )
-                  })()}
+                      {wh?.discrepancyNotes && (
+                        <div className="mt-4">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                            Discrepancy Notes
+                          </p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">{wh.discrepancyNotes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
-                  {/* Warehouse Section */}
-                  {(() => {
-                    const wh = order.stageData.warehouse
-                    const hasData =
-                      wh?.warehouseName ||
-                      wh?.warehouseCode ||
-                      wh?.customsEntryNumber ||
-                      wh?.customsClearedDate ||
-                      wh?.receivedDate
-                    if (!hasData) return null
-                    const sectionKey = 'warehouse'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-purple-50 text-purple-700">
-                              <Warehouse className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Warehouse</p>
-                              <p className="text-xs text-muted-foreground">Receiving & customs</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Warehouse
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {wh?.warehouseName || wh?.warehouseCode || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Customs Entry
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {wh?.customsEntryNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Customs Cleared
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(wh?.customsClearedDate) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Duty Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {wh?.dutyAmount != null
-                                  ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
-                                  : '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Received Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(wh?.receivedDate) || '—'}
-                              </p>
-                            </div>
-                          </div>
-                          {wh?.discrepancyNotes && (
-                            <div className="mt-4 pt-3 border-t">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                Discrepancy Notes
-                              </p>
-                              <p className="text-sm text-slate-700 dark:text-slate-300">{wh.discrepancyNotes}</p>
-                            </div>
-                          )}
+                {/* Shipped Section */}
+                {(() => {
+                  const shipped = order.stageData.shipped
+                  const hasData =
+                    shipped?.shipToName ||
+                    shipped?.shippingCarrier ||
+                    shipped?.trackingNumber ||
+                    shipped?.shippedDate
+                  if (!hasData) return null
+                  return (
+                    <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Shipped
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1 col-span-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Ship To
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {[
+                              shipped?.shipToName,
+                              shipped?.shipToAddress,
+                              shipped?.shipToCity,
+                              shipped?.shipToCountry,
+                            ]
+                              .filter(Boolean)
+                              .join(', ') || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Carrier
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.shippingCarrier || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Method
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.shippingMethod || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Tracking
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.trackingNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Shipped Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Delivered Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(shipped?.deliveredDate) || '—'}
+                          </p>
                         </div>
                       </div>
-                    )
-                  })()}
-
-                  {/* Shipped Section */}
-                  {(() => {
-                    const shipped = order.stageData.shipped
-                    const hasData =
-                      shipped?.shipToName ||
-                      shipped?.shippingCarrier ||
-                      shipped?.trackingNumber ||
-                      shipped?.shippedDate
-                    if (!hasData) return null
-                    const sectionKey = 'shipped'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-emerald-50 text-emerald-700">
-                              <Package2 className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Shipped</p>
-                              <p className="text-xs text-muted-foreground">Delivery details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1 col-span-2">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Ship To
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {[
-                                  shipped?.shipToName,
-                                  shipped?.shipToAddress,
-                                  shipped?.shipToCity,
-                                  shipped?.shipToCountry,
-                                ]
-                                  .filter(Boolean)
-                                  .join(', ') || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Carrier
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {shipped?.shippingCarrier || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Method
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {shipped?.shippingMethod || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Tracking
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {shipped?.trackingNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Shipped Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Delivered Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(shipped?.deliveredDate) || '—'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
