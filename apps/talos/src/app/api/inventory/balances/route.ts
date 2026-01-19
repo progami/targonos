@@ -24,12 +24,14 @@ export const GET = withAuth(async (req, session) => {
 
  const paginationParams = getPaginationParams(req)
 
- const pointInTime = date ? new Date(date) : new Date()
- pointInTime.setHours(23, 59, 59, 999)
-
- const transactionWhere: Prisma.InventoryTransactionWhereInput = {
- transactionDate: { lte: pointInTime },
- }
+  const pointInTime = date ? new Date(date) : null
+  if (pointInTime) {
+    pointInTime.setHours(23, 59, 59, 999)
+  }
+ 
+  const transactionWhere: Prisma.InventoryTransactionWhereInput = pointInTime
+    ? { transactionDate: { lte: pointInTime } }
+    : {}
 
  if (session.user.role === 'staff' && session.user.warehouseId) {
  const staffWarehouse = await prisma.warehouse.findUnique({
@@ -67,22 +69,22 @@ export const GET = withAuth(async (req, session) => {
 
   const transactions = await prisma.inventoryTransaction.findMany({
     where: transactionWhere,
-    orderBy: [
-      { transactionDate: 'asc' },
-      { createdAt: 'asc' }
-    ],
+    orderBy: pointInTime
+      ? [{ transactionDate: 'asc' }, { createdAt: 'asc' }]
+      : [{ createdAt: 'asc' }],
     include: {
       purchaseOrder: {
-        select: { orderNumber: true }
+        select: { orderNumber: true },
       },
       fulfillmentOrder: {
-        select: { foNumber: true }
-      }
-    }
+        select: { foNumber: true },
+      },
+    },
   })
 
   const ledgerTransactions = transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
     ...transaction,
+    transactionDate: pointInTime ? transaction.transactionDate : transaction.createdAt,
     purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
     fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
   }))
