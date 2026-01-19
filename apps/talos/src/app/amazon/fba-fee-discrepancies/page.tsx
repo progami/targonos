@@ -405,7 +405,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   // Reset to page 1 when filter changes
   useEffect(() => {
     pageState.setPagination(1, SKUS_PER_PAGE)
-  }, [statusFilter, pageState])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on filter change
+  }, [statusFilter])
 
   const totalPages = Math.ceil(filteredRows.length / SKUS_PER_PAGE)
   const paginatedRows = useMemo(() => {
