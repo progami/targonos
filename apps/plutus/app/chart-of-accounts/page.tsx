@@ -21,7 +21,10 @@ interface Account {
   parentName: string | null;
   depth: number;
   isFirstInGroup?: boolean;
+  source: 'lmb' | 'qbo';
 }
+
+type SourceFilter = 'all' | 'qbo' | 'lmb';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
 
@@ -202,6 +205,7 @@ function ColumnFilterDropdown({
 
 export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [selectedDetailTypes, setSelectedDetailTypes] = useState<Set<string>>(new Set());
   const [selectedCurrencies, setSelectedCurrencies] = useState<Set<string>>(new Set());
@@ -242,6 +246,13 @@ export default function ChartOfAccountsPage() {
     return Array.from(curr).sort();
   }, [accounts]);
 
+  // Count accounts by source
+  const sourceCounts = useMemo(() => {
+    const qbo = accounts.filter((a) => a.source === 'qbo').length;
+    const lmb = accounts.filter((a) => a.source === 'lmb').length;
+    return { qbo, lmb, all: accounts.length };
+  }, [accounts]);
+
   const filteredAccounts = useMemo(() => {
     return accounts.filter((account) => {
       const searchLower = search.toLowerCase();
@@ -249,16 +260,18 @@ export default function ChartOfAccountsPage() {
         !search ||
         account.name.toLowerCase().includes(searchLower) ||
         account.acctNum?.toLowerCase().includes(searchLower);
+      const matchesSource = sourceFilter === 'all' || account.source === sourceFilter;
       const matchesType = selectedTypes.size === 0 || selectedTypes.has(account.type);
       const matchesDetailType = selectedDetailTypes.size === 0 || (account.subType && selectedDetailTypes.has(account.subType));
       const matchesCurrency = selectedCurrencies.size === 0 || selectedCurrencies.has(account.currency);
-      return matchesSearch && matchesType && matchesDetailType && matchesCurrency;
+      return matchesSearch && matchesSource && matchesType && matchesDetailType && matchesCurrency;
     });
-  }, [accounts, search, selectedTypes, selectedDetailTypes, selectedCurrencies]);
+  }, [accounts, search, sourceFilter, selectedTypes, selectedDetailTypes, selectedCurrencies]);
 
   const activeFiltersCount = (selectedTypes.size > 0 ? 1 : 0) + (selectedDetailTypes.size > 0 ? 1 : 0) + (selectedCurrencies.size > 0 ? 1 : 0);
 
   const clearAllFilters = () => {
+    setSourceFilter('all');
     setSelectedTypes(new Set());
     setSelectedDetailTypes(new Set());
     setSelectedCurrencies(new Set());
@@ -310,6 +323,46 @@ export default function ChartOfAccountsPage() {
           </Button>
         </header>
 
+        {/* Source Tabs */}
+        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-white/5 rounded-lg w-fit">
+          <button
+            onClick={() => setSourceFilter('all')}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-all',
+              sourceFilter === 'all'
+                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            All
+            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.all}</span>
+          </button>
+          <button
+            onClick={() => setSourceFilter('qbo')}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-all',
+              sourceFilter === 'qbo'
+                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            QBO Created
+            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.qbo}</span>
+          </button>
+          <button
+            onClick={() => setSourceFilter('lmb')}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-all',
+              sourceFilter === 'lmb'
+                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            LMB / Plutus
+            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.lmb}</span>
+          </button>
+        </div>
+
         {/* Search Bar and Status */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           {/* Search */}
@@ -326,7 +379,7 @@ export default function ChartOfAccountsPage() {
 
           <div className="flex items-center gap-4">
             {/* Active filters indicator */}
-            {(activeFiltersCount > 0 || search) && (
+            {(activeFiltersCount > 0 || search || sourceFilter !== 'all') && (
               <button
                 onClick={clearAllFilters}
                 className="text-sm text-brand-teal-600 dark:text-brand-teal-400 hover:underline"
@@ -429,6 +482,11 @@ export default function ChartOfAccountsPage() {
                           </span>
                         )}
                       </span>
+                      {account.source === 'lmb' && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 rounded">
+                          LMB
+                        </span>
+                      )}
                     </div>
 
                     {/* Type */}
