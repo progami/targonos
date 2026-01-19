@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -209,6 +209,7 @@ export default function ChartOfAccountsPage() {
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [selectedDetailTypes, setSelectedDetailTypes] = useState<Set<string>>(new Set());
   const [selectedCurrencies, setSelectedCurrencies] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
 
   const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -216,12 +217,17 @@ export default function ChartOfAccountsPage() {
     staleTime: 30 * 1000,
   });
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['qbo-accounts-full'],
     queryFn: fetchAccounts,
     staleTime: 5 * 60 * 1000,
     enabled: connectionStatus?.connected === true,
   });
+
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['qbo-status'] });
+    queryClient.invalidateQueries({ queryKey: ['qbo-accounts-full'] });
+  }, [queryClient]);
 
   const accounts = useMemo(() => {
     return data ? data.accounts : [];
@@ -292,7 +298,7 @@ export default function ChartOfAccountsPage() {
           <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50 p-8 text-center">
             <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2">Error</h2>
             <p className="text-red-600 dark:text-red-300 mb-4">{errorMessage}</p>
-            <Button onClick={() => refetch()} variant="outline">
+            <Button onClick={handleRefresh} variant="outline">
               <RefreshIcon className="h-4 w-4 mr-2" />
               Retry
             </Button>
@@ -317,7 +323,7 @@ export default function ChartOfAccountsPage() {
             </Link>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Chart of Accounts</h1>
           </div>
-          <Button onClick={() => refetch()} variant="outline" size="sm">
+          <Button onClick={handleRefresh} variant="outline" size="sm">
             <RefreshIcon className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
             Refresh
           </Button>
