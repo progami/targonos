@@ -34,14 +34,6 @@ import { usePageState } from '@/lib/store'
 
 const LEDGER_TIME_FORMAT = 'PPP p'
 
-function getTodayParam(): string {
-  // API expects YYYY-MM-DD.
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 function formatLedgerTimestamp(value: string | Date | null | undefined) {
   if (!value) {
@@ -131,7 +123,6 @@ function InventoryPage() {
       setLoading(true)
       const params = new URLSearchParams({
         showZeroStock: showZeroStock ? 'true' : 'false',
-        date: getTodayParam(),
       })
 
       const response = await fetch(`/api/inventory/balances?${params}`)
