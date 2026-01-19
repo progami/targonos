@@ -478,75 +478,14 @@ export default function FulfillmentOrderDetailPage() {
     setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
     try {
-      const presignResponse = await fetch(
-        `/api/fulfillment-orders/${order.id}/documents/presigned-url`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            stage,
-            documentType,
-          }),
-          credentials: 'include',
-        }
-      )
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('stage', stage)
+      formData.append('documentType', documentType)
 
-      const presignPayload = await presignResponse.json().catch(() => null)
-      if (!presignResponse.ok) {
-        const errorMessage = typeof presignPayload?.error === 'string' ? presignPayload.error : null
-        const detailsMessage =
-          typeof presignPayload?.details === 'string' ? presignPayload.details : null
-        if (errorMessage && detailsMessage) {
-          toast.error(`${errorMessage}: ${detailsMessage}`)
-        } else if (errorMessage) {
-          toast.error(errorMessage)
-        } else {
-          toast.error(`Failed to prepare upload (HTTP ${presignResponse.status})`)
-        }
-        return
-      }
-
-      const uploadUrl = typeof presignPayload?.uploadUrl === 'string' ? presignPayload.uploadUrl : null
-      const s3Key = typeof presignPayload?.s3Key === 'string' ? presignPayload.s3Key : null
-      if (!uploadUrl || !s3Key) {
-        toast.error('Upload URL invalid')
-        return
-      }
-
-      const uploadBody = await file.arrayBuffer()
-      const uploadResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: uploadBody,
-      })
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text().catch(() => '')
-        const code = errorText.match(/<Code>([^<]+)<\/Code>/)?.[1]?.trim()
-        const message = errorText.match(/<Message>([^<]+)<\/Message>/)?.[1]?.trim()
-        if (code && message) {
-          toast.error(`${code}: ${message}`)
-        } else {
-          toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
-        }
-        return
-      }
-
-      const completeResponse = await fetch(`/api/fulfillment-orders/${order.id}/documents`, {
+      const completeResponse = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stage,
-          documentType,
-          s3Key,
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-        }),
-        credentials: 'include',
+        body: formData,
       })
 
       const payload = await completeResponse.json().catch(() => null)
@@ -558,7 +497,7 @@ export default function FulfillmentOrderDetailPage() {
         } else if (errorMessage) {
           toast.error(errorMessage)
         } else {
-          toast.error(`Failed to save document (HTTP ${completeResponse.status})`)
+          toast.error(`Failed to upload document (HTTP ${completeResponse.status})`)
         }
         return
       }
