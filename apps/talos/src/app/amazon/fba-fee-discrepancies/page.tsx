@@ -445,7 +445,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     <PageContainer>
       <PageHeaderSection
         title="FBA Fee Discrepancies"
-        description="Compare FBA fulfillment fees between reference and Amazon"
+        description="Amazon"
         icon={DollarSign}
       />
 

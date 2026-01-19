@@ -346,10 +346,18 @@ function VerifyLmbSetupStep({
           </p>
           <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-2 list-decimal list-inside">
             <li>Go to LMB → Accounts & Taxes → Setup Wizard</li>
-            <li>Step 1: Map transactions to accounts (use LMB defaults or your own names)</li>
-            <li>Step 2: Configure QuickBooks bank accounts</li>
-            <li>Step 3: Confirm tax rates</li>
-            <li>Complete the wizard</li>
+            <li>Step 1: Map categories to QBO accounts</li>
+            <li>
+              Use these QBO accounts (non-LMB) for P&L buckets: Amazon Sales, Amazon Refunds, Amazon
+              FBA Inventory Reimbursement, Amazon Seller Fees, Amazon FBA Fees, Amazon Storage Fees,
+              Amazon Advertising Costs, Amazon Promotions
+            </li>
+            <li>
+              Use LMB accounts for balance sheet mechanics: Amazon Sales Tax (LMB), Amazon Deferred
+              Balances (LMB), Amazon Reserved Balances (LMB), Amazon Split Month Rollovers (LMB), Amazon
+              Loans (LMB)
+            </li>
+            <li>Complete the wizard for EACH connection (US, UK, etc.)</li>
           </ol>
         </div>
 
@@ -1580,9 +1588,12 @@ function LmbProductGroupsStep({
       id: 'group-unassigned',
       label: 'Create Product Group "UNASSIGNED" and set it as default for unknown SKUs',
     },
-    { id: 'accounts-mapped', label: 'Map all Product Groups to QBO accounts (from Step 4)' },
-    { id: 'skus-assigned', label: 'Assign all SKUs to their Product Groups' },
-    { id: 'cogs-off', label: 'Set COGS to OFF (Plutus handles COGS)' },
+     {
+       id: 'accounts-mapped',
+       label: 'Map Product Group sales/refunds to the brand Sales account (e.g. Amazon Sales - <Brand>)',
+     },
+     { id: 'skus-assigned', label: 'Assign all SKUs to their Product Groups' },
+     { id: 'cogs-off', label: 'Set LMB COGS feature to OFF (Plutus will handle product COGS later)' },
   ];
 
   const toggleCheck = (id: string) => {
@@ -1602,8 +1613,9 @@ function LmbProductGroupsStep({
           LMB Product Groups
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          This step is completed in Link My Books, not in Plutus. Create Product Groups and map them
-          to the brand sub-accounts.
+           This step is completed in Link My Books, not in Plutus. Create Product Groups, assign SKUs,
+           and set the sales/refunds account per group.
+
         </p>
       </div>
 
@@ -1611,11 +1623,12 @@ function LmbProductGroupsStep({
         <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-2">
           Complete for EACH LMB connection:
         </p>
-        <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-1 list-decimal list-inside">
-          <li>LMB → Inventory → Product Groups → Create</li>
-          <li>Map to accounts: Sales, Refunds, FBA Fees, Seller Fees, etc.</li>
-          <li>Assign SKUs to the Product Group</li>
-        </ol>
+          <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-1 list-decimal list-inside">
+            <li>LMB → Inventory → Product Groups → Create</li>
+            <li>Set Account (sales/refunds) for each group to: Amazon Sales - &lt;Brand&gt;</li>
+            <li>Assign SKUs to the Product Group</li>
+            <li>Do not enable the LMB COGS feature</li>
+          </ol>
       </div>
 
       <a
