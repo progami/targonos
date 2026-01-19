@@ -9,7 +9,7 @@ import { redirectToPortal } from '@/lib/portal'
 import { calculateSizeTier } from '@/lib/amazon/fees'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { usePageState } from '@/lib/store/page-state'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -428,10 +428,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     return counts
   }, [computedRows])
 
-  const anyMissingReference = useMemo(() => {
-    return paginatedRows.some(row => row.comparison.status === 'MISSING_REFERENCE')
-  }, [paginatedRows])
-
   if (status === 'loading') {
     return (
       <div className="flex h-full items-center justify-center">
@@ -516,28 +512,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
               {filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}
             </div>
           </div>
-
-          {/* Missing reference alert */}
-          {anyMissingReference && (
-            <div className="px-4 pt-4">
-              <Alert className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-                <AlertTriangle className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                <AlertTitle className="text-slate-900 dark:text-slate-100">Missing reference data</AlertTitle>
-                <AlertDescription className="text-slate-600 dark:text-slate-400">
-                  <p>
-                    Fill the latest batch <span className="font-medium">Item package dimensions</span> +{' '}
-                    <span className="font-medium">Item package weight</span> and the SKU{' '}
-                    <span className="font-medium">Reference FBA fulfillment fee</span>.
-                    Go to{' '}
-                    <Link href="/config/products" className="text-cyan-600 dark:text-cyan-400 hover:underline">
-                      Products
-                    </Link>{' '}
-                    → Edit SKU → View Batches (latest).
-                  </p>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
 
           {/* Main comparison table */}
           {loading ? (
