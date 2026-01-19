@@ -563,7 +563,7 @@ export default function NewPurchaseOrderPage() {
                 }`}
               >
                 <FileText className="h-4 w-4" />
-                PO Details
+                Details
               </button>
               <button
                 type="button"
