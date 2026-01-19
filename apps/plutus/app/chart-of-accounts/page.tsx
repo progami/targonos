@@ -440,7 +440,10 @@ export default function ChartOfAccountsPage() {
             <div>
               {/* Table Header with Filters */}
               <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/10">
-                <div className="col-span-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                <div className="col-span-1 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                  Code
+                </div>
+                <div className="col-span-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Name
                 </div>
                 <div className="col-span-2">
@@ -482,9 +485,14 @@ export default function ChartOfAccountsPage() {
                     key={account.id}
                     className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
                   >
+                    {/* Code */}
+                    <div className="col-span-1 flex items-center text-slate-600 dark:text-slate-400 text-sm font-mono">
+                      {account.acctNum || '—'}
+                    </div>
+
                     {/* Name */}
                     <div
-                      className="col-span-4 flex items-center gap-2 min-w-0"
+                      className="col-span-3 flex items-center gap-2 min-w-0"
                       style={{ paddingLeft: `${account.depth * 16}px` }}
                       title={account.fullyQualifiedName || account.name}
                     >
@@ -497,11 +505,6 @@ export default function ChartOfAccountsPage() {
                       )}
                       <span className="font-medium text-slate-900 dark:text-white truncate">
                         {account.name}
-                        {account.acctNum && (
-                          <span className="text-slate-500 dark:text-slate-400 font-normal ml-1">
-                            ({account.acctNum})
-                          </span>
-                        )}
                       </span>
                       {account.source === 'lmb' && (
                         <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 rounded">
