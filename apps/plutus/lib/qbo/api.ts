@@ -119,17 +119,194 @@ export interface QboAccount {
   };
 }
 
+export interface QboJournalEntryLine {
+  Id?: string;
+  Amount?: number;
+  Description?: string;
+  DetailType: 'JournalEntryLineDetail';
+  JournalEntryLineDetail: {
+    PostingType: 'Debit' | 'Credit';
+    AccountRef: {
+      value: string;
+      name?: string;
+    };
+  };
+}
+
+export interface QboJournalEntry {
+  Id: string;
+  SyncToken: string;
+  TxnDate: string;
+  DocNumber?: string;
+  PrivateNote?: string;
+  Line: QboJournalEntryLine[];
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
+export async function fetchJournalEntries(
+  connection: QboConnection,
+  params: {
+    startDate?: string;
+    endDate?: string;
+    maxResults?: number;
+    startPosition?: number;
+    docNumberContains?: string;
+  } = {},
+): Promise<{ journalEntries: QboJournalEntry[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = params.maxResults === undefined ? 50 : params.maxResults;
+  const startPosition = params.startPosition === undefined ? 1 : params.startPosition;
+
+  const conditions: string[] = [];
+  if (params.startDate) {
+    conditions.push(`TxnDate >= '${params.startDate}'`);
+  }
+  if (params.endDate) {
+    conditions.push(`TxnDate <= '${params.endDate}'`);
+  }
+  if (params.docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${params.docNumberContains}%'`);
+  }
+
+  let query = `SELECT * FROM JournalEntry`;
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ` ORDERBY TxnDate DESC`;
+  query += ` STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching journal entries from QBO', { query });
+
+  const response = await fetchWithTimeout(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch journal entries', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch journal entries: ${response.status} ${errorText}`);
+  }
+
+  const data: QboQueryResponse = await response.json();
+  const journalEntries = data.QueryResponse.JournalEntry;
+  if (!journalEntries) {
+    return { journalEntries: [], totalCount: 0, updatedConnection };
+  }
+
+  let totalCount = journalEntries.length;
+  if (journalEntries.length > 0) {
+    const countQuery = `SELECT COUNT(*) FROM JournalEntry${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
+    const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
+
+    try {
+      const countResponse = await fetchWithTimeout(
+        countUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+        },
+        30000,
+      );
+
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        if (countData.QueryResponse?.totalCount !== undefined) {
+          totalCount = countData.QueryResponse.totalCount;
+        } else {
+          totalCount = journalEntries.length;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { journalEntries, totalCount, updatedConnection };
+}
+
+export async function createJournalEntry(
+  connection: QboConnection,
+  input: {
+    txnDate: string;
+    docNumber?: string;
+    privateNote?: string;
+    lines: Array<{
+      amount: number;
+      postingType: 'Debit' | 'Credit';
+      accountId: string;
+      description?: string;
+    }>;
+  },
+): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/journalentry`;
+
+  const payload = {
+    TxnDate: input.txnDate,
+    DocNumber: input.docNumber,
+    PrivateNote: input.privateNote,
+    Line: input.lines.map((line) => ({
+      DetailType: 'JournalEntryLineDetail',
+      Amount: line.amount,
+      Description: line.description,
+      JournalEntryLineDetail: {
+        PostingType: line.postingType,
+        AccountRef: {
+          value: line.accountId,
+        },
+      },
+    })),
+  };
+
+  logger.info('Creating journal entry in QBO', { txnDate: input.txnDate, docNumber: input.docNumber });
+
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create journal entry', { status: response.status, error: errorText });
+    throw new Error(`Failed to create journal entry: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { JournalEntry: QboJournalEntry };
+  return { journalEntry: data.JournalEntry, updatedConnection };
+}
+
 export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
     Bill?: QboBill[];
-    Account?: QboAccount[];
+    Account: QboAccount[];
+    JournalEntry?: QboJournalEntry[];
+    totalCount?: number;
     startPosition?: number;
     maxResults?: number;
-    totalCount?: number;
   };
-  time: string;
 }
+
 
 export interface FetchPurchasesOptions {
   startDate?: string;
