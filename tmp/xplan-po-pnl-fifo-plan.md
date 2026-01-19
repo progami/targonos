@@ -1,4 +1,4 @@
-# X-Plan: Refactor “7 PO Profitability” into FIFO-driven “PO P&L” (Projected vs Real)
+# xplan: Refactor “7 PO Profitability” into FIFO-driven “PO P&L” (Projected vs Real)
 
 ## Context / problem
 Sheet **7 (PO Profitability)** currently computes profit from **PO/batch input unit economics** (quantity × price/cost) and is not downstream of the same engine that drives:
