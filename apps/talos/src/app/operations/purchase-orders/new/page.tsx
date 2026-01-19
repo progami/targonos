@@ -466,7 +466,7 @@ export default function NewPurchaseOrderPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Ship To</label>
-                <div className="h-10 px-3 flex items-center border rounded-md bg-slate-50 dark:bg-slate-700 text-sm text-muted-foreground">
+                <div className="h-10 px-3 flex items-center text-sm font-medium text-slate-900 dark:text-slate-100">
                   {tenantDestination}
                 </div>
               </div>
@@ -613,7 +613,7 @@ export default function NewPurchaseOrderPage() {
                             <select
                               value={item.skuCode}
                               onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                              className="w-full min-w-[100px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[100px] h-9 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                             >
                               <option value="">Select...</option>
@@ -628,7 +628,7 @@ export default function NewPurchaseOrderPage() {
                             <select
                               value={item.batchLot}
                               onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                              className="w-full min-w-[90px] h-9 px-2 border rounded bg-white dark:bg-slate-800 text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full min-w-[100px] h-9 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                               disabled={!item.skuId}
                             >
@@ -651,13 +651,13 @@ export default function NewPurchaseOrderPage() {
                             </select>
                           </td>
 
-                          {/* Description */}
+                          {/* Description (auto-filled, editable) */}
                           <td className="px-4 py-2.5">
                             <Input
                               value={item.skuDescription}
                               onChange={e => updateLineItem(item.id, 'skuDescription', e.target.value)}
                               placeholder="Description"
-                              className="h-9 text-sm min-w-[140px]"
+                              className="h-9 text-sm min-w-[140px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
@@ -668,7 +668,7 @@ export default function NewPurchaseOrderPage() {
                               min="1"
                               value={item.unitsOrdered}
                               onChange={e => updateLineItem(item.id, 'unitsOrdered', parseInt(e.target.value) || 0)}
-                              className="h-9 text-sm text-right tabular-nums min-w-[70px]"
+                              className="h-9 text-sm text-right tabular-nums min-w-[70px] bg-white dark:bg-slate-800"
                               required
                             />
                           </td>
@@ -684,20 +684,22 @@ export default function NewPurchaseOrderPage() {
                                 updateLineItem(item.id, 'unitsPerCarton', Number.isInteger(parsed) && parsed > 0 ? parsed : null)
                               }}
                               placeholder="—"
-                              className="h-9 text-sm text-right tabular-nums disabled:bg-slate-50 min-w-[70px]"
+                              className="h-9 text-sm text-right tabular-nums min-w-[70px] bg-white dark:bg-slate-800 disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400"
                               disabled={!item.skuId || !item.batchLot}
                               required
                             />
                           </td>
 
                           {/* Cartons (calculated) */}
-                          <td className="px-4 py-2.5 text-right tabular-nums font-semibold whitespace-nowrap">
-                            {cartons ?? '—'}
+                          <td className="px-4 py-2.5">
+                            <div className="h-9 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm">
+                              {cartons ?? '—'}
+                            </div>
                           </td>
 
                           {/* Total */}
                           <td className="px-4 py-2.5">
-                            <div className="relative min-w-[100px]">
+                            <div className="relative min-w-[90px]">
                               <Input
                                 type="number"
                                 step="0.01"
@@ -705,14 +707,14 @@ export default function NewPurchaseOrderPage() {
                                 value={item.totalCost}
                                 onChange={e => updateLineItem(item.id, 'totalCost', e.target.value)}
                                 placeholder="0.00"
-                                className="h-9 text-sm text-right tabular-nums pr-12"
+                                className="h-9 text-sm text-right tabular-nums pr-11 bg-white dark:bg-slate-800"
                               />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">
                                 {item.currency}
                               </span>
                             </div>
                             {unitCost && (
-                              <p className="text-[10px] text-muted-foreground text-right mt-0.5">Unit: {unitCost}</p>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 text-right mt-0.5">Unit: {unitCost}</p>
                             )}
                           </td>
 
@@ -722,7 +724,7 @@ export default function NewPurchaseOrderPage() {
                               value={item.notes}
                               onChange={e => updateLineItem(item.id, 'notes', e.target.value)}
                               placeholder="Notes..."
-                              className="h-9 text-sm min-w-[100px]"
+                              className="h-9 text-sm min-w-[100px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
