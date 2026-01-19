@@ -1,9 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { parseLmbAuditCsv } from '@/lib/lmb/audit-csv';
+import { computeFeeAllocation } from '@/lib/fee-allocation';
 
 export const runtime = 'nodejs';
-import { computeFeeAllocation } from '@/lib/fee-allocation';
 
 type BrandMapInput = {
   skus: Array<{ sku: string; brand: string }>;
@@ -59,7 +59,6 @@ export async function POST(req: NextRequest) {
   const brandMap = makeBrandMap(mapping);
 
   const fileName = file.name.toLowerCase();
-
   let parsed: ReturnType<typeof parseLmbAuditCsv>;
 
   if (fileName.endsWith('.zip')) {

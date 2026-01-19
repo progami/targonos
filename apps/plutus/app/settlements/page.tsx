@@ -13,6 +13,11 @@ type AllocationResponse = {
   };
 };
 
+type AuditAnalysisResponse = {
+  fileName: string;
+  files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }>;
+};
+
 export default function SettlementsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [mappingText, setMappingText] = useState('');
@@ -20,13 +25,7 @@ export default function SettlementsPage() {
   const [data, setData] = useState<AllocationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<
-    | null
-    | {
-        fileName: string;
-        files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }>;
-      }
-  >(null);
+  const [analysis, setAnalysis] = useState<AuditAnalysisResponse | null>(null);
 
   const parsedMapping = useMemo(() => {
     if (mappingText.trim() === '') {
@@ -53,13 +52,8 @@ export default function SettlementsPage() {
         method: 'POST',
         body: form,
       });
-      const body =
-        (await res.json()) as
-          | {
-              fileName: string;
-              files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }>;
-            }
-          | { error: string; details?: string };
+
+      const body = (await res.json()) as AuditAnalysisResponse | { error: string; details?: string };
 
       if (!res.ok) {
         if ('details' in body && body.details) {
@@ -71,7 +65,7 @@ export default function SettlementsPage() {
         throw new Error('Request failed');
       }
 
-      setAnalysis(body as { fileName: string; files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }> });
+      setAnalysis(body as AuditAnalysisResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -131,7 +125,7 @@ export default function SettlementsPage() {
           </Link>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settlements</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Fee-by-brand allocation (v1): allocate fee rows without SKU by units sold in the same Invoice.
+            Upload LMB audit data (ZIP/CSV), analyze invoice/date ranges, and compute fee-by-brand allocation.
           </p>
         </div>
 
@@ -191,7 +185,9 @@ export default function SettlementsPage() {
                     <div className="mt-2 text-sm text-slate-700 dark:text-slate-300">
                       <div className="flex justify-between">
                         <span>Date range</span>
-                        <span className="font-mono">{f.minDate} → {f.maxDate}</span>
+                        <span className="font-mono">
+                          {f.minDate} → {f.maxDate}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Invoices</span>
