@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
   Check,
   ChevronRight,
+  DollarSign,
   Download,
   ExternalLink,
   Eye,
@@ -715,7 +716,7 @@ export default function PurchaseOrderDetailPage() {
 
   // Bottom section tabs
   const [activeBottomTab, setActiveBottomTab] = useState<
-    'cargo' | 'documents' | 'details' | 'history'
+    'cargo' | 'costs' | 'documents' | 'details' | 'history'
   >('details')
   const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [previewDocument, setPreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
@@ -1929,6 +1930,21 @@ export default function PurchaseOrderDetailPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setActiveBottomTab('costs')}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'costs'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <DollarSign className="h-4 w-4" />
+                Costs
+                {activeBottomTab === 'costs' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setActiveBottomTab('documents')
                   void refreshDocuments()
@@ -2671,6 +2687,163 @@ export default function PurchaseOrderDetailPage() {
                     })()}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeBottomTab === 'costs' && (
+              <div className="p-6">
+                {/* Product Costs Section */}
+                <div className="mb-6">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Product Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left px-4 py-2 font-medium">SKU</th>
+                          <th className="text-left px-4 py-2 font-medium">Batch</th>
+                          <th className="text-right px-4 py-2 font-medium">Qty</th>
+                          <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
+                          <th className="text-right px-4 py-2 font-medium">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.lines.map(line => {
+                          const unitCost = line.totalCost && line.unitsOrdered > 0
+                            ? line.totalCost / line.unitsOrdered
+                            : null
+                          return (
+                            <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
+                              <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
+                              <td className="px-4 py-2 text-muted-foreground">{line.batchLot || '—'}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{line.unitsOrdered.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                {unitCost !== null ? `${tenantCurrency} ${unitCost.toFixed(4)}` : '—'}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                {line.totalCost !== null ? `${line.currency || tenantCurrency} ${line.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                          <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">Product Subtotal</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Inbound Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Inbound Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Inbound costs will be calculated when the PO is received at warehouse.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Storage Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Storage Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Storage costs accrue daily based on warehouse rates.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Outbound Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Outbound Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Outbound costs will be calculated when inventory is shipped.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Customs/Duty Section */}
+                {order.stageData.warehouse?.dutyAmount != null && (
+                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                      Customs & Duty
+                    </h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Duty Amount
+                        </p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cost Summary */}
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Cost Summary
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Inbound Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Storage Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Outbound Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        {order.stageData.warehouse?.dutyAmount != null && (
+                          <tr className="border-b border-slate-100 dark:border-slate-700">
+                            <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
+                            <td className="px-4 py-2 text-right tabular-nums font-medium">
+                              {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50">
+                          <td className="px-4 py-3 font-semibold">Total Cost</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
+                            {tenantCurrency} {(
+                              order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0) +
+                              (order.stageData.warehouse?.dutyAmount || 0)
+                            ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 
