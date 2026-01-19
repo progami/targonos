@@ -157,6 +157,18 @@ function ReportsIcon({ className }: { className?: string }) {
   );
 }
 
+function SettlementsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('h-6 w-6', className)} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 3.75H6.375A2.625 2.625 0 003.75 6.375v11.25A2.625 2.625 0 006.375 20.25h11.25A2.625 2.625 0 0020.25 17.625V9M9 3.75V7.5A1.5 1.5 0 0010.5 9h3.75M9 3.75L14.25 9M12 14.25v4.5m0 0l-1.5-1.5m1.5 1.5l1.5-1.5"
+      />
+    </svg>
+  );
+}
+
 function TerminalIcon({ className }: { className?: string }) {
   return (
     <svg className={cn('h-6 w-6', className)} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -228,6 +240,14 @@ export default function HomePage() {
               title="Bills"
               description="PO memo guide + bill compliance scanner for bulk backfills."
               accentColor="amber"
+            />
+
+            <FeatureCard
+              href="/settlements"
+              icon={<SettlementsIcon />}
+              title="Settlements"
+              description="Upload LMB audit data (ZIP/CSV), analyze date ranges, and compute fee allocations."
+              accentColor="teal"
             />
 
             <ComingSoonCard
