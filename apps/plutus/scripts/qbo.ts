@@ -52,6 +52,7 @@ function printUsage(): void {
   console.log('  accounts:deactivate-amazon-duplicates');
   console.log('  accounts:deactivate-lmb-pnl-duplicates');
   console.log('  accounts:create-plutus-qbo-lmb-plan');
+  console.log('  accounts:move-land-storage-under-warehousing');
   console.log('');
 }
 
@@ -150,48 +151,78 @@ async function deactivateAccountsByName(
   accountNames: string[],
   options: { dryRun: boolean },
 ): Promise<void> {
-  let connection = await requireServerConnection();
+  const connection0 = await requireServerConnection();
+  let connection = connection0;
 
   const { fetchAccounts, updateAccountActive } = await import('@/lib/qbo/api');
-  const { accounts, updatedConnection } = await fetchAccounts(connection, {
-    includeInactive: true,
-  });
+
+  const { accounts, updatedConnection } = await fetchAccounts(connection, { includeInactive: true });
   if (updatedConnection) {
     connection = updatedConnection;
     await saveServerQboConnection(updatedConnection);
   }
 
-  const targets = new Set(accountNames.map((name) => name.toLowerCase()));
-  const matches = accounts.filter((account) => targets.has(account.Name.toLowerCase()));
+  const activeByName = new Map<string, { Id: string; Name: string; SyncToken: string; Active?: boolean }>();
+  for (const account of accounts) {
+    if (account.Active === false) continue;
+    activeByName.set(account.Name, account);
+  }
 
-  const matchedNames = new Set(matches.map((account) => account.Name.toLowerCase()));
-  const missing = accountNames.filter((name) => !matchedNames.has(name.toLowerCase()));
+  const matches: Array<{ Id: string; Name: string; SyncToken: string; Active?: boolean }> = [];
+  const missing: string[] = [];
 
-  console.log(JSON.stringify({ totalTargets: accountNames.length, matched: matches.length, missing: missing.length }, null, 2));
-
-  for (const account of matches) {
-    if (account.Active === false) {
-      console.log(JSON.stringify({ alreadyInactive: account.Name, id: account.Id }, null, 2));
+  for (const name of accountNames) {
+    const match = activeByName.get(name);
+    if (!match) {
+      missing.push(name);
       continue;
     }
+    matches.push(match);
+  }
 
+  console.log(
+    JSON.stringify(
+      {
+        totalTargets: accountNames.length,
+        matched: matches.length,
+        missing: missing.length,
+      },
+      null,
+      2,
+    ),
+  );
+
+  const errors: Array<{ name: string; id: string; error: string }> = [];
+
+  for (const account of matches) {
     if (options.dryRun) {
       console.log(JSON.stringify({ wouldDeactivate: account.Name, id: account.Id }, null, 2));
       continue;
     }
 
-    const result = await updateAccountActive(connection, account.Id, account.SyncToken, account.Name, false);
-    if (result.updatedConnection) {
-      connection = result.updatedConnection;
-      await saveServerQboConnection(result.updatedConnection);
+    try {
+      const result = await updateAccountActive(connection, account.Id, account.SyncToken, account.Name, false);
+      if (result.updatedConnection) {
+        connection = result.updatedConnection;
+        await saveServerQboConnection(result.updatedConnection);
+      }
+      console.log(JSON.stringify({ deactivated: account.Name, id: account.Id }, null, 2));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push({ name: account.Name, id: account.Id, error: message });
+      console.log(JSON.stringify({ failed: account.Name, id: account.Id, error: message }, null, 2));
     }
-    console.log(JSON.stringify({ deactivated: account.Name, id: account.Id }, null, 2));
   }
 
   if (missing.length > 0) {
     console.log(JSON.stringify({ missing }, null, 2));
   }
+
+  if (errors.length > 0) {
+    console.log(JSON.stringify({ errors }, null, 2));
+  }
 }
+
 
 type AccountPlanSpec = {
   name: string;
@@ -201,6 +232,29 @@ type AccountPlanSpec = {
 };
 
 const PLUTUS_QBO_LMB_PLAN_ACCOUNTS: AccountPlanSpec[] = [
+  {
+    name: 'Warehousing',
+    accountType: 'Cost of Goods Sold',
+    accountSubType: 'ShippingFreightDeliveryCos',
+  },
+  {
+    name: 'Amazon FC',
+    accountType: 'Cost of Goods Sold',
+    accountSubType: 'ShippingFreightDeliveryCos',
+    parentFullyQualifiedName: 'Warehousing',
+  },
+  {
+    name: 'AWD',
+    accountType: 'Cost of Goods Sold',
+    accountSubType: 'ShippingFreightDeliveryCos',
+    parentFullyQualifiedName: 'Warehousing',
+  },
+  {
+    name: '3PL',
+    accountType: 'Cost of Goods Sold',
+    accountSubType: 'ShippingFreightDeliveryCos',
+    parentFullyQualifiedName: 'Warehousing',
+  },
   {
     name: 'Mfg Accessories',
     accountType: 'Cost of Goods Sold',
@@ -445,25 +499,25 @@ const PLUTUS_QBO_LMB_PLAN_ACCOUNTS: AccountPlanSpec[] = [
     name: 'Land Freight - US-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
-    parentFullyQualifiedName: 'Land Freight',
+    parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
     name: 'Land Freight - UK-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
-    parentFullyQualifiedName: 'Land Freight',
+    parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
     name: 'Storage 3PL - US-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
-    parentFullyQualifiedName: 'Storage 3PL',
+    parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
     name: 'Storage 3PL - UK-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
-    parentFullyQualifiedName: 'Storage 3PL',
+    parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
     name: 'Mfg Accessories - US-Dust Sheets',
@@ -604,6 +658,18 @@ async function main(): Promise<void> {
 
   if (command === 'accounts:create-plutus-qbo-lmb-plan') {
     await createPlutusQboLmbPlanAccounts();
+    return;
+  }
+
+  if (command === 'accounts:move-land-storage-under-warehousing') {
+    const accountNames = ['Land Freight', 'Storage 3PL'];
+    await deactivateAccountsByName(accountNames, { dryRun: true });
+    console.log('Dry run complete. Re-run with CONFIRM=1 to deactivate old parents.');
+
+    if (process.env.CONFIRM === '1') {
+      await deactivateAccountsByName(accountNames, { dryRun: false });
+    }
+
     return;
   }
 
