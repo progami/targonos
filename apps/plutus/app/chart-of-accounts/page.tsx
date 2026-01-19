@@ -336,36 +336,51 @@ export default function ChartOfAccountsPage() {
             className={cn(
               'px-4 py-2 rounded-md text-sm font-medium transition-all',
               sourceFilter === 'all'
-                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-brand-teal-500 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
             )}
           >
             All
-            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.all}</span>
+            <span className={cn(
+              'ml-2 text-xs px-1.5 py-0.5 rounded',
+              sourceFilter === 'all'
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+            )}>{sourceCounts.all}</span>
           </button>
           <button
             onClick={() => setSourceFilter('qbo')}
             className={cn(
               'px-4 py-2 rounded-md text-sm font-medium transition-all',
               sourceFilter === 'qbo'
-                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-brand-teal-500 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
             )}
           >
             QBO Created
-            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.qbo}</span>
+            <span className={cn(
+              'ml-2 text-xs px-1.5 py-0.5 rounded',
+              sourceFilter === 'qbo'
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+            )}>{sourceCounts.qbo}</span>
           </button>
           <button
             onClick={() => setSourceFilter('lmb')}
             className={cn(
               'px-4 py-2 rounded-md text-sm font-medium transition-all',
               sourceFilter === 'lmb'
-                ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-brand-teal-500 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
             )}
           >
             LMB / Plutus
-            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{sourceCounts.lmb}</span>
+            <span className={cn(
+              'ml-2 text-xs px-1.5 py-0.5 rounded',
+              sourceFilter === 'lmb'
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+            )}>{sourceCounts.lmb}</span>
           </button>
         </div>
 
