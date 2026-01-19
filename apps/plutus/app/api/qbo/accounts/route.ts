@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { fetchAccounts, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getAccountSource } from '@/lib/lmb/default-accounts';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-accounts' });
@@ -86,6 +87,7 @@ export async function GET() {
           isSubAccount: a.SubAccount === true,
           parentName,
           depth,
+          source: getAccountSource(a.Name),
         };
       })
       // Sort by Account Type (QBO order), then by FullyQualifiedName within each type
