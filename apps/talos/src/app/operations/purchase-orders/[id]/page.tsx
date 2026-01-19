@@ -2341,94 +2341,90 @@ export default function PurchaseOrderDetailPage() {
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full table-auto text-sm">
-                      <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-semibold">SKU</th>
-                          <th className="px-4 py-2 text-left font-semibold">Batch</th>
-                          <th className="px-4 py-2 text-left font-semibold">Description</th>
-                          <th className="px-4 py-2 text-right font-semibold">Units</th>
-                          <th className="px-4 py-2 text-right font-semibold">Units/Ctn</th>
-                          <th className="px-4 py-2 text-right font-semibold">Cartons</th>
-                          <th className="px-4 py-2 text-right font-semibold">Total</th>
-                          <th className="px-4 py-2 text-left font-semibold">Notes</th>
-                          <th className="px-4 py-2 text-right font-semibold">Cartons Received</th>
-                          {canEdit && <th className="px-4 py-2 text-right font-semibold">Actions</th>}
+                    <table className="w-full text-sm min-w-[800px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Received</th>
+                          {canEdit && <th className="w-[60px]"></th>}
                         </tr>
                       </thead>
                       <tbody>
                         {order.lines.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={canEdit ? 10 : 9}
-                              className="px-4 py-6 text-center text-muted-foreground"
+                              colSpan={canEdit ? 11 : 10}
+                              className="px-3 py-6 text-center text-muted-foreground"
                             >
                               No lines added to this order yet.
                             </td>
                           </tr>
                         ) : (
                           order.lines.map((line) => (
-                            <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
-                              <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                            <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                                 {line.skuCode}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
                                 {line.batchLot || '—'}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap max-w-[220px] truncate">
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
                                 {line.skuDescription || '—'}
                               </td>
-                              <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.unitsOrdered.toLocaleString()}
                               </td>
-                              <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 {line.unitsPerCarton.toLocaleString()}
                               </td>
-                              <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
                               </td>
-                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                                <div className="text-right">
-                                  <div className="font-semibold text-foreground">
-                                    {line.totalCost !== null
-                                      ? `${line.totalCost.toLocaleString(undefined, {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })} ${(line.currency || tenantCurrency).toUpperCase()}`
-                                      : '—'}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    Unit:{' '}
-                                    {line.unitCost !== null
-                                      ? Number(line.unitCost).toFixed(4)
-                                      : '—'}
-                                  </div>
-                                </div>
+                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                {line.totalCost !== null
+                                  ? `${line.totalCost.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })} ${(line.currency || tenantCurrency).toUpperCase()}`
+                                  : '—'}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground max-w-[220px] truncate">
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {line.unitCost !== null
+                                  ? Number(line.unitCost).toFixed(4)
+                                  : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
                                 {line.lineNotes || '—'}
                               </td>
-                              <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
                               </td>
                               {canEdit && (
-                                <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                                <td className="px-2 py-2 whitespace-nowrap text-right">
                                   <div className="flex items-center justify-end gap-1">
                                     <Button
                                       type="button"
                                       size="sm"
                                       variant="ghost"
-                                      className="h-8 w-8 p-0"
+                                      className="h-7 w-7 p-0"
                                       onClick={() => openLineEditor(line)}
                                       title="Edit line"
                                     >
-                                      <FileEdit className="h-4 w-4" />
+                                      <FileEdit className="h-3.5 w-3.5" />
                                     </Button>
                                     <Button
                                       type="button"
                                       size="sm"
                                       variant="ghost"
-                                      className="h-8 w-8 p-0 text-rose-700 hover:text-rose-800"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                                       onClick={() =>
                                         setConfirmDialog({
                                           open: true,
@@ -2440,7 +2436,7 @@ export default function PurchaseOrderDetailPage() {
                                       }
                                       title="Remove line"
                                     >
-                                      <Trash2 className="h-4 w-4" />
+                                      <Trash2 className="h-3.5 w-3.5" />
                                     </Button>
                                   </div>
                                 </td>
