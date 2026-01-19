@@ -2,10 +2,10 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
+import type { QboJournalEntry, QboConnection } from '@/lib/qbo/api';
 import {
   createJournalEntry,
   fetchJournalEntries,
-  type QboConnection,
 } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -56,13 +56,13 @@ export async function GET(req: NextRequest) {
       await saveServerQboConnection(updatedConnection);
     }
 
-    const transformed = journalEntries.map((je) => ({
+    const transformed = journalEntries.map((je: QboJournalEntry) => ({
       id: je.Id,
       syncToken: je.SyncToken,
       date: je.TxnDate,
       docNumber: je.DocNumber,
       memo: je.PrivateNote,
-      lines: je.Line.map((line) => ({
+      lines: je.Line.map((line: QboJournalEntry['Line'][number]) => ({
         id: line.Id,
         amount: line.Amount,
         description: line.Description,
