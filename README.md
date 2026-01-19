@@ -56,8 +56,8 @@ PM2 process definitions live in `ecosystem.config.js` and reference these direct
 apps/
   sso/          # Portal (auth + navigation hub)
   talos/        # Warehouse Management (custom server.js)
-  xplan/       # xplan (Next.js app)
-  atlas/         # Atlas (Next.js app)
+  xplan/        # xplan (Next.js app)
+  atlas/        # Atlas (Next.js app)
   plutus/       # Plutus (Next.js app)
   website/      # Marketing site
   archived/     # Historical apps (excluded from pnpm workspace)
