@@ -15,20 +15,21 @@ import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
 import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
-import { Badge } from '@/components/ui/badge'
 import {
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   DollarSign,
   Loader2,
   Search,
-  X,
   XCircle,
 } from '@/lib/lucide-icons'
 
 const PAGE_KEY = '/amazon/fba-fee-discrepancies'
+const SKUS_PER_PAGE = 10
 
 type AlertStatus =
   | 'UNKNOWN'
@@ -209,7 +210,7 @@ function formatDimensionsIn(triplet: DimensionTriplet | null): string {
   const s1 = formatNumber(triplet.side1Cm / 2.54, 2)
   const s2 = formatNumber(triplet.side2Cm / 2.54, 2)
   const s3 = formatNumber(triplet.side3Cm / 2.54, 2)
-  return `${s1} x ${s2} x ${s3} in`
+  return `${s1} × ${s2} × ${s3} in`
 }
 
 function formatWeightLb(weightLb: number | null, decimals: number): string {
@@ -322,26 +323,6 @@ function StatusIcon({ status }: { status: AlertStatus }) {
   }
 }
 
-function StatusBadge({ status }: { status: AlertStatus }) {
-  const config: Record<AlertStatus, { label: string; variant: 'success' | 'danger' | 'warning' | 'neutral' }> = {
-    MATCH: { label: 'Match', variant: 'success' },
-    MISMATCH: { label: 'Mismatch', variant: 'danger' },
-    NO_ASIN: { label: 'No ASIN', variant: 'warning' },
-    MISSING_REFERENCE: { label: 'No Ref', variant: 'warning' },
-    ERROR: { label: 'Error', variant: 'neutral' },
-    UNKNOWN: { label: 'Pending', variant: 'neutral' },
-  }
-
-  const { label, variant } = config[status]
-
-  return (
-    <Badge variant={variant} className="gap-1.5">
-      <StatusIcon status={status} />
-      {label}
-    </Badge>
-  )
-}
-
 export default function AmazonFbaFeeDiscrepanciesPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
@@ -354,7 +335,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   const setSearch = pageState.setSearch
   const statusFilter = (pageState.custom?.statusFilter as AlertStatus | 'ALL') ?? 'ALL'
   const setStatusFilter = (value: AlertStatus | 'ALL') => pageState.setCustom('statusFilter', value)
-  const [selectedSkuIds, setSelectedSkuIds] = useState<string[]>([])
+  const currentPage = pageState.pagination?.page ?? 1
+  const setCurrentPage = (page: number) => pageState.setPagination(page, SKUS_PER_PAGE)
 
   const isAllowed = useMemo(() => {
     if (!session) return false
@@ -415,18 +397,21 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     }))
   }, [skus])
 
-  const selectedSkuSet = useMemo(() => new Set(selectedSkuIds), [selectedSkuIds])
-
-  useEffect(() => {
-    if (skus.length === 0) return
-    const ids = new Set(skus.map(sku => sku.id))
-    setSelectedSkuIds(prev => prev.filter(id => ids.has(id)))
-  }, [skus])
-
   const filteredRows = useMemo(() => {
     if (statusFilter === 'ALL') return computedRows
     return computedRows.filter(row => row.comparison.status === statusFilter)
   }, [computedRows, statusFilter])
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    pageState.setPagination(1, SKUS_PER_PAGE)
+  }, [statusFilter, pageState])
+
+  const totalPages = Math.ceil(filteredRows.length / SKUS_PER_PAGE)
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * SKUS_PER_PAGE
+    return filteredRows.slice(start, start + SKUS_PER_PAGE)
+  }, [filteredRows, currentPage])
 
   const summary = useMemo(() => {
     const counts = { total: computedRows.length, mismatch: 0, match: 0, warning: 0, pending: 0 }
@@ -442,20 +427,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     return counts
   }, [computedRows])
 
-  const selectedRows = useMemo(() => {
-    return computedRows.filter(row => selectedSkuSet.has(row.sku.id))
-  }, [computedRows, selectedSkuSet])
-
-  const anySelectedMissingReference = useMemo(() => {
-    return selectedRows.some(row => row.comparison.status === 'MISSING_REFERENCE')
-  }, [selectedRows])
-
-  const toggleSelected = useCallback((skuId: string) => {
-    setSelectedSkuIds(prev => {
-      if (prev.includes(skuId)) return prev.filter(id => id !== skuId)
-      return [...prev, skuId]
-    })
-  }, [])
+  const anyMissingReference = useMemo(() => {
+    return paginatedRows.some(row => row.comparison.status === 'MISSING_REFERENCE')
+  }, [paginatedRows])
 
   if (status === 'loading') {
     return (
@@ -510,290 +484,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
           />
         </StatsCardGrid>
 
-        {selectedRows.length > 0 ? (
-          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
-            <div className="flex flex-col gap-2 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Comparison</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {selectedRows.length} selected · Status based on FBA fee match (size tier shown for context)
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedSkuIds([])}
-                className="h-8 px-3 text-xs"
-              >
-                Clear selection
-              </Button>
-            </div>
-
-            {anySelectedMissingReference ? (
-              <div className="px-4 pt-4">
-                <Alert className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-                  <AlertTriangle className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                  <AlertTitle className="text-slate-900 dark:text-slate-100">Missing reference data</AlertTitle>
-                  <AlertDescription className="text-slate-600 dark:text-slate-400">
-                    <p>
-                      Fill the latest batch <span className="font-medium">Item package dimensions</span> +{' '}
-                      <span className="font-medium">Item package weight</span> and the SKU{' '}
-                      <span className="font-medium">Reference FBA fulfillment fee</span>.
-                      Go to{' '}
-                      <Link href="/config/products" className="text-cyan-600 dark:text-cyan-400 hover:underline">
-                        Products
-                      </Link>{' '}
-                      → Edit SKU → View Batches (latest).
-                    </p>
-                  </AlertDescription>
-                </Alert>
-              </div>
-            ) : null}
-
-            <div className="overflow-x-auto p-4">
-              <table className="min-w-[900px] w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <th className="px-4 py-3 sticky left-0 bg-slate-50/80 dark:bg-slate-900/80">Attribute</th>
-                    {selectedRows.map(row => (
-                      <th key={row.sku.id} className="px-4 py-3 text-center whitespace-nowrap">
-                        <div className="inline-flex items-center gap-2">
-                          <span className="text-slate-700 dark:text-slate-300">{row.sku.skuCode}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleSelected(row.sku.id)}
-                            className="rounded p-1 text-slate-400 hover:text-slate-600"
-                            aria-label={`Remove ${row.sku.skuCode} from comparison`}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr>
-                    <td
-                      colSpan={selectedRows.length + 1}
-                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-cyan-600 dark:bg-cyan-700 text-white"
-                    >
-                      User Provided / Ground Truth
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">ASIN</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center font-mono text-xs text-slate-600 dark:text-slate-400">
-                        {row.sku.asin ?? '—'}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Item package dimensions</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatDimensionsIn(row.comparison.reference.triplet)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Item package weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.reference.shipping.unitWeightLb, 3)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Dimensional Weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.reference.shipping.dimensionalWeightLb, 3)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Shipping Weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.reference.shipping.shippingWeightLb, 2)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Size Tier</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300">
-                        {row.comparison.reference.sizeTier ?? '—'}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Expected Fee (Ref)</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatFee(row.comparison.reference.expectedFee, currencyCode)}
-                      </td>
-                    ))}
-                  </tr>
-
-                  <tr>
-                    <td
-                      colSpan={selectedRows.length + 1}
-                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-600 dark:bg-slate-700 text-white"
-                    >
-                      Amazon Data (Imported)
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Listing Price</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatFee(row.sku.amazonListingPrice, currencyCode)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Item package dimensions</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatDimensionsIn(row.comparison.amazon.triplet)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Item package weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.amazon.shipping.unitWeightLb, 3)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Dimensional Weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.amazon.shipping.dimensionalWeightLb, 3)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Shipping Weight</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatWeightLb(row.comparison.amazon.shipping.shippingWeightLb, 2)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Size Tier</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300">
-                        {row.comparison.amazon.sizeTier ?? '—'}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">FBA Fee (Amazon)</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {formatFee(row.comparison.amazon.fee, currencyCode)}
-                      </td>
-                    ))}
-                  </tr>
-
-                  <tr>
-                    <td
-                      colSpan={selectedRows.length + 1}
-                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                    >
-                      Comparison
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">FBA Fee Match?</td>
-                    {selectedRows.map(row => {
-                      const s = row.comparison.status
-                      const cellStyle =
-                        s === 'MATCH'
-                          ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
-                          : s === 'MISMATCH'
-                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                            : s === 'NO_ASIN' || s === 'MISSING_REFERENCE'
-                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-
-                      const label =
-                        s === 'MATCH'
-                          ? '✓ Match'
-                          : s === 'MISMATCH'
-                            ? '✗ Mismatch'
-                            : s === 'MISSING_REFERENCE'
-                              ? '— Missing reference'
-                              : s === 'NO_ASIN'
-                                ? '— No ASIN'
-                                : s === 'ERROR'
-                                  ? '— Error'
-                                  : 'Pending'
-
-                      return (
-                        <td key={row.sku.id} className={`px-4 py-2 text-center font-medium ${cellStyle}`}>
-                          {label}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Fee Difference</td>
-                    {selectedRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
-                        {row.comparison.feeDifference === null
-                          ? '—'
-                          : formatFee(row.comparison.feeDifference, currencyCode)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800">Status</td>
-                    {selectedRows.map(row => {
-                      const s = row.comparison.status
-                      const cellStyle =
-                        s === 'MATCH'
-                          ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
-                          : s === 'MISMATCH'
-                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                            : s === 'NO_ASIN' || s === 'MISSING_REFERENCE'
-                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-
-                      const label =
-                        s === 'MATCH'
-                          ? '✓ Correct'
-                          : s === 'MISMATCH'
-                            ? 'Fee mismatch'
-                            : s === 'MISSING_REFERENCE'
-                              ? 'Fill reference fields'
-                            : s === 'NO_ASIN'
-                              ? 'Add ASIN'
-                                : s === 'ERROR'
-                                  ? 'Review Amazon data'
-                                  : 'Pending'
-
-                      return (
-                        <td key={row.sku.id} className={`px-4 py-2 text-center font-medium ${cellStyle}`}>
-                          {label}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
         <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
+          {/* Header with search and filter */}
           <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -820,115 +512,283 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
               </select>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              Select SKUs to compare ·{' '}
-              <Link href="/config/products" className="text-cyan-600 hover:underline">
-                Products
-              </Link>
+              {filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}
             </div>
           </div>
 
+          {/* Missing reference alert */}
+          {anyMissingReference && (
+            <div className="px-4 pt-4">
+              <Alert className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                <AlertTriangle className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <AlertTitle className="text-slate-900 dark:text-slate-100">Missing reference data</AlertTitle>
+                <AlertDescription className="text-slate-600 dark:text-slate-400">
+                  <p>
+                    Fill the latest batch <span className="font-medium">Item package dimensions</span> +{' '}
+                    <span className="font-medium">Item package weight</span> and the SKU{' '}
+                    <span className="font-medium">Reference FBA fulfillment fee</span>.
+                    Go to{' '}
+                    <Link href="/config/products" className="text-cyan-600 dark:text-cyan-400 hover:underline">
+                      Products
+                    </Link>{' '}
+                    → Edit SKU → View Batches (latest).
+                  </p>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Main comparison table */}
           {loading ? (
             <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
             </div>
-          ) : filteredRows.length === 0 ? (
+          ) : paginatedRows.length === 0 ? (
             <div className="px-6 py-16">
               <EmptyState title="No SKUs found" description="Try adjusting your search or filter." icon={DollarSign} />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto p-4">
+              <table className="min-w-[900px] w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <th className="px-4 py-3 w-10"></th>
-                    <th className="px-4 py-3">SKU</th>
-                    <th className="px-4 py-3">ASIN</th>
-                    <th className="px-4 py-3">Reference</th>
-                    <th className="px-4 py-3">Amazon</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-right">Action</th>
+                    <th className="px-4 py-3 sticky left-0 bg-slate-50/80 dark:bg-slate-900/80 z-10">Attribute</th>
+                    {paginatedRows.map(row => (
+                      <th key={row.sku.id} className="px-4 py-3 text-center whitespace-nowrap min-w-[140px]">
+                        <Link 
+                          href={`/config/products?editSkuId=${encodeURIComponent(row.sku.id)}`}
+                          className="text-slate-700 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                        >
+                          {row.sku.skuCode}
+                        </Link>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {filteredRows.map(({ sku, comparison }) => {
-                    const isSelected = selectedSkuSet.has(sku.id)
-                    const isMismatch = comparison.status === 'MISMATCH'
+                  {/* Reference section header */}
+                  <tr>
+                    <td
+                      colSpan={paginatedRows.length + 1}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-cyan-600 dark:bg-cyan-700 text-white"
+                    >
+                      Reference Data
+                    </td>
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">ASIN</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center font-mono text-xs text-slate-600 dark:text-slate-400">
+                        {row.sku.asin ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatDimensionsIn(row.comparison.reference.triplet)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.reference.shipping.unitWeightLb, 3)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.reference.shipping.dimensionalWeightLb, 3)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.reference.shipping.shippingWeightLb, 2)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Size Tier</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300 text-xs">
+                        {row.comparison.reference.sizeTier ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Expected Fee</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 font-medium">
+                        {formatFee(row.comparison.reference.expectedFee, currencyCode)}
+                      </td>
+                    ))}
+                  </tr>
 
-                    return (
-                      <tr
-                        key={sku.id}
-                        className={`transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-700/50 ${isMismatch ? 'bg-slate-100/50 dark:bg-slate-700/30' : ''}`}
-                      >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelected(sku.id)}
-                            className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-cyan-600 focus:ring-cyan-500 dark:bg-slate-700"
-                            aria-label={`Select ${sku.skuCode} for comparison`}
-                          />
+                  {/* Amazon section header */}
+                  <tr>
+                    <td
+                      colSpan={paginatedRows.length + 1}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-600 dark:bg-slate-700 text-white"
+                    >
+                      Amazon Data
+                    </td>
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Listing Price</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatFee(row.sku.amazonListingPrice, currencyCode)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatDimensionsIn(row.comparison.amazon.triplet)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.amazon.shipping.unitWeightLb, 3)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.amazon.shipping.dimensionalWeightLb, 3)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
+                        {formatWeightLb(row.comparison.amazon.shipping.shippingWeightLb, 2)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Size Tier</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300 text-xs">
+                        {row.comparison.amazon.sizeTier ?? '—'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">FBA Fee</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 font-medium">
+                        {formatFee(row.comparison.amazon.fee, currencyCode)}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Comparison section header */}
+                  <tr>
+                    <td
+                      colSpan={paginatedRows.length + 1}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                    >
+                      Comparison
+                    </td>
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Fee Difference</td>
+                    {paginatedRows.map(row => (
+                      <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
+                        {row.comparison.feeDifference === null
+                          ? '—'
+                          : formatFee(row.comparison.feeDifference, currencyCode)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Status</td>
+                    {paginatedRows.map(row => {
+                      const s = row.comparison.status
+                      const cellStyle =
+                        s === 'MATCH'
+                          ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300'
+                          : s === 'MISMATCH'
+                            ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            : s === 'NO_ASIN' || s === 'MISSING_REFERENCE'
+                              ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+
+                      const label =
+                        s === 'MATCH'
+                          ? 'Match'
+                          : s === 'MISMATCH'
+                            ? 'Mismatch'
+                            : s === 'MISSING_REFERENCE'
+                              ? 'No ref'
+                              : s === 'NO_ASIN'
+                                ? 'No ASIN'
+                                : s === 'ERROR'
+                                  ? 'Error'
+                                  : 'Pending'
+
+                      return (
+                        <td key={row.sku.id} className={`px-4 py-2 text-center text-xs font-medium ${cellStyle}`}>
+                          <span className="inline-flex items-center gap-1.5">
+                            <StatusIcon status={s} />
+                            {label}
+                          </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="space-y-0.5">
-                            <div className="font-medium text-slate-900 dark:text-slate-100">{sku.skuCode}</div>
-                            {sku.latestBatchCode ? (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">Batch: {sku.latestBatchCode}</div>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {sku.asin ? (
-                            <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{sku.asin}</span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="space-y-0.5">
-                            <div className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
-                              {formatFee(comparison.reference.expectedFee, currencyCode)}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{comparison.reference.sizeTier ?? '—'}</div>
-                            {comparison.reference.missingFields.length > 0 ? (
-                              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                                Missing: {comparison.reference.missingFields.join(', ')}
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="space-y-0.5">
-                            <div className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
-                              {formatFee(comparison.amazon.fee, currencyCode)}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{comparison.amazon.sizeTier ?? '—'}</div>
-                            {sku.amazonListingPrice ? (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Price: {formatFee(sku.amazonListingPrice, currencyCode)}
-                              </div>
-                            ) : null}
-                            {comparison.amazon.missingFields.length > 0 ? (
-                              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                                Missing: {comparison.amazon.missingFields.join(', ')}
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <StatusBadge status={comparison.status} />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
-                            <Link href={`/config/products?editSkuId=${encodeURIComponent(sku.id)}`}>
-                              Edit
-                            </Link>
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                      )
+                    })}
+                  </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Showing {((currentPage - 1) * SKUS_PER_PAGE) + 1}–{Math.min(currentPage * SKUS_PER_PAGE, filteredRows.length)} of {filteredRows.length} SKUs
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-8 px-3"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                <span className="text-sm text-slate-600 dark:text-slate-400 tabular-nums">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 px-3"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
