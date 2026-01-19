@@ -500,9 +500,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900"
               >
                 <option value="ALL">All statuses</option>
-                <option value="MISMATCH">Mismatch</option>
-                <option value="MATCH">Match</option>
-                <option value="MISSING_REFERENCE">Missing reference</option>
+                <option value="MISMATCH">Over/Undercharge</option>
+                <option value="MATCH">Correct</option>
+                <option value="MISSING_REFERENCE">No ref</option>
                 <option value="NO_ASIN">No ASIN</option>
                 <option value="ERROR">Error</option>
                 <option value="UNKNOWN">Pending</option>
@@ -707,9 +707,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
 
                       const label =
                         s === 'MATCH'
-                          ? 'Match'
+                          ? 'Correct'
                           : s === 'MISMATCH'
-                            ? 'Mismatch'
+                            ? (row.comparison.feeDifference !== null && row.comparison.feeDifference > 0 ? 'Overcharge' : 'Undercharge')
                             : s === 'MISSING_REFERENCE'
                               ? 'No ref'
                               : s === 'NO_ASIN'
