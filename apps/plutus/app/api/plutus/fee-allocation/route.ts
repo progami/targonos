@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { parseLmbAuditCsv } from '@/lib/lmb/audit-csv';
+
+export const runtime = 'nodejs';
 import { computeFeeAllocation } from '@/lib/fee-allocation';
 
 type BrandMapInput = {
@@ -56,8 +58,32 @@ export async function POST(req: NextRequest) {
   const mapping = JSON.parse(mappingRaw) as BrandMapInput;
   const brandMap = makeBrandMap(mapping);
 
-  const csvText = await file.text();
-  const parsed = parseLmbAuditCsv(csvText);
+  const fileName = file.name.toLowerCase();
+
+  let parsed: ReturnType<typeof parseLmbAuditCsv>;
+
+  if (fileName.endsWith('.zip')) {
+    const { unzipSync, strFromU8 } = await import('fflate');
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const unzipped = unzipSync(bytes);
+
+    const entries = Object.entries(unzipped).filter(([name]) => name.toLowerCase().endsWith('.csv'));
+    if (entries.length !== 1) {
+      throw new Error(`ZIP must contain exactly one .csv (found ${entries.length})`);
+    }
+
+    const [innerName, raw] = entries[0];
+    const csvText = strFromU8(raw);
+    parsed = parseLmbAuditCsv(csvText);
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Parsed ZIP CSV: ${innerName}`);
+    }
+  } else {
+    const csvText = await file.text();
+    parsed = parseLmbAuditCsv(csvText);
+  }
 
   const invoiceGroups = new Map<string, typeof parsed.rows>();
   for (const row of parsed.rows) {

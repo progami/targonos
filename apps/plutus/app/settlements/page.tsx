@@ -19,6 +19,14 @@ export default function SettlementsPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AllocationResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<
+    | null
+    | {
+        fileName: string;
+        files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }>;
+      }
+  >(null);
 
   const parsedMapping = useMemo(() => {
     if (mappingText.trim() === '') {
@@ -28,6 +36,49 @@ export default function SettlementsPage() {
     return JSON.parse(mappingText) as { skus: Array<{ sku: string; brand: string }> };
   }, [mappingText]);
 
+  const analyze = async () => {
+    setError(null);
+    setAnalysis(null);
+    setAnalyzing(true);
+
+    try {
+      if (!file) {
+        throw new Error('Select an Audit Data ZIP or CSV');
+      }
+
+      const form = new FormData();
+      form.set('file', file);
+
+      const res = await fetch('/api/plutus/audit-data/analyze', {
+        method: 'POST',
+        body: form,
+      });
+      const body =
+        (await res.json()) as
+          | {
+              fileName: string;
+              files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }>;
+            }
+          | { error: string; details?: string };
+
+      if (!res.ok) {
+        if ('details' in body && body.details) {
+          throw new Error(body.details);
+        }
+        if ('error' in body) {
+          throw new Error(body.error);
+        }
+        throw new Error('Request failed');
+      }
+
+      setAnalysis(body as { fileName: string; files: Array<{ name: string; size: number; invoices: string[]; minDate: string; maxDate: string; rowCount: number }> });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const run = async () => {
     setError(null);
     setData(null);
@@ -35,7 +86,7 @@ export default function SettlementsPage() {
 
     try {
       if (!file) {
-        throw new Error('Select an Audit Data CSV');
+        throw new Error('Select an Audit Data ZIP or CSV');
       }
       if (!parsedMapping) {
         throw new Error('Provide a SKU->Brand mapping JSON');
@@ -87,10 +138,10 @@ export default function SettlementsPage() {
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">1) Upload LMB Audit Data CSV</p>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">1) Upload LMB Audit Data (ZIP or CSV)</p>
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".zip,.csv,application/zip,text/csv"
                 onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
               />
             </div>
@@ -109,17 +160,56 @@ export default function SettlementsPage() {
 
             {error && <p className="text-sm text-red-700 dark:text-red-300">{error}</p>}
 
-            <Button onClick={run} disabled={loading} className="bg-teal-500 hover:bg-teal-600 text-white">
-              {loading ? 'Computing…' : 'Compute Allocation'}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button onClick={analyze} disabled={analyzing} variant="outline">
+                {analyzing ? 'Analyzing…' : 'Analyze File'}
+              </Button>
+              <Button onClick={run} disabled={loading} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {loading ? 'Computing…' : 'Compute Allocation'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        {analysis && (
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Audit File Analysis</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{analysis.fileName}</p>
+              </div>
+
+              <div className="space-y-3">
+                {analysis.files.map((f) => (
+                  <div key={f.name} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{f.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {f.rowCount.toLocaleString()} rows · {f.size.toLocaleString()} bytes
+                      </p>
+                    </div>
+                    <div className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+                      <div className="flex justify-between">
+                        <span>Date range</span>
+                        <span className="font-mono">{f.minDate} → {f.maxDate}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Invoices</span>
+                        <span className="font-mono">{f.invoices.join(', ')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {data && (
           <Card>
             <CardContent className="p-6 space-y-4">
               <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Result</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Allocation Result</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Invoice: {data.allocation.invoice} · Market: {data.allocation.market}
                 </p>
