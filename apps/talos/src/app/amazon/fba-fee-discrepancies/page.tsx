@@ -23,7 +23,6 @@ import {
   Clock,
   DollarSign,
   Loader2,
-  RefreshCw,
   Search,
   X,
   XCircle,
@@ -477,12 +476,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         title="FBA Fee Discrepancies"
         description="Compare FBA fulfillment fees between reference and Amazon"
         icon={DollarSign}
-        actions={
-          <Button variant="outline" size="sm" onClick={() => fetchRows()} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        }
       />
 
       <PageContent className="space-y-6">
