@@ -8,13 +8,13 @@ import { Badge } from '@/components/Badge';
 
 export function ProductCard({ product }: { product: Product }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="group overflow-hidden transition-shadow will-change-transform motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg">
       <div className="relative aspect-[3/2] w-full bg-white">
         <Image
           src={product.image.src}
           alt={product.image.alt}
           fill
-          className="object-contain p-6"
+          className="object-contain p-6 transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.02]"
           sizes="(min-width: 768px) 650px, 100vw"
         />
       </div>

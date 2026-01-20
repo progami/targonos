@@ -74,18 +74,16 @@ export type Product = {
 // NOTE: Some Amazon regions hide prices unless signed in.
 // We show the latest price we *can* verify and otherwise say “See Amazon”.
 
-// Primary pack (6-pack). UK listing we can reliably read price from.
-const AMAZON_UK_6PK = 'https://www.amazon.co.uk/Caelum-Star-Plastic-Sheets-Decorating/dp/B09HXC3NL8?th=1';
-
-// User-provided Amazon.com links (kept as-is for reference/traffic).
+// User-provided Amazon links (kept verbatim).
+// NOTE: Prices can change and Amazon can hide pricing unless signed in.
 const AMAZON_US_6PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B09HXC3NL8/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
+  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0FP66CWQ6/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
 const AMAZON_US_1PK =
   'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0FLKJ7WWM/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
 const AMAZON_US_3PK =
   'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0CR1GSBQ9/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
 const AMAZON_US_12PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0FP66CWQ6/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
+  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B09HXC3NL8/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
 
 /**
  * Product set:
@@ -100,9 +98,8 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    // Price copied from the Amazon UK product summary at time of update.
-    // Prices can change.
-    price: '£5.82',
+    // Intentionally not hard-coded (Amazon pricing changes).
+    price: undefined,
     tagline: 'Essential coverage for standard projects.',
     description: 'Extra‑large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
@@ -124,13 +121,14 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-essential-6pk.webp', alt: 'CS 6 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/aplus-4.jpg', alt: 'Dust sheet benefits: waterproof, coverage, recyclability, dust & debris' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets in use for decorating and furniture protection' },
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Coverage comparison across pack sizes' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/general-projects.jpg', alt: 'Ideal for general projects: coverage and thickness' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
+      { src: '/images/amazon/sustainable-process.jpg', alt: 'Sustainable efficiency: recycled plastic into protective sheets' },
+      { src: '/images/amazon/sustainable-efficiency.jpg', alt: '55% recycled plastic and eco-kind packaging' }
     ],
-    amazonUrl: AMAZON_UK_6PK,
-    amazonAltUrl: AMAZON_US_6PK,
-    amazonAltLabel: 'Amazon.com'
+    amazonUrl: AMAZON_US_6PK
   },
   {
     slug: '3pk-standard',
@@ -155,9 +153,9 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pack size comparison: strong vs light durability' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets used during decorating prep' },
-      { src: '/images/unsplash/painting-setup.webp', alt: 'Painting setup with ladder and tools' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' }
     ],
     amazonUrl: AMAZON_US_3PK
   },
@@ -184,9 +182,9 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pack size comparison: strong vs light durability' },
-      { src: '/images/amazon/aplus-4.jpg', alt: 'Dust sheet benefits overview' },
-      { src: '/images/unsplash/plastic-texture.webp', alt: 'Close-up plastic sheet texture' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/strong-vs-light.jpg', alt: 'Strong vs light durability comparison' },
+      { src: '/images/amazon/aplus-4.jpg', alt: 'One sheet, multiple benefits' }
     ],
     amazonUrl: AMAZON_US_1PK
   },
@@ -213,9 +211,10 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-deluxe-12pk.webp', alt: 'CS 12 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Coverage comparison across pack sizes' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets used for floor and furniture protection' },
-      { src: '/images/unsplash/renovation-room.webp', alt: 'Room prep for renovation' }
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/multi-room-projects.jpg', alt: 'Ideal for multi-room projects: deluxe coverage' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
+      { src: '/images/amazon/light-durability.jpg', alt: 'Light durability: universal protection' }
     ],
     amazonUrl: AMAZON_US_12PK
   }

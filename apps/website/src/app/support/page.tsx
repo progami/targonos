@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Container } from '@/components/Container';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Reveal } from '@/components/Reveal';
 import { site } from '@/content/site';
 
 export const metadata = {
@@ -13,8 +14,12 @@ export default function SupportPage() {
     <div>
       <section className="pt-14 md:pt-20">
         <Container>
-          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Support.</h1>
-          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we’ll help.</p>
+          <Reveal>
+            <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Support.</h1>
+          </Reveal>
+          <Reveal delay={80}>
+            <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we’ll help.</p>
+          </Reveal>
         </Container>
       </section>
 
@@ -22,7 +27,8 @@ export default function SupportPage() {
         <Container>
           <div className="grid gap-6 md:grid-cols-12">
             <div className="md:col-span-5">
-              <Card className="p-6">
+              <Reveal variant="media">
+                <Card className="p-6">
                 <div className="text-sm font-semibold text-ink">Email support</div>
                 <p className="mt-2 text-sm text-muted">Fastest help is email.</p>
                 <div className="mt-4">
@@ -33,9 +39,11 @@ export default function SupportPage() {
                 <div className="mt-4 text-xs text-muted">
                   Orders, payments, shipping and returns are handled on Amazon.
                 </div>
-              </Card>
+                </Card>
+              </Reveal>
 
-              <Card className="mt-6 p-6">
+              <Reveal variant="media" delay={120}>
+                <Card className="mt-6 p-6">
                 <div className="text-sm font-semibold text-ink">Where to buy</div>
                 <p className="mt-2 text-sm text-muted">
                   Compare packs here, then check out on Amazon.
@@ -45,11 +53,13 @@ export default function SupportPage() {
                     <Link href="/products">Compare packs</Link>
                   </Button>
                 </div>
-              </Card>
+                </Card>
+              </Reveal>
             </div>
 
             <div className="md:col-span-7">
-              <Card className="p-8">
+              <Reveal variant="media" delay={120}>
+                <Card className="p-8">
                 <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Using dust sheets</h2>
                 <div className="mt-6 space-y-4 text-sm text-muted md:text-base">
                   <p>
@@ -65,7 +75,8 @@ export default function SupportPage() {
                     <strong className="text-ink">Safety note:</strong> Keep plastic sheeting away from babies and children.
                   </p>
                 </div>
-              </Card>
+                </Card>
+              </Reveal>
             </div>
           </div>
         </Container>

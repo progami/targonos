@@ -20,18 +20,39 @@ const navLinks = [
 export function Header() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   // Close the mobile menu on navigation.
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Subtle nav polish: add a soft shadow when the page scrolls.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 2);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-bg/80 backdrop-blur">
+    <header
+      className={cn(
+        'sticky top-0 z-50 border-b border-border bg-bg/80 backdrop-blur transition-shadow',
+        scrolled && 'shadow-[0_1px_0_rgba(0,0,0,0.08)]'
+      )}
+    >
       <Container className="flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tightish">
-          <Image src="/brand/logo.svg" alt={`${site.name} logo`} width={32} height={32} priority />
-          <span className="hidden text-sm text-ink sm:inline">{site.name}</span>
+          <Image
+            src="/brand/targon-primary.png"
+            alt={`${site.name} logo`}
+            width={140}
+            height={28}
+            priority
+            className="h-6 w-auto"
+          />
+          <span className="sr-only">{site.name}</span>
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
