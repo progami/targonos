@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../packages/prisma-plutus/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PLUTUS_DATABASE_URL")
+}
+
+/// Brand represents a product line tracked separately for P&L (e.g., "US-Dust Sheets", "UK-Dust Sheets")
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  marketplace String   // e.g., "amazon.com", "amazon.co.uk"
+  currency    String   // e.g., "USD", "GBP"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skus Sku[]
+
+  @@index([marketplace])
+}
+
+/// Sku maps a product SKU to a brand for COGS calculation
+model Sku {
+  id          String   @id @default(cuid())
+  sku         String
+  productName String?
+  asin        String?
+  brandId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([sku, brandId])
+  @@index([brandId])
+}
+
+/// SetupConfig stores the QBO account mappings and setup state
+/// There should only be one row in this table per tenant
+model SetupConfig {
+  id        String   @id @default(cuid())
+  
+  // QBO Account Mappings - stores the QBO account ID for each category
+  // Inventory Asset accounts
+  invManufacturing    String?
+  invFreight          String?
+  invDuty             String?
+  invMfgAccessories   String?
+  
+  // COGS accounts
+  cogsManufacturing   String?
+  cogsFreight         String?
+  cogsDuty            String?
+  cogsMfgAccessories  String?
+  cogsLandFreight     String?
+  cogsStorage3pl      String?
+  cogsShrinkage       String?
+  
+  // LMB Revenue/Fee accounts
+  amazonSales                      String?
+  amazonRefunds                    String?
+  amazonFbaInventoryReimbursement  String?
+  amazonSellerFees                 String?
+  amazonFbaFees                    String?
+  amazonStorageFees                String?
+  amazonAdvertisingCosts           String?
+  amazonPromotions                 String?
+  
+  // Setup status
+  accountsCreated Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

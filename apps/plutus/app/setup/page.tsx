@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
 
-const STORAGE_KEY = 'plutus-setup-v4';
+const STORAGE_KEY = 'plutus-setup-v5'; // Bump version for DB-backed state
 
 const MARKETPLACES = [
   { id: 'amazon.com', label: 'Amazon.com', currency: 'USD' },
@@ -641,37 +641,129 @@ function StatusBar({ brands, mappedAccounts, totalAccounts, skus }: { brands: nu
 
 // Main
 export default function SetupPage() {
+  const queryClient = useQueryClient();
+
   const [state, setState] = useState<SetupState>({
     section: 'brands',
-    brands: [
-      { name: 'US-Dust Sheets', marketplace: 'amazon.com', currency: 'USD' },
-      { name: 'UK-Dust Sheets', marketplace: 'amazon.co.uk', currency: 'GBP' },
-    ],
+    brands: [],
     accountMappings: {},
     accountsCreated: false,
     skus: [],
   });
 
-  // Load saved state
+  // Fetch setup data from API
+  const { data: setupData, isLoading: isLoadingSetup } = useQuery({
+    queryKey: ['setup'],
+    queryFn: async () => {
+      const res = await fetch(`${basePath}/api/setup`);
+      if (!res.ok) throw new Error('Failed to fetch setup');
+      return res.json() as Promise<{
+        brands: Array<{ id: string; name: string; marketplace: string; currency: string }>;
+        skus: Array<{ id: string; sku: string; productName: string | null; brand: string; asin: string | null }>;
+        accountMappings: Record<string, string | null>;
+        accountsCreated: boolean;
+      }>;
+    },
+    staleTime: 30 * 1000,
+  });
+
+  // Initialize state from API data
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setState((prev) => ({ ...prev, ...JSON.parse(saved) }));
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
+    if (setupData) {
+      setState((prev) => ({
+        ...prev,
+        brands: setupData.brands.map((b) => ({ name: b.name, marketplace: b.marketplace, currency: b.currency })),
+        skus: setupData.skus.map((s) => ({ sku: s.sku, productName: s.productName || '', brand: s.brand, asin: s.asin || undefined })),
+        accountMappings: Object.fromEntries(Object.entries(setupData.accountMappings).filter(([, v]) => v != null)) as Record<string, string>,
+        accountsCreated: setupData.accountsCreated,
+      }));
+    } else {
+      // Fall back to localStorage if API returns nothing
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setState((prev) => ({ ...prev, ...parsed }));
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
       }
     }
-  }, []);
+  }, [setupData]);
 
-  // Save state
+  // Mutations for saving data
+  const saveBrandsMutation = useMutation({
+    mutationFn: async (brands: Brand[]) => {
+      const res = await fetch(`${basePath}/api/setup/brands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brands }),
+      });
+      if (!res.ok) throw new Error('Failed to save brands');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['setup'] }),
+  });
+
+  const saveSkusMutation = useMutation({
+    mutationFn: async (skus: Sku[]) => {
+      const res = await fetch(`${basePath}/api/setup/skus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skus }),
+      });
+      if (!res.ok) throw new Error('Failed to save SKUs');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['setup'] }),
+  });
+
+  const saveAccountsMutation = useMutation({
+    mutationFn: async (data: { accountMappings: Record<string, string>; accountsCreated?: boolean }) => {
+      const res = await fetch(`${basePath}/api/setup/accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to save accounts');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['setup'] }),
+  });
+
+  // Save state (local + API)
   const saveState = useCallback((patch: Partial<SetupState>) => {
     setState((prev) => {
       const next = { ...prev, ...patch };
+      // Save to localStorage as backup
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
+
+  // Save brands to API when they change
+  const saveBrands = useCallback((brands: Brand[]) => {
+    saveState({ brands, accountsCreated: false });
+    saveBrandsMutation.mutate(brands);
+  }, [saveState, saveBrandsMutation]);
+
+  // Save SKUs to API when they change
+  const saveSkus = useCallback((skus: Sku[]) => {
+    saveState({ skus });
+    saveSkusMutation.mutate(skus);
+  }, [saveState, saveSkusMutation]);
+
+  // Save account mappings to API
+  const saveAccountMappings = useCallback((accountMappings: Record<string, string>) => {
+    saveState({ accountMappings });
+    saveAccountsMutation.mutate({ accountMappings });
+  }, [saveState, saveAccountsMutation]);
+
+  // Mark accounts as created
+  const markAccountsCreated = useCallback(() => {
+    saveState({ accountsCreated: true });
+    saveAccountsMutation.mutate({ accountMappings: state.accountMappings, accountsCreated: true });
+  }, [saveState, saveAccountsMutation, state.accountMappings]);
 
   // Check QBO connection
   const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
@@ -698,8 +790,8 @@ export default function SetupPage() {
   const accounts = useMemo(() => accountsData?.accounts || [], [accountsData]);
   const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
 
-  // Show loading while checking connection
-  if (isCheckingConnection) {
+  // Show loading while checking connection or loading setup
+  if (isCheckingConnection || isLoadingSetup) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-slate-500">Loading...</div>
@@ -742,16 +834,16 @@ export default function SetupPage() {
             {state.section === 'brands' && (
               <BrandsSection
                 brands={state.brands}
-                onBrandsChange={(brands) => saveState({ brands, accountsCreated: false })}
+                onBrandsChange={saveBrands}
               />
             )}
             {state.section === 'accounts' && (
               <AccountsSection
                 accounts={accounts}
                 accountMappings={state.accountMappings}
-                onAccountMappingsChange={(accountMappings) => saveState({ accountMappings })}
+                onAccountMappingsChange={saveAccountMappings}
                 brands={state.brands}
-                onAccountsCreated={() => saveState({ accountsCreated: true })}
+                onAccountsCreated={markAccountsCreated}
                 accountsCreated={state.accountsCreated}
                 isLoadingAccounts={isLoadingAccounts}
               />
@@ -759,7 +851,7 @@ export default function SetupPage() {
             {state.section === 'skus' && (
               <SkusSection
                 skus={state.skus}
-                onSkusChange={(skus) => saveState({ skus })}
+                onSkusChange={saveSkus}
                 brands={state.brands}
               />
             )}
