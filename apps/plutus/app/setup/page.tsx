@@ -1,47 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
-
-// External URLs
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
 const LMB_APP_URL = 'https://app.linkmybooks.com';
-const LMB_SETUP_WIZARD_URL = 'https://app.linkmybooks.com/setup-wizard';
-const QBO_CHART_OF_ACCOUNTS_URL = 'https://app.qbo.intuit.com/app/chartofaccounts';
 
-// Plutus parent accounts (Inventory + COGS)
-const PLUTUS_PARENT_ACCOUNTS = [
-  { name: 'Inventory Asset', type: 'Other Current Assets' },
-  { name: 'Manufacturing', type: 'Cost of Goods Sold' },
-  { name: 'Freight & Custom Duty', type: 'Cost of Goods Sold' },
-  { name: 'Land Freight', type: 'Cost of Goods Sold' },
-  { name: 'Storage 3PL', type: 'Cost of Goods Sold' },
-  { name: 'Mfg Accessories', type: 'Cost of Goods Sold' },
-  { name: 'Inventory Shrinkage', type: 'Cost of Goods Sold' },
-] as const;
+const STORAGE_KEY = 'plutus-setup-v3';
 
-// LMB parent accounts (Revenue + Fees) - LMB posts here
-const LMB_PARENT_ACCOUNTS = [
-  { name: 'Amazon Sales', type: 'Income' },
-  { name: 'Amazon Refunds', type: 'Income' },
-  { name: 'Amazon FBA Fees', type: 'Cost of Goods Sold' },
-  { name: 'Amazon Seller Fees', type: 'Cost of Goods Sold' },
-  { name: 'Amazon Storage Fees', type: 'Cost of Goods Sold' },
-  { name: 'Amazon Advertising Costs', type: 'Cost of Goods Sold' },
-  { name: 'Amazon Promotions', type: 'Cost of Goods Sold' },
-  { name: 'Amazon FBA Inventory Reimbursement', type: 'Other Income' },
-] as const;
-
-const AUTO_CREATE_PLUTUS_PARENTS = new Set(['Mfg Accessories', 'Inventory Shrinkage']);
-
-const DEFAULT_BRANDS = ['UK-Dust Sheets', 'US-Dust Sheets'];
-const STORAGE_KEY = 'plutus-setup-wizard-v2';
-
-// Marketplace options with currencies
 const MARKETPLACES = [
   { id: 'amazon.com', label: 'Amazon.com', currency: 'USD' },
   { id: 'amazon.co.uk', label: 'Amazon.co.uk', currency: 'GBP' },
@@ -50,2381 +20,560 @@ const MARKETPLACES = [
   { id: 'amazon.fr', label: 'Amazon.fr', currency: 'EUR' },
   { id: 'amazon.es', label: 'Amazon.es', currency: 'EUR' },
   { id: 'amazon.it', label: 'Amazon.it', currency: 'EUR' },
-  { id: 'amazon.com.mx', label: 'Amazon.com.mx', currency: 'MXN' },
-  { id: 'amazon.co.jp', label: 'Amazon.co.jp', currency: 'JPY' },
-  { id: 'amazon.com.au', label: 'Amazon.com.au', currency: 'AUD' },
 ] as const;
 
-type Brand = {
-  name: string;
-  marketplace: string;
-  currency: string;
-};
+type Brand = { name: string; marketplace: string; currency: string };
 
-type Sku = {
-  sku: string;
-  productName: string;
-  brand: string;
-  asin?: string;
-};
-
-type ParentAccountIds = {
-  inventoryAsset: string;
-  manufacturing: string;
-  freightAndDuty: string;
-  landFreight: string;
-  storage3pl: string;
-  mfgAccessories: string;
-  inventoryShrinkage: string;
-  amazonSales: string;
-  amazonRefunds: string;
-  amazonFbaInventoryReimbursement: string;
-  amazonSellerFees: string;
-  amazonFbaFees: string;
-  amazonStorageFees: string;
-  amazonAdvertisingCosts: string;
-  amazonPromotions: string;
-};
-
-type WizardState = {
+type SetupState = {
   step: number;
-  // Step 1: QBO Connection
-  qboConnected: boolean;
-  qboCompanyName: string | null;
-  // Step 2: LMB Setup
-  lmbSetupAcknowledged: boolean;
-  // Step 3: Brands
+  lmbComplete: boolean;
   brands: Brand[];
-  // Step 4: Plutus Accounts
-  parentAccountIds: ParentAccountIds;
-  parentsVerified: boolean;
+  parentAccounts: Record<string, string>;
   accountsCreated: boolean;
-  accountsCreatedCount: number;
-  // Step 5: SKUs
-  skus: Sku[];
-  // Step 6: LMB Product Groups
-  lmbProductGroupsChecks: string[];
-  // Step 7: Bill Entry Guidelines
-  billGuidelinesAcknowledged: boolean;
-  // Step 8: Historical Catch-Up
-  catchUpMode: 'none' | 'from_date' | 'full' | null;
-  catchUpStartDate: string | null;
-  qboInitMethod: 'auto' | 'manual' | null;
-  qboInitJeId: string | null;
-  // Step 9: Complete
-  setupComplete: boolean;
+  lmbProductGroupsComplete: boolean;
+  complete: boolean;
 };
 
-const STEPS = [
-  'QuickBooks',
-  'LMB Setup',
-  'Brands',
-  'Accounts',
-  'SKUs',
-  'LMB Config',
-  'Bill Guide',
-  'Catch-Up',
-  'Complete',
-];
+type QboAccount = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  type: string;
+  active: boolean;
+};
 
-function StepIndicator({ currentStep }: { currentStep: number }) {
+// Icons
+function ChevronIcon({ expanded, className }: { expanded: boolean; className?: string }) {
   return (
-    <div className="flex items-center justify-between max-w-2xl mx-auto overflow-x-auto pb-2">
-      {STEPS.map((label, index) => {
-        const stepNum = index + 1;
-        const isActive = stepNum === currentStep;
-        const isComplete = stepNum < currentStep;
-
-        return (
-          <div key={label} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-all',
-                  isActive && 'bg-teal-500 text-white',
-                  isComplete && 'bg-teal-500 text-white',
-                  !isActive &&
-                    !isComplete &&
-                    'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
-                )}
-              >
-                {isComplete ? '✓' : stepNum}
-              </div>
-              <span
-                className={cn(
-                  'mt-1 text-[9px] font-medium whitespace-nowrap',
-                  isActive && 'text-teal-600 dark:text-teal-400',
-                  isComplete && 'text-slate-500 dark:text-slate-400',
-                  !isActive && !isComplete && 'text-slate-400 dark:text-slate-500',
-                )}
-              >
-                {label}
-              </span>
-            </div>
-            {index < STEPS.length - 1 && (
-              <div
-                className={cn(
-                  'w-4 sm:w-6 h-0.5 mx-0.5',
-                  stepNum < currentStep ? 'bg-teal-500' : 'bg-slate-200 dark:bg-slate-700',
-                )}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <svg
+      className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180', className)}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
   );
 }
 
-// Step 1: Connect QuickBooks
-function ConnectQboStep({
-  connected,
-  companyName,
-  onNext,
-  onConnectionChange,
-}: {
-  connected: boolean;
-  companyName: string | null;
-  onNext: () => void;
-  onConnectionChange: (connected: boolean, companyName: string | null) => void;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(connected);
-  const [company, setCompany] = useState(companyName);
-  const [homeCurrency, setHomeCurrency] = useState<string | null>(null);
-  const [subscription, setSubscription] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const checkConnection = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${basePath}/api/qbo/status`);
-        const data = await res.json();
-        if (!cancelled && data.connected) {
-          setIsConnected(true);
-          setCompany(data.companyName);
-          setHomeCurrency(data.homeCurrency);
-          setSubscription(data.subscription);
-        }
-      } catch {
-        // Not connected
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    checkConnection();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const connect = () => {
-    window.location.href = `${basePath}/api/qbo/connect`;
-  };
-
-  const disconnect = async () => {
-    setLoading(true);
-    try {
-      await fetch(`${basePath}/api/qbo/disconnect`, { method: 'POST' });
-      setIsConnected(false);
-      setCompany(null);
-      setHomeCurrency(null);
-      setSubscription(null);
-      onConnectionChange(false, null);
-    } catch (err) {
-      setError('Failed to disconnect');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function CheckIcon({ className }: { className?: string }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Connect QuickBooks
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Plutus needs access to your QuickBooks Online account to read your Chart of Accounts, read
-          supplier bills, and post COGS journal entries.
-        </p>
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      <div className="p-6 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
-        {loading ? (
-          <p className="text-slate-500 dark:text-slate-400">Checking connection...</p>
-        ) : isConnected ? (
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-              Connected
-            </div>
-            <div className="space-y-1">
-              <p className="text-slate-900 dark:text-white font-medium">{company}</p>
-              {homeCurrency && (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Home Currency: {homeCurrency}
-                </p>
-              )}
-              {subscription && (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Subscription: {subscription}
-                </p>
-              )}
-            </div>
-            <Button onClick={disconnect} variant="outline" size="sm">
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-              Not Connected
-            </div>
-            <div>
-              <Button onClick={connect} className="bg-teal-500 hover:bg-teal-600 text-white">
-                Connect to QuickBooks
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Button
-        onClick={() => {
-          onConnectionChange(isConnected, company);
-          onNext();
-        }}
-        disabled={!isConnected}
-        className="w-full bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-      >
-        Continue
-      </Button>
-    </div>
+    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
   );
 }
 
-// Step 2: Verify LMB Setup
-function VerifyLmbSetupStep({
-  acknowledged,
-  onAcknowledge,
-  onNext,
-  onBack,
-}: {
-  acknowledged: boolean;
-  onAcknowledge: (val: boolean) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
+function ArrowLeftIcon({ className }: { className?: string }) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Verify LMB Setup
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Plutus works alongside Link My Books. You must complete the LMB Accounts & Taxes Setup
-          Wizard BEFORE continuing.
-        </p>
-      </div>
+    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    </svg>
+  );
+}
 
-      <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 space-y-4">
-        <div>
-          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-3">
-            What to do in LMB for EACH connection (US, UK, etc.):
-          </p>
-          <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-2 list-decimal list-inside">
-            <li>Go to LMB → Accounts & Taxes → Setup Wizard</li>
-            <li>Step 1: Map categories to QBO accounts</li>
-            <li>
-              Use these QBO accounts (non-LMB) for P&L buckets: Amazon Sales, Amazon Refunds, Amazon
-              FBA Inventory Reimbursement, Amazon Seller Fees, Amazon FBA Fees, Amazon Storage Fees,
-              Amazon Advertising Costs, Amazon Promotions
-            </li>
-            <li>
-              Use LMB accounts for balance sheet mechanics: Amazon Sales Tax (LMB), Amazon Deferred
-              Balances (LMB), Amazon Reserved Balances (LMB), Amazon Split Month Rollovers (LMB), Amazon
-              Loans (LMB)
-            </li>
-            <li>Complete the wizard for EACH connection (US, UK, etc.)</li>
-          </ol>
-        </div>
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+    </svg>
+  );
+}
 
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
 
-      </div>
-
-      <a
-        href={LMB_SETUP_WIZARD_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium transition-colors"
-      >
-        Open LMB Setup Wizard →
-      </a>
-
-      <button
-        onClick={() => onAcknowledge(!acknowledged)}
-        className={cn(
-          'flex items-center gap-3 w-full p-4 rounded-lg border transition-all text-left',
-          acknowledged
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300',
-        )}
-      >
+// Step indicator
+function StepIndicator({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      {Array.from({ length: total }, (_, i) => (
         <div
+          key={i}
           className={cn(
-            'flex h-5 w-5 items-center justify-center rounded border-2 text-xs',
-            acknowledged
-              ? 'bg-green-500 border-green-500 text-white'
-              : 'border-slate-300 dark:border-slate-600',
+            'h-2 rounded-full transition-all',
+            i + 1 === current ? 'w-8 bg-brand-teal-500' : i + 1 < current ? 'w-2 bg-brand-teal-500' : 'w-2 bg-slate-200 dark:bg-slate-700'
           )}
-        >
-          {acknowledged && '✓'}
-        </div>
-        <span
-          className={cn(
-            'font-medium',
-            acknowledged
-              ? 'text-green-700 dark:text-green-400'
-              : 'text-slate-700 dark:text-slate-300',
-          )}
-        >
-          I have completed the LMB Accounts & Taxes Wizard for all my Amazon connections
-        </span>
-      </button>
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!acknowledged}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-        >
-          Continue
-        </Button>
-      </div>
+        />
+      ))}
     </div>
   );
 }
 
-// Step 3: Brand Setup
-function BrandSetupStep({
-  brands,
-  onBrandsChange,
-  onNext,
-  onBack,
+// Account mapping row (LMB-style)
+function AccountRow({
+  label,
+  accountId,
+  accounts,
+  onChange,
+  type,
 }: {
-  brands: Brand[];
-  onBrandsChange: (brands: Brand[]) => void;
-  onNext: () => void;
-  onBack: () => void;
+  label: string;
+  accountId: string;
+  accounts: QboAccount[];
+  onChange: (id: string) => void;
+  type?: string;
 }) {
-  const [newBrandName, setNewBrandName] = useState('');
-  const [newBrandMarketplace, setNewBrandMarketplace] = useState('amazon.com');
-
-  const addBrand = () => {
-    const trimmed = newBrandName.trim();
-    if (trimmed && !brands.some((b) => b.name === trimmed)) {
-      const marketplace = MARKETPLACES.find((m) => m.id === newBrandMarketplace);
-      if (!marketplace) {
-        return;
-      }
-
-      onBrandsChange([
-        ...brands,
-        {
-          name: trimmed,
-          marketplace: newBrandMarketplace,
-          currency: marketplace.currency,
-        },
-      ]);
-      setNewBrandName('');
-    }
-  };
-
-  const removeBrand = (index: number) => {
-    onBrandsChange(brands.filter((_, i) => i !== index));
-  };
-
-  const updateBrandMarketplace = (index: number, marketplaceId: string) => {
-      const marketplace = MARKETPLACES.find((m) => m.id === marketplaceId);
-      if (!marketplace) {
-        return;
-      }
-
-      const updated = [...brands];
-      updated[index] = {
-        ...updated[index],
-        marketplace: marketplaceId,
-        currency: marketplace.currency,
-      };
-    onBrandsChange(updated);
-  };
+  const filtered = type ? accounts.filter((a) => a.type === type || !type) : accounts;
+  const selected = accounts.find((a) => a.id === accountId);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Brand Setup</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Brands let you track P&L separately for different product lines or marketplaces. Plutus
-          will create sub-accounts for each brand you define.
-        </p>
+    <div className="flex items-center gap-4 py-3 px-4 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+      <div className="flex-1 min-w-0">
+        <span className="text-xs text-brand-teal-600 dark:text-brand-teal-400 uppercase tracking-wide">Account</span>
+        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{label}</p>
       </div>
-
-      <div className="space-y-3">
-        {brands.map((brand, index) => (
-          <div
-            key={index}
-            className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 space-y-2">
-                <div className="font-medium text-slate-900 dark:text-white">{brand.name}</div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={brand.marketplace}
-                    onChange={(e) => updateBrandMarketplace(index, e.target.value)}
-                    className="text-sm px-3 py-1.5 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  >
-                    {MARKETPLACES.map((mp) => (
-                      <option key={mp.id} value={mp.id}>
-                        {mp.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Currency: {brand.currency}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => removeBrand(index)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-3 p-4 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700">
-        <input
-          type="text"
-          value={newBrandName}
-          onChange={(e) => setNewBrandName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addBrand()}
-          placeholder="Brand name..."
-          className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-        />
-        <div className="flex gap-2">
-          <select
-            value={newBrandMarketplace}
-            onChange={(e) => setNewBrandMarketplace(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-          >
-            {MARKETPLACES.map((mp) => (
-              <option key={mp.id} value={mp.id}>
-                {mp.label}
-              </option>
-            ))}
-          </select>
-          <Button
-            onClick={addBrand}
-            disabled={!newBrandName.trim()}
-            className="bg-teal-500 hover:bg-teal-600 text-white"
-          >
-            Add Brand
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={brands.length === 0}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-        >
-          Continue
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Step 4: Plutus Account Setup
-function AccountSetupStep({
-  brands,
-  parentAccountIds,
-  onParentAccountIdsChange,
-  parentsVerified,
-  accountsCreated,
-  onVerified,
-  onAccountsCreated,
-  onNext,
-  onBack,
-}: {
-  brands: Brand[];
-  parentAccountIds: ParentAccountIds;
-  onParentAccountIdsChange: (ids: ParentAccountIds) => void;
-  parentsVerified: boolean;
-  accountsCreated: boolean;
-  onVerified: () => void;
-  onAccountsCreated: (count: number) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  type QboAccountOption = {
-    id: string;
-    name: string;
-    fullyQualifiedName: string;
-    type: string;
-    active: boolean;
-  };
-
-  const initialPhase: 'verify' | 'create' | 'done' = accountsCreated
-    ? 'done'
-    : parentsVerified
-      ? 'create'
-      : 'verify';
-
-  const [phase, setPhase] = useState<'verify' | 'create' | 'done'>(initialPhase);
-  const [loading, setLoading] = useState(false);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<QboAccountOption[]>([]);
-  const [createResult, setCreateResult] = useState<{ created: number; skipped: number } | null>(null);
-
-  const loadAccounts = useCallback(async () => {
-    setLoadingAccounts(true);
-    setError(null);
-
-    const res = await fetch(`${basePath}/api/qbo/accounts`);
-    const data = await res.json();
-    if (!res.ok) {
-      setLoadingAccounts(false);
-      throw new Error(data.error);
-    }
-
-    const rawAccounts = data.accounts as Array<{
-      id: string;
-      name: string;
-      fullyQualifiedName?: string;
-      type?: string;
-      active?: boolean;
-    }>;
-
-    const options: QboAccountOption[] = rawAccounts.map((a) => {
-      const fullyQualifiedName = a.fullyQualifiedName ? a.fullyQualifiedName : a.name;
-      const type = a.type ? a.type : 'Unknown';
-
-      return {
-        id: a.id,
-        name: a.name,
-        fullyQualifiedName,
-        type,
-        active: a.active !== false,
-      };
-    });
-
-    setAccounts(options);
-    setLoadingAccounts(false);
-    return options;
-  }, []);
-
-  useEffect(() => {
-    if (phase !== 'verify') return;
-
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const options = await loadAccounts();
-        if (cancelled) return;
-
-        if (options.length === 0) {
-          setError('No accounts found in QBO.');
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setLoadingAccounts(false);
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadAccounts, phase]);
-
-  const getAccountById = useCallback(
-    (id: string) => {
-      if (id === '') return undefined;
-      return accounts.find((a) => a.id === id);
-    },
-    [accounts],
-  );
-
-  const updateMapping = useCallback(
-    (key: keyof ParentAccountIds, nextId: string) => {
-      onParentAccountIdsChange({
-        ...parentAccountIds,
-        [key]: nextId,
-      });
-    },
-    [onParentAccountIdsChange, parentAccountIds],
-  );
-
-  const requiredKeys = useMemo<Array<keyof ParentAccountIds>>(
-    () => [
-      'inventoryAsset',
-      'manufacturing',
-      'freightAndDuty',
-      'landFreight',
-      'storage3pl',
-      'amazonSales',
-      'amazonRefunds',
-      'amazonFbaInventoryReimbursement',
-      'amazonSellerFees',
-      'amazonFbaFees',
-      'amazonStorageFees',
-      'amazonAdvertisingCosts',
-      'amazonPromotions',
-    ],
-    [],
-  );
-
-  const validateMapping = useCallback(
-    (accountOptions: QboAccountOption[]) => {
-      const missing: string[] = [];
-      const inactive: string[] = [];
-
-      for (const key of requiredKeys) {
-        const id = parentAccountIds[key];
-        if (id.trim() === '') {
-          missing.push(key);
-          continue;
-        }
-
-        const account = accountOptions.find((a) => a.id === id);
-        if (!account) {
-          missing.push(key);
-          continue;
-        }
-
-        if (!account.active) {
-          inactive.push(key);
-        }
-      }
-
-      return { missing, inactive };
-    },
-    [parentAccountIds, requiredKeys],
-  );
-
-  const verifyParents = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const accountOptions = accounts.length === 0 ? await loadAccounts() : accounts;
-      const { missing, inactive } = validateMapping(accountOptions);
-
-      if (missing.length > 0) {
-        throw new Error(`Select all required parent accounts (${missing.join(', ')}).`);
-      }
-
-      if (inactive.length > 0) {
-        throw new Error(`Selected parent accounts must be active (${inactive.join(', ')}).`);
-      }
-
-      onVerified();
-      setPhase('create');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const brandCount = brands.length;
-  const expectedSubAccounts = brandCount * 19;
-
-  const createAccounts = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const accountOptions = accounts.length === 0 ? await loadAccounts() : accounts;
-      const { missing, inactive } = validateMapping(accountOptions);
-
-      if (missing.length > 0) {
-        throw new Error(`Select all required parent accounts (${missing.join(', ')}).`);
-      }
-
-      if (inactive.length > 0) {
-        throw new Error(`Selected parent accounts must be active (${inactive.join(', ')}).`);
-      }
-
-      const payload: {
-        brandNames: string[];
-        parentAccountIds: {
-          inventoryAsset: string;
-          manufacturing: string;
-          freightAndDuty: string;
-          landFreight: string;
-          storage3pl: string;
-          mfgAccessories?: string;
-          inventoryShrinkage?: string;
-          amazonSales: string;
-          amazonRefunds: string;
-          amazonFbaInventoryReimbursement: string;
-          amazonSellerFees: string;
-          amazonFbaFees: string;
-          amazonStorageFees: string;
-          amazonAdvertisingCosts: string;
-          amazonPromotions: string;
-        };
-      } = {
-        brandNames: brands.map((b) => b.name),
-        parentAccountIds: {
-          inventoryAsset: parentAccountIds.inventoryAsset,
-          manufacturing: parentAccountIds.manufacturing,
-          freightAndDuty: parentAccountIds.freightAndDuty,
-          landFreight: parentAccountIds.landFreight,
-          storage3pl: parentAccountIds.storage3pl,
-          amazonSales: parentAccountIds.amazonSales,
-          amazonRefunds: parentAccountIds.amazonRefunds,
-          amazonFbaInventoryReimbursement: parentAccountIds.amazonFbaInventoryReimbursement,
-          amazonSellerFees: parentAccountIds.amazonSellerFees,
-          amazonFbaFees: parentAccountIds.amazonFbaFees,
-          amazonStorageFees: parentAccountIds.amazonStorageFees,
-          amazonAdvertisingCosts: parentAccountIds.amazonAdvertisingCosts,
-          amazonPromotions: parentAccountIds.amazonPromotions,
-        },
-      };
-
-      if (parentAccountIds.mfgAccessories !== '') {
-        payload.parentAccountIds.mfgAccessories = parentAccountIds.mfgAccessories;
-      }
-
-      if (parentAccountIds.inventoryShrinkage !== '') {
-        payload.parentAccountIds.inventoryShrinkage = parentAccountIds.inventoryShrinkage;
-      }
-
-      const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error);
-      }
-
-      const created = data.created.length;
-      const skipped = data.skipped.length;
-      setCreateResult({ created, skipped });
-      onAccountsCreated(expectedSubAccounts);
-      setPhase('done');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const inventorySubAccounts = ['Manufacturing', 'Freight', 'Duty', 'Mfg Accessories'];
-  const cogsSubAccounts = [
-    'Manufacturing',
-    'Freight',
-    'Duty',
-    'Land Freight',
-    'Storage 3PL',
-    'Mfg Accessories',
-    'Inventory Shrinkage',
-  ];
-  const lmbSubAccounts = [
-    'Amazon Sales',
-    'Amazon Refunds',
-    'Amazon FBA Inventory Reimbursement',
-    'Amazon Seller Fees',
-    'Amazon FBA Fees',
-    'Amazon Storage Fees',
-    'Amazon Advertising Costs',
-    'Amazon Promotions',
-  ];
-
-  const allActiveAccounts = accounts.filter((a) => a.active);
-
-  const renderPicker = (input: {
-    label: string;
-    key: keyof ParentAccountIds;
-    required: boolean;
-    expectedType: string;
-    helper: string;
-  }) => {
-    const selected = getAccountById(parentAccountIds[input.key]);
-
-    const typedActive = allActiveAccounts.filter((a) => a.type === input.expectedType);
-    const options = typedActive.length > 0 ? typedActive : allActiveAccounts;
-
-    return (
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            {input.label}{' '}
-            {input.required ? (
-              <span className="text-xs text-slate-500">(required)</span>
-            ) : (
-              <span className="text-xs text-slate-500">(optional)</span>
-            )}
-          </p>
-          {selected && (
-            <span
-              className={cn(
-                'text-xs font-medium',
-                selected.active ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
-              )}
-            >
-              {selected.active ? '✓ selected' : '✗ inactive'}
-            </span>
-          )}
-        </div>
-
+      <div className="w-64">
+        <span className="text-xs text-brand-teal-600 dark:text-brand-teal-400 uppercase tracking-wide">QBO Account</span>
         <select
-          value={parentAccountIds[input.key]}
-          onChange={(e) => updateMapping(input.key, e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm"
+          value={accountId}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(
+            'w-full mt-0.5 px-3 py-1.5 text-sm rounded border bg-white dark:bg-slate-800 transition-colors',
+            selected
+              ? 'border-brand-teal-300 dark:border-brand-teal-700 text-slate-900 dark:text-white'
+              : 'border-slate-200 dark:border-slate-700 text-slate-400'
+          )}
         >
-          <option value="">— Select account —</option>
-          {options.map((a) => (
+          <option value="">Select account...</option>
+          {filtered.map((a) => (
             <option key={a.id} value={a.id}>
               {a.fullyQualifiedName}
             </option>
           ))}
         </select>
-
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {input.helper} Expected type: {input.expectedType}.
-        </p>
       </div>
-    );
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Plutus Account Setup</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Select the correct QBO parent accounts by ID (names vary between companies). Plutus creates
-          brand sub-accounts under these.
-        </p>
-      </div>
-
-      {error && (
-        <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-700 dark:text-red-300 whitespace-pre-line">{error}</p>
-        </div>
-      )}
-
-      {phase === 'verify' && (
-        <>
-          <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              If you aren&apos;t sure which account is which, open QBO Chart of Accounts and copy the
-              structure you want to use.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await loadAccounts();
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                    setLoadingAccounts(false);
-                  }
-                }}
-                disabled={loadingAccounts}
-              >
-                {loadingAccounts ? 'Loading…' : 'Reload Accounts'}
-              </Button>
-              <a
-                href={QBO_CHART_OF_ACCOUNTS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition-colors"
-              >
-                Open QBO Chart of Accounts →
-              </a>
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">
-                Plutus Parents (Inventory + COGS)
-              </h3>
-              <div className="space-y-4">
-                {renderPicker({
-                  label: 'Inventory Asset',
-                  key: 'inventoryAsset',
-                  required: true,
-                  expectedType: 'Other Current Asset',
-                  helper: 'Parent for Inv Manufacturing/Freight/Duty accounts.',
-                })}
-                {renderPicker({
-                  label: 'Manufacturing',
-                  key: 'manufacturing',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Parent for Manufacturing - <Brand> COGS accounts.',
-                })}
-                {renderPicker({
-                  label: 'Freight & Custom Duty',
-                  key: 'freightAndDuty',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Parent for Freight - <Brand> and Duty - <Brand> COGS.',
-                })}
-                {renderPicker({
-                  label: 'Land Freight',
-                  key: 'landFreight',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Parent for Land Freight - <Brand> COGS.',
-                })}
-                {renderPicker({
-                  label: 'Storage 3PL',
-                  key: 'storage3pl',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Parent for Storage 3PL - <Brand> COGS.',
-                })}
-                {renderPicker({
-                  label: 'Mfg Accessories',
-                  key: 'mfgAccessories',
-                  required: false,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Optional: select if it already exists; otherwise Plutus can create it.',
-                })}
-                {renderPicker({
-                  label: 'Inventory Shrinkage',
-                  key: 'inventoryShrinkage',
-                  required: false,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'Optional: select if it already exists; otherwise Plutus can create it.',
-                })}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">
-                LMB Parents (Revenue + Fees)
-              </h3>
-              <div className="space-y-4">
-                {renderPicker({
-                  label: 'Amazon Sales',
-                  key: 'amazonSales',
-                  required: true,
-                  expectedType: 'Income',
-                  helper: 'LMB posts sales totals here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon Refunds',
-                  key: 'amazonRefunds',
-                  required: true,
-                  expectedType: 'Income',
-                  helper: 'LMB posts refund totals here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon FBA Inventory Reimbursement',
-                  key: 'amazonFbaInventoryReimbursement',
-                  required: true,
-                  expectedType: 'Other Income',
-                  helper: 'LMB posts reimbursements here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon Seller Fees',
-                  key: 'amazonSellerFees',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'LMB posts seller fees here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon FBA Fees',
-                  key: 'amazonFbaFees',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'LMB posts FBA fees here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon Storage Fees',
-                  key: 'amazonStorageFees',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'LMB posts storage fees here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon Advertising Costs',
-                  key: 'amazonAdvertisingCosts',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'LMB posts ad spend here.',
-                })}
-                {renderPicker({
-                  label: 'Amazon Promotions',
-                  key: 'amazonPromotions',
-                  required: true,
-                  expectedType: 'Cost of Goods Sold',
-                  helper: 'LMB posts promotions here.',
-                })}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {phase === 'create' && !createResult && (
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Sub-accounts will be created for each brand. Preview:
-          </p>
-
-          {brands.map((brand) => (
-            <div
-              key={brand.name}
-              className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            >
-              <h4 className="font-semibold text-slate-900 dark:text-white mb-3">{brand.name}</h4>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <p className="font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Inventory Asset Sub-Accounts:
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {inventorySubAccounts.map((sub) => (
-                      <span
-                        key={sub}
-                        className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                      >
-                        Inv {sub} - {brand.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="font-medium text-slate-600 dark:text-slate-400 mb-1">COGS Sub-Accounts:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {cogsSubAccounts.map((sub) => (
-                      <span
-                        key={sub}
-                        className="px-2 py-1 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                      >
-                        {sub} - {brand.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Revenue/Fee Sub-Accounts (for LMB):
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {lmbSubAccounts.map((sub) => (
-                      <span
-                        key={sub}
-                        className="px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                      >
-                        {sub} - {brand.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          <div className="p-4 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Summary: {expectedSubAccounts} sub-accounts to create
-            </p>
-            <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
-              <li>
-                • {brandCount * inventorySubAccounts.length} Inventory Asset sub-accounts (
-                {inventorySubAccounts.length} per brand)
-              </li>
-              <li>
-                • {brandCount * cogsSubAccounts.length} COGS sub-accounts ({cogsSubAccounts.length} per brand)
-              </li>
-              <li>
-                • {brandCount * lmbSubAccounts.length} Revenue/Fee sub-accounts ({lmbSubAccounts.length} per brand)
-              </li>
-            </ul>
-          </div>
-
-          <Button
-            onClick={createAccounts}
-            disabled={loading}
-            className="w-full bg-teal-500 hover:bg-teal-600 text-white"
-          >
-            {loading ? 'Creating...' : 'Create All Sub-Accounts in QBO'}
-          </Button>
-        </div>
-      )}
-
-      {phase === 'done' && (
-        <div className="p-6 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-center">
-          <p className="text-lg font-semibold text-green-700 dark:text-green-400 mb-3">Accounts Ready!</p>
-          {createResult && (
-            <div className="flex justify-center gap-8">
-              <div>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{createResult.created}</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Created</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-400">{createResult.skipped}</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Already Existed</p>
-              </div>
-            </div>
-          )}
-          {!createResult && (
-            <p className="text-sm text-slate-600 dark:text-slate-400">You already completed this step.</p>
-          )}
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        {phase === 'verify' && (
-          <Button onClick={verifyParents} disabled={loading} className="flex-1 bg-teal-500 hover:bg-teal-600 text-white">
-            {loading ? 'Checking...' : 'Verify Mapping'}
-          </Button>
-        )}
-        {phase === 'create' && (
-          <Button
-            onClick={() => setPhase('verify')}
-            variant="outline"
-            className="flex-1"
-            disabled={loading}
-          >
-            Edit Mapping
-          </Button>
-        )}
-        {phase === 'done' && (
-          <Button onClick={onNext} className="flex-1 bg-green-500 hover:bg-green-600 text-white">
-            Continue
-          </Button>
-        )}
+      <div className="w-8 flex justify-center">
+        {selected && <CheckIcon className="h-5 w-5 text-green-500" />}
       </div>
     </div>
   );
 }
 
-// Step 5: SKU Setup
-function SkuSetupStep({
-  skus,
-  brands,
-  onSkusChange,
-  onNext,
-  onBack,
+// Collapsible section
+function Section({
+  title,
+  children,
+  defaultExpanded = true,
 }: {
-  skus: Sku[];
-  brands: Brand[];
-  onSkusChange: (skus: Sku[]) => void;
-  onNext: () => void;
-  onBack: () => void;
+  title: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
 }) {
-  const [newSku, setNewSku] = useState('');
-  const [newProductName, setNewProductName] = useState('');
-  const [newBrand, setNewBrand] = useState(brands[0].name);
-  const [newAsin, setNewAsin] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [csvError, setCsvError] = useState<string | null>(null);
-
-  const addSku = () => {
-    const trimmedSku = newSku.trim();
-    const trimmedName = newProductName.trim();
-    const selectedBrand = newBrand.trim();
-    if (trimmedSku && selectedBrand !== '' && !skus.some((s) => s.sku === trimmedSku)) {
-      onSkusChange([
-        ...skus,
-        {
-          sku: trimmedSku,
-          productName: trimmedName,
-          brand: selectedBrand,
-          asin: newAsin.trim() === '' ? undefined : newAsin.trim(),
-        },
-      ]);
-      setNewSku('');
-      setNewProductName('');
-      setNewAsin('');
-      setShowModal(false);
-    }
-  };
-
-  const removeSku = (index: number) => {
-    onSkusChange(skus.filter((_, i) => i !== index));
-  };
-
-  const handleCsvImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setCsvError(null);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const lines = text.split('\n').filter((line) => line.trim());
-
-      if (lines.length < 2) {
-        setCsvError('CSV must have a header row and at least one data row');
-        return;
-      }
-
-      // Parse header
-      const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-      const skuIdx = header.indexOf('sku');
-      const productIdx = header.indexOf('product_name');
-      const brandIdx = header.indexOf('brand');
-      const asinIdx = header.indexOf('asin');
-
-      if (skuIdx === -1 || brandIdx === -1) {
-        setCsvError('CSV must have "sku" and "brand" columns');
-        return;
-      }
-
-      const brandNames = brands.map((b) => b.name.toLowerCase());
-      const newSkus: Sku[] = [];
-      const errors: string[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c) => c.trim());
-        const sku = cols[skuIdx];
-        const brand = cols[brandIdx];
-        const productName = productIdx !== -1 ? cols[productIdx] : '';
-        const asin = asinIdx !== -1 ? cols[asinIdx] : '';
-
-        if (!sku || !brand) {
-          errors.push(`Row ${i + 1}: Missing SKU or brand`);
-          continue;
-        }
-
-        if (!brandNames.includes(brand.toLowerCase())) {
-          errors.push(`Row ${i + 1}: Brand "${brand}" not found`);
-          continue;
-        }
-
-        const matchedBrand = brands.find((b) => b.name.toLowerCase() === brand.toLowerCase());
-        if (
-          matchedBrand &&
-          !skus.some((s) => s.sku === sku) &&
-          !newSkus.some((s) => s.sku === sku)
-        ) {
-          newSkus.push({
-            sku,
-            productName,
-            brand: matchedBrand.name,
-            asin: asin === '' ? undefined : asin,
-          });
-        }
-      }
-
-      if (newSkus.length > 0) {
-        onSkusChange([...skus, ...newSkus]);
-      }
-
-      if (errors.length > 0) {
-        setCsvError(
-          `Imported ${newSkus.length} SKUs. Errors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`,
-        );
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = ''; // Reset file input
-  };
-
-  const downloadTemplate = () => {
-    const template =
-      'sku,product_name,brand,asin\nCS-007,6 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ123\nCS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456';
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sku-import-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">SKU Setup</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Add your product SKUs and assign them to brands. You don&apos;t need to enter costs here -
-          Plutus calculates unit costs automatically from your supplier bills.
-        </p>
-      </div>
-
-      <div className="flex gap-2 flex-wrap">
-        <Button
-          onClick={() => setShowModal(true)}
-          className="bg-teal-500 hover:bg-teal-600 text-white"
-        >
-          + Add SKU
-        </Button>
-        <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-          <input type="file" accept=".csv" onChange={handleCsvImport} className="hidden" />
-          Bulk Import CSV
-        </label>
-        <button
-          onClick={downloadTemplate}
-          className="text-sm text-teal-600 dark:text-teal-400 hover:underline"
-        >
-          Download Template
-        </button>
-      </div>
-
-      {csvError && (
-        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <p className="text-sm text-amber-800 dark:text-amber-200 whitespace-pre-line">
-            {csvError}
-          </p>
-        </div>
-      )}
-
-      {skus.length > 0 ? (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-slate-600 dark:text-slate-400">
-                  SKU
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600 dark:text-slate-400">
-                  Product
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-slate-600 dark:text-slate-400">
-                  Brand
-                </th>
-                <th className="px-4 py-2 w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {skus.map((sku, index) => (
-                <tr key={index} className="bg-white dark:bg-slate-900">
-                  <td className="px-4 py-2 font-mono text-slate-900 dark:text-white">{sku.sku}</td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {sku.productName === '' ? '-' : sku.productName}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{sku.brand}</td>
-                  <td className="px-4 py-2">
-                    <button
-                      onClick={() => removeSku(index)}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="p-8 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
-          <p className="text-slate-500 dark:text-slate-400">
-            No SKUs added yet. Click &quot;Add SKU&quot; to get started.
-          </p>
-        </div>
-      )}
-
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        Total: {skus.length} SKUs configured
-      </p>
-
-      {/* Add SKU Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Add SKU</h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  SKU *
-                </label>
-                <input
-                  type="text"
-                  value={newSku}
-                  onChange={(e) => setNewSku(e.target.value)}
-                  placeholder="e.g., CS-007"
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Product Name
-                </label>
-                <input
-                  type="text"
-                  value={newProductName}
-                  onChange={(e) => setNewProductName(e.target.value)}
-                  placeholder="e.g., 6 Pack Drop Cloth 12x9ft"
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Brand *
-                </label>
-                <select
-                  value={newBrand}
-                  onChange={(e) => setNewBrand(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                >
-                  {brands.map((b) => (
-                    <option key={b.name} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  ASIN (optional)
-                </label>
-                <input
-                  type="text"
-                  value={newAsin}
-                  onChange={(e) => setNewAsin(e.target.value)}
-                  placeholder="e.g., B08XYZ123"
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="outline" className="flex-1">
-                Cancel
-              </Button>
-              <Button
-                onClick={addSku}
-                disabled={!newSku.trim() || !newBrand}
-                className="flex-1 bg-teal-500 hover:bg-teal-600 text-white"
-              >
-                Save SKU
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={skus.length === 0}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-        >
-          Continue
-        </Button>
-      </div>
+    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+      >
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{title}</span>
+        <ChevronIcon expanded={expanded} className="text-slate-400" />
+      </button>
+      {expanded && <div className="bg-white dark:bg-slate-900">{children}</div>}
     </div>
   );
 }
 
-// Step 6: LMB Product Groups (External)
-function LmbProductGroupsStep({
-  brands,
-  checks,
-  onChecksChange,
-  onNext,
-  onBack,
-}: {
-  brands: Brand[];
-  checks: string[];
-  onChecksChange: (checks: string[]) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const items = [
-    ...brands.map((b) => ({ id: `group-${b.name}`, label: `Create Product Group "${b.name}"` })),
-    {
-      id: 'group-unassigned',
-      label: 'Create Product Group "UNASSIGNED" and set it as default for unknown SKUs',
-    },
-     {
-       id: 'accounts-mapped',
-       label: 'Map Product Group sales/refunds to the brand Sales account (e.g. Amazon Sales - <Brand>)',
-     },
-     { id: 'skus-assigned', label: 'Assign all SKUs to their Product Groups' },
-     { id: 'cogs-off', label: 'Set LMB COGS feature to OFF (Plutus will handle product COGS later)' },
-  ];
-
-  const toggleCheck = (id: string) => {
-    if (checks.includes(id)) {
-      onChecksChange(checks.filter((c) => c !== id));
-    } else {
-      onChecksChange([...checks, id]);
-    }
-  };
-
-  const allChecked = items.every((item) => checks.includes(item.id));
-
+// Step 1: LMB Setup Acknowledgment
+function Step1({ complete, onComplete }: { complete: boolean; onComplete: () => void }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          LMB Product Groups
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-           This step is completed in Link My Books, not in Plutus. Create Product Groups, assign SKUs,
-           and set the sales/refunds account per group.
-
+      <div className="text-center py-8">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-teal-50 dark:bg-brand-teal-900/20 mb-4">
+          <svg className="w-8 h-8 text-brand-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">LMB Accounts & Taxes</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          Complete the LMB wizard for each connection before continuing
         </p>
-      </div>
-
-      <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-        <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-2">
-          Complete for EACH LMB connection:
-        </p>
-          <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-1 list-decimal list-inside">
-            <li>LMB → Inventory → Product Groups → Create</li>
-            <li>Set Account (sales/refunds) for each group to: Amazon Sales - &lt;Brand&gt;</li>
-            <li>Assign SKUs to the Product Group</li>
-            <li>Do not enable the LMB COGS feature</li>
-          </ol>
       </div>
 
       <a
         href={LMB_APP_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium transition-colors"
+        className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
       >
-        Open Link My Books →
+        Open Link My Books
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
       </a>
 
-      <div className="space-y-2">
-        {items.map((item) => {
-          const isChecked = checks.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              onClick={() => toggleCheck(item.id)}
-              className={cn(
-                'flex items-center gap-3 w-full p-4 rounded-lg border transition-all text-left',
-                isChecked
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300',
-              )}
-            >
-              <div
-                className={cn(
-                  'flex h-5 w-5 items-center justify-center rounded border-2 text-xs flex-shrink-0',
-                  isChecked
-                    ? 'bg-green-500 border-green-500 text-white'
-                    : 'border-slate-300 dark:border-slate-600',
-                )}
-              >
-                {isChecked && '✓'}
-              </div>
-              <span
-                className={cn(
-                  'font-medium text-sm',
-                  isChecked
-                    ? 'text-green-700 dark:text-green-400'
-                    : 'text-slate-700 dark:text-slate-300',
-                )}
-              >
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!allChecked}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-        >
-          Continue
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Step 7: Bill Entry Guidelines
-function BillGuidelinesStep({
-  acknowledged,
-  onAcknowledge,
-  onNext,
-  onBack,
-}: {
-  acknowledged: boolean;
-  onAcknowledge: (val: boolean) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Bill Entry Guidelines
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Plutus links supplier bills together using the PO Number. You&apos;ll enter the PO in the
-          bill&apos;s &quot;Memo&quot; field.
-        </p>
-      </div>
-
-      <div className="p-4 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-          Required Format for Bill Memo:
-        </p>
-        <div className="px-4 py-3 rounded bg-white dark:bg-slate-900 font-mono text-teal-600 dark:text-teal-400 border border-slate-200 dark:border-slate-700">
-          PO: PO-2026-001
-        </div>
-        <ul className="mt-3 text-sm text-slate-600 dark:text-slate-400 space-y-1">
-          <li>• Start with &quot;PO: &quot; (including the space)</li>
-          <li>• Keep exactly this format - no extra text</li>
-          <li>• Same PO memo on manufacturing + freight + duty bills</li>
-        </ul>
-        <div className="mt-4">
-          <Link
-            href="/bills"
-            className="inline-flex items-center gap-2 text-sm text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200 font-medium"
-          >
-            Open Bill Guide + Compliance Scanner →
-          </Link>
-        </div>
-      </div>
-
-      <div className="p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
-        <p className="text-sm font-medium text-teal-800 dark:text-teal-200 mb-2">
-          Why This Matters:
-        </p>
-        <p className="text-sm text-teal-700 dark:text-teal-300">
-          Plutus reads all bills with the same PO number and combines them to calculate your landed
-          cost per unit:
-        </p>
-        <div className="mt-3 text-xs font-mono text-teal-700 dark:text-teal-300 space-y-1">
-          <div>Manufacturing Bill (PO: PO-2026-001) → $5,000 / 1000 units</div>
-          <div>+ Freight Bill (PO: PO-2026-001) → $500 / 1000 units</div>
-          <div>+ Duty Bill (PO: PO-2026-001) → $200 / 1000 units</div>
-          <div className="pt-1 border-t border-teal-200 dark:border-teal-800">
-            = Unit Cost: $5.70
-          </div>
-        </div>
-      </div>
-
       <button
-        onClick={() => onAcknowledge(!acknowledged)}
+        onClick={onComplete}
         className={cn(
-          'flex items-center gap-3 w-full p-4 rounded-lg border transition-all text-left',
-          acknowledged
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300',
+          'w-full flex items-center justify-center gap-3 py-4 px-4 rounded-lg border-2 transition-all',
+          complete
+            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-brand-teal-300'
         )}
       >
         <div
           className={cn(
-            'flex h-5 w-5 items-center justify-center rounded border-2 text-xs',
-            acknowledged
-              ? 'bg-green-500 border-green-500 text-white'
-              : 'border-slate-300 dark:border-slate-600',
+            'w-6 h-6 rounded-full border-2 flex items-center justify-center',
+            complete ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-slate-600'
           )}
         >
-          {acknowledged && '✓'}
+          {complete && <CheckIcon className="w-4 h-4 text-white" />}
         </div>
-        <span
-          className={cn(
-            'font-medium',
-            acknowledged
-              ? 'text-green-700 dark:text-green-400'
-              : 'text-slate-700 dark:text-slate-300',
-          )}
-        >
-          I understand how to enter bills with the PO memo format
+        <span className={cn('font-medium', complete ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-300')}>
+          I&apos;ve completed LMB setup for all connections
         </span>
       </button>
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!acknowledged}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
-        >
-          Continue
-        </Button>
-      </div>
     </div>
   );
 }
 
-// Step 8: Historical Catch-Up
-function CatchUpStep({
-  mode,
-  startDate,
-  qboInitMethod,
+// Step 2: Brands
+function Step2({
   brands,
-  onModeChange,
-  onStartDateChange,
-  onQboInitMethodChange,
-  onNext,
-  onBack,
+  onBrandsChange,
 }: {
-  mode: 'none' | 'from_date' | 'full' | null;
-  startDate: string | null;
-  qboInitMethod: 'auto' | 'manual' | null;
   brands: Brand[];
-  onModeChange: (mode: 'none' | 'from_date' | 'full') => void;
-  onStartDateChange: (date: string | null) => void;
-  onQboInitMethodChange: (method: 'auto' | 'manual') => void;
-  onNext: () => void;
-  onBack: () => void;
+  onBrandsChange: (brands: Brand[]) => void;
 }) {
-  const [valuationSource, setValuationSource] = useState<'bills' | 'accountant' | null>(null);
-  const [inventoryFile, setInventoryFile] = useState<File | null>(null);
-  const [valuationFile, setValuationFile] = useState<File | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newMarketplace, setNewMarketplace] = useState('amazon.com');
 
-  const options = [
-    {
-      id: 'none' as const,
-      title: "I'm just starting (no historical data)",
-      description:
-        "You're a new seller or just started using LMB. Plutus will process settlements as they come.",
-    },
-    {
-      id: 'from_date' as const,
-      title: 'Catch up from a specific date (with opening snapshot)',
-      description: 'Requires: Opening inventory snapshot (Amazon report + valuation).',
-    },
-    {
-      id: 'full' as const,
-      title: 'Catch up from the beginning',
-      description:
-        'Process ALL historical bills and settlements. Most accurate, but more work upfront.',
-    },
-  ];
+  const addBrand = () => {
+    const name = newName.trim();
+    if (!name || brands.some((b) => b.name === name)) return;
+    const mp = MARKETPLACES.find((m) => m.id === newMarketplace);
+    if (!mp) return;
+    onBrandsChange([...brands, { name, marketplace: mp.id, currency: mp.currency }]);
+    setNewName('');
+  };
 
-  // For from_date mode, we need: date + inventory file + valuation source (+ valuation file if accountant) + qboInitMethod
-  const fromDateValid =
-    mode === 'from_date' &&
-    startDate !== null &&
-    inventoryFile !== null &&
-    valuationSource !== null &&
-    (valuationSource === 'bills' || (valuationSource === 'accountant' && valuationFile !== null)) &&
-    qboInitMethod !== null;
-
-  const canProceed = mode === 'none' || mode === 'full' || fromDateValid;
+  const removeBrand = (index: number) => {
+    onBrandsChange(brands.filter((_, i) => i !== index));
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Historical Catch-Up
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Plutus maintains a strict audit trail. Every inventory movement must be linked to a source
-          document.
-        </p>
+      <div className="text-center py-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Your Brands</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Add brands for separate P&L tracking</p>
       </div>
 
-      <div className="p-4 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          <span className="font-semibold">INVENTORY IN</span> → Bills in QBO (Plutus reads these)
-          <br />
-          <span className="font-semibold">INVENTORY OUT</span> → LMB Settlements (via Audit Data
-          CSV)
-          <br />
-          <span className="font-semibold">OPENING POS.</span> → Amazon Inventory Report + Valuation
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            onClick={() => onModeChange(option.id)}
-            className={cn(
-              'w-full p-4 rounded-lg border transition-all text-left',
-              mode === option.id
-                ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300',
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className={cn(
-                  'mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2',
-                  mode === option.id
-                    ? 'border-teal-500 bg-teal-500'
-                    : 'border-slate-300 dark:border-slate-600',
-                )}
-              >
-                {mode === option.id && <div className="w-2 h-2 rounded-full bg-white"></div>}
-              </div>
+      {brands.length > 0 && (
+        <div className="space-y-2">
+          {brands.map((brand, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+            >
               <div className="flex-1">
-                <p
-                  className={cn(
-                    'font-medium',
-                    mode === option.id
-                      ? 'text-teal-700 dark:text-teal-400'
-                      : 'text-slate-700 dark:text-slate-300',
-                  )}
-                >
-                  {option.title}
-                </p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {option.description}
+                <p className="font-medium text-slate-900 dark:text-white">{brand.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label} ({brand.currency})
                 </p>
               </div>
-            </div>
-
-            {option.id === 'from_date' && mode === 'from_date' && (
-              <div className="mt-4 ml-8 space-y-4" onClick={(e) => e.stopPropagation()}>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Start from:
-                  </label>
-                  <input
-                    type="date"
-                    value={startDate ? startDate : ''}
-                    onChange={(e) => onStartDateChange(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
-                    className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-                  />
-                </div>
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Opening Inventory Snapshot Panel - only shown when from_date is selected */}
-      {mode === 'from_date' && startDate && (
-        <div className="p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 space-y-4">
-          <h3 className="font-semibold text-amber-800 dark:text-amber-200">
-            Opening Inventory Snapshot
-          </h3>
-          <p className="text-sm text-amber-700 dark:text-amber-300">
-            To start from {startDate}, we need to know your inventory position on that date.
-          </p>
-
-          {/* Step 1: Amazon Inventory Report */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Step 1: Upload Amazon Inventory Report
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Download from: Seller Central → Reports → Inventory → Inventory Ledger (as-of{' '}
-              {startDate})
-            </p>
-            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-              <input
-                type="file"
-                accept=".csv,.xlsx"
-                onChange={(e) => setInventoryFile(e.target.files ? e.target.files[0] : null)}
-                className="hidden"
-              />
-              {inventoryFile ? inventoryFile.name : 'Choose File'}
-            </label>
-            {inventoryFile && (
-              <span className="text-xs text-green-600 dark:text-green-400 ml-2">
-                ✓ File selected
-              </span>
-            )}
-          </div>
-
-          {/* Step 2: Valuation Source */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Step 2: Provide Inventory Valuation
-            </p>
-
-            <div className="space-y-2">
-              <button
-                onClick={() => setValuationSource('bills')}
-                className={cn(
-                  'w-full p-3 rounded-lg border text-left text-sm',
-                  valuationSource === 'bills'
-                    ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      'w-4 h-4 rounded-full border-2',
-                      valuationSource === 'bills'
-                        ? 'border-teal-500 bg-teal-500'
-                        : 'border-slate-300',
-                    )}
-                  >
-                    {valuationSource === 'bills' && (
-                      <div className="w-2 h-2 rounded-full bg-white m-0.5" />
-                    )}
-                  </div>
-                  <span className="font-medium">Compute from historical bills in QBO</span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 ml-6 mt-1">
-                  Plutus will read all bills before {startDate} to calculate weighted average cost
-                  per SKU.
-                </p>
+              <button onClick={() => removeBrand(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                <XIcon className="w-4 h-4" />
               </button>
-
-              <button
-                onClick={() => setValuationSource('accountant')}
-                className={cn(
-                  'w-full p-3 rounded-lg border text-left text-sm',
-                  valuationSource === 'accountant'
-                    ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      'w-4 h-4 rounded-full border-2',
-                      valuationSource === 'accountant'
-                        ? 'border-teal-500 bg-teal-500'
-                        : 'border-slate-300',
-                    )}
-                  >
-                    {valuationSource === 'accountant' && (
-                      <div className="w-2 h-2 rounded-full bg-white m-0.5" />
-                    )}
-                  </div>
-                  <span className="font-medium">Use accountant&apos;s valuation</span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 ml-6 mt-1">
-                  Upload component breakdown from your accountant (SKU, Qty, Mfg, Freight, Duty, Mfg
-                  Accessories).
-                </p>
-              </button>
-
-              {valuationSource === 'accountant' && (
-                <div className="ml-6 mt-2">
-                  <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <input
-                      type="file"
-                      accept=".csv,.xlsx"
-                      onChange={(e) => setValuationFile(e.target.files ? e.target.files[0] : null)}
-                      className="hidden"
-                    />
-                    {valuationFile ? valuationFile.name : 'Upload Valuation File'}
-                  </label>
-                  {valuationFile && (
-                    <span className="text-xs text-green-600 dark:text-green-400 ml-2">
-                      ✓ File selected
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
-          </div>
-
-          {/* Step 3: QBO Initialization Journal Entry */}
-          {valuationSource !== null && (inventoryFile !== null || valuationSource === 'bills') && (
-            <div className="space-y-3 pt-3 border-t border-amber-300 dark:border-amber-700">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Step 3: QBO Initialization Journal Entry
-              </p>
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                <p className="text-xs text-red-700 dark:text-red-300">
-                  <span className="font-semibold">IMPORTANT:</span> Your QBO inventory sub-accounts
-                  are currently at $0. Without an initialization JE, they will go{' '}
-                  <span className="font-semibold">NEGATIVE</span> when you post your first COGS.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <button
-                  onClick={() => onQboInitMethodChange('auto')}
-                  className={cn(
-                    'w-full p-3 rounded-lg border text-left text-sm',
-                    qboInitMethod === 'auto'
-                      ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={cn(
-                        'w-4 h-4 rounded-full border-2',
-                        qboInitMethod === 'auto'
-                          ? 'border-teal-500 bg-teal-500'
-                          : 'border-slate-300',
-                      )}
-                    >
-                      {qboInitMethod === 'auto' && (
-                        <div className="w-2 h-2 rounded-full bg-white m-0.5" />
-                      )}
-                    </div>
-                    <span className="font-medium">
-                      Let Plutus create the initialization JE automatically
-                    </span>
-                    <span className="text-xs text-teal-600 dark:text-teal-400 font-medium">
-                      (Recommended)
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => onQboInitMethodChange('manual')}
-                  className={cn(
-                    'w-full p-3 rounded-lg border text-left text-sm',
-                    qboInitMethod === 'manual'
-                      ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-700'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={cn(
-                        'w-4 h-4 rounded-full border-2',
-                        qboInitMethod === 'manual'
-                          ? 'border-teal-500 bg-teal-500'
-                          : 'border-slate-300',
-                      )}
-                    >
-                      {qboInitMethod === 'manual' && (
-                        <div className="w-2 h-2 rounded-full bg-white m-0.5" />
-                      )}
-                    </div>
-                    <span className="font-medium">
-                      I&apos;ll create it manually / have my accountant do it
-                    </span>
-                  </div>
-                  {qboInitMethod === 'manual' && (
-                    <div className="ml-6 mt-2">
-                      <button className="text-xs text-teal-600 dark:text-teal-400 hover:underline font-medium">
-                        Download JE Details
-                      </button>
-                    </div>
-                  )}
-                </button>
-              </div>
-
-              {/* Preview of Initialization JE */}
-              {qboInitMethod && (
-                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-                    Preview of Initialization JE:
-                  </p>
-                  <div className="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-1">
-                    <p className="font-semibold">Date: {startDate}</p>
-                    <div className="mt-2">
-                      <p className="text-slate-500">DEBITS:</p>
-                      {brands.map((brand) => (
-                        <div key={brand.name} className="ml-2">
-                          <p>
-                            Inv Manufacturing - {brand.name}{' '}
-                            <span className="text-slate-400">$X,XXX.XX</span>
-                          </p>
-                          <p>
-                            Inv Freight - {brand.name}{' '}
-                            <span className="text-slate-400">$XXX.XX</span>
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2">
-                      <p className="text-slate-500">CREDITS:</p>
-                      <p className="ml-2">
-                        Opening Balance Equity <span className="text-slate-400">$X,XXX.XX</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          ))}
         </div>
       )}
 
-      <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-          How Catch-Up Works:
-        </p>
-        <ol className="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside">
-          <li>Ensure all supplier bills are in QBO with PO number in Memo</li>
-          <li>Download Audit Data CSV from LMB for each past settlement</li>
-          <li>Upload CSVs to Plutus (Dashboard → Upload Audit Data)</li>
-          <li>Plutus processes in chronological order</li>
-        </ol>
-      </div>
-
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!canProceed}
-          className="flex-1 bg-teal-500 hover:bg-teal-600 text-white disabled:opacity-50"
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addBrand()}
+          placeholder="Brand name..."
+          className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30"
+        />
+        <select
+          value={newMarketplace}
+          onChange={(e) => setNewMarketplace(e.target.value)}
+          className="px-3 py-2.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
         >
-          Continue
+          {MARKETPLACES.map((m) => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+        <Button onClick={addBrand} disabled={!newName.trim()} className="bg-brand-teal-500 hover:bg-brand-teal-600 text-white">
+          <PlusIcon className="w-4 h-4" />
         </Button>
       </div>
     </div>
   );
 }
 
-// Step 9: Review & Complete
-function ReviewCompleteStep({
-  state,
-  onComplete,
-  onBack,
-  onReset,
+// Step 3: Account Mapping
+function Step3({
+  accounts,
+  parentAccounts,
+  onParentAccountsChange,
+  brands,
+  onAccountsCreated,
+  accountsCreated,
+  isLoadingAccounts,
 }: {
-  state: WizardState;
-  onComplete: () => void;
-  onBack: () => void;
-  onReset: () => void;
+  accounts: QboAccount[];
+  parentAccounts: Record<string, string>;
+  onParentAccountsChange: (accounts: Record<string, string>) => void;
+  brands: Brand[];
+  onAccountsCreated: () => void;
+  accountsCreated: boolean;
+  isLoadingAccounts: boolean;
 }) {
-  const catchUpLabel =
-    state.catchUpMode === 'none'
-      ? 'Just starting (no historical data)'
-      : state.catchUpMode === 'full'
-        ? 'Full historical catch-up'
-        : state.catchUpMode === 'from_date'
-          ? `From specific date (${state.catchUpStartDate})`
-          : 'Not selected';
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (state.setupComplete) {
+  const plutusParents = [
+    { key: 'inventoryAsset', label: 'Inventory Asset', type: 'Other Current Asset' },
+    { key: 'manufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
+    { key: 'freightAndDuty', label: 'Freight & Custom Duty', type: 'Cost of Goods Sold' },
+    { key: 'landFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
+    { key: 'storage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
+  ];
+
+  const lmbParents = [
+    { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
+    { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
+    { key: 'amazonFbaInventoryReimbursement', label: 'Amazon FBA Inventory Reimbursement', type: 'Other Income' },
+    { key: 'amazonSellerFees', label: 'Amazon Seller Fees', type: 'Cost of Goods Sold' },
+    { key: 'amazonFbaFees', label: 'Amazon FBA Fees', type: 'Cost of Goods Sold' },
+    { key: 'amazonStorageFees', label: 'Amazon Storage Fees', type: 'Cost of Goods Sold' },
+    { key: 'amazonAdvertisingCosts', label: 'Amazon Advertising Costs', type: 'Cost of Goods Sold' },
+    { key: 'amazonPromotions', label: 'Amazon Promotions', type: 'Cost of Goods Sold' },
+  ];
+
+  const allRequired = [...plutusParents, ...lmbParents];
+  const allMapped = allRequired.every((p) => parentAccounts[p.key]);
+
+  const updateAccount = (key: string, id: string) => {
+    onParentAccountsChange({ ...parentAccounts, [key]: id });
+  };
+
+  const createAccounts = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandNames: brands.map((b) => b.name),
+          parentAccountIds: parentAccounts,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create accounts');
+      onAccountsCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create accounts');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (accountsCreated) {
     return (
-      <div className="text-center py-8">
-        <div className="text-4xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Setup Complete!</h2>
-        <p className="text-slate-500 dark:text-slate-400 mb-6">
-          Plutus is ready for {state.brands.map((b) => b.name).join(' & ')}.
-        </p>
-
-        {state.catchUpMode !== 'none' && (
-          <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 mb-6 text-left">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
-              What&apos;s Next (Catch-Up Mode):
-            </p>
-            <ol className="text-sm text-amber-700 dark:text-amber-300 space-y-1 list-decimal list-inside">
-              {state.catchUpMode === 'from_date' && (
-                <li>Ensure all bills since {state.catchUpStartDate} are in QBO</li>
-              )}
-              {state.catchUpMode === 'full' && <li>Ensure all historical bills are in QBO</li>}
-              <li>Go to LMB and check for settlements</li>
-              <li>Download Audit Data CSV for each settlement</li>
-              <li>Upload CSVs to Plutus to process COGS</li>
-            </ol>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <Link href="/" className="block">
-            <Button className="w-full bg-teal-500 hover:bg-teal-600 text-white">
-              Go to Dashboard
-            </Button>
-          </Link>
-          <Button onClick={onReset} variant="outline" className="w-full">
-            Start Over
-          </Button>
+      <div className="text-center py-12">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 mb-4">
+          <CheckIcon className="w-8 h-8 text-green-500" />
         </div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Accounts Created</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-          Review & Complete
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Setup is almost complete! Review your configuration:
-        </p>
+      <div className="text-center py-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Map QBO Accounts</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Select parent accounts for sub-account creation</p>
       </div>
 
-      <div className="space-y-4">
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            QuickBooks Connection
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">
-            ✓ Connected to: {state.qboCompanyName}
-          </p>
-        </div>
+      {isLoadingAccounts ? (
+        <div className="py-12 text-center text-slate-500">Loading accounts...</div>
+      ) : (
+        <>
+          <Section title="Plutus Accounts (Inventory + COGS)">
+            {plutusParents.map((p) => (
+              <AccountRow
+                key={p.key}
+                label={p.label}
+                accountId={parentAccounts[p.key] || ''}
+                accounts={accounts}
+                onChange={(id) => updateAccount(p.key, id)}
+                type={p.type}
+              />
+            ))}
+          </Section>
 
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            LMB Setup
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">✓ Acknowledged as complete</p>
-        </div>
+          <Section title="LMB Accounts (Revenue + Fees)">
+            {lmbParents.map((p) => (
+              <AccountRow
+                key={p.key}
+                label={p.label}
+                accountId={parentAccounts[p.key] || ''}
+                accounts={accounts}
+                onChange={(id) => updateAccount(p.key, id)}
+                type={p.type}
+              />
+            ))}
+          </Section>
 
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Brands ({state.brands.length})
-          </h3>
-          {state.brands.map((b, i) => (
-            <p key={i} className="text-sm text-green-600 dark:text-green-400">
-              ✓ {b.name} ({MARKETPLACES.find((m) => m.id === b.marketplace)?.label})
-            </p>
-          ))}
-        </div>
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
 
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Accounts
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">✓ Parent accounts verified</p>
-          <p className="text-sm text-green-600 dark:text-green-400">
-            ✓ {state.accountsCreatedCount} sub-accounts created
-          </p>
-          <p className="text-sm text-green-600 dark:text-green-400">
-            ✓ Bill memo format guidelines acknowledged
-          </p>
-        </div>
+          <Button
+            onClick={createAccounts}
+            disabled={!allMapped || creating}
+            className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
+          >
+            {creating ? 'Creating...' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
 
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            SKUs ({state.skus.length})
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">
-            ✓ {state.skus.length} SKUs configured
-          </p>
-          <p className="text-sm text-green-600 dark:text-green-400">
-            ✓ All SKUs assigned to brands
-          </p>
-        </div>
+// Step 4: LMB Product Groups
+function Step4({ complete, onComplete, brands }: { complete: boolean; onComplete: () => void; brands: Brand[] }) {
+  return (
+    <div className="space-y-6">
+      <div className="text-center py-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">LMB Product Groups</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Create Product Groups in LMB for each brand</p>
+      </div>
 
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            LMB Product Groups
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">✓ Acknowledged as complete</p>
+      <div className="space-y-2">
+        {brands.map((brand) => (
+          <div key={brand.name} className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="w-2 h-2 rounded-full bg-brand-teal-500" />
+            <span className="text-sm text-slate-700 dark:text-slate-300">
+              Create group <span className="font-medium text-slate-900 dark:text-white">&ldquo;{brand.name}&rdquo;</span>
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="w-2 h-2 rounded-full bg-amber-500" />
+          <span className="text-sm text-slate-700 dark:text-slate-300">
+            Map to brand sub-accounts (e.g., Amazon Sales - Brand)
+          </span>
         </div>
-
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Historical Catch-Up
-          </h3>
-          <p className="text-sm text-green-600 dark:text-green-400">✓ Mode: {catchUpLabel}</p>
+        <div className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="w-2 h-2 rounded-full bg-amber-500" />
+          <span className="text-sm text-slate-700 dark:text-slate-300">Assign SKUs to Product Groups</span>
         </div>
       </div>
 
-      <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-        <Button onClick={onBack} variant="outline" className="flex-1">
-          Back
-        </Button>
-        <Button onClick={onComplete} className="flex-1 bg-green-500 hover:bg-green-600 text-white">
-          Complete Setup ✓
+      <a
+        href={LMB_APP_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+      >
+        Open Link My Books
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+
+      <button
+        onClick={onComplete}
+        className={cn(
+          'w-full flex items-center justify-center gap-3 py-4 px-4 rounded-lg border-2 transition-all',
+          complete
+            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-brand-teal-300'
+        )}
+      >
+        <div
+          className={cn(
+            'w-6 h-6 rounded-full border-2 flex items-center justify-center',
+            complete ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-slate-600'
+          )}
+        >
+          {complete && <CheckIcon className="w-4 h-4 text-white" />}
+        </div>
+        <span className={cn('font-medium', complete ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-300')}>
+          Product Groups configured
+        </span>
+      </button>
+    </div>
+  );
+}
+
+// Step 5: Complete
+function Step5({ brands, onReset }: { brands: Brand[]; onReset: () => void }) {
+  return (
+    <div className="text-center py-12">
+      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 mb-6">
+        <CheckIcon className="w-10 h-10 text-green-500" />
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Setup Complete</h2>
+      <p className="text-slate-500 dark:text-slate-400 mb-8">
+        Plutus is ready for {brands.map((b) => b.name).join(' & ')}
+      </p>
+
+      <div className="space-y-3 max-w-xs mx-auto">
+        <Link href="/">
+          <Button className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white">Go to Dashboard</Button>
+        </Link>
+        <Button onClick={onReset} variant="outline" className="w-full">
+          Start Over
         </Button>
       </div>
     </div>
   );
 }
 
-// Main Wizard
+// Main
 export default function SetupPage() {
-  const [state, setState] = useState<WizardState>({
+  const queryClient = useQueryClient();
+
+  const [state, setState] = useState<SetupState>({
     step: 1,
-    qboConnected: false,
-    qboCompanyName: null,
-    lmbSetupAcknowledged: false,
-    brands: DEFAULT_BRANDS.map((name, i) => ({
-      name,
-      marketplace: i === 0 ? 'amazon.co.uk' : 'amazon.com',
-      currency: i === 0 ? 'GBP' : 'USD',
-    })),
-    parentAccountIds: {
-      inventoryAsset: '',
-      manufacturing: '',
-      freightAndDuty: '',
-      landFreight: '',
-      storage3pl: '',
-      mfgAccessories: '',
-      inventoryShrinkage: '',
-      amazonSales: '',
-      amazonRefunds: '',
-      amazonFbaInventoryReimbursement: '',
-      amazonSellerFees: '',
-      amazonFbaFees: '',
-      amazonStorageFees: '',
-      amazonAdvertisingCosts: '',
-      amazonPromotions: '',
-    },
-    parentsVerified: false,
+    lmbComplete: false,
+    brands: [
+      { name: 'US-Dust Sheets', marketplace: 'amazon.com', currency: 'USD' },
+      { name: 'UK-Dust Sheets', marketplace: 'amazon.co.uk', currency: 'GBP' },
+    ],
+    parentAccounts: {},
     accountsCreated: false,
-    accountsCreatedCount: 0,
-    skus: [],
-    lmbProductGroupsChecks: [],
-    billGuidelinesAcknowledged: false,
-    catchUpMode: null,
-    catchUpStartDate: null,
-    qboInitMethod: null,
-    qboInitJeId: null,
-    setupComplete: false,
+    lmbProductGroupsComplete: false,
+    complete: false,
   });
 
+  // Load saved state
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-
-    try {
-      const parsed = JSON.parse(saved);
-      if (typeof parsed === 'object' && parsed !== null) {
-        setState((prev) => ({ ...prev, ...parsed }));
+    if (saved) {
+      try {
+        setState((prev) => ({ ...prev, ...JSON.parse(saved) }));
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
-  const saveState = useCallback((patch: Partial<WizardState>) => {
+  // Save state
+  const saveState = useCallback((patch: Partial<SetupState>) => {
     setState((prev) => {
       const next = { ...prev, ...patch };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -2432,168 +581,151 @@ export default function SetupPage() {
     });
   }, []);
 
-  const setStep = (step: number) => saveState({ step });
-
-  const resetWizard = () => {
+  const reset = () => {
     localStorage.removeItem(STORAGE_KEY);
     setState({
       step: 1,
-      qboConnected: false,
-      qboCompanyName: null,
-      lmbSetupAcknowledged: false,
-      brands: DEFAULT_BRANDS.map((name, i) => ({
-        name,
-        marketplace: i === 0 ? 'amazon.co.uk' : 'amazon.com',
-        currency: i === 0 ? 'GBP' : 'USD',
-      })),
-      parentAccountIds: {
-        inventoryAsset: '',
-        manufacturing: '',
-        freightAndDuty: '',
-        landFreight: '',
-        storage3pl: '',
-        mfgAccessories: '',
-        inventoryShrinkage: '',
-        amazonSales: '',
-        amazonRefunds: '',
-        amazonFbaInventoryReimbursement: '',
-        amazonSellerFees: '',
-        amazonFbaFees: '',
-        amazonStorageFees: '',
-        amazonAdvertisingCosts: '',
-        amazonPromotions: '',
-      },
-      parentsVerified: false,
+      lmbComplete: false,
+      brands: [],
+      parentAccounts: {},
       accountsCreated: false,
-      accountsCreatedCount: 0,
-      skus: [],
-      lmbProductGroupsChecks: [],
-      billGuidelinesAcknowledged: false,
-      catchUpMode: null,
-      catchUpStartDate: null,
-      qboInitMethod: null,
-      qboInitJeId: null,
-      setupComplete: false,
+      lmbProductGroupsComplete: false,
+      complete: false,
     });
   };
 
-  return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <div className="max-w-xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-teal-600 dark:text-slate-400 dark:hover:text-teal-400 mb-4"
-          >
-            ← Back to Plutus
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Plutus Setup Wizard</h1>
-        </div>
+  // Check QBO connection
+  const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
+    queryKey: ['qbo-status'],
+    queryFn: async () => {
+      const res = await fetch(`${basePath}/api/qbo/status`);
+      return res.json() as Promise<{ connected: boolean }>;
+    },
+    staleTime: 30 * 1000,
+  });
 
-        <div className="mb-8">
-          <StepIndicator currentStep={state.step} />
-        </div>
+  // Fetch QBO accounts
+  const { data: accountsData, isLoading: isLoadingAccounts } = useQuery({
+    queryKey: ['qbo-accounts'],
+    queryFn: async () => {
+      const res = await fetch(`${basePath}/api/qbo/accounts`);
+      if (!res.ok) throw new Error('Failed to fetch accounts');
+      return res.json() as Promise<{ accounts: QboAccount[] }>;
+    },
+    enabled: connectionStatus?.connected === true && state.step === 3,
+    staleTime: 5 * 60 * 1000,
+  });
 
-        <Card className="border-slate-200 dark:border-slate-700">
-          <CardContent className="p-6">
-            {state.step === 1 && (
-              <ConnectQboStep
-                connected={state.qboConnected}
-                companyName={state.qboCompanyName}
-                onConnectionChange={(connected, companyName) => {
-                  saveState({ qboConnected: connected, qboCompanyName: companyName });
-                }}
-                onNext={() => {
-                  saveState({ step: 2, qboConnected: true });
-                }}
-              />
-            )}
-            {state.step === 2 && (
-              <VerifyLmbSetupStep
-                acknowledged={state.lmbSetupAcknowledged}
-                onAcknowledge={(val) => saveState({ lmbSetupAcknowledged: val })}
-                onNext={() => setStep(3)}
-                onBack={() => setStep(1)}
-              />
-            )}
-              {state.step === 3 && (
-              <BrandSetupStep
-                brands={state.brands}
-                onBrandsChange={(brands) =>
-                  saveState({
-                    brands,
-                    parentsVerified: false,
-                    accountsCreated: false,
-                    accountsCreatedCount: 0,
-                  })
-                }
-                onNext={() => setStep(4)}
-                onBack={() => setStep(2)}
-              />
-            )}
-              {state.step === 4 && (
-              <AccountSetupStep
-                brands={state.brands}
-                parentAccountIds={state.parentAccountIds}
-                onParentAccountIdsChange={(ids) => saveState({ parentAccountIds: ids })}
-                parentsVerified={state.parentsVerified}
-                accountsCreated={state.accountsCreated}
-                onVerified={() => saveState({ parentsVerified: true })}
-                onAccountsCreated={(count) => saveState({ accountsCreated: true, accountsCreatedCount: count })}
-                onNext={() => setStep(5)}
-                onBack={() => setStep(3)}
-              />
-            )}
-            {state.step === 5 && (
-              <SkuSetupStep
-                skus={state.skus}
-                brands={state.brands}
-                onSkusChange={(skus) => saveState({ skus })}
-                onNext={() => setStep(6)}
-                onBack={() => setStep(4)}
-              />
-            )}
-            {state.step === 6 && (
-              <LmbProductGroupsStep
-                brands={state.brands}
-                checks={state.lmbProductGroupsChecks}
-                onChecksChange={(checks) => saveState({ lmbProductGroupsChecks: checks })}
-                onNext={() => setStep(7)}
-                onBack={() => setStep(5)}
-              />
-            )}
-            {state.step === 7 && (
-              <BillGuidelinesStep
-                acknowledged={state.billGuidelinesAcknowledged}
-                onAcknowledge={(val) => saveState({ billGuidelinesAcknowledged: val })}
-                onNext={() => setStep(8)}
-                onBack={() => setStep(6)}
-              />
-            )}
-            {state.step === 8 && (
-              <CatchUpStep
-                mode={state.catchUpMode}
-                startDate={state.catchUpStartDate}
-                qboInitMethod={state.qboInitMethod}
-                brands={state.brands}
-                onModeChange={(mode) => saveState({ catchUpMode: mode })}
-                onStartDateChange={(date) => saveState({ catchUpStartDate: date })}
-                onQboInitMethodChange={(method) => saveState({ qboInitMethod: method })}
-                onNext={() => setStep(9)}
-                onBack={() => setStep(7)}
-              />
-            )}
-            {state.step === 9 && (
-              <ReviewCompleteStep
-                state={state}
-                onComplete={() => saveState({ setupComplete: true })}
-                onBack={() => setStep(8)}
-                onReset={resetWizard}
-              />
-            )}
-          </CardContent>
-        </Card>
+  const accounts = useMemo(() => accountsData?.accounts || [], [accountsData]);
+
+  // Show loading while checking connection
+  if (isCheckingConnection) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-slate-500">Loading...</div>
       </div>
-    </main>
+    );
+  }
+
+  // Show not connected screen
+  if (!connectionStatus?.connected) {
+    return <NotConnectedScreen title="Setup Wizard" />;
+  }
+
+  const canProceed = () => {
+    switch (state.step) {
+      case 1:
+        return state.lmbComplete;
+      case 2:
+        return state.brands.length > 0;
+      case 3:
+        return state.accountsCreated;
+      case 4:
+        return state.lmbProductGroupsComplete;
+      default:
+        return true;
+    }
+  };
+
+  const nextStep = () => {
+    if (state.step === 4) {
+      saveState({ step: 5, complete: true });
+    } else {
+      saveState({ step: state.step + 1 });
+    }
+  };
+
+  const prevStep = () => {
+    saveState({ step: Math.max(1, state.step - 1) });
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-xl mx-auto px-4 py-8">
+        {/* Header */}
+        <header className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
+            >
+              <ArrowLeftIcon className="w-4 h-4" />
+            </Link>
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Setup</h1>
+          </div>
+          {!state.complete && <StepIndicator current={state.step} total={4} />}
+        </header>
+
+        {/* Content */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
+          {state.step === 1 && (
+            <Step1 complete={state.lmbComplete} onComplete={() => saveState({ lmbComplete: !state.lmbComplete })} />
+          )}
+          {state.step === 2 && (
+            <Step2
+              brands={state.brands}
+              onBrandsChange={(brands) => saveState({ brands, accountsCreated: false })}
+            />
+          )}
+          {state.step === 3 && (
+            <Step3
+              accounts={accounts}
+              parentAccounts={state.parentAccounts}
+              onParentAccountsChange={(parentAccounts) => saveState({ parentAccounts })}
+              brands={state.brands}
+              onAccountsCreated={() => saveState({ accountsCreated: true })}
+              accountsCreated={state.accountsCreated}
+              isLoadingAccounts={isLoadingAccounts}
+            />
+          )}
+          {state.step === 4 && (
+            <Step4
+              complete={state.lmbProductGroupsComplete}
+              onComplete={() => saveState({ lmbProductGroupsComplete: !state.lmbProductGroupsComplete })}
+              brands={state.brands}
+            />
+          )}
+          {state.step === 5 && <Step5 brands={state.brands} onReset={reset} />}
+        </div>
+
+        {/* Navigation */}
+        {!state.complete && (
+          <div className="flex gap-3 mt-6">
+            {state.step > 1 && (
+              <Button onClick={prevStep} variant="outline" className="flex-1">
+                Back
+              </Button>
+            )}
+            <Button
+              onClick={nextStep}
+              disabled={!canProceed()}
+              className="flex-1 bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
+            >
+              {state.step === 4 ? 'Complete' : 'Continue'}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

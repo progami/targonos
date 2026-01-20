@@ -46,16 +46,28 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get('file');
   const mappingRaw = formData.get('mapping');
+  const mappingFile = formData.get('mappingFile');
+  const invoiceRaw = formData.get('invoice');
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'Missing file' }, { status: 400 });
   }
 
-  if (typeof mappingRaw !== 'string') {
-    return NextResponse.json({ error: 'Missing mapping' }, { status: 400 });
+  let mapping: BrandMapInput;
+
+  if (mappingFile instanceof File) {
+    const { parseSkuBrandMappingCsv } = await import('@/lib/sku-brand-mapping');
+    const text = await mappingFile.text();
+    const parsed = parseSkuBrandMappingCsv(text);
+    mapping = { skus: parsed.rows };
+  } else {
+    if (typeof mappingRaw !== 'string') {
+      return NextResponse.json({ error: 'Missing mapping' }, { status: 400 });
+    }
+
+    mapping = JSON.parse(mappingRaw) as BrandMapInput;
   }
 
-  const mapping = JSON.parse(mappingRaw) as BrandMapInput;
   const brandMap = makeBrandMap(mapping);
 
   const fileName = file.name.toLowerCase();
@@ -94,17 +106,36 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (invoiceGroups.size !== 1) {
-    return NextResponse.json(
-      {
-        error: 'CSV must contain exactly one Invoice for v1 allocation',
-        invoices: Array.from(invoiceGroups.keys()),
-      },
-      { status: 400 },
-    );
+  const requestedInvoice = typeof invoiceRaw === 'string' ? invoiceRaw.trim() : '';
+
+  let rows: typeof parsed.rows;
+
+  if (requestedInvoice !== '') {
+    const group = invoiceGroups.get(requestedInvoice);
+    if (!group) {
+      return NextResponse.json(
+        {
+          error: 'Invoice not found in uploaded audit file',
+          invoices: Array.from(invoiceGroups.keys()),
+        },
+        { status: 400 },
+      );
+    }
+    rows = group;
+  } else {
+    if (invoiceGroups.size !== 1) {
+      return NextResponse.json(
+        {
+          error: 'Audit file contains multiple Invoices. Select one.',
+          invoices: Array.from(invoiceGroups.keys()),
+        },
+        { status: 400 },
+      );
+    }
+
+    rows = Array.from(invoiceGroups.values())[0];
   }
 
-  const rows = Array.from(invoiceGroups.values())[0];
   const allocation = computeFeeAllocation(rows, brandMap);
 
   return NextResponse.json({ allocation });
