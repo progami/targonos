@@ -28,6 +28,11 @@ const allowedFields = [
   'overrideFbaFee',
   'overrideReferralRate',
   'overrideStoragePerMonth',
+  'cartonSide1Cm',
+  'cartonSide2Cm',
+  'cartonSide3Cm',
+  'cartonWeightKg',
+  'unitsPerCarton',
 ] as const;
 
 const percentFields: Record<string, true> = {
@@ -43,6 +48,14 @@ const decimalFields: Record<string, true> = {
   overrideTariffCost: true,
   overrideFbaFee: true,
   overrideStoragePerMonth: true,
+  cartonSide1Cm: true,
+  cartonSide2Cm: true,
+  cartonSide3Cm: true,
+  cartonWeightKg: true,
+};
+
+const integerFields: Record<string, true> = {
+  unitsPerCarton: true,
 };
 
 function parseNumber(value: string | null | undefined) {
@@ -267,6 +280,9 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
         }
       } else if (decimalFields[field]) {
         data[field] = parseNumber(incoming);
+      } else if (integerFields[field]) {
+        const parsedInt = parseNumber(incoming);
+        data[field] = parsedInt != null ? Math.max(0, Math.round(parsedInt)) : null;
       } else if (field === 'productId' || field === 'batchCode') {
         data[field] = incoming;
       }

@@ -792,7 +792,7 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
         purchaseOrderDelegate,
         {
           where: { strategyId },
-          orderBy: { orderCode: 'asc' },
+          orderBy: [{ poDate: 'asc' }, { orderCode: 'asc' }],
           include: {
             payments: { orderBy: { paymentIndex: 'asc' } },
           },
@@ -1502,6 +1502,12 @@ async function getOpsPlanningView(
         storagePerMonth: formatNumeric(
           batch.overrideStoragePerMonth ?? order.overrideStoragePerMonth ?? null,
         ),
+        // Carton dimensions for CBM - cast to any to handle optional fields
+        cartonSide1Cm: formatNumeric((batch as any).cartonSide1Cm ?? null, 2),
+        cartonSide2Cm: formatNumeric((batch as any).cartonSide2Cm ?? null, 2),
+        cartonSide3Cm: formatNumeric((batch as any).cartonSide3Cm ?? null, 2),
+        cartonWeightKg: formatNumeric((batch as any).cartonWeightKg ?? null, 3),
+        unitsPerCarton: formatNumeric(toNumberSafe((batch as any).unitsPerCarton), 0),
       }));
     });
 

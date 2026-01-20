@@ -100,14 +100,14 @@ const NUMERIC_PRECISION: Partial<Record<keyof OpsInputRow, number>> = {
   sourceWeeks: 2,
   oceanWeeks: 2,
   finalWeeks: 2,
-  sellingPrice: 2,
-  manufacturingCost: 2,
-  freightCost: 2,
+  sellingPrice: 3,
+  manufacturingCost: 3,
+  freightCost: 3,
   tariffRate: 2,
   tacosPercent: 2,
-  fbaFee: 2,
+  fbaFee: 3,
   referralRate: 2,
-  storagePerMonth: 2,
+  storagePerMonth: 3,
 };
 
 const NUMERIC_FIELDS = new Set<keyof OpsInputRow>([
@@ -2281,7 +2281,7 @@ export function CustomOpsPlanningGrid({
           onKeyDown={handleTableKeyDown}
           onCopy={handleCopy}
           onPaste={handlePaste}
-          className="max-h-[400px] overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <Table className="table-fixed border-collapse">
             <TableHeader>

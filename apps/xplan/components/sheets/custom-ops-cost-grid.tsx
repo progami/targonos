@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useMutationQueue } from '@/hooks/useMutationQueue';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { usePersistentScroll } from '@/hooks/usePersistentScroll';
+import { useGridUndoRedo, type CellEdit } from '@/hooks/useGridUndoRedo';
 import { cn } from '@/lib/utils';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
 import {
@@ -49,6 +50,14 @@ export type OpsBatchRow = {
   fbaFee: string;
   referralRate: string;
   storagePerMonth: string;
+  // Carton dimensions for CBM
+  cartonSide1Cm: string;
+  cartonSide2Cm: string;
+  cartonSide3Cm: string;
+  cartonWeightKg: string;
+  unitsPerCarton: string;
+  // Computed fields
+  cbm?: string;
   grossProfit?: string;
   netProfit?: string;
 };
@@ -77,17 +86,27 @@ const NUMERIC_FIELDS = [
   'tariffCost',
   'fbaFee',
   'storagePerMonth',
+  'cartonSide1Cm',
+  'cartonSide2Cm',
+  'cartonSide3Cm',
+  'cartonWeightKg',
+  'unitsPerCarton',
 ] as const;
 type NumericField = (typeof NUMERIC_FIELDS)[number];
 
 const NUMERIC_PRECISION: Record<NumericField, number> = {
   quantity: 0,
-  sellingPrice: 2,
+  sellingPrice: 3,
   manufacturingCost: 3,
   freightCost: 3,
   tariffCost: 3,
   fbaFee: 3,
   storagePerMonth: 3,
+  cartonSide1Cm: 2,
+  cartonSide2Cm: 2,
+  cartonSide3Cm: 2,
+  cartonWeightKg: 3,
+  unitsPerCarton: 0,
 };
 
 const PERCENT_FIELDS = ['tariffRate', 'tacosPercent', 'referralRate'] as const;
@@ -113,6 +132,11 @@ const SERVER_FIELD_MAP: Partial<Record<keyof OpsBatchRow, string>> = {
   fbaFee: 'overrideFbaFee',
   referralRate: 'overrideReferralRate',
   storagePerMonth: 'overrideStoragePerMonth',
+  cartonSide1Cm: 'cartonSide1Cm',
+  cartonSide2Cm: 'cartonSide2Cm',
+  cartonSide3Cm: 'cartonSide3Cm',
+  cartonWeightKg: 'cartonWeightKg',
+  unitsPerCarton: 'unitsPerCarton',
 };
 
 function isNumericField(field: keyof OpsBatchRow): field is NumericField {
@@ -174,7 +198,7 @@ const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
     width: 120,
     type: 'numeric',
     editable: true,
-    precision: 2,
+    precision: 3,
   },
   {
     key: 'manufacturingCost',
@@ -239,6 +263,72 @@ const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
     precision: 3,
   },
 ];
+
+// Carton dimensions are editable but displayed in the CBM column
+const CBM_COLUMNS: ColumnDef[] = [
+  {
+    key: 'unitsPerCarton',
+    header: 'Units/Ctn',
+    width: 100,
+    type: 'numeric',
+    editable: true,
+    precision: 0,
+  },
+  {
+    key: 'cartonSide1Cm',
+    header: 'L (cm)',
+    width: 85,
+    type: 'numeric',
+    editable: true,
+    precision: 2,
+  },
+  {
+    key: 'cartonSide2Cm',
+    header: 'W (cm)',
+    width: 85,
+    type: 'numeric',
+    editable: true,
+    precision: 2,
+  },
+  {
+    key: 'cartonSide3Cm',
+    header: 'H (cm)',
+    width: 85,
+    type: 'numeric',
+    editable: true,
+    precision: 2,
+  },
+];
+
+/**
+ * Compute total CBM for a batch row.
+ * Formula: (side1 * side2 * side3) / 1,000,000 * (quantity / unitsPerCarton)
+ */
+function computeCbm(row: OpsBatchRow): number | null {
+  const side1 = sanitizeNumeric(row.cartonSide1Cm);
+  const side2 = sanitizeNumeric(row.cartonSide2Cm);
+  const side3 = sanitizeNumeric(row.cartonSide3Cm);
+  const unitsPerCarton = sanitizeNumeric(row.unitsPerCarton);
+  const quantity = sanitizeNumeric(row.quantity);
+
+  if (
+    Number.isNaN(side1) ||
+    Number.isNaN(side2) ||
+    Number.isNaN(side3) ||
+    Number.isNaN(unitsPerCarton) ||
+    Number.isNaN(quantity) ||
+    side1 <= 0 ||
+    side2 <= 0 ||
+    side3 <= 0 ||
+    unitsPerCarton <= 0
+  ) {
+    return null;
+  }
+
+  const cbmPerCarton = (side1 * side2 * side3) / 1_000_000;
+  const totalCartons = Math.ceil(quantity / unitsPerCarton);
+  return cbmPerCarton * totalCartons;
+}
 
 type TariffInputMode = 'rate' | 'cost';
 type ProfitDisplayMode = 'unit' | 'total' | 'percent';
@@ -350,7 +440,18 @@ export function CustomOpsCostGrid({
               },
             ];
 
-    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...profitColumns];
+    // Add computed CBM column
+    const cbmColumn: ColumnDef = {
+      key: 'cbm',
+      header: 'CBM',
+      width: 90,
+      type: 'numeric',
+      editable: false,
+      precision: 3,
+      computed: true,
+    };
+
+    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...CBM_COLUMNS, cbmColumn, ...profitColumns];
   }, [profitDisplayMode, tariffInputMode]);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
@@ -434,6 +535,39 @@ export function CustomOpsCostGrid({
   >({
     debounceMs: 500,
     onFlush: handleFlush,
+  });
+
+  // Undo/redo functionality
+  const applyUndoRedoEdits = useCallback(
+    (edits: CellEdit<string>[]) => {
+      let updatedRows = [...localRows];
+      for (const edit of edits) {
+        const rowIndex = updatedRows.findIndex((r) => r.id === edit.rowKey);
+        if (rowIndex < 0) continue;
+        updatedRows[rowIndex] = { ...updatedRows[rowIndex], [edit.field]: edit.newValue };
+
+        // Queue for API update
+        if (!pendingRef.current.has(edit.rowKey)) {
+          pendingRef.current.set(edit.rowKey, { id: edit.rowKey, values: {} });
+        }
+        const entry = pendingRef.current.get(edit.rowKey)!;
+        const serverKey = SERVER_FIELD_MAP[edit.field as keyof OpsBatchRow];
+        if (serverKey) {
+          entry.values[serverKey] = edit.newValue === '' ? null : edit.newValue;
+        } else if (edit.field === 'productId') {
+          entry.values.productId = edit.newValue;
+        }
+      }
+      setLocalRows(updatedRows);
+      onRowsChange?.(updatedRows);
+      scheduleFlush();
+    },
+    [localRows, pendingRef, scheduleFlush, onRowsChange],
+  );
+
+  const { recordEdits, undo, redo } = useGridUndoRedo<string>({
+    maxHistory: 50,
+    onApplyEdits: applyUndoRedoEdits,
   });
 
   const flushNowRef = useRef(flushNow);
@@ -578,6 +712,36 @@ export function CustomOpsCostGrid({
         updatedRow[colKey] = finalValue;
       }
 
+      // Record edits for undo/redo
+      const undoEdits: CellEdit<string>[] = [];
+      if (colKey === 'productName') {
+        const selected = products.find((p) => p.name === finalValue);
+        if (selected) {
+          undoEdits.push({
+            rowKey: rowId,
+            field: 'productId',
+            oldValue: row.productId,
+            newValue: selected.id,
+          });
+          undoEdits.push({
+            rowKey: rowId,
+            field: 'productName',
+            oldValue: row.productName,
+            newValue: selected.name,
+          });
+        }
+      } else {
+        undoEdits.push({
+          rowKey: rowId,
+          field: colKey,
+          oldValue: row[colKey] ?? '',
+          newValue: finalValue,
+        });
+      }
+      if (undoEdits.length > 0) {
+        recordEdits(undoEdits);
+      }
+
       // Update rows
       const updatedRows = localRows.map((r) => (r.id === rowId ? updatedRow : r));
       setLocalRows(updatedRows);
@@ -596,6 +760,7 @@ export function CustomOpsCostGrid({
       onRowsChange,
       columns,
       cancelEditing,
+      recordEdits,
     ],
   );
 
@@ -831,6 +996,7 @@ export function CustomOpsCostGrid({
     const { top, bottom, left, right } = normalizeRange(resolvedRange);
     let updatedRows = [...localRows];
     let cleared = 0;
+    const undoEdits: CellEdit<string>[] = [];
 
     for (let rowIndex = top; rowIndex <= bottom; rowIndex += 1) {
       const row = updatedRows[rowIndex];
@@ -856,6 +1022,7 @@ export function CustomOpsCostGrid({
         if (colKey === 'tariffCost') {
           entry.values.overrideTariffCost = null;
           entry.values.overrideTariffRate = null;
+          undoEdits.push({ rowKey: row.id, field: 'tariffCost', oldValue: updatedRow.tariffCost, newValue: '' });
           updatedRow = { ...updatedRow, tariffCost: '', tariffRate: '' };
           rowChanged = true;
           cleared += 1;
@@ -865,6 +1032,7 @@ export function CustomOpsCostGrid({
         if (colKey === 'tariffRate') {
           entry.values.overrideTariffRate = null;
           entry.values.overrideTariffCost = null;
+          undoEdits.push({ rowKey: row.id, field: 'tariffRate', oldValue: updatedRow.tariffRate, newValue: '' });
           updatedRow = { ...updatedRow, tariffRate: '', tariffCost: '' };
           rowChanged = true;
           cleared += 1;
@@ -876,6 +1044,7 @@ export function CustomOpsCostGrid({
           if (serverKey) {
             entry.values[serverKey] = null;
           }
+          undoEdits.push({ rowKey: row.id, field: colKey, oldValue: updatedRow[colKey] ?? '', newValue: '' });
           updatedRow = { ...updatedRow, [colKey]: '' };
           rowChanged = true;
           cleared += 1;
@@ -889,10 +1058,14 @@ export function CustomOpsCostGrid({
 
     if (cleared === 0) return;
 
+    if (undoEdits.length > 0) {
+      recordEdits(undoEdits);
+    }
+
     setLocalRows(updatedRows);
     onRowsChange?.(updatedRows);
     scheduleFlush();
-  }, [activeCell, columns, localRows, onRowsChange, pendingRef, scheduleFlush, selection]);
+  }, [activeCell, columns, localRows, onRowsChange, pendingRef, scheduleFlush, selection, recordEdits]);
 
   const applyPastedText = useCallback(
     (text: string, start: { rowId: string; colKey: keyof OpsBatchRow }) => {
@@ -912,6 +1085,7 @@ export function CustomOpsCostGrid({
       let updatedRows = [...localRows];
       let applied = 0;
       let skipped = 0;
+      const undoEdits: CellEdit<string>[] = [];
 
       for (let r = 0; r < matrix.length; r += 1) {
         for (let c = 0; c < matrix[r]!.length; c += 1) {
@@ -968,22 +1142,27 @@ export function CustomOpsCostGrid({
             entry.values.productId = selected.id;
             nextRow.productId = selected.id;
             nextRow.productName = selected.name;
+            undoEdits.push({ rowKey: row.id, field: 'productId', oldValue: row.productId, newValue: selected.id });
+            undoEdits.push({ rowKey: row.id, field: 'productName', oldValue: row.productName, newValue: selected.name });
           } else if (column.key === 'tariffCost') {
             entry.values.overrideTariffCost = finalValue === '' ? null : finalValue;
             entry.values.overrideTariffRate = null;
             nextRow.tariffCost = finalValue;
             nextRow.tariffRate = '';
+            undoEdits.push({ rowKey: row.id, field: 'tariffCost', oldValue: row.tariffCost, newValue: finalValue });
           } else if (column.key === 'tariffRate') {
             entry.values.overrideTariffRate = finalValue === '' ? null : finalValue;
             entry.values.overrideTariffCost = null;
             nextRow.tariffRate = finalValue;
             nextRow.tariffCost = '';
+            undoEdits.push({ rowKey: row.id, field: 'tariffRate', oldValue: row.tariffRate, newValue: finalValue });
           } else if (isNumericField(column.key) || isPercentField(column.key)) {
             const serverKey = SERVER_FIELD_MAP[column.key];
             if (serverKey) {
               entry.values[serverKey] = finalValue === '' ? null : finalValue;
             }
             nextRow[column.key] = finalValue;
+            undoEdits.push({ rowKey: row.id, field: column.key, oldValue: row[column.key] ?? '', newValue: finalValue });
           }
 
           updatedRows[targetRowIndex] = nextRow;
@@ -992,6 +1171,10 @@ export function CustomOpsCostGrid({
       }
 
       if (applied === 0) return;
+
+      if (undoEdits.length > 0) {
+        recordEdits(undoEdits);
+      }
 
       setLocalRows(updatedRows);
       onRowsChange?.(updatedRows);
@@ -1004,7 +1187,7 @@ export function CustomOpsCostGrid({
         });
       }
     },
-    [columns, localRows, onRowsChange, pendingRef, products, scheduleFlush],
+    [columns, localRows, onRowsChange, pendingRef, products, scheduleFlush, recordEdits],
   );
 
   const handleCopy = useCallback(
@@ -1101,6 +1284,25 @@ export function CustomOpsCostGrid({
       preventDefault: () => void;
     }) => {
       if (editingCell) return;
+
+      // Handle Ctrl+Z for undo and Ctrl+Shift+Z / Ctrl+Y for redo (even without active cell)
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      // Handle Ctrl+Y for redo (Windows convention)
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
       if (!activeCell) return;
 
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'c') {
@@ -1194,6 +1396,8 @@ export function CustomOpsCostGrid({
       moveSelectionTab,
       startEditing,
       startEditingActiveCell,
+      undo,
+      redo,
     ],
   );
 
@@ -1285,13 +1489,29 @@ export function CustomOpsCostGrid({
       return formatter.format(raw);
     }
 
+    // Handle computed CBM column
+    if (column.key === 'cbm') {
+      const cbm = computeCbm(row);
+      if (cbm === null) return '-';
+      return cbm.toFixed(column.precision ?? 3);
+    }
+
     const value = row[column.key];
     if (!value) return '';
 
     if (column.type === 'numeric') {
       const num = sanitizeNumeric(value);
       if (Number.isNaN(num)) return value;
-      if (column.key === 'quantity') return num.toLocaleString();
+      // Don't show $ prefix for quantity or carton dimension fields
+      if (column.key === 'quantity' || column.key === 'unitsPerCarton') return num.toLocaleString();
+      if (
+        column.key === 'cartonSide1Cm' ||
+        column.key === 'cartonSide2Cm' ||
+        column.key === 'cartonSide3Cm' ||
+        column.key === 'cartonWeightKg'
+      ) {
+        return num.toFixed(column.precision ?? 2);
+      }
       return `$${num.toFixed(column.precision ?? 2)}`;
     }
 
@@ -1544,7 +1764,7 @@ export function CustomOpsCostGrid({
           onKeyDown={handleTableKeyDown}
           onCopy={handleCopy}
           onPaste={handlePaste}
-          className="max-h-[400px] overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <Table className="table-fixed border-collapse">
             <TableHeader>
