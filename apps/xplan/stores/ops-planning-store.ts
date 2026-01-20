@@ -51,7 +51,6 @@ interface OpsPlanningState {
   // ---------------------------------------------------------------------------
   isCreateOrderOpen: boolean;
   isImportOrderOpen: boolean;
-  cartonModalRowId: string | null;
 
   // ---------------------------------------------------------------------------
   // Selection Actions
@@ -86,7 +85,6 @@ interface OpsPlanningState {
   closeCreateOrder: () => void;
   openImportOrder: () => void;
   closeImportOrder: () => void;
-  setCartonModalRowId: (id: string | null) => void;
 }
 
 // ============================================================================
@@ -110,7 +108,6 @@ export const useOpsPlanningStore = create<OpsPlanningState>()(
         maxHistory: 50,
         isCreateOrderOpen: false,
         isImportOrderOpen: false,
-        cartonModalRowId: null,
 
         // ---------------------------------------------------------------------
         // Selection Actions
@@ -236,8 +233,6 @@ export const useOpsPlanningStore = create<OpsPlanningState>()(
         openImportOrder: () => set({ isImportOrderOpen: true }, false, 'openImportOrder'),
 
         closeImportOrder: () => set({ isImportOrderOpen: false }, false, 'closeImportOrder'),
-
-        setCartonModalRowId: (id) => set({ cartonModalRowId: id }, false, 'setCartonModalRowId'),
       }),
       {
         name: 'xplan-ops-planning',
@@ -264,4 +259,3 @@ export const useTariffInputMode = () => useOpsPlanningStore((s) => s.tariffInput
 export const useStageMode = () => useOpsPlanningStore((s) => s.stageMode);
 export const useIsCreateOrderOpen = () => useOpsPlanningStore((s) => s.isCreateOrderOpen);
 export const useIsImportOrderOpen = () => useOpsPlanningStore((s) => s.isImportOrderOpen);
-export const useCartonModalRowId = () => useOpsPlanningStore((s) => s.cartonModalRowId);
