@@ -9,7 +9,13 @@ export function Container({
   children: ReactNode;
 }) {
   return (
-    <div className={cn('mx-auto w-full max-w-6xl px-5 md:px-8', className)}>
+    <div
+      className={cn(
+        // Apple-like: generous max width with comfortable side padding.
+        'mx-auto w-full max-w-[1680px] px-5 md:px-10 lg:px-12',
+        className
+      )}
+    >
       {children}
     </div>
   );

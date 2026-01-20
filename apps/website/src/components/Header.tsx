@@ -1,94 +1,107 @@
-import Image from 'next/image';
+'use client';
+
 import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
-import { cn } from '@/lib/utils';
 
-const navLinks: Array<{ href: string; label: string }> = [
-  { href: '/products', label: 'Products' },
-  { href: '/about', label: 'About' },
-  { href: '/support', label: 'Support' },
-  { href: '/where-to-buy', label: 'Where to buy' }
+const navLinks = [
+  { label: 'Packs', href: '/products' },
+  { label: 'Where to buy', href: '/where-to-buy' },
+  { label: 'Support', href: '/support' },
+  { label: 'About', href: '/about' }
 ];
 
 export function Header() {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile menu on navigation.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-bg/80 backdrop-blur">
       <Container className="flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-3" aria-label={`${site.name} home`}>
-          <Image src="/brand/logo.svg" alt={site.name} width={124} height={32} priority />
+        <Link href="/" className="flex items-center gap-3 font-semibold tracking-tightish">
+          <Image src="/brand/logo.svg" alt={`${site.name} logo`} width={32} height={32} priority />
+          <span className="hidden text-sm text-ink sm:inline">{site.name}</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-sm font-semibold text-ink/80 md:flex">
-          {navLinks.slice(0, 3).map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="transition hover:text-ink"
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav className="hidden items-center gap-6 md:flex">
+          {navLinks.map((l) => {
+            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={cn(
+                  'text-sm font-semibold text-muted transition hover:text-ink',
+                  active && 'text-ink'
+                )}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/where-to-buy">Where to buy</Link>
-          </Button>
-
-          <Button asChild variant="primary" size="sm">
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
             <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-              Buy on Amazon <ArrowUpRight className="h-4 w-4" />
+              Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
             </a>
           </Button>
-        </div>
+          <Button asChild size="sm" className="sm:hidden">
+            <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+              Buy <ArrowUpRight className="h-4 w-4" />
+            </a>
+          </Button>
 
-        {/* Mobile */}
-        <details className="relative md:hidden">
-          <summary
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
             className={cn(
-              'list-none rounded-pill p-2 transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              '[&::-webkit-details-marker]:hidden'
+              'inline-flex h-10 w-10 items-center justify-center rounded-pill border border-border bg-surface text-ink shadow-softer transition hover:bg-bg md:hidden',
+              mobileOpen && 'bg-bg'
             )}
-            aria-label="Open menu"
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
           >
-            <span className="inline-flex items-center justify-center">
-              <Menu className="h-5 w-5 text-ink" />
-              <X className="hidden h-5 w-5 text-ink" />
-            </span>
-          </summary>
-
-          <div className="absolute right-0 mt-3 w-[min(320px,calc(100vw-2rem))] rounded-card border border-border bg-surface p-3 shadow-soft">
-            <div className="flex flex-col gap-1">
-              {navLinks.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-pill px-3 py-2 text-sm font-semibold text-ink hover:bg-bg"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              <Button asChild variant="accent">
-                <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-                  Buy on Amazon <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          </div>
-        </details>
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
+        </div>
       </Container>
 
-      {/* tiny script-free toggle: swap icons when open */}
-      <style>{`
-        details[open] summary .lucide-menu { display: none; }
-        details[open] summary .lucide-x { display: block; }
-      `}</style>
+      {mobileOpen ? (
+        <div className="border-t border-border bg-bg/95 backdrop-blur md:hidden">
+          <Container className="py-4">
+            <div className="grid gap-2">
+              {navLinks.map((l) => {
+                const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className={cn(
+                      'rounded-pill px-4 py-3 text-sm font-semibold text-muted hover:bg-surface hover:text-ink',
+                      active && 'bg-surface text-ink'
+                    )}
+                  >
+                    {l.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </Container>
+        </div>
+      ) : null}
     </header>
   );
 }
