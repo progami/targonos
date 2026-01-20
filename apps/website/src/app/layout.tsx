@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
 import './globals.css';
 import { site } from '@/content/site';
 import { Header } from '@/components/Header';
@@ -17,21 +16,19 @@ export const metadata: Metadata = {
     description: site.description,
     url: `https://${site.domain}`,
     siteName: site.name,
-    locale: 'en_US',
+    locale: 'en_GB',
     type: 'website'
   },
-  alternates: {
-    canonical: `https://${site.domain}`
+  icons: {
+    icon: '/favicon.ico'
   }
 };
 
-export const viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  themeColor: '#F5F5F5'
-};
-
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>

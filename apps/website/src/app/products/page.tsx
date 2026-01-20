@@ -1,9 +1,14 @@
+import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 import { Container } from '@/components/Container';
 import { ProductCard } from '@/components/ProductCard';
+import { Card } from '@/components/Card';
+import { Button } from '@/components/Button';
 import { products } from '@/content/products';
+import { site } from '@/content/site';
 
 export const metadata = {
-  title: 'Products'
+  title: 'Packs'
 };
 
 export default function ProductsPage() {
@@ -11,10 +16,8 @@ export default function ProductsPage() {
     <div>
       <section className="pt-14 md:pt-20">
         <Container>
-          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Products</h1>
-          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">
-            A focused lineup with clear differences. Choose the tier that matches your work style and coverage needs.
-          </p>
+          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Packs.</h1>
+          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Pick a size. Buy on Amazon.</p>
         </Container>
       </section>
 
@@ -24,6 +27,81 @@ export default function ProductsPage() {
             {products.map((p) => (
               <ProductCard key={p.slug} product={p} />
             ))}
+          </div>
+        </Container>
+      </section>
+
+      <section className="mt-16 md:mt-20">
+        <Container>
+          <div className="grid gap-10 md:grid-cols-12">
+            <div className="md:col-span-4">
+              <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Compare</h2>
+              <p className="mt-3 text-sm text-muted">
+                Quick view of the differences. Pricing and availability are always live on Amazon.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button asChild variant="outline">
+                  <Link href="/where-to-buy">Where to buy</Link>
+                </Button>
+                <Button asChild variant="primary">
+                  <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+                    View on Amazon <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            <div className="md:col-span-8">
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[720px] w-full text-left">
+                    <thead className="bg-surface">
+                      <tr className="border-b border-border">
+                        <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                          Pack
+                        </th>
+                        <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                          Thickness
+                        </th>
+                        <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                          Coverage
+                        </th>
+                        <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                          Price
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products.map((p) => (
+                        <tr key={p.slug} className="border-b border-border last:border-b-0">
+                          <td className="px-5 py-4">
+                            <div className="text-sm font-semibold text-ink">{p.name}</div>
+                            <div className="mt-1 text-xs text-muted">{p.packLabel}</div>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-ink">{p.thicknessLabel}</td>
+                          <td className="px-5 py-4 text-sm text-muted">
+                            {p.coverageLabel ? p.coverageLabel : '—'}
+                            <div className="mt-1 text-xs text-muted">
+                              {p.primary
+                                ? 'Recommended for most homes'
+                                : p.slug.startsWith('12pk')
+                                ? 'Multi‑room jobs'
+                                : p.slug.startsWith('3pk')
+                                ? 'Everyday prep'
+                                : 'Quick protection'}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-sm font-semibold text-ink">{p.price ?? 'See Amazon'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+              <div className="mt-3 text-xs text-muted">
+                Sheet size is the same across packs: 3.6m × 2.7m (12ft × 9ft) each.
+              </div>
+            </div>
           </div>
         </Container>
       </section>

@@ -1,7 +1,7 @@
-import Link from 'next/link';
+import Image from 'next/image';
 import { Container } from '@/components/Container';
 import { Card } from '@/components/Card';
-import { Button } from '@/components/Button';
+import { site } from '@/content/site';
 
 export const metadata = {
   title: 'About'
@@ -12,59 +12,62 @@ export default function AboutPage() {
     <div>
       <section className="pt-14 md:pt-20">
         <Container>
-          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">
-            Make the simplest choice the best one.
-          </h1>
-          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">
-            Targon Global builds sustainable protection products that feel premium, perform in real-world use, and stay out of the landfill longer.
-          </p>
+          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">About.</h1>
+          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">{site.name} builds protection products for decorating.</p>
         </Container>
       </section>
 
       <section className="mt-12">
         <Container>
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card className="p-6">
-              <div className="text-sm font-semibold text-ink">Design</div>
-              <p className="mt-2 text-sm text-muted">
-                A clean lineup, clear differences, and product pages that answer questions fast.
-              </p>
-            </Card>
-            <Card className="p-6">
-              <div className="text-sm font-semibold text-ink">Materials</div>
-              <p className="mt-2 text-sm text-muted">
-                Recycled cotton blends reinforced with recycled plastic fibers — tuned for durability and repeat use.
-              </p>
-            </Card>
-            <Card className="p-6">
-              <div className="text-sm font-semibold text-ink">Execution</div>
-              <p className="mt-2 text-sm text-muted">
-                We obsess over the small things: grip, edge control, foldability, and consistency.
-              </p>
-            </Card>
-          </div>
-        </Container>
-      </section>
+          <div className="grid gap-6 md:grid-cols-12 md:items-start">
+            <div className="md:col-span-7">
+              <Card className="p-8">
+                <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Built for clean work.</h2>
+                <div className="mt-5 space-y-3 text-sm text-muted md:text-base">
+                  <p>Big coverage. Simple choices. Clear details.</p>
+                  <p>We focus on extra-large dust sheets designed for fast setup and easy cleanup.</p>
+                  <p>Checkout stays on Amazon for shipping and returns.</p>
+                </div>
+              </Card>
 
-      <section className="mt-20">
-        <Container>
-          <div className="rounded-card border border-border bg-surface p-8 shadow-softer md:p-12">
-            <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">What we believe</h2>
-            <div className="mt-5 space-y-4 text-sm text-muted md:text-base">
-              <p>
-                Sustainability should not feel like a compromise. Our goal is to build products that people choose because they’re simply better — and happen to be made with recycled materials.
-              </p>
-              <p>
-                If you want to adjust this story (certifications, supply chain specifics, testing standards), update this page’s copy and the product specs.
-              </p>
+              <div className="mt-6 grid gap-6 md:grid-cols-2">
+                <Card className="p-6">
+                  <div className="text-sm font-semibold text-ink">What we care about</div>
+                  <div className="mt-4 space-y-2 text-sm text-muted">
+                    <p>Coverage that’s actually extra-large.</p>
+                    <p>Details that are easy to understand.</p>
+                    <p>Support that replies.</p>
+                  </div>
+                </Card>
+                <Card className="p-6">
+                  <div className="text-sm font-semibold text-ink">Need help?</div>
+                  <p className="mt-2 text-sm text-muted">Email us anytime.</p>
+                  <p className="mt-4 text-sm">
+                    <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>
+                      {site.contactEmail}
+                    </a>
+                  </p>
+                </Card>
+              </div>
             </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild>
-                <Link href="/products">Explore products</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/support">Support</Link>
-              </Button>
+
+            <div className="md:col-span-5">
+              <Card className="overflow-hidden">
+                <div className="relative aspect-[4/5]">
+                  <Image
+                    src="/images/unsplash/painting-setup.webp"
+                    alt="Decorating setup"
+                    fill
+                    className="object-cover"
+                    sizes="(min-width: 768px) 520px, 100vw"
+                  />
+                </div>
+              </Card>
+
+              <Card className="mt-6 p-6">
+                <div className="text-sm font-semibold text-ink">Sales channels</div>
+                <p className="mt-2 text-sm text-muted">We sell on Amazon. Pricing and availability stay live there.</p>
+              </Card>
             </div>
           </div>
         </Container>

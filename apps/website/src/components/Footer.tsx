@@ -3,8 +3,8 @@ import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 
 const footerLinks = {
-  Products: [
-    { label: 'All products', href: '/products' },
+  Packs: [
+    { label: 'Compare packs', href: '/products' },
     { label: 'Where to buy', href: '/where-to-buy' }
   ],
   Company: [
@@ -27,7 +27,7 @@ export function Footer() {
           <div className="md:col-span-5">
             <div className="text-base font-semibold tracking-tightish">{site.name}</div>
             <p className="mt-3 max-w-md text-sm text-muted">
-              Sustainable protection products designed for clean work. Built with recycled materials and obsessive attention to detail.
+              Extra-large dust sheets built for clean decorating. Checkout stays on Amazon.
             </p>
             <p className="mt-4 text-sm text-muted">
               Contact: <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>
@@ -54,7 +54,7 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col gap-2 border-t border-border pt-6 text-xs text-muted md:flex-row md:items-center md:justify-between">
           <div>© {year} {site.name}. All rights reserved.</div>
-          <div>Built for performance, accessibility, and clarity.</div>
+          <div>Support: <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a></div>
         </div>
       </Container>
     </footer>
