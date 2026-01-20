@@ -334,17 +334,23 @@ function Step3({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Inventory Asset (Balance Sheet) - single parent for all inventory sub-accounts
+  // Inventory Asset accounts - user maps each component to their existing accounts
   const inventoryAccounts = [
-    { key: 'inventoryAsset', label: 'Inventory Asset', type: 'Other Current Asset' },
+    { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
+    { key: 'invFreight', label: 'Freight', type: 'Other Current Asset' },
+    { key: 'invDuty', label: 'Duty', type: 'Other Current Asset' },
+    { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset' },
   ];
 
-  // COGS accounts (P&L) - where costs go when inventory is sold
+  // COGS accounts - user maps each component to their existing accounts
   const cogsAccounts = [
-    { key: 'manufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
-    { key: 'freightAndDuty', label: 'Freight & Custom Duty', type: 'Cost of Goods Sold' },
-    { key: 'landFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
-    { key: 'storage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
+    { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
+    { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
+    { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
+    { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
+    { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
+    { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
+    { key: 'cogsShrinkage', label: 'Inventory Shrinkage', type: 'Cost of Goods Sold' },
   ];
 
   // LMB Revenue/Fee accounts (P&L) - where LMB posts sales and fees
@@ -375,7 +381,7 @@ function Step3({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           brandNames: brands.map((b) => b.name),
-          parentAccountIds: parentAccounts,
+          accountMappings: parentAccounts,
         }),
       });
       const data = await res.json();
