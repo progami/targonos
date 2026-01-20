@@ -1,16 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
-const LMB_APP_URL = 'https://app.linkmybooks.com';
 
-const STORAGE_KEY = 'plutus-setup-v3';
+const STORAGE_KEY = 'plutus-setup-v4';
 
 const MARKETPLACES = [
   { id: 'amazon.com', label: 'Amazon.com', currency: 'USD' },
@@ -23,15 +22,14 @@ const MARKETPLACES = [
 ] as const;
 
 type Brand = { name: string; marketplace: string; currency: string };
+type Sku = { sku: string; productName: string; brand: string; asin?: string };
 
 type SetupState = {
-  step: number;
-  lmbComplete: boolean;
+  section: 'brands' | 'accounts' | 'skus';
   brands: Brand[];
-  parentAccounts: Record<string, string>;
+  accountMappings: Record<string, string>;
   accountsCreated: boolean;
-  lmbProductGroupsComplete: boolean;
-  complete: boolean;
+  skus: Sku[];
 };
 
 type QboAccount = {
@@ -43,20 +41,6 @@ type QboAccount = {
 };
 
 // Icons
-function ChevronIcon({ expanded, className }: { expanded: boolean; className?: string }) {
-  return (
-    <svg
-      className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180', className)}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  );
-}
-
 function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -89,154 +73,88 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-// Step indicator
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      {Array.from({ length: total }, (_, i) => (
-        <div
-          key={i}
-          className={cn(
-            'h-2 rounded-full transition-all',
-            i + 1 === current ? 'w-8 bg-brand-teal-500' : i + 1 < current ? 'w-2 bg-brand-teal-500' : 'w-2 bg-slate-200 dark:bg-slate-700'
-          )}
-        />
-      ))}
-    </div>
-  );
-}
+// Account definitions
+const INVENTORY_ACCOUNTS = [
+  { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
+  { key: 'invFreight', label: 'Freight', type: 'Other Current Asset' },
+  { key: 'invDuty', label: 'Duty', type: 'Other Current Asset' },
+  { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset' },
+];
 
-// Account mapping row (LMB-style)
-function AccountRow({
-  label,
-  accountId,
-  accounts,
-  onChange,
-  type,
+const COGS_ACCOUNTS = [
+  { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
+  { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
+  { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
+  { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
+  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
+  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
+  { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
+];
+
+const LMB_ACCOUNTS = [
+  { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
+  { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
+  { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income' },
+  { key: 'amazonSellerFees', label: 'Seller Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonFbaFees', label: 'FBA Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonStorageFees', label: 'Storage Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonAdvertisingCosts', label: 'Advertising', type: 'Cost of Goods Sold' },
+  { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
+];
+
+const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...LMB_ACCOUNTS];
+
+// Sidebar
+function Sidebar({
+  section,
+  onSectionChange,
+  brandsComplete,
+  accountsComplete,
+  skusComplete,
 }: {
-  label: string;
-  accountId: string;
-  accounts: QboAccount[];
-  onChange: (id: string) => void;
-  type?: string;
+  section: string;
+  onSectionChange: (s: 'brands' | 'accounts' | 'skus') => void;
+  brandsComplete: boolean;
+  accountsComplete: boolean;
+  skusComplete: boolean;
 }) {
-  const filtered = type ? accounts.filter((a) => a.type === type || !type) : accounts;
-  const selected = accounts.find((a) => a.id === accountId);
+  const items = [
+    { id: 'brands' as const, label: 'Brands', complete: brandsComplete },
+    { id: 'accounts' as const, label: 'Accounts', complete: accountsComplete },
+    { id: 'skus' as const, label: 'SKUs', complete: skusComplete },
+  ];
 
   return (
-    <div className="flex items-center gap-4 py-3 px-4 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
-      <div className="flex-1 min-w-0">
-        <span className="text-xs text-brand-teal-600 dark:text-brand-teal-400 uppercase tracking-wide">Account</span>
-        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{label}</p>
-      </div>
-      <div className="w-64">
-        <span className="text-xs text-brand-teal-600 dark:text-brand-teal-400 uppercase tracking-wide">QBO Account</span>
-        <select
-          value={accountId}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            'w-full mt-0.5 px-3 py-1.5 text-sm rounded border bg-white dark:bg-slate-800 transition-colors',
-            selected
-              ? 'border-brand-teal-300 dark:border-brand-teal-700 text-slate-900 dark:text-white'
-              : 'border-slate-200 dark:border-slate-700 text-slate-400'
-          )}
-        >
-          <option value="">Select account...</option>
-          {filtered.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.fullyQualifiedName}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="w-8 flex justify-center">
-        {selected && <CheckIcon className="h-5 w-5 text-green-500" />}
-      </div>
-    </div>
+    <nav className="w-48 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 p-4">
+      <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Setup</h2>
+      <ul className="space-y-1">
+        {items.map((item) => (
+          <li key={item.id}>
+            <button
+              onClick={() => onSectionChange(item.id)}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors',
+                section === item.id
+                  ? 'bg-brand-teal-50 dark:bg-brand-teal-900/20 text-brand-teal-700 dark:text-brand-teal-300 font-medium'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              )}
+            >
+              {item.complete ? (
+                <CheckIcon className="w-4 h-4 text-green-500" />
+              ) : (
+                <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />
+              )}
+              {item.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
-// Collapsible section
-function Section({
-  title,
-  children,
-  defaultExpanded = true,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultExpanded?: boolean;
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-
-  return (
-    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-      >
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{title}</span>
-        <ChevronIcon expanded={expanded} className="text-slate-400" />
-      </button>
-      {expanded && <div className="bg-white dark:bg-slate-900">{children}</div>}
-    </div>
-  );
-}
-
-// Step 1: LMB Setup Acknowledgment
-function Step1({ complete, onComplete }: { complete: boolean; onComplete: () => void }) {
-  return (
-    <div className="space-y-6">
-      <div className="text-center py-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-teal-50 dark:bg-brand-teal-900/20 mb-4">
-          <svg className="w-8 h-8 text-brand-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">LMB Accounts & Taxes</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-          Complete the LMB wizard for each connection before continuing
-        </p>
-      </div>
-
-      <a
-        href={LMB_APP_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-      >
-        Open Link My Books
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-      </a>
-
-      <button
-        onClick={onComplete}
-        className={cn(
-          'w-full flex items-center justify-center gap-3 py-4 px-4 rounded-lg border-2 transition-all',
-          complete
-            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-            : 'border-slate-200 dark:border-slate-700 hover:border-brand-teal-300'
-        )}
-      >
-        <div
-          className={cn(
-            'w-6 h-6 rounded-full border-2 flex items-center justify-center',
-            complete ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-slate-600'
-          )}
-        >
-          {complete && <CheckIcon className="w-4 h-4 text-white" />}
-        </div>
-        <span className={cn('font-medium', complete ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-300')}>
-          I&apos;ve completed LMB setup for all connections
-        </span>
-      </button>
-    </div>
-  );
-}
-
-// Step 2: Brands
-function Step2({
+// Brands Section
+function BrandsSection({
   brands,
   onBrandsChange,
 }: {
@@ -261,29 +179,41 @@ function Step2({
 
   return (
     <div className="space-y-6">
-      <div className="text-center py-4">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Your Brands</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Add brands for separate P&L tracking</p>
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Brands</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Add brands for separate P&L tracking. Plutus creates sub-accounts for each brand.
+        </p>
       </div>
 
       {brands.length > 0 && (
-        <div className="space-y-2">
-          {brands.map((brand, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-            >
-              <div className="flex-1">
-                <p className="font-medium text-slate-900 dark:text-white">{brand.name}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label} ({brand.currency})
-                </p>
-              </div>
-              <button onClick={() => removeBrand(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                <XIcon className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50 dark:bg-slate-800/50">
+              <tr>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Brand Name</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Marketplace</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Currency</th>
+                <th className="w-12"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              {brands.map((brand, i) => (
+                <tr key={i} className="bg-white dark:bg-slate-900">
+                  <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-white">{brand.name}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                    {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{brand.currency}</td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => removeBrand(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                      <XIcon className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -294,38 +224,85 @@ function Step2({
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addBrand()}
           placeholder="Brand name..."
-          className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30"
+          className="flex-1 px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30"
         />
         <select
           value={newMarketplace}
           onChange={(e) => setNewMarketplace(e.target.value)}
-          className="px-3 py-2.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+          className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
         >
           {MARKETPLACES.map((m) => (
             <option key={m.id} value={m.id}>{m.label}</option>
           ))}
         </select>
         <Button onClick={addBrand} disabled={!newName.trim()} className="bg-brand-teal-500 hover:bg-brand-teal-600 text-white">
-          <PlusIcon className="w-4 h-4" />
+          <PlusIcon className="w-4 h-4 mr-1" />
+          Add
         </Button>
       </div>
     </div>
   );
 }
 
-// Step 3: Account Mapping
-function Step3({
+// Account Row
+function AccountRow({
+  label,
+  accountId,
   accounts,
-  parentAccounts,
-  onParentAccountsChange,
+  onChange,
+  type,
+}: {
+  label: string;
+  accountId: string;
+  accounts: QboAccount[];
+  onChange: (id: string) => void;
+  type?: string;
+}) {
+  const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
+  const selected = accounts.find((a) => a.id === accountId);
+
+  return (
+    <tr className="bg-white dark:bg-slate-900">
+      <td className="px-4 py-2.5 text-sm text-slate-900 dark:text-white">{label}</td>
+      <td className="px-4 py-2.5">
+        <select
+          value={accountId}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(
+            'w-full px-3 py-1.5 text-sm rounded border bg-white dark:bg-slate-800 transition-colors',
+            selected
+              ? 'border-brand-teal-300 dark:border-brand-teal-700 text-slate-900 dark:text-white'
+              : 'border-slate-200 dark:border-slate-700 text-slate-400'
+          )}
+        >
+          <option value="">Select account...</option>
+          {filtered.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.fullyQualifiedName}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2.5 w-12">
+        {selected && <CheckIcon className="h-4 w-4 text-green-500" />}
+      </td>
+    </tr>
+  );
+}
+
+// Accounts Section
+function AccountsSection({
+  accounts,
+  accountMappings,
+  onAccountMappingsChange,
   brands,
   onAccountsCreated,
   accountsCreated,
   isLoadingAccounts,
 }: {
   accounts: QboAccount[];
-  parentAccounts: Record<string, string>;
-  onParentAccountsChange: (accounts: Record<string, string>) => void;
+  accountMappings: Record<string, string>;
+  onAccountMappingsChange: (accounts: Record<string, string>) => void;
   brands: Brand[];
   onAccountsCreated: () => void;
   accountsCreated: boolean;
@@ -334,42 +311,11 @@ function Step3({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Inventory Asset accounts - user maps each component to their existing accounts
-  const inventoryAccounts = [
-    { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
-    { key: 'invFreight', label: 'Freight', type: 'Other Current Asset' },
-    { key: 'invDuty', label: 'Duty', type: 'Other Current Asset' },
-    { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset' },
-  ];
-
-  // COGS accounts - user maps each component to their existing accounts
-  const cogsAccounts = [
-    { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
-    { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
-    { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
-    { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
-    { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
-    { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
-    { key: 'cogsShrinkage', label: 'Inventory Shrinkage', type: 'Cost of Goods Sold' },
-  ];
-
-  // LMB Revenue/Fee accounts (P&L) - where LMB posts sales and fees
-  const lmbAccounts = [
-    { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
-    { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
-    { key: 'amazonFbaInventoryReimbursement', label: 'Amazon FBA Inventory Reimbursement', type: 'Other Income' },
-    { key: 'amazonSellerFees', label: 'Amazon Seller Fees', type: 'Cost of Goods Sold' },
-    { key: 'amazonFbaFees', label: 'Amazon FBA Fees', type: 'Cost of Goods Sold' },
-    { key: 'amazonStorageFees', label: 'Amazon Storage Fees', type: 'Cost of Goods Sold' },
-    { key: 'amazonAdvertisingCosts', label: 'Amazon Advertising Costs', type: 'Cost of Goods Sold' },
-    { key: 'amazonPromotions', label: 'Amazon Promotions', type: 'Cost of Goods Sold' },
-  ];
-
-  const allRequired = [...inventoryAccounts, ...cogsAccounts, ...lmbAccounts];
-  const allMapped = allRequired.every((p) => parentAccounts[p.key]);
+  const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
+  const allMapped = mappedCount === ALL_ACCOUNTS.length;
 
   const updateAccount = (key: string, id: string) => {
-    onParentAccountsChange({ ...parentAccounts, [key]: id });
+    onAccountMappingsChange({ ...accountMappings, [key]: id });
   };
 
   const createAccounts = async () => {
@@ -381,7 +327,7 @@ function Step3({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           brandNames: brands.map((b) => b.name),
-          accountMappings: parentAccounts,
+          accountMappings,
         }),
       });
       const data = await res.json();
@@ -393,6 +339,22 @@ function Step3({
       setCreating(false);
     }
   };
+
+  if (brands.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500 dark:text-slate-400">Add brands first before mapping accounts.</p>
+      </div>
+    );
+  }
+
+  if (isLoadingAccounts) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500 dark:text-slate-400">Loading QBO accounts...</p>
+      </div>
+    );
+  }
 
   if (accountsCreated) {
     return (
@@ -408,161 +370,232 @@ function Step3({
     );
   }
 
+  const renderAccountGroup = (title: string, accountList: typeof INVENTORY_ACCOUNTS) => (
+    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+      <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2">
+        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{title}</h3>
+      </div>
+      <table className="w-full">
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+          {accountList.map((acc) => (
+            <AccountRow
+              key={acc.key}
+              label={acc.label}
+              accountId={accountMappings[acc.key] || ''}
+              accounts={accounts}
+              onChange={(id) => updateAccount(acc.key, id)}
+              type={acc.type}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="text-center py-4">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Map QBO Accounts</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Select parent accounts for sub-account creation</p>
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Map QBO parent accounts. Plutus creates brand sub-accounts under each.
+        </p>
       </div>
 
-      {isLoadingAccounts ? (
-        <div className="py-12 text-center text-slate-500">Loading accounts...</div>
+      <div className="grid gap-4">
+        {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
+        {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
+        {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
+
+      <Button
+        onClick={createAccounts}
+        disabled={!allMapped || creating}
+        className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
+      >
+        {creating ? 'Creating...' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+      </Button>
+    </div>
+  );
+}
+
+// SKUs Section
+function SkusSection({
+  skus,
+  onSkusChange,
+  brands,
+}: {
+  skus: Sku[];
+  onSkusChange: (skus: Sku[]) => void;
+  brands: Brand[];
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const [newSku, setNewSku] = useState({ sku: '', productName: '', brand: '', asin: '' });
+
+  const addSku = () => {
+    if (!newSku.sku.trim() || !newSku.brand) return;
+    if (skus.some((s) => s.sku === newSku.sku.trim())) return;
+    onSkusChange([...skus, { ...newSku, sku: newSku.sku.trim() }]);
+    setNewSku({ sku: '', productName: '', brand: '', asin: '' });
+    setShowModal(false);
+  };
+
+  const removeSku = (index: number) => {
+    onSkusChange(skus.filter((_, i) => i !== index));
+  };
+
+  if (brands.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500 dark:text-slate-400">Add brands first before adding SKUs.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">SKUs</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Add product SKUs and assign them to brands. Costs come from bills.
+          </p>
+        </div>
+        <Button onClick={() => setShowModal(true)} className="bg-brand-teal-500 hover:bg-brand-teal-600 text-white">
+          <PlusIcon className="w-4 h-4 mr-1" />
+          Add SKU
+        </Button>
+      </div>
+
+      {skus.length > 0 ? (
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50 dark:bg-slate-800/50">
+              <tr>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">SKU</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Product Name</th>
+                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Brand</th>
+                <th className="w-12"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              {skus.map((sku, i) => (
+                <tr key={i} className="bg-white dark:bg-slate-900">
+                  <td className="px-4 py-3 text-sm font-mono text-slate-900 dark:text-white">{sku.sku}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.productName || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.brand}</td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => removeSku(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
+                      <XIcon className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <>
-          <Section title="Inventory Asset">
-            {inventoryAccounts.map((p) => (
-              <AccountRow
-                key={p.key}
-                label={p.label}
-                accountId={parentAccounts[p.key] || ''}
-                accounts={accounts}
-                onChange={(id) => updateAccount(p.key, id)}
-                type={p.type}
-              />
-            ))}
-          </Section>
+        <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-8 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">No SKUs added yet</p>
+        </div>
+      )}
 
-          <Section title="Cost of Goods Sold">
-            {cogsAccounts.map((p) => (
-              <AccountRow
-                key={p.key}
-                label={p.label}
-                accountId={parentAccounts[p.key] || ''}
-                accounts={accounts}
-                onChange={(id) => updateAccount(p.key, id)}
-                type={p.type}
-              />
-            ))}
-          </Section>
+      <p className="text-sm text-slate-500 dark:text-slate-400">Total: {skus.length} SKU{skus.length !== 1 ? 's' : ''}</p>
 
-          <Section title="Revenue & Fees (LMB)">
-            {lmbAccounts.map((p) => (
-              <AccountRow
-                key={p.key}
-                label={p.label}
-                accountId={parentAccounts[p.key] || ''}
-                accounts={accounts}
-                onChange={(id) => updateAccount(p.key, id)}
-                type={p.type}
-              />
-            ))}
-          </Section>
-
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      {/* Add SKU Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Add SKU</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <XIcon className="w-5 h-5" />
+              </button>
             </div>
-          )}
-
-          <Button
-            onClick={createAccounts}
-            disabled={!allMapped || creating}
-            className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
-          >
-            {creating ? 'Creating...' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
-          </Button>
-        </>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">SKU *</label>
+                <input
+                  type="text"
+                  value={newSku.sku}
+                  onChange={(e) => setNewSku({ ...newSku, sku: e.target.value })}
+                  placeholder="CS-007"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Product Name</label>
+                <input
+                  type="text"
+                  value={newSku.productName}
+                  onChange={(e) => setNewSku({ ...newSku, productName: e.target.value })}
+                  placeholder="6 Pack Drop Cloth 12x9ft"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Brand *</label>
+                <select
+                  value={newSku.brand}
+                  onChange={(e) => setNewSku({ ...newSku, brand: e.target.value })}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  <option value="">Select brand...</option>
+                  {brands.map((b) => (
+                    <option key={b.name} value={b.name}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ASIN (optional)</label>
+                <input
+                  type="text"
+                  value={newSku.asin}
+                  onChange={(e) => setNewSku({ ...newSku, asin: e.target.value })}
+                  placeholder="B08XYZ123"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button onClick={() => setShowModal(false)} variant="outline" className="flex-1">Cancel</Button>
+              <Button
+                onClick={addSku}
+                disabled={!newSku.sku.trim() || !newSku.brand}
+                className="flex-1 bg-brand-teal-500 hover:bg-brand-teal-600 text-white"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// Step 4: LMB Product Groups
-function Step4({ complete, onComplete, brands }: { complete: boolean; onComplete: () => void; brands: Brand[] }) {
+// Status Bar
+function StatusBar({ brands, mappedAccounts, totalAccounts, skus }: { brands: number; mappedAccounts: number; totalAccounts: number; skus: number }) {
   return (
-    <div className="space-y-6">
-      <div className="text-center py-4">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">LMB Product Groups</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Create Product Groups in LMB for each brand</p>
-      </div>
-
-      <div className="space-y-2">
-        {brands.map((brand) => (
-          <div key={brand.name} className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
-            <div className="w-2 h-2 rounded-full bg-brand-teal-500" />
-            <span className="text-sm text-slate-700 dark:text-slate-300">
-              Create group <span className="font-medium text-slate-900 dark:text-white">&ldquo;{brand.name}&rdquo;</span>
-            </span>
-          </div>
-        ))}
-        <div className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
-          <span className="text-sm text-slate-700 dark:text-slate-300">
-            Map to brand sub-accounts (e.g., Amazon Sales - Brand)
-          </span>
-        </div>
-        <div className="flex items-center gap-3 py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700">
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
-          <span className="text-sm text-slate-700 dark:text-slate-300">Assign SKUs to Product Groups</span>
-        </div>
-      </div>
-
-      <a
-        href={LMB_APP_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-      >
-        Open Link My Books
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-        </svg>
-      </a>
-
-      <button
-        onClick={onComplete}
-        className={cn(
-          'w-full flex items-center justify-center gap-3 py-4 px-4 rounded-lg border-2 transition-all',
-          complete
-            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-            : 'border-slate-200 dark:border-slate-700 hover:border-brand-teal-300'
-        )}
-      >
-        <div
-          className={cn(
-            'w-6 h-6 rounded-full border-2 flex items-center justify-center',
-            complete ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-slate-600'
-          )}
-        >
-          {complete && <CheckIcon className="w-4 h-4 text-white" />}
-        </div>
-        <span className={cn('font-medium', complete ? 'text-green-700 dark:text-green-400' : 'text-slate-700 dark:text-slate-300')}>
-          Product Groups configured
+    <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-6 py-3">
+      <div className="flex items-center gap-6 text-sm">
+        <span className={cn('flex items-center gap-1.5', brands > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-500')}>
+          <span className={cn('w-2 h-2 rounded-full', brands > 0 ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600')} />
+          {brands} brand{brands !== 1 ? 's' : ''}
         </span>
-      </button>
-    </div>
-  );
-}
-
-// Step 5: Complete
-function Step5({ brands, onReset }: { brands: Brand[]; onReset: () => void }) {
-  return (
-    <div className="text-center py-12">
-      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 mb-6">
-        <CheckIcon className="w-10 h-10 text-green-500" />
-      </div>
-      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Setup Complete</h2>
-      <p className="text-slate-500 dark:text-slate-400 mb-8">
-        Plutus is ready for {brands.map((b) => b.name).join(' & ')}
-      </p>
-
-      <div className="space-y-3 max-w-xs mx-auto">
-        <Link href="/">
-          <Button className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white">Go to Dashboard</Button>
-        </Link>
-        <Button onClick={onReset} variant="outline" className="w-full">
-          Start Over
-        </Button>
+        <span className={cn('flex items-center gap-1.5', mappedAccounts === totalAccounts ? 'text-green-600 dark:text-green-400' : mappedAccounts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500')}>
+          <span className={cn('w-2 h-2 rounded-full', mappedAccounts === totalAccounts ? 'bg-green-500' : mappedAccounts > 0 ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600')} />
+          {mappedAccounts}/{totalAccounts} accounts
+        </span>
+        <span className={cn('flex items-center gap-1.5', skus > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-500')}>
+          <span className={cn('w-2 h-2 rounded-full', skus > 0 ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600')} />
+          {skus} SKU{skus !== 1 ? 's' : ''}
+        </span>
       </div>
     </div>
   );
@@ -570,19 +603,15 @@ function Step5({ brands, onReset }: { brands: Brand[]; onReset: () => void }) {
 
 // Main
 export default function SetupPage() {
-  const queryClient = useQueryClient();
-
   const [state, setState] = useState<SetupState>({
-    step: 1,
-    lmbComplete: false,
+    section: 'brands',
     brands: [
       { name: 'US-Dust Sheets', marketplace: 'amazon.com', currency: 'USD' },
       { name: 'UK-Dust Sheets', marketplace: 'amazon.co.uk', currency: 'GBP' },
     ],
-    parentAccounts: {},
+    accountMappings: {},
     accountsCreated: false,
-    lmbProductGroupsComplete: false,
-    complete: false,
+    skus: [],
   });
 
   // Load saved state
@@ -606,19 +635,6 @@ export default function SetupPage() {
     });
   }, []);
 
-  const reset = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setState({
-      step: 1,
-      lmbComplete: false,
-      brands: [],
-      parentAccounts: {},
-      accountsCreated: false,
-      lmbProductGroupsComplete: false,
-      complete: false,
-    });
-  };
-
   // Check QBO connection
   const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -637,11 +653,12 @@ export default function SetupPage() {
       if (!res.ok) throw new Error('Failed to fetch accounts');
       return res.json() as Promise<{ accounts: QboAccount[] }>;
     },
-    enabled: connectionStatus?.connected === true && state.step === 3,
+    enabled: connectionStatus?.connected === true,
     staleTime: 5 * 60 * 1000,
   });
 
   const accounts = useMemo(() => accountsData?.accounts || [], [accountsData]);
+  const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
 
   // Show loading while checking connection
   if (isCheckingConnection) {
@@ -654,103 +671,71 @@ export default function SetupPage() {
 
   // Show not connected screen
   if (!connectionStatus?.connected) {
-    return <NotConnectedScreen title="Setup Wizard" />;
+    return <NotConnectedScreen title="Setup" />;
   }
 
-  const canProceed = () => {
-    switch (state.step) {
-      case 1:
-        return state.lmbComplete;
-      case 2:
-        return state.brands.length > 0;
-      case 3:
-        return state.accountsCreated;
-      case 4:
-        return state.lmbProductGroupsComplete;
-      default:
-        return true;
-    }
-  };
-
-  const nextStep = () => {
-    if (state.step === 4) {
-      saveState({ step: 5, complete: true });
-    } else {
-      saveState({ step: state.step + 1 });
-    }
-  };
-
-  const prevStep = () => {
-    saveState({ step: Math.max(1, state.step - 1) });
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-xl mx-auto px-4 py-8">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
-            >
-              <ArrowLeftIcon className="w-4 h-4" />
-            </Link>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Setup</h1>
-          </div>
-          {!state.complete && <StepIndicator current={state.step} total={4} />}
-        </header>
-
-        {/* Content */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-          {state.step === 1 && (
-            <Step1 complete={state.lmbComplete} onComplete={() => saveState({ lmbComplete: !state.lmbComplete })} />
-          )}
-          {state.step === 2 && (
-            <Step2
-              brands={state.brands}
-              onBrandsChange={(brands) => saveState({ brands, accountsCreated: false })}
-            />
-          )}
-          {state.step === 3 && (
-            <Step3
-              accounts={accounts}
-              parentAccounts={state.parentAccounts}
-              onParentAccountsChange={(parentAccounts) => saveState({ parentAccounts })}
-              brands={state.brands}
-              onAccountsCreated={() => saveState({ accountsCreated: true })}
-              accountsCreated={state.accountsCreated}
-              isLoadingAccounts={isLoadingAccounts}
-            />
-          )}
-          {state.step === 4 && (
-            <Step4
-              complete={state.lmbProductGroupsComplete}
-              onComplete={() => saveState({ lmbProductGroupsComplete: !state.lmbProductGroupsComplete })}
-              brands={state.brands}
-            />
-          )}
-          {state.step === 5 && <Step5 brands={state.brands} onReset={reset} />}
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-4">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
+          >
+            <ArrowLeftIcon className="w-4 h-4" />
+          </Link>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Setup</h1>
         </div>
+      </header>
 
-        {/* Navigation */}
-        {!state.complete && (
-          <div className="flex gap-3 mt-6">
-            {state.step > 1 && (
-              <Button onClick={prevStep} variant="outline" className="flex-1">
-                Back
-              </Button>
+      {/* Main content */}
+      <div className="flex flex-1">
+        <Sidebar
+          section={state.section}
+          onSectionChange={(s) => saveState({ section: s })}
+          brandsComplete={state.brands.length > 0}
+          accountsComplete={state.accountsCreated}
+          skusComplete={state.skus.length > 0}
+        />
+
+        <main className="flex-1 p-6 overflow-auto">
+          <div className="max-w-4xl">
+            {state.section === 'brands' && (
+              <BrandsSection
+                brands={state.brands}
+                onBrandsChange={(brands) => saveState({ brands, accountsCreated: false })}
+              />
             )}
-            <Button
-              onClick={nextStep}
-              disabled={!canProceed()}
-              className="flex-1 bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
-            >
-              {state.step === 4 ? 'Complete' : 'Continue'}
-            </Button>
+            {state.section === 'accounts' && (
+              <AccountsSection
+                accounts={accounts}
+                accountMappings={state.accountMappings}
+                onAccountMappingsChange={(accountMappings) => saveState({ accountMappings })}
+                brands={state.brands}
+                onAccountsCreated={() => saveState({ accountsCreated: true })}
+                accountsCreated={state.accountsCreated}
+                isLoadingAccounts={isLoadingAccounts}
+              />
+            )}
+            {state.section === 'skus' && (
+              <SkusSection
+                skus={state.skus}
+                onSkusChange={(skus) => saveState({ skus })}
+                brands={state.brands}
+              />
+            )}
           </div>
-        )}
+        </main>
       </div>
+
+      {/* Status bar */}
+      <StatusBar
+        brands={state.brands.length}
+        mappedAccounts={mappedCount}
+        totalAccounts={ALL_ACCOUNTS.length}
+        skus={state.skus.length}
+      />
     </div>
   );
 }
