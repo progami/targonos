@@ -6,22 +6,28 @@ import { Button } from '@/components/Button';
 import { products } from '@/content/products';
 import { site } from '@/content/site';
 
+const bySlug = (slug: string) => products.find((p) => p.slug === slug)?.amazonUrl;
+
 const internationalAmazonLinks = [
   {
     label: '6 Pack — Light (Amazon.co.uk — Primary)',
     url: site.amazonStoreUrl
   },
   {
-    label: '1 Pack — Strong (Amazon.com)',
-    url: 'https://www.amazon.com/dp/B0FLKJ7WWM?th=1'
+    label: '6 Pack — Light (Amazon.com)',
+    url: site.amazonStoreAltUrl
   },
   {
-    label: '3 Pack — Strong (Amazon.com)',
-    url: 'https://www.amazon.com/dp/B0CR1GSBQ9?th=1'
+    label: '1 Pack — Strong (Amazon.com)',
+    url: bySlug('1pk-strong') ?? '#'
+  },
+  {
+    label: '3 Pack — Standard (Amazon.com)',
+    url: bySlug('3pk-standard') ?? '#'
   },
   {
     label: '12 Pack — Light (Amazon.com)',
-    url: 'https://www.amazon.com/dp/B0FP66CWQ6?th=1'
+    url: bySlug('12pk-light') ?? '#'
   }
 ];
 
