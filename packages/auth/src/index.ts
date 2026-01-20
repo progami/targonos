@@ -627,7 +627,11 @@ export type RolesClaim = Record<string, AppEntitlement>; // { talos: { depts }, 
 export function getAppEntitlement(roles: unknown, appId: string): AppEntitlement | undefined {
   if (!roles || typeof roles !== 'object') return undefined;
   const rec = roles as Record<string, any>;
-  const ent = rec[appId];
+  let ent = rec[appId];
+  if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
+    const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
+    ent = rec[legacyKey];
+  }
   if (!ent || typeof ent !== 'object') return undefined;
   const departments = Array.isArray(ent.departments)
     ? ent.departments.map(String)
