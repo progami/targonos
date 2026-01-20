@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@targon/prisma-plutus';
 import { db } from '@/lib/db';
 import { z } from 'zod';
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     const { brands } = BrandsInputSchema.parse(body);
 
     // Delete all existing brands and create new ones in a transaction
-    await db.$transaction(async (tx: typeof db) => {
+    await db.$transaction(async (tx: Prisma.TransactionClient) => {
       // Delete all existing brands (cascades to skus)
       await tx.brand.deleteMany();
 

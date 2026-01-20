@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@targon/prisma-plutus';
 import { db } from '@/lib/db';
 import { z } from 'zod';
 
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete all existing skus and create new ones
-    await db.$transaction(async (tx: typeof db) => {
+    await db.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.sku.deleteMany();
 
       for (const sku of skus) {
