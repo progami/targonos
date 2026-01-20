@@ -25,10 +25,7 @@
     ],
     "paths": {
       "@/*": [
-        "./*"
-      ],
-      "@targon/theme": [
-        "../../packages/theme/src"
+        "./src/*"
       ]
     },
     "target": "ES2017"
