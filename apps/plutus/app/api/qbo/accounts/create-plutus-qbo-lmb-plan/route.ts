@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import type { QboConnection } from '@/lib/qbo/api';
-import { ensurePlutusQboLmbPlanAccounts } from '@/lib/qbo/plutus-qbo-lmb-plan';
+import { ensurePlutusQboLmbPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-lmb-plan';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { randomUUID } from 'crypto';
 
@@ -30,28 +30,12 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as {
       brandNames: string[];
-      parentAccountIds?: {
-        inventoryAsset: string;
-        manufacturing: string;
-        freightAndDuty: string;
-        landFreight: string;
-        storage3pl: string;
-        mfgAccessories?: string;
-        inventoryShrinkage?: string;
-        amazonSales: string;
-        amazonRefunds: string;
-        amazonFbaInventoryReimbursement: string;
-        amazonSellerFees: string;
-        amazonFbaFees: string;
-        amazonStorageFees: string;
-        amazonAdvertisingCosts: string;
-        amazonPromotions: string;
-      };
+      accountMappings: AccountMappings;
     };
 
     const result = await ensurePlutusQboLmbPlanAccounts(connection, {
       brandNames: body.brandNames,
-      parentAccountIds: body.parentAccountIds,
+      accountMappings: body.accountMappings,
     });
 
     if (result.updatedConnection) {
