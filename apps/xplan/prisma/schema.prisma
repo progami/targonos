@@ -201,6 +201,12 @@ model BatchTableRow {
   overrideFbaFee            Decimal?      @db.Decimal(10, 3)
   overrideReferralRate      Decimal?      @db.Decimal(5, 4)
   overrideStoragePerMonth   Decimal?      @db.Decimal(10, 3)
+  // Carton dimensions for CBM calculation
+  cartonSide1Cm             Decimal?      @db.Decimal(8, 2)  // Length in cm
+  cartonSide2Cm             Decimal?      @db.Decimal(8, 2)  // Width in cm
+  cartonSide3Cm             Decimal?      @db.Decimal(8, 2)  // Height in cm
+  cartonWeightKg            Decimal?      @db.Decimal(8, 3)
+  unitsPerCarton            Int?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
   product                   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
