@@ -1,17 +1,25 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
+const variants = {
+  default: 'border-border bg-surface text-ink',
+  subtle: 'border-transparent bg-surface/60 text-muted'
+} as const;
+
 export function Badge({
   children,
-  className
+  className,
+  variant = 'default'
 }: {
   children: ReactNode;
   className?: string;
+  variant?: keyof typeof variants;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-pill border border-border bg-surface px-3 py-1 text-xs font-semibold text-ink',
+        'inline-flex items-center rounded-pill border px-3 py-1 text-xs font-semibold',
+        variants[variant],
         className
       )}
     >

@@ -63,3 +63,58 @@ a {
 .text-balance {
   text-wrap: balance;
 }
+
+/*
+  Scroll reveal animations
+  -----------------------
+  Goal: Apple-like, subtle movement that guides attention without feeling "animated".
+  - Uses IntersectionObserver in a tiny client component.
+  - Disabled automatically for users who prefer reduced motion.
+*/
+
+.reveal {
+  /* Keep content visible even before JS/hydration (no blank page). */
+  opacity: 0.96;
+  transform: translateY(14px);
+  transition:
+    opacity var(--reveal-duration, 780ms) cubic-bezier(0.16, 1, 0.3, 1)
+      var(--reveal-delay, 0ms),
+    transform var(--reveal-duration, 780ms) cubic-bezier(0.16, 1, 0.3, 1)
+      var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.reveal--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Variants */
+.reveal--fade {
+  transform: none;
+}
+.reveal--fade.reveal--visible {
+  transform: none;
+}
+
+.reveal--zoom {
+  transform: scale(0.985);
+}
+.reveal--zoom.reveal--visible {
+  transform: scale(1);
+}
+
+.reveal--media {
+  transform: translateY(14px) scale(0.992);
+}
+.reveal--media.reveal--visible {
+  transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
