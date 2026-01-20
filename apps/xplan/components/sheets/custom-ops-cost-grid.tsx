@@ -96,7 +96,7 @@ type NumericField = (typeof NUMERIC_FIELDS)[number];
 
 const NUMERIC_PRECISION: Record<NumericField, number> = {
   quantity: 0,
-  sellingPrice: 3,
+  sellingPrice: 2,
   manufacturingCost: 3,
   freightCost: 3,
   tariffCost: 3,
@@ -188,38 +188,35 @@ function normalizeRange(range: CellRange): {
   };
 }
 
-function getColumnsBeforeTariff(displayMode: ProfitDisplayMode): ColumnDef[] {
-  const suffix = displayMode === 'total' ? ' $' : ' $/u';
-  return [
-    { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
-    { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
-    { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
-    {
-      key: 'sellingPrice',
-      header: `Sell${suffix}`,
-      width: 120,
-      type: 'numeric',
-      editable: true,
-      precision: 3,
-    },
-    {
-      key: 'manufacturingCost',
-      header: `Mfg${suffix}`,
-      width: 120,
-      type: 'numeric',
-      editable: true,
-      precision: 3,
-    },
-    {
-      key: 'freightCost',
-      header: `Freight${suffix}`,
-      width: 130,
-      type: 'numeric',
-      editable: true,
-      precision: 3,
-    },
-  ];
-}
+const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
+  { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
+  { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
+  { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
+  {
+    key: 'sellingPrice',
+    header: 'Sell $',
+    width: 120,
+    type: 'numeric',
+    editable: true,
+    precision: 2,
+  },
+  {
+    key: 'manufacturingCost',
+    header: 'Mfg $',
+    width: 120,
+    type: 'numeric',
+    editable: true,
+    precision: 3,
+  },
+  {
+    key: 'freightCost',
+    header: 'Freight $',
+    width: 120,
+    type: 'numeric',
+    editable: true,
+    precision: 3,
+  },
+];
 
 const TARIFF_RATE_COLUMN: ColumnDef = {
   key: 'tariffRate',
@@ -230,47 +227,42 @@ const TARIFF_RATE_COLUMN: ColumnDef = {
   precision: 2,
 };
 
-function getTariffCostColumn(displayMode: ProfitDisplayMode): ColumnDef {
-  return {
-    key: 'tariffCost',
-    header: displayMode === 'total' ? 'Tariff $' : 'Tariff $/u',
+const TARIFF_COST_COLUMN: ColumnDef = {
+  key: 'tariffCost',
+  header: 'Tariff $',
+  width: 120,
+  type: 'numeric',
+  editable: true,
+  precision: 3,
+};
+
+const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
+  {
+    key: 'tacosPercent',
+    header: 'TACoS %',
+    width: 110,
+    type: 'percent',
+    editable: true,
+    precision: 2,
+  },
+  { key: 'fbaFee', header: 'FBA $', width: 110, type: 'numeric', editable: true, precision: 3 },
+  {
+    key: 'referralRate',
+    header: 'Referral %',
+    width: 110,
+    type: 'percent',
+    editable: true,
+    precision: 2,
+  },
+  {
+    key: 'storagePerMonth',
+    header: 'Storage $',
     width: 120,
     type: 'numeric',
     editable: true,
     precision: 3,
-  };
-}
-
-function getColumnsAfterTariff(displayMode: ProfitDisplayMode): ColumnDef[] {
-  const suffix = displayMode === 'total' ? ' $' : ' $/u';
-  return [
-    {
-      key: 'tacosPercent',
-      header: 'TACoS %',
-      width: 110,
-      type: 'percent',
-      editable: true,
-      precision: 2,
-    },
-    { key: 'fbaFee', header: `FBA${suffix}`, width: 110, type: 'numeric', editable: true, precision: 3 },
-    {
-      key: 'referralRate',
-      header: 'Referral %',
-      width: 110,
-      type: 'percent',
-      editable: true,
-      precision: 2,
-    },
-    {
-      key: 'storagePerMonth',
-      header: `Storage${suffix}`,
-      width: 120,
-      type: 'numeric',
-      editable: true,
-      precision: 3,
-    },
-  ];
-}
+  },
+];
 
 // Carton dimensions are editable but displayed in the CBM column
 const CBM_COLUMNS: ColumnDef[] = [
@@ -383,7 +375,7 @@ export function CustomOpsCostGrid({
   );
 
   const columns = useMemo(() => {
-    const tariffColumn = tariffInputMode === 'cost' ? getTariffCostColumn(profitDisplayMode) : TARIFF_RATE_COLUMN;
+    const tariffColumn = tariffInputMode === 'cost' ? TARIFF_COST_COLUMN : TARIFF_RATE_COLUMN;
     const profitColumns: ColumnDef[] =
       profitDisplayMode === 'percent'
         ? [
@@ -406,15 +398,14 @@ export function CustomOpsCostGrid({
               computed: true,
             },
           ]
-        : profitDisplayMode === 'total'
-          ? [
+        : [
               {
                 key: 'grossProfit',
                 header: 'GP $',
                 width: 130,
                 type: 'numeric',
                 editable: false,
-                precision: 0,
+                precision: profitDisplayMode === 'total' ? 0 : 2,
                 computed: true,
               },
               {
@@ -423,27 +414,7 @@ export function CustomOpsCostGrid({
                 width: 130,
                 type: 'numeric',
                 editable: false,
-                precision: 0,
-                computed: true,
-              },
-            ]
-          : [
-              {
-                key: 'grossProfit',
-                header: 'GP $/u',
-                width: 130,
-                type: 'numeric',
-                editable: false,
-                precision: 2,
-                computed: true,
-              },
-              {
-                key: 'netProfit',
-                header: 'NP $/u',
-                width: 130,
-                type: 'numeric',
-                editable: false,
-                precision: 2,
+                precision: profitDisplayMode === 'total' ? 0 : 2,
                 computed: true,
               },
             ];
@@ -459,7 +430,7 @@ export function CustomOpsCostGrid({
       computed: true,
     };
 
-    return [...getColumnsBeforeTariff(profitDisplayMode), tariffColumn, ...getColumnsAfterTariff(profitDisplayMode), ...CBM_COLUMNS, cbmColumn, ...profitColumns];
+    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...CBM_COLUMNS, cbmColumn, ...profitColumns];
   }, [profitDisplayMode, tariffInputMode]);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
@@ -1545,6 +1516,17 @@ export function CustomOpsCostGrid({
     if (column.type === 'percent') {
       const num = sanitizeNumeric(value);
       if (Number.isNaN(num)) return value;
+
+      // In total mode, show TACoS and Referral as dollar amounts
+      if (profitDisplayMode === 'total' && (column.key === 'tacosPercent' || column.key === 'referralRate')) {
+        const sellingPrice = sanitizeNumeric(row.sellingPrice);
+        const quantity = sanitizeNumeric(row.quantity);
+        if (Number.isFinite(sellingPrice) && Number.isFinite(quantity)) {
+          const dollarAmount = sellingPrice * num * quantity;
+          return `$${dollarAmount.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        }
+      }
+
       return `${(num * 100).toFixed(column.precision ?? 2)}%`;
     }
 
