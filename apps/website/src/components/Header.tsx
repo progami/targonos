@@ -45,12 +45,12 @@ export function Header() {
       <Container className="flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tightish">
           <Image
-            src="/brand/targon-primary.png"
+            src="/brand/logo.svg"
             alt={`${site.name} logo`}
             width={140}
             height={28}
             priority
-            className="h-6 w-auto"
+            className="h-7 w-auto"
           />
           <span className="sr-only">{site.name}</span>
         </Link>
