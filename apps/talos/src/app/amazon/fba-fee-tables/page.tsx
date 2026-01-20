@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
@@ -14,7 +13,7 @@ import {
 } from '@/lib/amazon/fees'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
-import { DollarSign, ArrowLeft, Loader2 } from '@/lib/lucide-icons'
+import { DollarSign, Loader2 } from '@/lib/lucide-icons'
 
 const ALLOWED_ROLES = ['admin', 'staff'] as const
 
@@ -133,17 +132,11 @@ export default function FbaFeeTablesPage() {
         title="FBA Fee Tables (2026)"
         description="Amazon"
         icon={DollarSign}
+        backHref="/config/products"
+        backLabel="Products"
       />
 
       <PageContent className="space-y-8">
-        <Link
-          href="/config/products"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Products
-        </Link>
-
         {/* Small Standard-Size Table */}
         <section className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3">
