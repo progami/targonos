@@ -406,7 +406,7 @@ export function CustomOpsCostGrid({
     const cbmColumn: ColumnDef = {
       key: 'cbm',
       header: 'CBM',
-      width: 90,
+      width: 70,
       type: 'numeric',
       editable: false,
       precision: 3,
