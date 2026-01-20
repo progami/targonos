@@ -415,7 +415,7 @@ function formatPurchaseOrderStatus(value: string): string {
 
 const COLUMNS: ColumnDef[] = [
   { key: 'orderCode', header: 'PO Code', width: 150, type: 'text', editable: true },
-  { key: 'poDate', header: 'PO Date', width: 130, type: 'date', editable: true },
+  { key: 'productionStart', header: 'Mfg Start', width: 130, type: 'date', editable: true },
   { key: 'shipName', header: 'Ship', width: 160, type: 'text', editable: true },
   { key: 'containerNumber', header: 'Container #', width: 160, type: 'text', editable: true },
   {
@@ -426,7 +426,6 @@ const COLUMNS: ColumnDef[] = [
     editable: true,
     options: PURCHASE_ORDER_STATUS_OPTIONS,
   },
-  { key: 'productionStart', header: 'Mfg Start', width: 130, type: 'date', editable: true },
   {
     key: 'productionWeeks',
     header: 'Manufacturing',
