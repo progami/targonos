@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,8 @@ import {
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
 import { usePageState } from '@/lib/store/page-state'
-import { Layers, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { ChevronDown, ChevronRight, ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { SkuBatchesPanel } from './sku-batches-modal'
 
 const PAGE_KEY = '/config/products'
 
@@ -385,7 +386,6 @@ interface SkusPanelProps {
 }
 
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
-  const router = useRouter()
   const pageState = usePageState(PAGE_KEY)
   const [skus, setSkus] = useState<SkuRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -400,6 +400,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [formState, setFormState] = useState<SkuFormState>(() => buildFormState())
 
   const [confirmDelete, setConfirmDelete] = useState<SkuRow | null>(null)
+  const [expandedSkuIds, setExpandedSkuIds] = useState<Set<string>>(new Set())
   const [modalTab, setModalTab] = useState<SkuModalTab>('reference')
   const [externalEditOpened, setExternalEditOpened] = useState(false)
 
@@ -926,6 +927,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
             <table className="min-w-full table-auto text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
+                  <th className="px-2 py-3 text-left font-semibold w-8"></th>
                   <th className="px-4 py-3 text-left font-semibold">SKU</th>
                   <th className="px-4 py-3 text-left font-semibold">Description</th>
                   <th className="px-4 py-3 text-left font-semibold">ASIN</th>
@@ -940,52 +942,67 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                 {filteredSkus.map(sku => {
                   const latestBatch = sku.batches?.[0]
                   const batchSummary = formatBatchSummary(latestBatch)
+                  const isExpanded = expandedSkuIds.has(sku.id)
+
+                  const toggleExpand = () => {
+                    setExpandedSkuIds(prev => {
+                      const next = new Set(prev)
+                      if (next.has(sku.id)) {
+                        next.delete(sku.id)
+                      } else {
+                        next.add(sku.id)
+                      }
+                      return next
+                    })
+                  }
 
                   return (
-                    <tr key={sku.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                        <div className="space-y-1">
+                    <React.Fragment key={sku.id}>
+                      <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
+                        <td className="px-2 py-3">
                           <button
                             type="button"
-                            onClick={() => openEdit(sku)}
-                            className="text-cyan-700 dark:text-cyan-400 hover:underline"
+                            onClick={toggleExpand}
+                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title={isExpanded ? 'Collapse batches' : 'Expand batches'}
                           >
-                            {sku.skuCode}
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                            )}
                           </button>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 xl:hidden">{batchSummary}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {sku.description}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {sku.asin ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap hidden xl:table-cell">
-                        <div className="space-y-1">
-                          <div className="font-mono text-slate-700 dark:text-slate-300">
-                            {latestBatch?.batchCode ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <div className="space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(sku)}
+                              className="text-cyan-700 dark:text-cyan-400 hover:underline"
+                            >
+                              {sku.skuCode}
+                            </button>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 xl:hidden">{batchSummary}</div>
                           </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">{batchSummary}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {sku._count?.inventoryTransactions ?? 0}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              router.push(
-                                `/config/products/batches?skuId=${encodeURIComponent(sku.id)}`
-                              )
-                            }
-                            title="View Batches"
-                          >
-                            <Layers className="h-4 w-4" />
-                          </Button>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {sku.description}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {sku.asin ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap hidden xl:table-cell">
+                          <div className="space-y-1">
+                            <div className="font-mono text-slate-700 dark:text-slate-300">
+                              {latestBatch?.batchCode ?? '—'}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{batchSummary}</div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          {sku._count?.inventoryTransactions ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
                           <Button
                             variant="outline"
                             size="sm"
@@ -994,9 +1011,32 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={7} className="p-0 bg-slate-50/80 dark:bg-slate-900/50">
+                            <div className="p-4">
+                              <SkuBatchesPanel
+                                sku={{
+                                  id: sku.id,
+                                  skuCode: sku.skuCode,
+                                  description: sku.description,
+                                  unitDimensionsCm: null,
+                                  amazonReferenceWeightKg: null,
+                                  itemDimensionsCm: sku.itemDimensionsCm ?? null,
+                                  itemSide1Cm: sku.itemSide1Cm ?? null,
+                                  itemSide2Cm: sku.itemSide2Cm ?? null,
+                                  itemSide3Cm: sku.itemSide3Cm ?? null,
+                                  itemWeightKg: sku.itemWeightKg ?? null,
+                                }}
+                                onBatchesUpdated={fetchSkus}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -1011,27 +1051,9 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {editingSku ? 'Edit SKU' : 'New SKU'}
             </h2>
-            <div className="flex items-center gap-3">
-              {editingSku ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    closeModal()
-                    router.push(
-                      `/config/products/batches?skuId=${encodeURIComponent(editingSku.id)}`
-                    )
-                  }}
-                  disabled={isSubmitting}
-                >
-                  View Batches
-                </Button>
-              ) : null}
-              <Button variant="ghost" onClick={closeModal} disabled={isSubmitting}>
-                Close
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={closeModal} disabled={isSubmitting}>
+              Close
+            </Button>
           </div>
 
           <form onSubmit={submitSku} className="flex min-h-0 flex-1 flex-col">
@@ -1209,8 +1231,16 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
 	                      <div className="flex items-start justify-between gap-3 mb-3">
 		                        <div>
-		                          <h4 className="text-sm font-semibold text-slate-900 mb-1">
+		                          <h4 className="text-sm font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
 		                            Amazon Fees
+		                            <Link
+		                              href="/amazon/fba-fee-tables"
+		                              target="_blank"
+		                              className="text-slate-400 hover:text-cyan-600 transition-colors"
+		                              title="View fee tables"
+		                            >
+		                              <ExternalLink className="h-3.5 w-3.5" />
+		                            </Link>
 		                          </h4>
 	                          <p className="text-xs text-slate-500">
 	                            {modalTab === 'reference'
