@@ -31,6 +31,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { withAppBasePath } from '@/lib/base-path';
 
 export type OpsBatchRow = {
@@ -96,7 +104,7 @@ type NumericField = (typeof NUMERIC_FIELDS)[number];
 
 const NUMERIC_PRECISION: Record<NumericField, number> = {
   quantity: 0,
-  sellingPrice: 3,
+  sellingPrice: 2,
   manufacturingCost: 3,
   freightCost: 3,
   tariffCost: 3,
@@ -165,7 +173,7 @@ type ColumnDef = {
   key: keyof OpsBatchRow;
   header: string;
   width: number;
-  type: 'text' | 'numeric' | 'percent' | 'dropdown';
+  type: 'text' | 'numeric' | 'percent' | 'dropdown' | 'carton';
   editable: boolean;
   precision?: number;
   computed?: boolean;
@@ -190,20 +198,21 @@ function normalizeRange(range: CellRange): {
 
 const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
-  { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
-  { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
+  { key: 'productName', header: 'Product', width: 140, type: 'dropdown', editable: true },
+  { key: 'cartonSide1Cm', header: 'Carton', width: 120, type: 'carton', editable: true },
+  { key: 'quantity', header: 'Qty', width: 100, type: 'numeric', editable: true, precision: 0 },
   {
     key: 'sellingPrice',
     header: 'Sell $',
-    width: 120,
+    width: 100,
     type: 'numeric',
     editable: true,
-    precision: 3,
+    precision: 2,
   },
   {
     key: 'manufacturingCost',
     header: 'Mfg $',
-    width: 120,
+    width: 100,
     type: 'numeric',
     editable: true,
     precision: 3,
@@ -211,7 +220,7 @@ const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   {
     key: 'freightCost',
     header: 'Freight $',
-    width: 120,
+    width: 100,
     type: 'numeric',
     editable: true,
     precision: 3,
@@ -229,7 +238,7 @@ const TARIFF_RATE_COLUMN: ColumnDef = {
 
 const TARIFF_COST_COLUMN: ColumnDef = {
   key: 'tariffCost',
-  header: 'Tariff $/unit',
+  header: 'Tariff $',
   width: 120,
   type: 'numeric',
   editable: true,
@@ -264,41 +273,15 @@ const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   },
 ];
 
-// Carton dimensions are editable but displayed in the CBM column
-const CBM_COLUMNS: ColumnDef[] = [
-  {
-    key: 'unitsPerCarton',
-    header: 'Units/Ctn',
-    width: 100,
-    type: 'numeric',
-    editable: true,
-    precision: 0,
-  },
-  {
-    key: 'cartonSide1Cm',
-    header: 'L (cm)',
-    width: 85,
-    type: 'numeric',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'cartonSide2Cm',
-    header: 'W (cm)',
-    width: 85,
-    type: 'numeric',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'cartonSide3Cm',
-    header: 'H (cm)',
-    width: 85,
-    type: 'numeric',
-    editable: true,
-    precision: 2,
-  },
-];
+// Units per carton column (separate from carton dimensions modal)
+const UNITS_PER_CARTON_COLUMN: ColumnDef = {
+  key: 'unitsPerCarton',
+  header: 'Units/Ctn',
+  width: 90,
+  type: 'numeric',
+  editable: true,
+  precision: 0,
+};
 
 /**
  * Compute total CBM for a batch row.
@@ -382,7 +365,7 @@ export function CustomOpsCostGrid({
             {
               key: 'grossProfit',
               header: 'GP %',
-              width: 110,
+              width: 80,
               type: 'percent',
               editable: false,
               precision: 2,
@@ -391,51 +374,30 @@ export function CustomOpsCostGrid({
             {
               key: 'netProfit',
               header: 'NP %',
-              width: 110,
+              width: 80,
               type: 'percent',
               editable: false,
               precision: 2,
               computed: true,
             },
           ]
-        : profitDisplayMode === 'total'
-          ? [
+        : [
               {
                 key: 'grossProfit',
                 header: 'GP $',
-                width: 130,
+                width: 90,
                 type: 'numeric',
                 editable: false,
-                precision: 0,
+                precision: profitDisplayMode === 'total' ? 0 : 2,
                 computed: true,
               },
               {
                 key: 'netProfit',
                 header: 'NP $',
-                width: 130,
+                width: 90,
                 type: 'numeric',
                 editable: false,
-                precision: 0,
-                computed: true,
-              },
-            ]
-          : [
-              {
-                key: 'grossProfit',
-                header: 'GP $/unit',
-                width: 130,
-                type: 'numeric',
-                editable: false,
-                precision: 2,
-                computed: true,
-              },
-              {
-                key: 'netProfit',
-                header: 'NP $/unit',
-                width: 130,
-                type: 'numeric',
-                editable: false,
-                precision: 2,
+                precision: profitDisplayMode === 'total' ? 0 : 2,
                 computed: true,
               },
             ];
@@ -444,14 +406,14 @@ export function CustomOpsCostGrid({
     const cbmColumn: ColumnDef = {
       key: 'cbm',
       header: 'CBM',
-      width: 90,
+      width: 70,
       type: 'numeric',
       editable: false,
       precision: 3,
       computed: true,
     };
 
-    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...CBM_COLUMNS, cbmColumn, ...profitColumns];
+    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, UNITS_PER_CARTON_COLUMN, cbmColumn, ...profitColumns];
   }, [profitDisplayMode, tariffInputMode]);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
@@ -459,6 +421,12 @@ export function CustomOpsCostGrid({
     rowId: string;
     colKey: keyof OpsBatchRow;
   } | null>(null);
+  const [cartonModalRow, setCartonModalRow] = useState<OpsBatchRow | null>(null);
+  const [cartonModalValues, setCartonModalValues] = useState({
+    cartonSide1Cm: '',
+    cartonSide2Cm: '',
+    cartonSide3Cm: '',
+  });
   const [activeCell, setActiveCell] = useState<{ rowId: string; colKey: keyof OpsBatchRow } | null>(
     null,
   );
@@ -1459,6 +1427,16 @@ export function CustomOpsCostGrid({
     };
   }, []);
 
+  // Monetary fields that should be affected by the profit display mode (total vs per-unit)
+  const MONETARY_FIELDS: Set<keyof OpsBatchRow> = new Set([
+    'sellingPrice',
+    'manufacturingCost',
+    'freightCost',
+    'tariffCost',
+    'fbaFee',
+    'storagePerMonth',
+  ]);
+
   const formatDisplayValue = (row: OpsBatchRow, column: ColumnDef): string => {
     if (column.key === 'grossProfit' || column.key === 'netProfit') {
       const metrics = computeProfitMetrics(row);
@@ -1496,6 +1474,17 @@ export function CustomOpsCostGrid({
       return cbm.toFixed(column.precision ?? 3);
     }
 
+    // Handle carton dimensions display (L×W×H)
+    if (column.type === 'carton') {
+      const l = sanitizeNumeric(row.cartonSide1Cm);
+      const w = sanitizeNumeric(row.cartonSide2Cm);
+      const h = sanitizeNumeric(row.cartonSide3Cm);
+      if (Number.isNaN(l) || Number.isNaN(w) || Number.isNaN(h) || l <= 0 || w <= 0 || h <= 0) {
+        return '-';
+      }
+      return `${l}×${w}×${h}`;
+    }
+
     const value = row[column.key];
     if (!value) return '';
 
@@ -1512,12 +1501,32 @@ export function CustomOpsCostGrid({
       ) {
         return num.toFixed(column.precision ?? 2);
       }
+
+      // Apply total mode multiplier for monetary fields
+      if (MONETARY_FIELDS.has(column.key) && profitDisplayMode === 'total') {
+        const quantity = sanitizeNumeric(row.quantity);
+        const total = Number.isFinite(quantity) ? num * quantity : num;
+        const precision = profitDisplayMode === 'total' ? 0 : (column.precision ?? 2);
+        return `$${total.toFixed(precision).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+      }
+
       return `$${num.toFixed(column.precision ?? 2)}`;
     }
 
     if (column.type === 'percent') {
       const num = sanitizeNumeric(value);
       if (Number.isNaN(num)) return value;
+
+      // In total mode, show TACoS and Referral as dollar amounts
+      if (profitDisplayMode === 'total' && (column.key === 'tacosPercent' || column.key === 'referralRate')) {
+        const sellingPrice = sanitizeNumeric(row.sellingPrice);
+        const quantity = sanitizeNumeric(row.quantity);
+        if (Number.isFinite(sellingPrice) && Number.isFinite(quantity)) {
+          const dollarAmount = sellingPrice * num * quantity;
+          return `$${dollarAmount.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        }
+      }
+
       return `${(num * 100).toFixed(column.precision ?? 2)}%`;
     }
 
@@ -1538,6 +1547,7 @@ export function CustomOpsCostGrid({
 
     const isNumericCell = column.type === 'numeric' || column.type === 'percent';
     const isDropdown = column.type === 'dropdown';
+    const isCarton = column.type === 'carton';
     const isRowSelected = isRowActive(row);
 
     const cellClassName = cn(
@@ -1545,7 +1555,7 @@ export function CustomOpsCostGrid({
       colIndex === 0 && isRowSelected && 'border-l-4 border-cyan-600 dark:border-cyan-400',
       isNumericCell && 'text-right',
       column.editable
-        ? isDropdown
+        ? isDropdown || isCarton
           ? 'cursor-pointer bg-accent/50 font-medium'
           : 'cursor-text bg-accent/50 font-medium'
         : column.computed
@@ -1568,7 +1578,7 @@ export function CustomOpsCostGrid({
             key={column.key}
             id={cellDomId(row.id, column.key)}
             className={cellClassName}
-            style={{ width: column.width, minWidth: column.width, boxShadow }}
+            style={{ boxShadow }}
           >
             <select
               ref={inputRef as React.RefObject<HTMLSelectElement>}
@@ -1596,7 +1606,7 @@ export function CustomOpsCostGrid({
           key={column.key}
           id={cellDomId(row.id, column.key)}
           className={cellClassName}
-          style={{ width: column.width, minWidth: column.width, boxShadow }}
+          style={{ boxShadow }}
         >
           <input
             ref={inputRef as React.RefObject<HTMLInputElement>}
@@ -1614,12 +1624,39 @@ export function CustomOpsCostGrid({
       );
     }
 
+    // Carton cell - opens modal on click
+    if (isCarton) {
+      return (
+        <TableCell
+          key={column.key}
+          id={cellDomId(row.id, column.key)}
+          className={cellClassName}
+          style={{ boxShadow }}
+          title={displayValue || undefined}
+          onPointerDown={(event) => handlePointerDown(event, rowIndex, colIndex)}
+          onPointerMove={(event) => handlePointerMove(event, rowIndex, colIndex)}
+          onPointerUp={handlePointerUp}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            setCartonModalRow(row);
+            setCartonModalValues({
+              cartonSide1Cm: row.cartonSide1Cm || '',
+              cartonSide2Cm: row.cartonSide2Cm || '',
+              cartonSide3Cm: row.cartonSide3Cm || '',
+            });
+          }}
+        >
+          <span className="block truncate px-3 text-center">{displayValue}</span>
+        </TableCell>
+      );
+    }
+
     return (
       <TableCell
         key={column.key}
         id={cellDomId(row.id, column.key)}
         className={cellClassName}
-        style={{ width: column.width, minWidth: column.width, boxShadow }}
+        style={{ boxShadow }}
         title={displayValue || undefined}
         onPointerDown={(event) => handlePointerDown(event, rowIndex, colIndex)}
         onPointerMove={(event) => handlePointerMove(event, rowIndex, colIndex)}
@@ -1766,14 +1803,13 @@ export function CustomOpsCostGrid({
           onPaste={handlePaste}
           className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <Table className="table-fixed border-collapse">
+          <Table className="border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 {columns.map((column) => (
                   <TableHead
                     key={column.key}
-                    style={{ width: column.width, minWidth: column.width }}
-                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
+                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.key === 'tariffRate' || column.key === 'tariffCost' ? (
                       <button
@@ -1829,6 +1865,91 @@ export function CustomOpsCostGrid({
           </Table>
         </div>
       </div>
+
+      {/* Carton Dimensions Modal */}
+      <Dialog open={cartonModalRow !== null} onOpenChange={(open) => !open && setCartonModalRow(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Carton Dimensions (cm)</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3 py-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Length</label>
+              <input
+                type="number"
+                step="0.01"
+                value={cartonModalValues.cartonSide1Cm}
+                onChange={(e) => setCartonModalValues((v) => ({ ...v, cartonSide1Cm: e.target.value }))}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="L"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Width</label>
+              <input
+                type="number"
+                step="0.01"
+                value={cartonModalValues.cartonSide2Cm}
+                onChange={(e) => setCartonModalValues((v) => ({ ...v, cartonSide2Cm: e.target.value }))}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="W"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Height</label>
+              <input
+                type="number"
+                step="0.01"
+                value={cartonModalValues.cartonSide3Cm}
+                onChange={(e) => setCartonModalValues((v) => ({ ...v, cartonSide3Cm: e.target.value }))}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="H"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCartonModalRow(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!cartonModalRow) return;
+                const updates: Array<{ id: string; values: Record<string, string | null> }> = [
+                  {
+                    id: cartonModalRow.id,
+                    values: {
+                      cartonSide1Cm: cartonModalValues.cartonSide1Cm || null,
+                      cartonSide2Cm: cartonModalValues.cartonSide2Cm || null,
+                      cartonSide3Cm: cartonModalValues.cartonSide3Cm || null,
+                    },
+                  },
+                ];
+                // Update local state
+                setLocalRows((prev) =>
+                  prev.map((r) =>
+                    r.id === cartonModalRow.id
+                      ? {
+                          ...r,
+                          cartonSide1Cm: cartonModalValues.cartonSide1Cm,
+                          cartonSide2Cm: cartonModalValues.cartonSide2Cm,
+                          cartonSide3Cm: cartonModalValues.cartonSide3Cm,
+                        }
+                      : r,
+                  ),
+                );
+                // Flush to server
+                handleFlush(updates);
+                setCartonModalRow(null);
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
