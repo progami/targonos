@@ -188,35 +188,38 @@ function normalizeRange(range: CellRange): {
   };
 }
 
-const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
-  { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
-  { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
-  { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
-  {
-    key: 'sellingPrice',
-    header: 'Sell $',
-    width: 120,
-    type: 'numeric',
-    editable: true,
-    precision: 3,
-  },
-  {
-    key: 'manufacturingCost',
-    header: 'Mfg $',
-    width: 120,
-    type: 'numeric',
-    editable: true,
-    precision: 3,
-  },
-  {
-    key: 'freightCost',
-    header: 'Freight $',
-    width: 120,
-    type: 'numeric',
-    editable: true,
-    precision: 3,
-  },
-];
+function getColumnsBeforeTariff(displayMode: ProfitDisplayMode): ColumnDef[] {
+  const suffix = displayMode === 'total' ? ' $' : ' $/u';
+  return [
+    { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
+    { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
+    { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
+    {
+      key: 'sellingPrice',
+      header: `Sell${suffix}`,
+      width: 120,
+      type: 'numeric',
+      editable: true,
+      precision: 3,
+    },
+    {
+      key: 'manufacturingCost',
+      header: `Mfg${suffix}`,
+      width: 120,
+      type: 'numeric',
+      editable: true,
+      precision: 3,
+    },
+    {
+      key: 'freightCost',
+      header: `Freight${suffix}`,
+      width: 130,
+      type: 'numeric',
+      editable: true,
+      precision: 3,
+    },
+  ];
+}
 
 const TARIFF_RATE_COLUMN: ColumnDef = {
   key: 'tariffRate',
@@ -227,42 +230,47 @@ const TARIFF_RATE_COLUMN: ColumnDef = {
   precision: 2,
 };
 
-const TARIFF_COST_COLUMN: ColumnDef = {
-  key: 'tariffCost',
-  header: 'Tariff $/unit',
-  width: 120,
-  type: 'numeric',
-  editable: true,
-  precision: 3,
-};
-
-const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
-  {
-    key: 'tacosPercent',
-    header: 'TACoS %',
-    width: 110,
-    type: 'percent',
-    editable: true,
-    precision: 2,
-  },
-  { key: 'fbaFee', header: 'FBA $', width: 110, type: 'numeric', editable: true, precision: 3 },
-  {
-    key: 'referralRate',
-    header: 'Referral %',
-    width: 110,
-    type: 'percent',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'storagePerMonth',
-    header: 'Storage $',
+function getTariffCostColumn(displayMode: ProfitDisplayMode): ColumnDef {
+  return {
+    key: 'tariffCost',
+    header: displayMode === 'total' ? 'Tariff $' : 'Tariff $/u',
     width: 120,
     type: 'numeric',
     editable: true,
     precision: 3,
-  },
-];
+  };
+}
+
+function getColumnsAfterTariff(displayMode: ProfitDisplayMode): ColumnDef[] {
+  const suffix = displayMode === 'total' ? ' $' : ' $/u';
+  return [
+    {
+      key: 'tacosPercent',
+      header: 'TACoS %',
+      width: 110,
+      type: 'percent',
+      editable: true,
+      precision: 2,
+    },
+    { key: 'fbaFee', header: `FBA${suffix}`, width: 110, type: 'numeric', editable: true, precision: 3 },
+    {
+      key: 'referralRate',
+      header: 'Referral %',
+      width: 110,
+      type: 'percent',
+      editable: true,
+      precision: 2,
+    },
+    {
+      key: 'storagePerMonth',
+      header: `Storage${suffix}`,
+      width: 120,
+      type: 'numeric',
+      editable: true,
+      precision: 3,
+    },
+  ];
+}
 
 // Carton dimensions are editable but displayed in the CBM column
 const CBM_COLUMNS: ColumnDef[] = [
@@ -375,7 +383,7 @@ export function CustomOpsCostGrid({
   );
 
   const columns = useMemo(() => {
-    const tariffColumn = tariffInputMode === 'cost' ? TARIFF_COST_COLUMN : TARIFF_RATE_COLUMN;
+    const tariffColumn = tariffInputMode === 'cost' ? getTariffCostColumn(profitDisplayMode) : TARIFF_RATE_COLUMN;
     const profitColumns: ColumnDef[] =
       profitDisplayMode === 'percent'
         ? [
@@ -422,7 +430,7 @@ export function CustomOpsCostGrid({
           : [
               {
                 key: 'grossProfit',
-                header: 'GP $/unit',
+                header: 'GP $/u',
                 width: 130,
                 type: 'numeric',
                 editable: false,
@@ -431,7 +439,7 @@ export function CustomOpsCostGrid({
               },
               {
                 key: 'netProfit',
-                header: 'NP $/unit',
+                header: 'NP $/u',
                 width: 130,
                 type: 'numeric',
                 editable: false,
@@ -451,7 +459,7 @@ export function CustomOpsCostGrid({
       computed: true,
     };
 
-    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...CBM_COLUMNS, cbmColumn, ...profitColumns];
+    return [...getColumnsBeforeTariff(profitDisplayMode), tariffColumn, ...getColumnsAfterTariff(profitDisplayMode), ...CBM_COLUMNS, cbmColumn, ...profitColumns];
   }, [profitDisplayMode, tariffInputMode]);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
@@ -1459,6 +1467,16 @@ export function CustomOpsCostGrid({
     };
   }, []);
 
+  // Monetary fields that should be affected by the profit display mode (total vs per-unit)
+  const MONETARY_FIELDS: Set<keyof OpsBatchRow> = new Set([
+    'sellingPrice',
+    'manufacturingCost',
+    'freightCost',
+    'tariffCost',
+    'fbaFee',
+    'storagePerMonth',
+  ]);
+
   const formatDisplayValue = (row: OpsBatchRow, column: ColumnDef): string => {
     if (column.key === 'grossProfit' || column.key === 'netProfit') {
       const metrics = computeProfitMetrics(row);
@@ -1512,6 +1530,15 @@ export function CustomOpsCostGrid({
       ) {
         return num.toFixed(column.precision ?? 2);
       }
+
+      // Apply total mode multiplier for monetary fields
+      if (MONETARY_FIELDS.has(column.key) && profitDisplayMode === 'total') {
+        const quantity = sanitizeNumeric(row.quantity);
+        const total = Number.isFinite(quantity) ? num * quantity : num;
+        const precision = profitDisplayMode === 'total' ? 0 : (column.precision ?? 2);
+        return `$${total.toFixed(precision).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+      }
+
       return `$${num.toFixed(column.precision ?? 2)}`;
     }
 
