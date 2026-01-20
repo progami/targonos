@@ -1351,7 +1351,7 @@ export function CustomPurchasePaymentsGrid({
           key={column.key}
           id={cellDomId(row.id, column.key)}
           className={cellClassName}
-          style={{ width: column.width, minWidth: column.width, boxShadow }}
+          style={{ boxShadow }}
         >
           {column.type === 'date' || isScheduleDate ? (
             <Flatpickr
@@ -1417,7 +1417,7 @@ export function CustomPurchasePaymentsGrid({
         key={column.key}
         id={cellDomId(row.id, column.key)}
         className={cellClassName}
-        style={{ width: column.width, minWidth: column.width, boxShadow }}
+        style={{ boxShadow }}
         title={showPlaceholder ? undefined : displayValue || undefined}
         onPointerDown={(event) => handlePointerDown(event, rowIndex, colIndex)}
         onPointerMove={(event) => handlePointerMove(event, rowIndex, colIndex)}
@@ -1524,13 +1524,13 @@ export function CustomPurchasePaymentsGrid({
           onPaste={handlePaste}
           className="max-h-[400px] overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <Table className="table-fixed border-collapse">
+          <Table className="border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 {COLUMNS.map((column) => (
                   <TableHead
                     key={column.key}
-                    style={{ width: column.width, minWidth: column.width }}
+                    style={{}}
                     className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.type === 'schedule' ? (

@@ -792,7 +792,7 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
         purchaseOrderDelegate,
         {
           where: { strategyId },
-          orderBy: [{ poDate: 'asc' }, { orderCode: 'asc' }],
+          orderBy: [{ productionStart: 'asc' }, { orderCode: 'asc' }],
           include: {
             payments: { orderBy: { paymentIndex: 'asc' } },
           },
