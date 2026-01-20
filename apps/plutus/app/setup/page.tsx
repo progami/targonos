@@ -73,33 +73,54 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-// Account definitions
+function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+// Tooltip component
+function Tooltip({ children, content }: { children: React.ReactNode; content: string }) {
+  return (
+    <span className="relative group">
+      {children}
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-slate-900 dark:bg-slate-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+        {content}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-700" />
+      </span>
+    </span>
+  );
+}
+
+// Account definitions with tooltips
 const INVENTORY_ACCOUNTS = [
-  { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
-  { key: 'invFreight', label: 'Freight', type: 'Other Current Asset' },
-  { key: 'invDuty', label: 'Duty', type: 'Other Current Asset' },
-  { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset' },
+  { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset', tip: 'Product cost from supplier' },
+  { key: 'invFreight', label: 'Freight', type: 'Other Current Asset', tip: 'International shipping costs' },
+  { key: 'invDuty', label: 'Duty', type: 'Other Current Asset', tip: 'Import duty/customs charges' },
+  { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset', tip: 'Packaging, labels, inserts' },
 ];
 
 const COGS_ACCOUNTS = [
-  { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
-  { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
-  { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
-  { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
-  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
-  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
-  { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
+  { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold', tip: 'Product cost when sold' },
+  { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold', tip: 'Freight cost when sold' },
+  { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold', tip: 'Duty cost when sold' },
+  { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold', tip: 'Accessories cost when sold' },
+  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold', tip: 'Local shipping (3PL to FBA)' },
+  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold', tip: '3PL warehouse storage fees' },
+  { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold', tip: 'Lost/damaged inventory' },
 ];
 
 const LMB_ACCOUNTS = [
-  { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
-  { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
-  { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income' },
-  { key: 'amazonSellerFees', label: 'Seller Fees', type: 'Cost of Goods Sold' },
-  { key: 'amazonFbaFees', label: 'FBA Fees', type: 'Cost of Goods Sold' },
-  { key: 'amazonStorageFees', label: 'Storage Fees', type: 'Cost of Goods Sold' },
-  { key: 'amazonAdvertisingCosts', label: 'Advertising', type: 'Cost of Goods Sold' },
-  { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
+  { key: 'amazonSales', label: 'Amazon Sales', type: 'Income', tip: 'Revenue from product sales' },
+  { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income', tip: 'Customer refunds (contra-revenue)' },
+  { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income', tip: 'Amazon reimbursements for lost inventory' },
+  { key: 'amazonSellerFees', label: 'Seller Fees', type: 'Cost of Goods Sold', tip: 'Referral fees, closing fees' },
+  { key: 'amazonFbaFees', label: 'FBA Fees', type: 'Cost of Goods Sold', tip: 'Fulfillment fees' },
+  { key: 'amazonStorageFees', label: 'Storage Fees', type: 'Cost of Goods Sold', tip: 'FBA warehouse storage' },
+  { key: 'amazonAdvertisingCosts', label: 'Advertising', type: 'Cost of Goods Sold', tip: 'PPC and sponsored ads' },
+  { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold', tip: 'Coupons and promotions' },
 ];
 
 const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...LMB_ACCOUNTS];
@@ -251,19 +272,30 @@ function AccountRow({
   accounts,
   onChange,
   type,
+  tip,
 }: {
   label: string;
   accountId: string;
   accounts: QboAccount[];
   onChange: (id: string) => void;
   type?: string;
+  tip?: string;
 }) {
   const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
   const selected = accounts.find((a) => a.id === accountId);
 
   return (
     <tr className="bg-white dark:bg-slate-900">
-      <td className="px-4 py-2.5 text-sm text-slate-900 dark:text-white">{label}</td>
+      <td className="px-4 py-2.5 text-sm text-slate-900 dark:text-white">
+        <span className="flex items-center gap-1.5">
+          {label}
+          {tip && (
+            <Tooltip content={tip}>
+              <InfoIcon className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+            </Tooltip>
+          )}
+        </span>
+      </td>
       <td className="px-4 py-2.5">
         <select
           value={accountId}
@@ -275,7 +307,7 @@ function AccountRow({
               : 'border-slate-200 dark:border-slate-700 text-slate-400'
           )}
         >
-          <option value="">Select account...</option>
+          <option value="">Select parent account...</option>
           {filtered.map((a) => (
             <option key={a.id} value={a.id}>
               {a.fullyQualifiedName}
@@ -370,10 +402,15 @@ function AccountsSection({
     );
   }
 
-  const renderAccountGroup = (title: string, accountList: typeof INVENTORY_ACCOUNTS) => (
+  const renderAccountGroup = (title: string, description: string, accountList: typeof INVENTORY_ACCOUNTS) => (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-      <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2">
-        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{title}</h3>
+      <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">{title}</h3>
+          <Tooltip content={description}>
+            <InfoIcon className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+          </Tooltip>
+        </div>
       </div>
       <table className="w-full">
         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -385,6 +422,7 @@ function AccountsSection({
               accounts={accounts}
               onChange={(id) => updateAccount(acc.key, id)}
               type={acc.type}
+              tip={acc.tip}
             />
           ))}
         </tbody>
@@ -397,14 +435,14 @@ function AccountsSection({
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Map QBO parent accounts. Plutus creates brand sub-accounts under each.
+          Select your existing QBO <span className="font-medium text-slate-600 dark:text-slate-300">parent accounts</span>. Plutus will create brand sub-accounts under each (e.g., &quot;Manufacturing - US-Dust Sheets&quot;).
         </p>
       </div>
 
       <div className="grid gap-4">
-        {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
-        {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
-        {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
+        {renderAccountGroup('Inventory Asset', 'Select parent accounts where Plutus creates brand sub-accounts (e.g., "Inv Manufacturing - US-Dust Sheets")', INVENTORY_ACCOUNTS)}
+        {renderAccountGroup('Cost of Goods Sold', 'Select parent accounts for COGS sub-accounts. Plutus posts here when inventory is sold.', COGS_ACCOUNTS)}
+        {renderAccountGroup('Revenue & Fees (LMB)', 'Select LMB parent accounts. Plutus creates brand sub-accounts for fee allocation.', LMB_ACCOUNTS)}
       </div>
 
       {error && (
