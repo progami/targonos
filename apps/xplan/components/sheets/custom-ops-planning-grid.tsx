@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import Flatpickr from 'react-flatpickr';
 import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { useMutationQueue } from '@/hooks/useMutationQueue';
-import { useGridUndoRedo, type CellEdit } from '@/hooks/useGridUndoRedo';
+import { useOpsPlanningStore, type CellEdit, type StageMode } from '@/stores';
 import { toIsoDate, formatDateDisplay } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
@@ -468,7 +468,7 @@ const COLUMNS: ColumnDef[] = [
   },
 ];
 
-type StageMode = 'weeks' | 'dates';
+// StageMode imported from @/stores
 
 type CellCoords = { row: number; col: number };
 type CellRange = { from: CellCoords; to: CellCoords };
@@ -812,7 +812,13 @@ export function CustomOpsPlanningGrid({
   disableDuplicate,
   disableDelete,
 }: CustomOpsPlanningGridProps) {
-  const [stageMode, setStageMode] = useState<StageMode>('dates');
+  // Get state and actions from zustand store
+  const stageMode = useOpsPlanningStore((s) => s.stageMode);
+  const toggleStageMode = useOpsPlanningStore((s) => s.toggleStageMode);
+  const recordEdits = useOpsPlanningStore((s) => s.recordEdits);
+  const storeUndo = useOpsPlanningStore((s) => s.undo);
+  const storeRedo = useOpsPlanningStore((s) => s.redo);
+
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
     colKey: keyof OpsInputRow;
@@ -881,9 +887,9 @@ export function CustomOpsPlanningGrid({
     onFlush: handleFlush,
   });
 
-  // Undo/redo functionality
+  // Undo/redo functionality - apply edits to rows and queue for API
   const applyUndoRedoEdits = useCallback(
-    (edits: CellEdit<string>[]) => {
+    (edits: CellEdit[]) => {
       let updatedRows = [...rows];
       for (const edit of edits) {
         const rowIndex = updatedRows.findIndex((r) => r.id === edit.rowKey);
@@ -903,10 +909,16 @@ export function CustomOpsPlanningGrid({
     [rows, pendingRef, scheduleFlush, onRowsChange],
   );
 
-  const { recordEdits, undo, redo, canUndo, canRedo } = useGridUndoRedo<string>({
-    maxHistory: 50,
-    onApplyEdits: applyUndoRedoEdits,
-  });
+  // Undo/redo handlers that use the store
+  const undo = useCallback(() => {
+    const edits = storeUndo();
+    if (edits) applyUndoRedoEdits(edits);
+  }, [storeUndo, applyUndoRedoEdits]);
+
+  const redo = useCallback(() => {
+    const edits = storeRedo();
+    if (edits) applyUndoRedoEdits(edits);
+  }, [storeRedo, applyUndoRedoEdits]);
 
   // Use ref pattern to avoid cleanup running on every re-render
   const flushNowRef = useRef(flushNow);
@@ -1308,7 +1320,7 @@ export function CustomOpsPlanningGrid({
       }
 
       // Record edits for undo/redo
-      const undoEdits: CellEdit<string>[] = Object.entries(entry.values).map(
+      const undoEdits: CellEdit[] = Object.entries(entry.values).map(
         ([field, newValue]) => ({
           rowKey: rowId,
           field,
@@ -1649,7 +1661,7 @@ export function CustomOpsPlanningGrid({
     if (top < 0 || left < 0) return;
 
     let updatedRows = [...rows];
-    const undoEdits: CellEdit<string>[] = [];
+    const undoEdits: CellEdit[] = [];
 
     for (let rowIndex = top; rowIndex <= bottom; rowIndex += 1) {
       const row = updatedRows[rowIndex];
@@ -1735,7 +1747,7 @@ export function CustomOpsPlanningGrid({
       if (updatesByRowIndex.size === 0) return;
 
       let updatedRows = [...rows];
-      const undoEdits: CellEdit<string>[] = [];
+      const undoEdits: CellEdit[] = [];
       const stageValidationErrors: string[] = [];
 
       for (const [rowIndex, rowUpdates] of updatesByRowIndex.entries()) {
@@ -2171,10 +2183,6 @@ export function CustomOpsPlanningGrid({
         : (column.headerDates ?? column.header);
     }
     return column.header;
-  };
-
-  const toggleStageMode = () => {
-    setStageMode((prev) => (prev === 'weeks' ? 'dates' : 'weeks'));
   };
 
   const renderHeader = (column: ColumnDef) => {
