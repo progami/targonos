@@ -49,7 +49,7 @@ export const products: Product[] = [
       { src: '/products/core.svg', alt: 'Core hero' },
       { src: '/products/basic.svg', alt: 'Core detail' }
     ],
-    amazonUrl: 'https://www.amazon.com/dp/YOUR_ASIN_HERE',
+    amazonUrl: 'https://www.amazon.com/dp/B09HXC3NL8',
     accent: 'core'
   },
   {
@@ -78,7 +78,7 @@ export const products: Product[] = [
       { src: '/products/basic.svg', alt: 'Basic hero' },
       { src: '/products/essential.svg', alt: 'Basic detail' }
     ],
-    amazonUrl: 'https://www.amazon.com/dp/YOUR_ASIN_HERE',
+    amazonUrl: 'https://www.amazon.com/dp/B0FLKJ7WWM',
     accent: 'basic'
   },
   {
@@ -107,7 +107,7 @@ export const products: Product[] = [
       { src: '/products/essential.svg', alt: 'Essential hero' },
       { src: '/products/deluxe.svg', alt: 'Essential detail' }
     ],
-    amazonUrl: 'https://www.amazon.com/dp/YOUR_ASIN_HERE',
+    amazonUrl: 'https://www.amazon.com/dp/B0CR1GSBQ9',
     accent: 'essential'
   },
   {
@@ -136,7 +136,7 @@ export const products: Product[] = [
       { src: '/products/deluxe.svg', alt: 'Deluxe hero' },
       { src: '/products/core.svg', alt: 'Deluxe detail' }
     ],
-    amazonUrl: 'https://www.amazon.com/dp/YOUR_ASIN_HERE',
+    amazonUrl: 'https://www.amazon.com/dp/B0FP66CWQ6',
     accent: 'deluxe'
   }
 ];
