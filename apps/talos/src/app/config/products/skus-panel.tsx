@@ -1095,12 +1095,9 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                 </div>
 
                 <div className="md:col-span-2 pt-4 border-t">
-                  <h4 className="text-sm font-semibold text-slate-900 mb-1">Item dimensions</h4>
-                  <p className="text-xs text-slate-500 mb-3">Physical product dimensions (optional).</p>
-
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-1">
-                      <Label>Dimensions (cm)</Label>
+                      <Label>Item Dimensions (cm)</Label>
                       <div className="grid grid-cols-3 gap-2">
                         <Input
                           id="itemSide1Cm"

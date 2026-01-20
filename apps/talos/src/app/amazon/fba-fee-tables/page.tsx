@@ -129,12 +129,27 @@ export default function FbaFeeTablesPage() {
     <DashboardLayout>
     <PageContainer>
       <PageHeaderSection
-        title="FBA Fee Tables (2026)"
-        description="Amazon"
+        title="FBA Fee Tables"
+        description="Amazon US Rate Card 2026 (after Jan 15, 2026)"
         icon={DollarSign}
       />
 
       <PageContent className="space-y-8">
+        {/* UK Rate Card Link */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-4">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>Note:</strong> These are US FBA fees (USD). For UK FBA fees (GBP), see the{' '}
+            <a
+              href="https://sellercentral.amazon.co.uk/help/hub/reference/G201411300"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+            >
+              Amazon UK FBA Rate Card
+            </a>.
+          </p>
+        </div>
+
         {/* Small Standard-Size Table */}
         <section className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3">
@@ -466,7 +481,15 @@ export default function FbaFeeTablesPage() {
         </section>
 
         <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-          Fee tables effective January 15, 2026 (non-peak, excluding apparel). Source: Amazon FBA fee schedule.
+          US fee tables effective January 15, 2026 (non-peak, excluding apparel). Source:{' '}
+          <a
+            href="https://sellercentral.amazon.com/help/hub/reference/G201411300"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-slate-600 dark:hover:text-slate-400"
+          >
+            Amazon US FBA Fee Schedule
+          </a>
         </p>
       </PageContent>
     </PageContainer>
