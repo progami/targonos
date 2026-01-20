@@ -83,6 +83,21 @@ export default function ProductDetailPage({ params }: PageProps) {
                 </Button>
               </div>
 
+              {p.amazonAltUrl ? (
+                <div className="mt-3 text-xs text-muted">
+                  Also available on{' '}
+                  <a
+                    className="font-semibold text-ink hover:underline"
+                    href={p.amazonAltUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {p.amazonAltLabel ?? 'Amazon'}
+                  </a>
+                  .
+                </div>
+              ) : null}
+
               <div className="mt-5 flex flex-wrap items-baseline gap-3">
                 {p.price ? (
                   <div className="text-sm font-semibold text-ink">
@@ -232,11 +247,26 @@ export default function ProductDetailPage({ params }: PageProps) {
                       <Link href="/products">See all packs</Link>
                     </Button>
                     <Button asChild variant="accent" size="sm">
-                      <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+                      <a href={primary?.amazonUrl ?? site.amazonStoreUrl} target="_blank" rel="noreferrer">
                         Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
                       </a>
                     </Button>
                   </div>
+
+                  {primary?.amazonAltUrl ? (
+                    <div className="mt-3 text-xs text-muted">
+                      Prefer{' '}
+                      <a
+                        className="font-semibold text-ink hover:underline"
+                        href={primary.amazonAltUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {primary.amazonAltLabel ?? 'another region'}
+                      </a>
+                      ?
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
