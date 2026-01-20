@@ -2344,8 +2344,8 @@ export default function PurchaseOrderDetailPage() {
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
@@ -2370,10 +2370,10 @@ export default function PurchaseOrderDetailPage() {
                         ) : (
                           order.lines.map((line) => (
                             <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
                                 {line.skuCode}
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
                                 {line.batchLot || '—'}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
@@ -2452,23 +2452,23 @@ export default function PurchaseOrderDetailPage() {
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full table-auto text-sm">
-                      <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-semibold">SKU</th>
-                          <th className="px-4 py-2 text-left font-semibold">Batch</th>
-                          <th className="px-4 py-2 text-left font-semibold">Carton Size</th>
-                          <th className="px-4 py-2 text-right font-semibold">CBM/ctn</th>
-                          <th className="px-4 py-2 text-right font-semibold">CBM Total</th>
-                          <th className="px-4 py-2 text-right font-semibold">KG/ctn</th>
-                          <th className="px-4 py-2 text-right font-semibold">KG Total</th>
-                          <th className="px-4 py-2 text-center font-semibold">Pkg Type</th>
+                    <table className="w-full text-sm min-w-[800px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM/ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM Total</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG/ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG Total</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Pkg Type</th>
                         </tr>
                       </thead>
                       <tbody>
                         {order.lines.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                            <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
                               No lines added to this order yet.
                             </td>
                           </tr>
@@ -2476,33 +2476,33 @@ export default function PurchaseOrderDetailPage() {
                           order.lines.map((line) => {
                             const pkg = buildLinePackagingDetails(line)
                             return (
-                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-muted/10">
-                                <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
                                   {line.skuCode}
                                 </td>
-                                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
                                   {line.batchLot || '—'}
                                 </td>
-                                <td className="px-4 py-2.5 text-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-foreground whitespace-nowrap">
                                   {pkg?.cartonDims ? (
                                     pkg.cartonDims
                                   ) : (
                                     <span className="text-amber-600">Not set</span>
                                   )}
                                 </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums text-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                   {pkg?.cbmPerCarton ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
                                   {pkg?.cbmTotal ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums text-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                   {pkg?.kgPerCarton ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
                                   {pkg?.kgTotal ?? <span className="text-muted-foreground">—</span>}
                                 </td>
-                                <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
                                   {pkg?.packagingType ? (
                                     <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                                       {pkg.packagingType}

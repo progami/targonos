@@ -334,15 +334,21 @@ function Step3({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const plutusParents = [
+  // Inventory Asset (Balance Sheet) - single parent for all inventory sub-accounts
+  const inventoryAccounts = [
     { key: 'inventoryAsset', label: 'Inventory Asset', type: 'Other Current Asset' },
+  ];
+
+  // COGS accounts (P&L) - where costs go when inventory is sold
+  const cogsAccounts = [
     { key: 'manufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
     { key: 'freightAndDuty', label: 'Freight & Custom Duty', type: 'Cost of Goods Sold' },
     { key: 'landFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
     { key: 'storage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
   ];
 
-  const lmbParents = [
+  // LMB Revenue/Fee accounts (P&L) - where LMB posts sales and fees
+  const lmbAccounts = [
     { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
     { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
     { key: 'amazonFbaInventoryReimbursement', label: 'Amazon FBA Inventory Reimbursement', type: 'Other Income' },
@@ -353,7 +359,7 @@ function Step3({
     { key: 'amazonPromotions', label: 'Amazon Promotions', type: 'Cost of Goods Sold' },
   ];
 
-  const allRequired = [...plutusParents, ...lmbParents];
+  const allRequired = [...inventoryAccounts, ...cogsAccounts, ...lmbAccounts];
   const allMapped = allRequired.every((p) => parentAccounts[p.key]);
 
   const updateAccount = (key: string, id: string) => {
@@ -407,8 +413,8 @@ function Step3({
         <div className="py-12 text-center text-slate-500">Loading accounts...</div>
       ) : (
         <>
-          <Section title="Plutus Accounts (Inventory + COGS)">
-            {plutusParents.map((p) => (
+          <Section title="Inventory Asset">
+            {inventoryAccounts.map((p) => (
               <AccountRow
                 key={p.key}
                 label={p.label}
@@ -420,8 +426,21 @@ function Step3({
             ))}
           </Section>
 
-          <Section title="LMB Accounts (Revenue + Fees)">
-            {lmbParents.map((p) => (
+          <Section title="Cost of Goods Sold">
+            {cogsAccounts.map((p) => (
+              <AccountRow
+                key={p.key}
+                label={p.label}
+                accountId={parentAccounts[p.key] || ''}
+                accounts={accounts}
+                onChange={(id) => updateAccount(p.key, id)}
+                type={p.type}
+              />
+            ))}
+          </Section>
+
+          <Section title="Revenue & Fees (LMB)">
+            {lmbAccounts.map((p) => (
               <AccountRow
                 key={p.key}
                 label={p.label}
