@@ -25,6 +25,7 @@ packages/prisma-xplan/generated/
 packages/prisma-atlas/generated/
 packages/prisma-kairos/generated/
 packages/prisma-talos/generated/
+packages/prisma-plutus/generated/
 
 # TypeScript
 *.tsbuildinfo
