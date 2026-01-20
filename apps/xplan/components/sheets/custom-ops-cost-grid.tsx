@@ -1578,7 +1578,7 @@ export function CustomOpsCostGrid({
             key={column.key}
             id={cellDomId(row.id, column.key)}
             className={cellClassName}
-            style={{ width: column.width, minWidth: column.width, boxShadow }}
+            style={{ boxShadow }}
           >
             <select
               ref={inputRef as React.RefObject<HTMLSelectElement>}
@@ -1606,7 +1606,7 @@ export function CustomOpsCostGrid({
           key={column.key}
           id={cellDomId(row.id, column.key)}
           className={cellClassName}
-          style={{ width: column.width, minWidth: column.width, boxShadow }}
+          style={{ boxShadow }}
         >
           <input
             ref={inputRef as React.RefObject<HTMLInputElement>}
@@ -1631,7 +1631,7 @@ export function CustomOpsCostGrid({
           key={column.key}
           id={cellDomId(row.id, column.key)}
           className={cellClassName}
-          style={{ width: column.width, minWidth: column.width, boxShadow }}
+          style={{ boxShadow }}
           title={displayValue || undefined}
           onPointerDown={(event) => handlePointerDown(event, rowIndex, colIndex)}
           onPointerMove={(event) => handlePointerMove(event, rowIndex, colIndex)}
@@ -1656,7 +1656,7 @@ export function CustomOpsCostGrid({
         key={column.key}
         id={cellDomId(row.id, column.key)}
         className={cellClassName}
-        style={{ width: column.width, minWidth: column.width, boxShadow }}
+        style={{ boxShadow }}
         title={displayValue || undefined}
         onPointerDown={(event) => handlePointerDown(event, rowIndex, colIndex)}
         onPointerMove={(event) => handlePointerMove(event, rowIndex, colIndex)}
@@ -1803,14 +1803,13 @@ export function CustomOpsCostGrid({
           onPaste={handlePaste}
           className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <Table className="table-fixed border-collapse">
+          <Table className="border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 {columns.map((column) => (
                   <TableHead
                     key={column.key}
-                    style={{ width: column.width, minWidth: column.width }}
-                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
+                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.key === 'tariffRate' || column.key === 'tariffCost' ? (
                       <button
