@@ -207,7 +207,8 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 
 **Purpose:** Create or select all sub-accounts needed for brand-level tracking. This includes:
 - **For Plutus:** Inventory Asset and COGS sub-accounts
-- **For LMB:** Revenue and Fee sub-accounts (so LMB can post to them)
+- **For LMB:** Revenue sub-accounts for **Sales/Refunds** (Product Groups split sales/refunds by brand)
+- **For Plutus:** Fee/other-income sub-accounts used as targets for **post-settlement reclass JEs** (fees are not split by Product Group)
 
 **UI Elements:**
 
@@ -217,7 +218,8 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Plutus needs accounts to track inventory and COGS by brand.    │
-│  We'll also create revenue/fee sub-accounts for LMB to use.     │
+│  We'll also create revenue sub-accounts for LMB (Sales/Refunds) │
+│  and fee sub-accounts for Plutus to post reclass JEs later.     │
 │                                                                 │
 │  We've pre-filled suggested account names. You can customize    │
 │  them or select existing accounts from your Chart of Accounts.  │
@@ -326,12 +328,16 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 │  │ │ Storage 3PL    [Storage 3PL - US-Dust Sheets      ] │ │   │
 │  │ └─────────────────────────────────────────────────────┘ │   │
 │  │                                                         │   │
-│  │ REVENUE/FEE SUB-ACCOUNTS (for LMB Product Groups)       │   │
+│  │ REVENUE SUB-ACCOUNTS (LMB Product Groups)               │   │
 │  │ ┌─────────────────────────────────────────────────────┐ │   │
 │  │ │ Sales          [Amazon Sales - US-Dust Sheets     ] │ │   │
 │  │ │ Refunds        [Amazon Refunds - US-Dust Sheets   ] │ │   │
-│  │ │ FBA Fees       [Amazon FBA Fees - US-Dust Sheets  ] │ │   │
+│  │ └─────────────────────────────────────────────────────┘ │   │
+│  │                                                         │   │
+│  │ FEE/OTHER-INCOME SUB-ACCOUNTS (Plutus reclass targets)   │   │
+│  │ ┌─────────────────────────────────────────────────────┐ │   │
 │  │ │ Seller Fees    [Amazon Seller Fees - US-Dust Sheet] │ │   │
+│  │ │ FBA Fees       [Amazon FBA Fees - US-Dust Sheets  ] │ │   │
 │  │ │ Storage Fees   [Amazon Storage Fees - US-Dust She ] │ │   │
 │  │ │ Advertising    [Amazon Advertising - US-Dust Sheet] │ │   │
 │  │ │ Promotions     [Amazon Promotions - US-Dust Sheets] │ │   │
@@ -349,6 +355,8 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 │  • 8 Inventory Asset sub-accounts (4 per brand)                 │
 │  • 14 COGS sub-accounts (7 per brand)                           │
 │  • 16 Revenue/Fee sub-accounts (8 per brand)                    │
+│    - Sales/Refunds used by LMB Product Groups                    │
+│    - Fees used by Plutus fee reclass JEs                         │
 │                                                                 │
 │  [Create All Sub-Accounts in QBO]                               │
 │                                                                 │
@@ -449,7 +457,9 @@ CS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456
 
 ## Step 6: LMB Product Groups (External)
 
-**Purpose:** Guide user to configure LMB Product Groups to use the brand sub-accounts created in Step 4.
+**Purpose:** Guide user to configure LMB Product Groups so **sales/refunds** post to brand sub-accounts.
+
+**Important:** Product Groups do not split most fee categories by brand. Fees are mapped in LMB Accounts & Taxes and are re-allocated by Plutus after the settlement is posted.
 
 **UI Elements:**
 
@@ -461,7 +471,7 @@ CS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456
 │  ⚠️  This step is completed in Link My Books, not in Plutus.    │
 │                                                                 │
 │  You need to create Product Groups in LMB and map them to the   │
-│  brand sub-accounts created in Step 4.                          │
+│  Sales/Refunds brand sub-accounts created in Step 4.            │
 │                                                                 │
 │  Complete these steps for EACH LMB connection:                  │
 │                                                                 │
@@ -477,12 +487,7 @@ CS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456
 │      ┌───────────────────────────────────────────────────┐     │
 │      │ Sales Account:        Amazon Sales - US-Dust Sheets│     │
 │      │ Refunds Account:      Amazon Refunds - US-Dust...  │     │
-│      │ Seller Fees Account:  Amazon Seller Fees - US-D... │     │
-│      │ FBA Fees Account:     Amazon FBA Fees - US-Dust... │     │
-│      │ Storage Fees Account: Amazon Storage Fees - US-... │     │
-│      │ Advertising Account:  Amazon Advertising - US-D... │     │
-│      │ Promotions Account:   Amazon Promotions - US-Du... │     │
-│      │ Reimbursement:        Amazon FBA Inv Reimb - US... │     │
+│      │ (Fees):               Leave as inherited/default   │     │
 │      │ COGS:                 OFF (Plutus handles this)    │     │
 │      └───────────────────────────────────────────────────┘     │
 │                                                                 │
