@@ -8,7 +8,11 @@ const nextConfig = {
     NEXT_PUBLIC_VERSION: resolvedVersion,
   },
   // Turbopack is the default bundler in Next.js 16
-  turbopack: {},
+  turbopack: {
+    resolveAlias: {
+      '@targon/auth': '../../packages/auth/dist/index.js',
+    },
+  },
 }
 
 module.exports = nextConfig

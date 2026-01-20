@@ -20,7 +20,8 @@ You are only allowed to work on the `apps/atlas` folder. Do not modify files out
 
 1. Create feature branches from `dev`
 2. PRs target `dev` branch
-3. After CI passes and PR is merged to `dev`, merge `dev` to `main`
+3. Always read and address PR reviews/comments from anyone before merging
+4. After CI passes and PR is merged to `dev`, merge `dev` to `main`
 
 ## Code Style
 

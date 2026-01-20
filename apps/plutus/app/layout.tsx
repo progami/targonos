@@ -4,6 +4,7 @@ import './globals.css';
 import { clsx } from 'clsx';
 
 import { Providers } from '@/components/providers';
+import { AppHeader } from '@/components/app-header';
 
 const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '';
 
@@ -44,12 +45,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body
         className={clsx(
-          'min-h-screen bg-slate-50 font-sans antialiased dark:bg-slate-950',
+          'min-h-screen flex flex-col bg-slate-50 font-sans antialiased dark:bg-slate-950',
           dmSans.variable,
           instrumentSerif.variable,
         )}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppHeader />
+          {children}
+        </Providers>
         <a
           href={versionHref}
           target="_blank"

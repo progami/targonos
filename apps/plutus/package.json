@@ -11,7 +11,8 @@
     "lint": "eslint app components lib",
     "type-check": "tsc --noEmit",
     "format": "prettier --check \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
-    "format:write": "prettier --write \"{app,components,lib}/**/*.{ts,tsx,mdx}\""
+    "format:write": "prettier --write \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
+    "qbo": "tsx scripts/qbo.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -29,6 +30,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "decimal.js": "^10.5.0",
+    "fflate": "^0.8.2",
     "intuit-oauth": "^4.2.2",
     "lucide-react": "^0.559.0",
     "next": "16.0.8",

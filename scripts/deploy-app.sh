@@ -126,7 +126,7 @@ case "$app_key" in
     legacy_app_dir="$REPO_DIR/apps/wms"
     legacy_pm2_name="${PM2_PREFIX}-wms"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation"
+    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation"
     build_cmd="pnpm --filter $workspace build"
     ;;
   sso|targon|targonos)
@@ -143,10 +143,10 @@ case "$app_key" in
     prisma_cmd=""
     build_cmd="pnpm --filter $workspace build"
     ;;
-  xplan|x-plan)
-    workspace="@targon/x-plan"
-    app_dir="$REPO_DIR/apps/x-plan"
-    pm2_name="${PM2_PREFIX}-x-plan"
+  xplan)
+    workspace="@targon/xplan"
+    app_dir="$REPO_DIR/apps/xplan"
+    pm2_name="${PM2_PREFIX}-xplan"
     prisma_cmd="pnpm --filter $workspace prisma:generate"
     migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace exec next build"
@@ -490,8 +490,8 @@ if [[ -n "$prisma_cmd" ]]; then
           run_prisma_generate="true"
         fi
         ;;
-      xplan|x-plan)
-        if any_changed "apps/x-plan/prisma/schema.prisma" && ! any_changed_under "packages/prisma-x-plan/generated/"; then
+      xplan)
+        if any_changed "apps/xplan/prisma/schema.prisma" && ! any_changed_under "packages/prisma-xplan/generated/"; then
           run_prisma_generate="true"
         fi
         ;;
@@ -531,8 +531,8 @@ if [[ -n "$migrate_cmd" ]]; then
           run_migrations="true"
         fi
         ;;
-      xplan|x-plan)
-        if any_changed "apps/x-plan/prisma/schema.prisma" || any_changed_under "apps/x-plan/prisma/migrations/"; then
+      xplan)
+        if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then
           run_migrations="true"
         fi
         ;;
@@ -613,7 +613,10 @@ fi
 log "Step 6: Building $app_key"
 cd "$REPO_DIR"
 set +e
-eval "$build_cmd"
+(
+  export NODE_ENV=production
+  eval "$build_cmd"
+)
 build_status=$?
 set -e
 
@@ -635,7 +638,10 @@ if [[ "$build_status" -ne 0 ]]; then
     fi
 
     set +e
-    eval "$build_cmd"
+    (
+      export NODE_ENV=production
+      eval "$build_cmd"
+    )
     build_status=$?
     set -e
   fi

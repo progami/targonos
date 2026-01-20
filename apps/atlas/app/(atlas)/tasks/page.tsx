@@ -206,6 +206,7 @@ export default function TasksPage() {
           loading={loading}
           skeletonRows={6}
           onRowClick={handleRowClick}
+          addRow={{ label: 'Add Task', onClick: () => router.push('/tasks/add') }}
           emptyState={
             <TableEmptyContent
               icon={<CheckCircleIcon className="h-10 w-10" />}

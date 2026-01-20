@@ -9,7 +9,10 @@ import { Label } from '@/components/ui/label'
 import { PortalModal } from '@/components/ui/portal-modal'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
-import { Edit2, Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
+import { usePageState } from '@/lib/store/page-state'
+import { Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
+
+const PAGE_KEY = '/config/suppliers'
 
 interface SupplierRow {
   id: string
@@ -76,9 +79,11 @@ export default function SuppliersPanel({
   externalModalOpen,
   onExternalModalClose,
 }: SuppliersPanelProps) {
+  const pageState = usePageState(PAGE_KEY)
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -244,29 +249,29 @@ export default function SuppliersPanel({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-white shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-cyan-600" />
-              <h2 className="text-xl font-semibold text-slate-900">Supplier Directory</h2>
+              <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Supplier Directory</h2>
             </div>
-            <p className="text-sm text-slate-600">Manage supplier information and contacts</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Manage supplier information and contacts</p>
           </div>
           <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">
             {suppliers.length} suppliers
           </Badge>
         </div>
 
-        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 items-center gap-3">
             <div className="relative flex-1 md:max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 value={searchTerm}
                 onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Search suppliers..."
-                className="w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
               />
             </div>
           </div>
@@ -274,16 +279,16 @@ export default function SuppliersPanel({
 
         {loading ? (
           <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : filteredSuppliers.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <Users className="h-10 w-10 text-slate-300" />
+            <Users className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <div>
-              <p className="text-base font-semibold text-slate-900">
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 {searchTerm ? 'No suppliers found' : 'No suppliers yet'}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 {searchTerm
                   ? 'Clear your search or create a new supplier.'
                   : 'Create suppliers for consistent SKU defaults and purchase orders.'}
@@ -299,7 +304,7 @@ export default function SuppliersPanel({
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full table-auto text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">Name</th>
                   <th className="px-4 py-3 text-left font-semibold">Contact</th>
@@ -309,19 +314,25 @@ export default function SuppliersPanel({
                   <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredSuppliers.map(supplier => (
-                  <tr key={supplier.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
-                      {supplier.name}
+                  <tr key={supplier.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(supplier)}
+                        className="text-left hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
+                      >
+                        {supplier.name}
+                      </button>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                       {supplier.contactName ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {supplier.email ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {supplier.phone ?? '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -352,14 +363,11 @@ export default function SuppliersPanel({
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(supplier)}>
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setConfirmDelete(supplier)}
-                          className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                          className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -374,9 +382,9 @@ export default function SuppliersPanel({
       </div>
 
       <PortalModal open={isModalOpen} className="items-center">
-        <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
-            <h2 className="text-lg font-semibold text-slate-900">
+        <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-6 py-4">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {editingSupplier ? 'Edit Supplier' : 'New Supplier'}
             </h2>
             <Button variant="ghost" onClick={closeModal} disabled={isSubmitting}>
@@ -396,7 +404,7 @@ export default function SuppliersPanel({
                       setFormState(prev => ({ ...prev, name: event.target.value }))
                     }
                     required
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
                 </div>
 
@@ -409,7 +417,7 @@ export default function SuppliersPanel({
                       setFormState(prev => ({ ...prev, contactName: event.target.value }))
                     }
                     required
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
                 </div>
 
@@ -423,7 +431,7 @@ export default function SuppliersPanel({
                       setFormState(prev => ({ ...prev, email: event.target.value }))
                     }
                     required
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
                 </div>
 
@@ -436,7 +444,7 @@ export default function SuppliersPanel({
                       setFormState(prev => ({ ...prev, phone: event.target.value }))
                     }
                     required
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
                 </div>
 
@@ -475,9 +483,9 @@ export default function SuppliersPanel({
                       setFormState(prev => ({ ...prev, defaultPaymentTerms: event.target.value }))
                     }
                     placeholder="e.g., Net 30, 50% deposit"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
-                  <p className="text-xs text-slate-500">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
                 </div>
 
                 <div className="space-y-1">
@@ -488,7 +496,7 @@ export default function SuppliersPanel({
                     onChange={event =>
                       setFormState(prev => ({ ...prev, defaultIncoterms: event.target.value }))
                     }
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   >
                     <option value="">None (select on PO)</option>
                     {INCOTERMS_OPTIONS.map(option => (
@@ -497,7 +505,7 @@ export default function SuppliersPanel({
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
                 </div>
               </div>
             </div>

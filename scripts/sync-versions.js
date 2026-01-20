@@ -24,7 +24,7 @@ const APPS_TO_SYNC = [
   'apps/talos',
   'apps/website',
   'apps/sso',
-  'apps/x-plan',
+  'apps/xplan',
   'apps/atlas',
   'apps/plutus',
 ]

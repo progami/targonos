@@ -82,17 +82,147 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const prisma = await getTenantPrismaClient(tenant)
 
   const ddlStatements = [
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_length_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_width_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_height_cm" DECIMAL(8,2)`,
+    `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_length_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_side1_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "unit_length_cm" TO "unit_side1_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_width_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_side2_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "unit_width_cm" TO "unit_side2_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_height_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'unit_side3_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "unit_height_cm" TO "unit_side3_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_length_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_side1_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "item_length_cm" TO "item_side1_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_width_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_side2_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "item_width_cm" TO "item_side2_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_height_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'item_side3_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "item_height_cm" TO "item_side3_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_length_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_side1_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "carton_length_cm" TO "carton_side1_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_width_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_side2_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "carton_width_cm" TO "carton_side2_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_height_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'skus'
+            AND column_name = 'carton_side3_cm'
+        ) THEN
+          ALTER TABLE "skus" RENAME COLUMN "carton_height_cm" TO "carton_side3_cm";
+        END IF;
+      END $$;
+    `,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_side1_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_side2_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "unit_side3_cm" DECIMAL(8,2)`,
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_dimensions_cm" TEXT`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_length_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_width_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_height_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_side1_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_side2_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_side3_cm" DECIMAL(8,2)`,
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "item_weight_kg" DECIMAL(8,3)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_length_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_width_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_height_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_side1_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_side2_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "carton_side3_cm" DECIMAL(8,2)`,
   ]
 
   console.log(`\n[${tenant}] Ensuring dimension columns exist`)
@@ -106,7 +236,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
 
   const backfillStatements = [
     {
-      label: 'unit dimensions',
+      label: 'item package dimensions',
       sql: `
         WITH parsed AS (
           SELECT
@@ -117,13 +247,13 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
             ) AS m
           FROM skus
           WHERE unit_dimensions_cm IS NOT NULL
-            AND (unit_length_cm IS NULL OR unit_width_cm IS NULL OR unit_height_cm IS NULL)
+            AND (unit_side1_cm IS NULL OR unit_side2_cm IS NULL OR unit_side3_cm IS NULL)
         )
         UPDATE skus s
         SET
-          unit_length_cm = COALESCE(s.unit_length_cm, (p.m[1])::numeric),
-          unit_width_cm = COALESCE(s.unit_width_cm, (p.m[2])::numeric),
-          unit_height_cm = COALESCE(s.unit_height_cm, (p.m[3])::numeric)
+          unit_side1_cm = COALESCE(s.unit_side1_cm, (p.m[1])::numeric),
+          unit_side2_cm = COALESCE(s.unit_side2_cm, (p.m[2])::numeric),
+          unit_side3_cm = COALESCE(s.unit_side3_cm, (p.m[3])::numeric)
         FROM parsed p
         WHERE s.id = p.id
           AND p.m IS NOT NULL
@@ -141,13 +271,13 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
             ) AS m
           FROM skus
           WHERE item_dimensions_cm IS NOT NULL
-            AND (item_length_cm IS NULL OR item_width_cm IS NULL OR item_height_cm IS NULL)
+            AND (item_side1_cm IS NULL OR item_side2_cm IS NULL OR item_side3_cm IS NULL)
         )
         UPDATE skus s
         SET
-          item_length_cm = COALESCE(s.item_length_cm, (p.m[1])::numeric),
-          item_width_cm = COALESCE(s.item_width_cm, (p.m[2])::numeric),
-          item_height_cm = COALESCE(s.item_height_cm, (p.m[3])::numeric)
+          item_side1_cm = COALESCE(s.item_side1_cm, (p.m[1])::numeric),
+          item_side2_cm = COALESCE(s.item_side2_cm, (p.m[2])::numeric),
+          item_side3_cm = COALESCE(s.item_side3_cm, (p.m[3])::numeric)
         FROM parsed p
         WHERE s.id = p.id
           AND p.m IS NOT NULL
@@ -165,13 +295,13 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
             ) AS m
           FROM skus
           WHERE carton_dimensions_cm IS NOT NULL
-            AND (carton_length_cm IS NULL OR carton_width_cm IS NULL OR carton_height_cm IS NULL)
+            AND (carton_side1_cm IS NULL OR carton_side2_cm IS NULL OR carton_side3_cm IS NULL)
         )
         UPDATE skus s
         SET
-          carton_length_cm = COALESCE(s.carton_length_cm, (p.m[1])::numeric),
-          carton_width_cm = COALESCE(s.carton_width_cm, (p.m[2])::numeric),
-          carton_height_cm = COALESCE(s.carton_height_cm, (p.m[3])::numeric)
+          carton_side1_cm = COALESCE(s.carton_side1_cm, (p.m[1])::numeric),
+          carton_side2_cm = COALESCE(s.carton_side2_cm, (p.m[2])::numeric),
+          carton_side3_cm = COALESCE(s.carton_side3_cm, (p.m[3])::numeric)
         FROM parsed p
         WHERE s.id = p.id
           AND p.m IS NOT NULL
@@ -186,6 +316,133 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       continue
     }
     await prisma.$executeRawUnsafe(statement.sql)
+  }
+
+  const backfillFromLegacyNumericSql = `
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'unit_length_cm'
+      ) THEN
+        UPDATE skus
+        SET unit_side1_cm = COALESCE(unit_side1_cm, unit_length_cm)
+        WHERE unit_length_cm IS NOT NULL AND unit_side1_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'unit_width_cm'
+      ) THEN
+        UPDATE skus
+        SET unit_side2_cm = COALESCE(unit_side2_cm, unit_width_cm)
+        WHERE unit_width_cm IS NOT NULL AND unit_side2_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'unit_height_cm'
+      ) THEN
+        UPDATE skus
+        SET unit_side3_cm = COALESCE(unit_side3_cm, unit_height_cm)
+        WHERE unit_height_cm IS NOT NULL AND unit_side3_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'item_length_cm'
+      ) THEN
+        UPDATE skus
+        SET item_side1_cm = COALESCE(item_side1_cm, item_length_cm)
+        WHERE item_length_cm IS NOT NULL AND item_side1_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'item_width_cm'
+      ) THEN
+        UPDATE skus
+        SET item_side2_cm = COALESCE(item_side2_cm, item_width_cm)
+        WHERE item_width_cm IS NOT NULL AND item_side2_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'item_height_cm'
+      ) THEN
+        UPDATE skus
+        SET item_side3_cm = COALESCE(item_side3_cm, item_height_cm)
+        WHERE item_height_cm IS NOT NULL AND item_side3_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'carton_length_cm'
+      ) THEN
+        UPDATE skus
+        SET carton_side1_cm = COALESCE(carton_side1_cm, carton_length_cm)
+        WHERE carton_length_cm IS NOT NULL AND carton_side1_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'carton_width_cm'
+      ) THEN
+        UPDATE skus
+        SET carton_side2_cm = COALESCE(carton_side2_cm, carton_width_cm)
+        WHERE carton_width_cm IS NOT NULL AND carton_side2_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'skus'
+          AND column_name = 'carton_height_cm'
+      ) THEN
+        UPDATE skus
+        SET carton_side3_cm = COALESCE(carton_side3_cm, carton_height_cm)
+        WHERE carton_height_cm IS NOT NULL AND carton_side3_cm IS NULL;
+      END IF;
+    END $$;
+  `
+
+  const dropLegacyColumnsStatements = [
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "unit_length_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "unit_width_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "unit_height_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "item_length_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "item_width_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "item_height_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "carton_length_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "carton_width_cm"`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "carton_height_cm"`,
+  ]
+
+  if (options.dryRun) {
+    console.log(`[${tenant}] DRY RUN: cleanup legacy sku dimension columns`)
+    for (const statement of dropLegacyColumnsStatements) console.log(`[${tenant}] DRY RUN: ${statement}`)
+    return
+  }
+
+  await prisma.$executeRawUnsafe(backfillFromLegacyNumericSql)
+  for (const statement of dropLegacyColumnsStatements) {
+    await prisma.$executeRawUnsafe(statement)
   }
 }
 

@@ -1,0 +1,441 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../packages/prisma-xplan/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Planning strategy - each strategy represents an isolated planning session (e.g., "Q4 2025 Planning")
+model Strategy {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  status      StrategyStatus @default(DRAFT)
+  region      StrategyRegion @default(US)
+  isDefault   Boolean        @default(false)
+  createdById    String?
+  createdByEmail String?
+  assigneeId     String?
+  assigneeEmail  String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  products             Product[]
+  businessParameters   BusinessParameter[]
+  purchaseOrders       PurchaseOrder[]
+  salesWeeks           SalesWeek[]
+  salesWeekFinancials  SalesWeekFinancials[]
+  profitAndLossWeeks   ProfitAndLossWeek[]
+  cashFlowWeeks        CashFlowWeek[]
+  monthlySummaries     MonthlySummary[]
+  quarterlySummaries   QuarterlySummary[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdByEmail])
+  @@index([assigneeId])
+  @@index([assigneeEmail])
+}
+
+enum StrategyStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum StrategyRegion {
+  US
+  UK
+}
+
+/// Represents a SKU in the X-Plan workbook ("1. Product Setup")
+model Product {
+  id                 String             @id @default(cuid())
+  strategyId         String
+  name               String
+  sku                String
+  asin               String?
+  sellingPrice       Decimal            @db.Decimal(10, 2)
+  manufacturingCost  Decimal            @db.Decimal(10, 3)
+  freightCost        Decimal            @db.Decimal(10, 3)
+  tariffRate         Decimal            @db.Decimal(5, 4)
+  tacosPercent       Decimal            @db.Decimal(5, 4)
+  fbaFee             Decimal            @db.Decimal(10, 3)
+  amazonReferralRate Decimal            @db.Decimal(5, 4)
+  storagePerMonth    Decimal            @db.Decimal(10, 3)
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  strategy            Strategy              @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  leadTimeOverrides   LeadTimeOverride[]
+  purchaseOrders      PurchaseOrder[]
+  batchTableRows      BatchTableRow[]
+  salesWeeks          SalesWeek[]
+  salesWeekFinancials SalesWeekFinancials[]
+
+  @@unique([strategyId, sku])
+  @@index([strategyId])
+  @@index([name])
+  @@index([asin])
+}
+
+/// Default lead time configuration ("1. Product Setup" -> LEAD TIME CONFIGURATION)
+model LeadStageTemplate {
+  id           String             @id @default(cuid())
+  label        String
+  defaultWeeks Decimal            @db.Decimal(5, 2)
+  sequence     Int                @unique
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  overrides    LeadTimeOverride[]
+}
+
+/// Per-product overrides for lead stages
+model LeadTimeOverride {
+  id              String            @id @default(cuid())
+  productId       String
+  stageTemplateId String
+  durationWeeks   Decimal           @db.Decimal(5, 2)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  product         Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stageTemplate   LeadStageTemplate @relation(fields: [stageTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, stageTemplateId])
+}
+
+/// Business parameters per strategy
+model BusinessParameter {
+  id           String   @id @default(cuid())
+  strategyId   String
+  label        String
+  valueNumeric Decimal? @db.Decimal(14, 2)
+  valueText    String?
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  strategy     Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, label])
+  @@index([strategyId])
+}
+
+/// Operations planning rows ("2. Ops Planning")
+model PurchaseOrder {
+  id                        String                 @id @default(cuid())
+  strategyId                String
+  orderCode                 String
+  productId                 String
+  poDate                    DateTime?
+  poWeekNumber              Int?
+  quantity                  Int
+  productionWeeks           Decimal                @db.Decimal(5, 2)
+  sourceWeeks               Decimal                @db.Decimal(5, 2)
+  oceanWeeks                Decimal                @db.Decimal(5, 2)
+  finalWeeks                Decimal                @db.Decimal(5, 2)
+  pay1Date                  DateTime?
+  pay1Percent               Decimal?               @db.Decimal(6, 4)
+  pay1Amount                Decimal?               @db.Decimal(12, 2)
+  pay2Date                  DateTime?
+  pay2Percent               Decimal?               @db.Decimal(6, 4)
+  pay2Amount                Decimal?               @db.Decimal(12, 2)
+  pay3Date                  DateTime?
+  pay3Percent               Decimal?               @db.Decimal(6, 4)
+  pay3Amount                Decimal?               @db.Decimal(12, 2)
+  productionStart           DateTime?
+  productionComplete        DateTime?
+  productionCompleteWeekNumber Int?
+  sourceDeparture           DateTime?
+  sourceDepartureWeekNumber Int?
+  transportReference        String?
+  shipName                  String?
+  containerNumber           String?
+  portEta                   DateTime?
+  portEtaWeekNumber         Int?
+  inboundEta                DateTime?
+  inboundEtaWeekNumber      Int?
+  availableDate             DateTime?
+  availableWeekNumber       Int?
+  totalLeadDays             Int?
+  status                    PurchaseOrderStatus    @default(ISSUED)
+  statusIcon                String?
+  weeksUntilArrival         Int?
+  notes                     String?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  overrideSellingPrice      Decimal?               @db.Decimal(10, 2)
+  overrideManufacturingCost Decimal?               @db.Decimal(10, 3)
+  overrideFreightCost       Decimal?               @db.Decimal(10, 3)
+  overrideTariffRate        Decimal?               @db.Decimal(5, 4)
+  overrideTacosPercent      Decimal?               @db.Decimal(5, 4)
+  overrideFbaFee            Decimal?               @db.Decimal(10, 3)
+  overrideReferralRate      Decimal?               @db.Decimal(5, 4)
+  overrideStoragePerMonth   Decimal?               @db.Decimal(10, 3)
+  strategy                  Strategy               @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  logisticsEvents           LogisticsEvent[]
+  product                   Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchTableRows            BatchTableRow[]
+  payments                  PurchaseOrderPayment[]
+
+  @@unique([strategyId, orderCode])
+  @@index([strategyId])
+  @@index([orderCode])
+  @@index([status])
+}
+
+model BatchTableRow {
+  id                        String        @id @default(cuid())
+  purchaseOrderId           String
+  batchCode                 String?
+  productId                 String
+  quantity                  Int
+  overrideSellingPrice      Decimal?      @db.Decimal(10, 2)
+  overrideManufacturingCost Decimal?      @db.Decimal(10, 3)
+  overrideFreightCost       Decimal?      @db.Decimal(10, 3)
+  overrideTariffRate        Decimal?      @db.Decimal(5, 4)
+  overrideTariffCost        Decimal?      @db.Decimal(10, 3)
+  overrideTacosPercent      Decimal?      @db.Decimal(5, 4)
+  overrideFbaFee            Decimal?      @db.Decimal(10, 3)
+  overrideReferralRate      Decimal?      @db.Decimal(5, 4)
+  overrideStoragePerMonth   Decimal?      @db.Decimal(10, 3)
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+  product                   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchaseOrder             PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model PurchaseOrderPayment {
+  id              String               @id @default(cuid())
+  purchaseOrderId String
+  paymentIndex    Int
+  dueDate         DateTime?
+  dueWeekNumber   Int?
+  dueDateDefault  DateTime?
+  dueWeekNumberDefault Int?
+  dueDateSource   PaymentDueDateSource @default(SYSTEM)
+  percentage      Decimal?             @db.Decimal(6, 4)
+  amountExpected  Decimal?             @db.Decimal(12, 2)
+  amountPaid      Decimal?             @db.Decimal(12, 2)
+  category        String?              @db.VarChar(32)
+  label           String?              @db.VarChar(64)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  purchaseOrder   PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([purchaseOrderId, paymentIndex])
+}
+
+enum PaymentDueDateSource {
+  SYSTEM
+  USER
+}
+
+model LogisticsEvent {
+  id              String             @id @default(cuid())
+  purchaseOrderId String
+  type            LogisticsEventType
+  eventDate       DateTime?
+  reference       String?
+  notes           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+}
+
+/// Weekly sales & inventory positions ("3. Sales Planning")
+model SalesWeek {
+  id            String   @id @default(cuid())
+  strategyId    String
+  productId     String
+  weekNumber    Int
+  weekDate      DateTime
+  stockStart    Int?
+  actualSales   Int?
+  forecastSales Int?
+  systemForecastSales   Int?
+  systemForecastVersion String? @db.VarChar(64)
+  finalSales    Int?
+  stockWeeks    Decimal? @db.Decimal(8, 2)
+  stockEnd      Int?
+  hasActualData Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  strategy      Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, productId, weekNumber])
+  @@index([strategyId])
+  @@index([weekDate])
+}
+
+/// Weekly financial actuals from Sellerboard Dashboard by Day report
+model SalesWeekFinancials {
+  id                  String   @id @default(cuid())
+  strategyId          String
+  productId           String
+  weekNumber          Int
+  weekDate            DateTime /// Monday of the week
+
+  /// From Sellerboard Dashboard
+  actualRevenue       Decimal? @db.Decimal(12, 2)
+  actualAmazonFees    Decimal? @db.Decimal(12, 2)
+  actualReferralFees  Decimal? @db.Decimal(12, 2)
+  actualFbaFees       Decimal? @db.Decimal(12, 2)
+  actualRefunds       Decimal? @db.Decimal(12, 2)
+  actualPpcSpend      Decimal? @db.Decimal(12, 2)
+  actualNetProfit     Decimal? @db.Decimal(12, 2)
+
+  /// Metadata
+  syncedAt            DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  /// Relations
+  strategy            Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, productId, weekNumber])
+  @@index([strategyId])
+  @@index([productId])
+  @@index([weekNumber])
+}
+
+/// Weekly P&L metrics ("4. Fin Planning P&L")
+model ProfitAndLossWeek {
+  id          String   @id @default(cuid())
+  strategyId  String
+  weekNumber  Int
+  weekDate    DateTime
+  units       Int?
+  revenue     Decimal? @db.Decimal(14, 2)
+  cogs        Decimal? @db.Decimal(14, 2)
+  grossProfit Decimal? @db.Decimal(14, 2)
+  grossMargin Decimal? @db.Decimal(7, 4)
+  amazonFees  Decimal? @db.Decimal(14, 2)
+  ppcSpend    Decimal? @db.Decimal(14, 2)
+  fixedCosts  Decimal? @db.Decimal(14, 2)
+  totalOpex   Decimal? @db.Decimal(14, 2)
+  netProfit   Decimal? @db.Decimal(14, 2)
+  periodLabel String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  strategy    Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, weekNumber])
+  @@index([strategyId])
+  @@index([weekDate])
+}
+
+/// Weekly cash flow metrics ("5. Fin Planning Cash Flow")
+model CashFlowWeek {
+  id             String   @id @default(cuid())
+  strategyId     String
+  weekNumber     Int
+  weekDate       DateTime
+  amazonPayout   Decimal? @db.Decimal(14, 2)
+  inventorySpend Decimal? @db.Decimal(14, 2)
+  fixedCosts     Decimal? @db.Decimal(14, 2)
+  netCash        Decimal? @db.Decimal(14, 2)
+  cashBalance    Decimal? @db.Decimal(14, 2)
+  periodLabel    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  strategy       Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, weekNumber])
+  @@index([strategyId])
+  @@index([weekDate])
+}
+
+/// Monthly summary metrics (derived from sheets 4 & 5)
+model MonthlySummary {
+  id             String   @id @default(cuid())
+  strategyId     String
+  periodLabel    String
+  year           Int
+  month          Int
+  revenue        Decimal? @db.Decimal(14, 2)
+  cogs           Decimal? @db.Decimal(14, 2)
+  grossProfit    Decimal? @db.Decimal(14, 2)
+  amazonFees     Decimal? @db.Decimal(14, 2)
+  ppcSpend       Decimal? @db.Decimal(14, 2)
+  fixedCosts     Decimal? @db.Decimal(14, 2)
+  totalOpex      Decimal? @db.Decimal(14, 2)
+  netProfit      Decimal? @db.Decimal(14, 2)
+  amazonPayout   Decimal? @db.Decimal(14, 2)
+  inventorySpend Decimal? @db.Decimal(14, 2)
+  netCash        Decimal? @db.Decimal(14, 2)
+  closingCash    Decimal? @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  strategy       Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, year, month, periodLabel])
+  @@index([strategyId])
+}
+
+/// Quarterly summary metrics
+model QuarterlySummary {
+  id             String   @id @default(cuid())
+  strategyId     String
+  periodLabel    String
+  year           Int
+  quarter        Int
+  revenue        Decimal? @db.Decimal(14, 2)
+  cogs           Decimal? @db.Decimal(14, 2)
+  grossProfit    Decimal? @db.Decimal(14, 2)
+  amazonFees     Decimal? @db.Decimal(14, 2)
+  ppcSpend       Decimal? @db.Decimal(14, 2)
+  fixedCosts     Decimal? @db.Decimal(14, 2)
+  totalOpex      Decimal? @db.Decimal(14, 2)
+  netProfit      Decimal? @db.Decimal(14, 2)
+  amazonPayout   Decimal? @db.Decimal(14, 2)
+  inventorySpend Decimal? @db.Decimal(14, 2)
+  netCash        Decimal? @db.Decimal(14, 2)
+  closingCash    Decimal? @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  strategy       Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, year, quarter, periodLabel])
+  @@index([strategyId])
+}
+
+/// Workbook snapshots (future scenarios)
+model ScenarioSnapshot {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  workbook    Json
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  MANUFACTURING
+  OCEAN
+  WAREHOUSE
+  SHIPPED
+  REJECTED
+  ARCHIVED
+  CANCELLED
+}
+
+enum LogisticsEventType {
+  PRODUCTION_START
+  PRODUCTION_COMPLETE
+  INBOUND_DEPARTURE
+  PORT_ARRIVAL
+  WAREHOUSE_ARRIVAL
+  CUSTOM
+}

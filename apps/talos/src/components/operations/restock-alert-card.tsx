@@ -121,7 +121,7 @@ export function RestockAlertCard({
 
  {/* Stock Metrics */}
  <div className="grid grid-cols-2 gap-3 mb-3">
- <div className="bg-white rounded p-2">
+ <div className="bg-white dark:bg-slate-800 rounded p-2">
  <div className="flex items-center gap-1 text-xs text-slate-600 mb-1">
  <Package className="h-3 w-3" />
  <span>Current FBA Stock</span>
@@ -130,7 +130,7 @@ export function RestockAlertCard({
  <p className={`text-xs ${colors.text}`}>{daysOfStock} days remaining</p>
  </div>
  
- <div className="bg-white rounded p-2">
+ <div className="bg-white dark:bg-slate-800 rounded p-2">
  <div className="flex items-center gap-1 text-xs text-slate-600 mb-1">
  <TrendingUp className="h-3 w-3" />
  <span>Daily Velocity</span>
@@ -146,7 +146,7 @@ export function RestockAlertCard({
  </div>
 
  {/* Suggested Shipment */}
- <div className="bg-white rounded p-3 mb-3">
+ <div className="bg-white dark:bg-slate-800 rounded p-3 mb-3">
  <div className="flex items-center justify-between mb-2">
  <h4 className="text-sm font-medium text-slate-900">Suggested Shipment</h4>
  <Tooltip 

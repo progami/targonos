@@ -161,7 +161,7 @@ export const GET = withAuth(async (_request, session) => {
  'Warehouse',
  'SKU Code',
  'SKU Description',
- 'Batch/Lot',
+ 'Batch',
  'Reference ID',
  
  // Quantities

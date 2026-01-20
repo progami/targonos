@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
-import { Boxes, Edit2, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
+import { usePageState } from '@/lib/store/page-state'
+import { Boxes, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { cn } from '@/lib/utils'
 import { coerceFiniteNumber, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
@@ -37,6 +38,13 @@ interface BatchRow {
   unitsPerCarton: number | null
   material: string | null
   packagingType: string | null
+  amazonItemPackageDimensionsCm: string | null
+  amazonItemPackageSide1Cm: number | string | null
+  amazonItemPackageSide2Cm: number | string | null
+  amazonItemPackageSide3Cm: number | string | null
+  amazonSizeTier: string | null
+  amazonFbaFulfillmentFee: number | string | null
+  amazonReferenceWeightKg: number | string | null
   storageCartonsPerPallet: number | null
   shippingCartonsPerPallet: number | null
   unitDimensionsCm: string | null
@@ -258,7 +266,9 @@ function SkuBatchesManager({
   onRequestClose?: () => void
   onBatchesUpdated?: () => void
 }) {
-  const [batchSearch, setBatchSearch] = useState('')
+  const pageState = usePageState(`/config/products/batches/${sku.id}`)
+  const batchSearch = pageState.search ?? ''
+  const setBatchSearch = pageState.setSearch
   const [batches, setBatches] = useState<BatchRow[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -274,7 +284,8 @@ function SkuBatchesManager({
   )
 
   const [confirmDelete, setConfirmDelete] = useState<BatchRow | null>(null)
-  const [batchModalTab, setBatchModalTab] = useState<BatchModalTab>('reference')
+  const batchModalTab = (pageState.activeTab as BatchModalTab) ?? 'reference'
+  const setBatchModalTab = (tab: BatchModalTab) => pageState.setActiveTab(tab)
 
   useEffect(() => {
     try {
@@ -318,6 +329,12 @@ function SkuBatchesManager({
       return batchCode.toLowerCase().includes(term) || description.toLowerCase().includes(term)
     })
   }, [batchSearch, batches])
+
+  const amazonReadonlyBatch = useMemo(() => {
+    if (editingBatch) return editingBatch
+    if (batches.length > 0) return batches[0]
+    return null
+  }, [batches, editingBatch])
 
   const fetchBatches = useCallback(async () => {
     try {
@@ -601,10 +618,10 @@ function SkuBatchesManager({
 
   return (
     <>
-      <div className="w-full overflow-hidden rounded-lg border bg-white shadow-soft">
+      <div className="w-full overflow-hidden rounded-lg border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex items-start justify-between border-b px-6 py-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900">Batches</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
             <p className="text-xs text-muted-foreground">
               {sku.skuCode} — {sku.description}
             </p>
@@ -634,7 +651,7 @@ function SkuBatchesManager({
             </Button>
           </div>
 
-          <div className="rounded-xl border bg-white shadow-soft">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
             {loading ? (
               <div className="flex h-40 items-center justify-center text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -693,43 +710,44 @@ function SkuBatchesManager({
                         typeof batch.description === 'string' ? batch.description : '—'
                       const canDelete = batches.length > 1
 
-                      return (
-                        <tr key={batch.id} className="odd:bg-muted/20">
-                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                            {batchCode}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                            {batchDescription}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {batch.packSize ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {batch.unitsPerCarton ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {formatTriplet(unitTriplet)}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {formatTriplet(cartonTriplet)}
-                          </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-2">
-                              <Button variant="outline" size="sm" onClick={() => openEdit(batch)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setConfirmDelete(batch)}
-                                disabled={!canDelete}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
+                                      return (
+                                        <tr key={batch.id} className="odd:bg-muted/20">
+                                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                            <button
+                                              type="button"
+                                              onClick={() => openEdit(batch)}
+                                              className="text-left hover:text-primary hover:underline transition-colors"
+                                            >
+                                              {batchCode}
+                                            </button>
+                                          </td>
+                                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                            {batchDescription}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {batch.packSize ?? '—'}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {batch.unitsPerCarton ?? '—'}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {formatTriplet(unitTriplet)}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                                            {formatTriplet(cartonTriplet)}
+                                          </td>
+                                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => setConfirmDelete(batch)}
+                                              disabled={!canDelete}
+                                            >
+                                              <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </td>
+                                        </tr>
+                                      )
                     })}
                   </tbody>
                 </table>
@@ -741,24 +759,24 @@ function SkuBatchesManager({
 
       {isFormOpen ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div className="flex flex-col">
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                   {editingBatch ? 'Edit Batch' : 'New Batch'}
                 </h2>
                 <p className="text-xs text-muted-foreground">{sku.skuCode}</p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                <div className="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-1">
                   <button
                     type="button"
                     onClick={() => applyUnitSystem('metric')}
                     className={cn(
                       'rounded px-2.5 py-1 text-xs font-medium transition-colors',
                       unitSystem === 'metric'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     )}
                     aria-pressed={unitSystem === 'metric'}
                   >
@@ -770,8 +788,8 @@ function SkuBatchesManager({
                     className={cn(
                       'rounded px-2.5 py-1 text-xs font-medium transition-colors',
                       unitSystem === 'imperial'
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-slate-100 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     )}
                     aria-pressed={unitSystem === 'imperial'}
                   >
@@ -899,7 +917,7 @@ function SkuBatchesManager({
                           packagingType: event.target.value as PackagingTypeOption,
                         }))
                       }
-                      className="w-full rounded-md border border-border/60 bg-white px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                     >
                       <option value="">Optional</option>
                       <option value="BOX">Box</option>
@@ -908,142 +926,173 @@ function SkuBatchesManager({
                   </div>
 
                   <div className="md:col-span-2 pt-4 border-t">
-                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Item Package Dimensions</h3>
-                    <Tabs>
-                      <TabsList className="w-full grid grid-cols-2">
-                        <TabsTrigger
-                          type="button"
-                          onClick={() => setBatchModalTab('reference')}
-                          data-state={batchModalTab === 'reference' ? 'active' : 'inactive'}
-                        >
-                          Reference
-                        </TabsTrigger>
-                        <TabsTrigger
-                          type="button"
-                          onClick={() => setBatchModalTab('amazon')}
-                          data-state={batchModalTab === 'amazon' ? 'active' : 'inactive'}
-                        >
-                          Amazon
-                        </TabsTrigger>
-                      </TabsList>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Item package dimensions</h3>
+                    <div className="rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4">
+                      <Tabs>
+                        <TabsList className="w-full grid grid-cols-2 mb-4">
+                          <TabsTrigger
+                            type="button"
+                            onClick={() => setBatchModalTab('reference')}
+                            data-state={batchModalTab === 'reference' ? 'active' : 'inactive'}
+                          >
+                            Reference
+                          </TabsTrigger>
+                          <TabsTrigger
+                            type="button"
+                            onClick={() => setBatchModalTab('amazon')}
+                            data-state={batchModalTab === 'amazon' ? 'active' : 'inactive'}
+                          >
+                            Amazon
+                          </TabsTrigger>
+                        </TabsList>
 
-                      <TabsContent className={batchModalTab === 'reference' ? '' : 'hidden'}>
-                        <div className="space-y-4 pt-4">
-                          <p className="text-xs text-slate-500">
-                            Team reference values (editable).
-                          </p>
-                          <div className="space-y-1">
-                            <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
-                            <div className="grid grid-cols-3 gap-2">
+                        <TabsContent className={batchModalTab === 'reference' ? '' : 'hidden'}>
+                          <div className="space-y-4">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Team reference values (editable).
+                            </p>
+                            <div className="space-y-1">
+                              <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
+                              <div className="grid grid-cols-3 gap-2">
+                                <Input
+                                  value={formState.unitLength}
+                                  onChange={event => handleDimensionChange('unitLength', event.target.value)}
+                                  placeholder="S1"
+                                  inputMode="decimal"
+                                />
+                                <Input
+                                  value={formState.unitWidth}
+                                  onChange={event => handleDimensionChange('unitWidth', event.target.value)}
+                                  placeholder="S2"
+                                  inputMode="decimal"
+                                />
+                                <Input
+                                  value={formState.unitHeight}
+                                  onChange={event => handleDimensionChange('unitHeight', event.target.value)}
+                                  placeholder="S3"
+                                  inputMode="decimal"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="unitWeight">
+                                Weight ({unitSystem === 'metric' ? 'kg' : 'lb'})
+                              </Label>
                               <Input
-                                value={formState.unitLength}
-                                onChange={event => handleDimensionChange('unitLength', event.target.value)}
-                                placeholder="L"
-                                inputMode="decimal"
-                              />
-                              <Input
-                                value={formState.unitWidth}
-                                onChange={event => handleDimensionChange('unitWidth', event.target.value)}
-                                placeholder="W"
-                                inputMode="decimal"
-                              />
-                              <Input
-                                value={formState.unitHeight}
-                                onChange={event => handleDimensionChange('unitHeight', event.target.value)}
-                                placeholder="H"
-                                inputMode="decimal"
+                                id="unitWeight"
+                                type="number"
+                                step="0.001"
+                                min={0.001}
+                                required
+                                value={formState.unitWeight}
+                                onChange={event => handleWeightChange('unitWeight', event.target.value)}
+                                placeholder="Required"
                               />
                             </div>
                           </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="unitWeight">
-                              Weight ({unitSystem === 'metric' ? 'kg' : 'lb'})
-                            </Label>
-                            <Input
-                              id="unitWeight"
-                              type="number"
-                              step="0.001"
-                              min={0.001}
-                              required
-                              value={formState.unitWeight}
-                              onChange={event => handleWeightChange('unitWeight', event.target.value)}
-                              placeholder="Required"
-                            />
-                          </div>
-                        </div>
-                      </TabsContent>
+                        </TabsContent>
 
-                      <TabsContent className={batchModalTab === 'amazon' ? '' : 'hidden'}>
-                        <div className="space-y-4 pt-4">
-                          <p className="text-xs text-slate-500">
-                            Imported from Amazon (read-only).
-                          </p>
-                          <div className="space-y-1">
-                            <Label>Dimensions (cm)</Label>
-                            <Input
-                              value={sku.unitDimensionsCm ?? ''}
-                              disabled
-                              className="bg-slate-50 text-slate-500"
-                              placeholder="—"
-                            />
+                        <TabsContent className={batchModalTab === 'amazon' ? '' : 'hidden'}>
+                          <div className="space-y-4">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Imported from Amazon (read-only).
+                            </p>
+                            <div className="space-y-1">
+                              <Label>Dimensions (cm)</Label>
+                              <div className="grid grid-cols-3 gap-2">
+                                {(() => {
+                                  const side1 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide1Cm)
+                                  const side2 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide2Cm)
+                                  const side3 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide3Cm)
+
+                                  return (
+                                    <>
+                                      <Input
+                                        value={side1 === null ? '' : formatNumber(side1, 2)}
+                                        disabled
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                        placeholder="S1"
+                                      />
+                                      <Input
+                                        value={side2 === null ? '' : formatNumber(side2, 2)}
+                                        disabled
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                        placeholder="S2"
+                                      />
+                                      <Input
+                                        value={side3 === null ? '' : formatNumber(side3, 2)}
+                                        disabled
+                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                        placeholder="S3"
+                                      />
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label>Weight (kg)</Label>
+                              <Input
+                                value={(() => {
+                                  const weight = coerceFiniteNumber(amazonReadonlyBatch?.amazonReferenceWeightKg)
+                                  return weight === null ? '' : formatNumber(weight, 3)
+                                })()}
+                                disabled
+                                className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                                placeholder="—"
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <Label>Weight (kg)</Label>
-                            <Input
-                              value={sku.amazonReferenceWeightKg?.toString() ?? ''}
-                              disabled
-                              className="bg-slate-50 text-slate-500"
-                              placeholder="—"
-                            />
-                          </div>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
+                        </TabsContent>
+                      </Tabs>
+                    </div>
                   </div>
 
                   <div className="md:col-span-2 pt-4 border-t">
-                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Carton Dimensions</h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
-                        <div className="grid grid-cols-3 gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Carton Dimensions</h3>
+                    <div className="rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Input
+                              value={formState.cartonLength}
+                              onChange={event =>
+                                handleDimensionChange('cartonLength', event.target.value)
+                              }
+                              placeholder="S1"
+                              inputMode="decimal"
+                            />
+                            <Input
+                              value={formState.cartonWidth}
+                              onChange={event => handleDimensionChange('cartonWidth', event.target.value)}
+                              placeholder="S2"
+                              inputMode="decimal"
+                            />
+                            <Input
+                              value={formState.cartonHeight}
+                              onChange={event =>
+                                handleDimensionChange('cartonHeight', event.target.value)
+                              }
+                              placeholder="S3"
+                              inputMode="decimal"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="cartonWeight">
+                            Weight ({unitSystem === 'metric' ? 'kg' : 'lb'})
+                          </Label>
                           <Input
-                            value={formState.cartonLength}
-                            onChange={event =>
-                              handleDimensionChange('cartonLength', event.target.value)
-                            }
-                            placeholder="L"
-                            inputMode="decimal"
-                          />
-                          <Input
-                            value={formState.cartonWidth}
-                            onChange={event => handleDimensionChange('cartonWidth', event.target.value)}
-                            placeholder="W"
-                            inputMode="decimal"
-                          />
-                          <Input
-                            value={formState.cartonHeight}
-                            onChange={event =>
-                              handleDimensionChange('cartonHeight', event.target.value)
-                            }
-                            placeholder="H"
-                            inputMode="decimal"
+                            id="cartonWeight"
+                            type="number"
+                            step="0.001"
+                            min={0.001}
+                            value={formState.cartonWeight}
+                            onChange={event => handleWeightChange('cartonWeight', event.target.value)}
+                            placeholder="Optional"
                           />
                         </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="cartonWeight">
-                          Weight ({unitSystem === 'metric' ? 'kg' : 'lb'})
-                        </Label>
-                        <Input
-                          id="cartonWeight"
-                          type="number"
-                          step="0.001"
-                          min={0.001}
-                          value={formState.cartonWeight}
-                          onChange={event => handleWeightChange('cartonWeight', event.target.value)}
-                          placeholder="Optional"
-                        />
                       </div>
                     </div>
                   </div>

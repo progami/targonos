@@ -39,7 +39,7 @@ function generateStorageLedgerCSV(entries: StorageLedgerEntryRow[]): string {
  'Warehouse Name',
  'SKU Code',
  'SKU Description',
- 'Batch Lot',
+ 'Batch',
  'Closing Cartons',
  'Closing Pallets',
  'Pallet Days',

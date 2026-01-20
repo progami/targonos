@@ -1,15 +1,13 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { Button } from '@/components/ui/button'
-import { ArrowLeft, Boxes, Loader2 } from '@/lib/lucide-icons'
+import { Boxes, Loader2 } from '@/lib/lucide-icons'
 import { SkuBatchesPanel } from '../sku-batches-modal'
 
 const ALLOWED_ROLES = ['admin', 'staff']
@@ -145,18 +143,12 @@ function ProductBatchesPageInner() {
           title="Batches"
           description="Configuration"
           icon={Boxes}
-          actions={
-            <Button asChild variant="outline" className="gap-2">
-              <Link href="/config/products">
-                <ArrowLeft className="h-4 w-4" />
-                Back to SKUs
-              </Link>
-            </Button>
-          }
+          backHref="/config/products"
+          backLabel="Back"
         />
         <PageContent>
           {!skuId ? (
-            <div className="flex h-full items-center justify-center rounded-xl border bg-white p-10 text-center">
+            <div className="flex h-full items-center justify-center rounded-xl border bg-white dark:bg-slate-800 p-10 text-center">
               <div className="space-y-2">
                 <div className="text-base font-semibold text-slate-900">Select a SKU</div>
                 <div className="text-sm text-slate-500">
@@ -171,7 +163,7 @@ function ProductBatchesPageInner() {
           ) : sku ? (
             <SkuBatchesPanel sku={sku} key={sku.id} />
           ) : (
-            <div className="flex h-full items-center justify-center rounded-xl border bg-white p-10 text-center">
+            <div className="flex h-full items-center justify-center rounded-xl border bg-white dark:bg-slate-800 p-10 text-center">
               <div className="space-y-2">
                 <div className="text-base font-semibold text-slate-900">SKU not found</div>
                 <div className="text-sm text-slate-500">

@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
@@ -13,9 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { PageLoading } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -220,7 +219,7 @@ export default function FulfillmentOrderDetailPage() {
     if (!session) {
       redirectToPortal(
         '/login',
-        `${window.location.origin}/operations/fulfillment-orders/${params.id}`
+        `${window.location.origin}${withBasePath(`/operations/fulfillment-orders/${params.id}`)}`
       )
       return
     }
@@ -466,13 +465,14 @@ export default function FulfillmentOrderDetailPage() {
     setDocuments(Array.isArray(list) ? (list as FulfillmentOrderDocumentSummary[]) : [])
   }
 
-  const handleDocumentUpload = async (
-    event: ChangeEvent<HTMLInputElement>,
-    stage: FulfillmentOrderDocumentStage,
-    documentType: string
-  ) => {
-    const file = event.target.files?.[0]
-    if (!order || !file) return
+	  const handleDocumentUpload = async (
+	    event: ChangeEvent<HTMLInputElement>,
+	    stage: FulfillmentOrderDocumentStage,
+	    documentType: string
+	  ) => {
+	    const input = event.target
+	    const file = input.files?.[0]
+	    if (!order || !file) return
 
     const key = `${stage}::${documentType}`
     setUploadingDoc(prev => ({ ...prev, [key]: true }))
@@ -483,15 +483,22 @@ export default function FulfillmentOrderDetailPage() {
       formData.append('stage', stage)
       formData.append('documentType', documentType)
 
-      const response = await fetch(`/api/fulfillment-orders/${order.id}/documents`, {
+      const completeResponse = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}/documents`, {
         method: 'POST',
         body: formData,
-        credentials: 'include',
       })
 
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) {
-        toast.error(payload?.error ?? 'Failed to upload document')
+      const payload = await completeResponse.json().catch(() => null)
+      if (!completeResponse.ok) {
+        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+        if (errorMessage && detailsMessage) {
+          toast.error(`${errorMessage}: ${detailsMessage}`)
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Failed to upload document (HTTP ${completeResponse.status})`)
+        }
         return
       }
 
@@ -499,11 +506,11 @@ export default function FulfillmentOrderDetailPage() {
       toast.success('Document uploaded')
     } catch {
       toast.error('Failed to upload document')
-    } finally {
-      setUploadingDoc(prev => ({ ...prev, [key]: false }))
-      event.target.value = ''
-    }
-  }
+	    } finally {
+	      setUploadingDoc(prev => ({ ...prev, [key]: false }))
+	      input.value = ''
+	    }
+	  }
 
   const renderDocumentStage = (stage: FulfillmentOrderDocumentStage, title: string) => {
     const required = DOCUMENT_REQUIREMENTS[stage] ?? []
@@ -552,7 +559,7 @@ export default function FulfillmentOrderDetailPage() {
                   </div>
                 </div>
 
-                <label className="inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
                   <Upload className="h-3.5 w-3.5" />
                   {existing ? 'Replace' : 'Upload'}
                   <input
@@ -586,17 +593,11 @@ export default function FulfillmentOrderDetailPage() {
           title="Fulfillment Order"
           description="Operations"
           icon={FileText}
-          actions={
-            <Button asChild variant="outline" className="gap-2">
-              <Link href="/operations/fulfillment-orders">
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Link>
-            </Button>
-          }
+          backHref="/operations/fulfillment-orders"
+          backLabel="Back"
         />
         <PageContent>
-          <div className="rounded-xl border bg-white shadow-soft p-6 text-sm text-muted-foreground">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft p-6 text-sm text-muted-foreground">
             Fulfillment order not found.
           </div>
         </PageContent>
@@ -611,32 +612,26 @@ export default function FulfillmentOrderDetailPage() {
           title={order.foNumber}
           description="Fulfillment Order"
           icon={Truck}
+          backHref="/operations/fulfillment-orders"
+          backLabel="Back"
           actions={
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline" className="gap-2">
-                <Link href="/operations/fulfillment-orders">
-                  <ArrowLeft className="h-4 w-4" />
-                  Back
-                </Link>
+            order.status === 'DRAFT' ? (
+              <Button
+                variant="destructive"
+                className="gap-2"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={submitting}
+              >
+                <XCircle className="h-4 w-4" />
+                Cancel
               </Button>
-              {order.status === 'DRAFT' && (
-                <Button
-                  variant="destructive"
-                  className="gap-2"
-                  onClick={() => setShowCancelConfirm(true)}
-                  disabled={submitting}
-                >
-                  <XCircle className="h-4 w-4" />
-                  Cancel
-                </Button>
-              )}
-            </div>
+            ) : null
           }
         />
         <PageContent>
           <div className="flex flex-col gap-6">
             {/* Order Type (read-only) - matches new page structure */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Order Type</h3>
@@ -671,7 +666,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Amazon Shipment Info (for Amazon FBA) - matches new page structure */}
             {isAmazonFBA && (
-              <div className="rounded-xl border bg-white p-5">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
                 <h3 className="text-sm font-semibold mb-4">Amazon Shipment</h3>
                 {order.amazonShipmentId ? (
                   <div className="space-y-4">
@@ -717,7 +712,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Destination Details (for non-Amazon) - matches new page structure */}
             {!isAmazonFBA && (
-              <div className="rounded-xl border bg-white p-5">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
                 <h3 className="text-sm font-semibold mb-4">Destination Details</h3>
                 <div className="grid gap-4 md:grid-cols-2 text-sm">
                   <div>
@@ -743,7 +738,7 @@ export default function FulfillmentOrderDetailPage() {
             )}
 
             {/* Line Items Section - matches new page structure */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Line Items</h3>
@@ -754,10 +749,10 @@ export default function FulfillmentOrderDetailPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border bg-white overflow-hidden">
+              <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
                 <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50">
                   <div className="col-span-3">SKU</div>
-                  <div className="col-span-3">Batch/Lot</div>
+                  <div className="col-span-3">Batch</div>
                   <div className="col-span-4">Description</div>
                   <div className="col-span-2 text-right">Qty</div>
                   <div className="col-span-2">Status</div>
@@ -796,7 +791,7 @@ export default function FulfillmentOrderDetailPage() {
 
             {/* Collapsible Freight Section (for Amazon FBA) - matches new page structure */}
             {isAmazonFBA && (
-              <div className="rounded-xl border bg-white overflow-hidden">
+              <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setFreightExpanded(!freightExpanded)}
@@ -1274,7 +1269,7 @@ export default function FulfillmentOrderDetailPage() {
             )}
 
             {/* Documents Section */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Documents</h3>
@@ -1293,7 +1288,7 @@ export default function FulfillmentOrderDetailPage() {
             </div>
 
             {/* Shipping Section */}
-            <div className="rounded-xl border bg-white p-5">
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Shipping</h3>

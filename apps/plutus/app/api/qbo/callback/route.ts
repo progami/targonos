@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { exchangeCodeForTokens } from '@/lib/qbo/client';
 import { createLogger } from '@targon/logger';
 import { z } from 'zod';
+import { saveServerQboConnection } from '@/lib/qbo/connection-store';
+import type { QboConnection } from '@/lib/qbo/api';
 
 const logger = createLogger({ name: 'qbo-callback' });
 
@@ -13,8 +15,8 @@ const CallbackSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3012';
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const baseUrl = process.env.BASE_URL ?? req.nextUrl.origin;
 
   try {
     const cookieStore = await cookies();
@@ -48,20 +50,22 @@ export async function GET(req: NextRequest) {
 
     logger.info('Successfully obtained QBO tokens', { realmId });
 
-    // Store tokens in secure cookie (temporary - move to database later)
-    // In production, you'd store these in an encrypted database
-    cookieStore.set('qbo_connection', JSON.stringify({
+    const connection: QboConnection = {
       realmId: tokens.realmId,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       expiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
-    }), {
+    };
+
+    cookieStore.set('qbo_connection', JSON.stringify(connection), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 100, // 100 days (refresh token lifetime)
       path: '/',
     });
+
+    await saveServerQboConnection(connection);
 
     return NextResponse.redirect(new URL(`${basePath}?connected=true`, baseUrl));
   } catch (error) {

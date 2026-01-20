@@ -20,7 +20,7 @@ export function WarehouseMapSimple({
 }: WarehouseMapSimpleProps) {
   if (warehouses.length === 0) {
     return (
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-8 text-center">
+      <div className="bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-lg p-8 text-center">
         <MapPin className="h-12 w-12 text-slate-400 mx-auto mb-2" />
         <p className="text-slate-500">No warehouses available</p>
       </div>
@@ -35,7 +35,7 @@ export function WarehouseMapSimple({
           className={`border rounded-lg p-4 ${
             warehouse.id === selectedWarehouseId
               ? 'border-cyan-600 bg-cyan-50'
-              : 'border-slate-200 bg-white'
+              : 'border-slate-200 dark:border-slate-700 bg-white'
           }`}
         >
           <div className="flex items-start justify-between">

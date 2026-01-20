@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@targon/auth', '@targon/config', '@targon/logger'],
 
   serverExternalPackages: ['@targon/prisma-kairos'],
+
+  turbopack: {
+    resolveAlias: {
+      '@targon/prisma-kairos': '../../packages/prisma-kairos/generated/index.js',
+      '@targon/auth': '../../packages/auth/dist/index.js',
+    },
+  },
 };
 
 export default nextConfig;

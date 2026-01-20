@@ -130,8 +130,8 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
          <div className="flex h-full w-full items-center justify-center p-4">
            <div className="fixed inset-0 bg-black/50" onClick={handleClose} aria-hidden="true" />
 
-           <div className="relative w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-xl">
- <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+           <div className="relative w-full max-w-lg overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
+ <div className="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
  <div className="flex items-center justify-between mb-4">
  <h3 className="text-lg font-medium text-slate-900">
  Import {config.displayName}
@@ -168,7 +168,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  </div>
  <button
  onClick={downloadTemplate}
- className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-medium rounded text-slate-700 bg-white hover:bg-slate-50"
+ className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-medium rounded text-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50"
  >
  <Download className="h-3 w-3 mr-1" />
  Template
@@ -282,7 +282,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  </button>
  <button
  onClick={handleClose}
- className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-soft px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+ className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-soft px-4 py-2 bg-white dark:bg-slate-800 text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
  >
  Cancel
  </button>

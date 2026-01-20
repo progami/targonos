@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
+import { getAllowedDepartmentStrings, getDepartmentRefsForEmployee, hasExecutiveAccess } from '@/lib/department-access'
 import { prisma } from '@/lib/prisma'
-import { isHROrAbove } from '@/lib/permissions'
 
 const ContractorStatusEnum = z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'TERMINATED'])
 
@@ -43,16 +43,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const isExecutive = hasExecutiveAccess(deptRefs)
+    const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
     const contractor = await prisma.contractor.findUnique({ where: { id } })
 
     if (!contractor) {
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
+    }
+
+    // Executives can access all contractors
+    if (
+      !isExecutive &&
+      contractor.department &&
+      contractor.department.length &&
+      !allowedDepartments.some((d) => d.toLowerCase() === contractor.department!.toLowerCase())
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     return NextResponse.json(contractor)
@@ -71,10 +84,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const isExecutive = hasExecutiveAccess(deptRefs)
+    const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
     const existing = await prisma.contractor.findUnique({ where: { id } })
@@ -83,11 +99,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
     }
 
+    // Executives can update all contractors
+    if (
+      !isExecutive &&
+      existing.department &&
+      existing.department.length &&
+      !allowedDepartments.some((d) => d.toLowerCase() === existing.department!.toLowerCase())
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await req.json()
     const validation = validateBody(UpdateContractorSchema, body)
     if (!validation.success) return validation.error
 
     const data = validation.data
+    const departmentUpdate =
+      data.department === undefined ? undefined : data.department && data.department.length ? data.department : null
+
+    // Executives can update to any department
+    if (
+      !isExecutive &&
+      departmentUpdate &&
+      !allowedDepartments.some((d) => d.toLowerCase() === departmentUpdate.toLowerCase())
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const contractor = await prisma.contractor.update({
       where: { id },
@@ -97,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         email: data.email,
         phone: data.phone,
         role: data.role,
-        department: data.department,
+        department: departmentUpdate,
         hourlyRate: data.hourlyRate,
         currency: data.currency,
         contractStart: data.contractStart !== undefined
@@ -130,16 +167,29 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isHR = await isHROrAbove(currentEmployeeId)
-    if (!isHR) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const deptRefs = await getDepartmentRefsForEmployee(currentEmployeeId)
+    if (!deptRefs) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
     }
+
+    const isExecutive = hasExecutiveAccess(deptRefs)
+    const allowedDepartments = getAllowedDepartmentStrings(deptRefs)
 
     const { id } = await params
     const existing = await prisma.contractor.findUnique({ where: { id } })
 
     if (!existing) {
       return NextResponse.json({ error: 'Contractor not found' }, { status: 404 })
+    }
+
+    // Executives can delete all contractors
+    if (
+      !isExecutive &&
+      existing.department &&
+      existing.department.length &&
+      !allowedDepartments.some((d) => d.toLowerCase() === existing.department!.toLowerCase())
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     await prisma.contractor.delete({ where: { id } })

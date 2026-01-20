@@ -69,12 +69,12 @@ export default function WorkQueuePage() {
     loadPending()
   }, [loadPending])
 
-  // Load completed items when switching to completed tab
+  // Keep completed items fresh when entering completed tab
   useEffect(() => {
-    if (activeTab === 'completed' && !completedData) {
-      loadCompleted()
+    if (activeTab === 'completed') {
+      loadCompleted({ force: true })
     }
-  }, [activeTab, completedData, loadCompleted])
+  }, [activeTab, loadCompleted])
 
   const handleTabChange = useCallback((tab: InboxTab) => {
     setActiveTab(tab)
@@ -85,16 +85,14 @@ export default function WorkQueuePage() {
     setError(null)
     try {
       await executeAction(actionId, item.entity)
+      WorkItemsApi.invalidate()
       await loadPending({ force: true })
-      // Also refresh completed since item might have moved there
-      if (completedData) {
-        await loadCompleted({ force: true })
-      }
+      await loadCompleted({ force: true })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to complete action'
       setError(message)
     }
-  }, [loadPending, loadCompleted, completedData])
+  }, [loadPending, loadCompleted])
 
   const handleRequestCreated = useCallback(() => {
     setCreateModalOpen(false)

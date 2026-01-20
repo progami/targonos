@@ -38,7 +38,7 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
     if (unitAny && !unitAll) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Unit dimensions require all three sides',
+        message: 'Item package dimensions require all three sides',
       })
     }
 
@@ -178,7 +178,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     payload.cartonSide3Cm
 
   if (unitInputProvided && !unitTriplet) {
-    return ApiResponses.badRequest('Unit dimensions must be a valid LxWxH triple')
+    return ApiResponses.badRequest('Item package dimensions must be a valid LxWxH triple')
   }
 
   if (cartonInputProvided && !cartonTriplet) {

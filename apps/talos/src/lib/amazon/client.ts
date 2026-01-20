@@ -32,7 +32,19 @@ type AmazonCatalogItemAttributes = {
     width?: AmazonCatalogMeasurement
     height?: AmazonCatalogMeasurement
   }>
+  item_package_dimensions?: Array<{
+    length?: AmazonCatalogMeasurement
+    width?: AmazonCatalogMeasurement
+    height?: AmazonCatalogMeasurement
+  }>
+  package_dimensions?: Array<{
+    length?: AmazonCatalogMeasurement
+    width?: AmazonCatalogMeasurement
+    height?: AmazonCatalogMeasurement
+  }>
   item_weight?: Array<AmazonCatalogMeasurement>
+  item_package_weight?: Array<AmazonCatalogMeasurement>
+  package_weight?: Array<AmazonCatalogMeasurement>
 }
 
 type AmazonCatalogItemSummary = {
@@ -168,6 +180,39 @@ const AMAZON_BASE_REQUIRED_ENV_VARS = [
 const AMAZON_TENANT_REQUIRED_ENV_VARS = ['AMAZON_REFRESH_TOKEN'] as const
 
 const clientCache = new Map<string, SellingPartnerApiClient>()
+
+// Pricing cache to avoid repeated API calls for the same ASIN
+// Key: `${tenantCode}:${asin}`, Value: { price, expiresAt }
+const PRICING_CACHE_TTL_MS = 5 * 60_000 // 5 minutes
+const pricingCache = new Map<string, { price: number | null; expiresAt: number }>()
+
+function getPricingCacheKey(asin: string, tenantCode?: TenantCode): string {
+  return `${tenantCode ?? 'default'}:${asin.toUpperCase()}`
+}
+
+function getCachedPrice(asin: string, tenantCode?: TenantCode): number | null | undefined {
+  const key = getPricingCacheKey(asin, tenantCode)
+  const cached = pricingCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.price
+  }
+  return undefined // undefined means not cached, null means cached as "no price found"
+}
+
+function setCachedPrice(asin: string, tenantCode: TenantCode | undefined, price: number | null): void {
+  const key = getPricingCacheKey(asin, tenantCode)
+  pricingCache.set(key, { price, expiresAt: Date.now() + PRICING_CACHE_TTL_MS })
+
+  // Prune old entries periodically (keep cache size bounded)
+  if (pricingCache.size > 500) {
+    const now = Date.now()
+    for (const [k, v] of pricingCache) {
+      if (v.expiresAt < now) {
+        pricingCache.delete(k)
+      }
+    }
+  }
+}
 
 function normalizeRegion(value: string): SellingPartnerApiRegion | null {
   const normalized = value.trim().toLowerCase()
@@ -999,6 +1044,93 @@ export async function getProductFees(asin: string, price: number, tenantCode?: T
   } catch (_error) {
     // console.error('Error fetching product fees:', _error)
     throw _error
+  }
+}
+
+/**
+ * Get the current listing price for an ASIN from Amazon's Pricing API.
+ * Uses getPricing which returns the seller's own listing price.
+ * Returns the seller's listing price if available, null otherwise.
+ * Results are cached for 5 minutes to reduce API calls.
+ */
+export async function getListingPrice(asin: string, tenantCode?: TenantCode): Promise<number | null> {
+  // Check cache first
+  const cached = getCachedPrice(asin, tenantCode)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const result = await getListingPriceDebug(asin, tenantCode)
+  return result.price
+}
+
+/**
+ * Debug version of getListingPrice that returns both the price and the raw API response.
+ * Also populates the pricing cache.
+ */
+export async function getListingPriceDebug(
+  asin: string,
+  tenantCode?: TenantCode
+): Promise<{ price: number | null; rawResponse: unknown }> {
+  try {
+    const config = getAmazonSpApiConfigFromEnv(tenantCode)
+    const marketplaceId = config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID
+
+    // Use getPricing which returns our own seller's price for the ASIN
+    const response = await callAmazonApi<unknown>(tenantCode, {
+      operation: 'getPricing',
+      endpoint: 'productPricing',
+      query: {
+        MarketplaceId: marketplaceId,
+        ItemType: 'Asin',
+        Asins: asin,
+        ItemCondition: 'New',
+      },
+    })
+
+    // Parse the response - getPricing returns our own seller's offers for the ASIN
+    // Response can be either an array directly or wrapped in { payload: [...] }
+    type PricingItem = {
+      ASIN?: string
+      status?: string
+      Product?: {
+        Offers?: Array<{
+          BuyingPrice?: {
+            ListingPrice?: { Amount?: number; CurrencyCode?: string }
+            LandedPrice?: { Amount?: number; CurrencyCode?: string }
+          }
+          RegularPrice?: { Amount?: number; CurrencyCode?: string }
+        }>
+      }
+    }
+
+    let payload: PricingItem[] = []
+    if (Array.isArray(response)) {
+      payload = response as PricingItem[]
+    } else if (response && typeof response === 'object') {
+      const obj = response as { payload?: PricingItem[] }
+      payload = obj.payload ?? []
+    }
+    for (const item of payload) {
+      if (item.status !== 'Success') continue
+      const offers = item.Product?.Offers ?? []
+      for (const offer of offers) {
+        // Try ListingPrice first, then RegularPrice
+        const listingPrice = offer.BuyingPrice?.ListingPrice?.Amount ?? offer.RegularPrice?.Amount
+        if (typeof listingPrice === 'number' && Number.isFinite(listingPrice) && listingPrice > 0) {
+          setCachedPrice(asin, tenantCode, listingPrice)
+          return { price: listingPrice, rawResponse: response }
+        }
+      }
+    }
+
+    // Cache null result to avoid repeated API calls for ASINs without pricing
+    setCachedPrice(asin, tenantCode, null)
+    return { price: null, rawResponse: response }
+  } catch (error) {
+    // Pricing API may fail for various reasons, return null to use default
+    // Don't cache errors - they may be transient
+    return { price: null, rawResponse: { error: error instanceof Error ? error.message : 'Unknown error' } }
   }
 }
 

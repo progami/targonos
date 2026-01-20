@@ -159,7 +159,7 @@ export async function createMovementNote(input: CreateMovementNoteInput, user: U
 
                 if (providedBatchLot !== poBatchLot) {
                   throw new ValidationError(
-                    `Batch/Lot mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
+                    `Batch mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
                   )
                 }
               }
@@ -180,7 +180,7 @@ export async function createMovementNote(input: CreateMovementNoteInput, user: U
 
               if (!batchRecord) {
                 throw new ValidationError(
-                  `Batch/Lot ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
+                  `Batch ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
                 )
               }
 
@@ -426,7 +426,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
         if (providedBatchLot !== poBatchLot) {
           throw new ValidationError(
-            `Batch/Lot mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
+            `Batch mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
           )
         }
       }
@@ -448,7 +448,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
       if (!batchRecord) {
         throw new ValidationError(
-          `Batch/Lot ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
+          `Batch ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
         )
       }
 

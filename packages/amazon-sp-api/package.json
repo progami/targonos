@@ -1,0 +1,31 @@
+{
+  "name": "@targon/amazon-sp-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -w -p tsconfig.build.json",
+    "type-check": "tsc --noEmit -p tsconfig.build.json",
+    "lint": "echo 'No lint configured for amazon-sp-api package'"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "amazon-sp-api": "^1.0.12"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./orders": {
+      "import": "./dist/orders.js",
+      "types": "./dist/orders.d.ts"
+    }
+  }
+}

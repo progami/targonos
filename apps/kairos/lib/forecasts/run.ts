@@ -7,7 +7,8 @@ import { ZodError } from 'zod';
 import prisma from '@/lib/prisma';
 import { buildKairosOwnershipWhere, getKairosActor } from '@/lib/access';
 import { parseEtsConfig, parseProphetConfig } from '@/lib/forecasts/config';
-import { runMlForecast } from '@/lib/models/ml-service';
+import { alignPointsToDs } from '@/lib/forecasts/regressor-alignment';
+import { runMlBatchForecast, runMlForecast } from '@/lib/models/ml-service';
 
 type ForecastModel = 'ETS' | 'PROPHET' | 'ARIMA' | 'THETA' | 'NEURALPROPHET';
 
@@ -71,7 +72,7 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
 
     const paramsRec = params as Record<string, unknown>;
     const model = paramsRec.model;
-    if (model !== 'ETS' && model !== 'PROPHET') {
+    if (model !== 'ETS' && model !== 'PROPHET' && model !== 'ARIMA' && model !== 'THETA' && model !== 'NEURALPROPHET') {
       throw new Error('Forecast run model is missing.');
     }
 
@@ -95,6 +96,20 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
             granularity: true,
           },
         },
+        regressors: {
+          include: {
+            series: {
+              select: {
+                id: true,
+                name: true,
+                source: true,
+                query: true,
+                geo: true,
+                granularity: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -106,16 +121,35 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
       throw new Error('Forecast is no longer running.');
     }
 
+    const seriesIds = [forecast.targetSeriesId, ...forecast.regressors.map((r) => r.seriesId)];
     const points = await prisma.timeSeriesPoint.findMany({
-      where: { seriesId: forecast.targetSeriesId },
-      orderBy: { t: 'asc' },
-      select: { t: true, value: true },
+      where: { seriesId: { in: seriesIds } },
+      orderBy: [{ seriesId: 'asc' }, { t: 'asc' }],
+      select: { seriesId: true, t: true, value: true },
     });
 
-    const ds = points.map((point) => Math.floor(point.t.getTime() / 1000));
-    const y = points.map((point) => point.value);
+    const pointsBySeries = new Map<string, Array<{ t: Date; value: number }>>();
+    for (const point of points) {
+      const bucket = pointsBySeries.get(point.seriesId);
+      if (bucket) {
+        bucket.push({ t: point.t, value: point.value });
+        continue;
+      }
+      pointsBySeries.set(point.seriesId, [{ t: point.t, value: point.value }]);
+    }
+
+    const targetPoints = pointsBySeries.get(forecast.targetSeriesId);
+    if (!targetPoints || targetPoints.length < 2) {
+      throw new Error('Target time series has insufficient data.');
+    }
+
+    const ds = targetPoints.map((point) => Math.floor(point.t.getTime() / 1000));
+    const y = targetPoints.map((point) => point.value);
 
     const loadMs = Date.now() - loadStart;
+
+    let regressorMs: number | null = null;
+    let regressorForecasts: unknown[] = [];
 
     const modelStart = Date.now();
     const result = await (async () => {
@@ -134,7 +168,89 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
       if (model === 'PROPHET') {
         try {
           const parsedConfig = parseProphetConfig(config) ?? undefined;
-          return await runMlForecast({ model: 'PROPHET', ds, y, horizon, config: parsedConfig });
+          if (forecast.regressors.length === 0) {
+            return await runMlForecast({ model: 'PROPHET', ds, y, horizon, config: parsedConfig });
+          }
+
+          for (const regressor of forecast.regressors) {
+            if (regressor.futureMode === 'USER_INPUT') {
+              throw new Error(
+                `Regressor '${regressor.series.name}' requires user-provided future values, which is not supported yet.`,
+              );
+            }
+            if (regressor.series.granularity !== forecast.targetSeries.granularity) {
+              throw new Error(
+                `Regressor '${regressor.series.name}' granularity must match target series granularity.`,
+              );
+            }
+          }
+
+          const regressors: Record<string, number[]> = {};
+          for (const regressor of forecast.regressors) {
+            const regressorPoints = pointsBySeries.get(regressor.seriesId);
+            if (!regressorPoints || regressorPoints.length < 2) {
+              throw new Error(`Regressor '${regressor.series.name}' has insufficient data.`);
+            }
+
+            regressors[regressor.seriesId] = alignPointsToDs({
+              ds,
+              points: regressorPoints,
+              label: `Regressor '${regressor.series.name}'`,
+            });
+          }
+
+          const regressorForecastStart = Date.now();
+          const regressorResults = await runMlBatchForecast({
+            items: forecast.regressors.map((regressor) => ({
+              id: regressor.seriesId,
+              model: 'ETS',
+              ds,
+              y: regressors[regressor.seriesId],
+              horizon,
+            })),
+          });
+          regressorMs = Date.now() - regressorForecastStart;
+
+          const regressorBySeriesId = new Map(
+            forecast.regressors.map((regressor) => [regressor.seriesId, regressor]),
+          );
+
+          const regressorsFuture: Record<string, number[]> = {};
+          for (const item of regressorResults.items) {
+            const values = item.points.map((point) => point.yhat);
+            regressorsFuture[item.id] = values;
+          }
+
+          const unitResult = await runMlForecast({
+            model: 'PROPHET',
+            ds,
+            y,
+            horizon,
+            config: parsedConfig,
+            regressors,
+            regressorsFuture,
+          });
+
+          regressorForecasts = regressorResults.items.map((item) => {
+              const regressor = regressorBySeriesId.get(item.id);
+              if (!regressor) {
+                throw new Error(`Regressor '${item.id}' was not found.`);
+              }
+
+              return {
+                id: regressor.id,
+                seriesId: regressor.seriesId,
+                futureMode: regressor.futureMode,
+                series: regressor.series,
+                forecast: {
+                  model: 'ETS' as const,
+                  points: item.points,
+                  meta: item.meta,
+                },
+              };
+            });
+
+          return unitResult;
         } catch (error) {
           if (error instanceof ZodError) {
             throw new Error(error.issues.at(0)?.message ?? 'Invalid forecast configuration.');
@@ -185,6 +301,23 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
     const modelMs = Date.now() - modelStart;
     const completedAt = new Date();
 
+    const timings = {
+      loadMs,
+      modelMs,
+      saveMs: 0,
+      totalMs: 0,
+    } as {
+      loadMs: number;
+      modelMs: number;
+      saveMs: number;
+      totalMs: number;
+      regressorMs?: number;
+    };
+
+    if (regressorMs !== null) {
+      timings.regressorMs = regressorMs;
+    }
+
     const output = {
       model,
       series: {
@@ -196,13 +329,11 @@ async function finalizeForecastRun(args: { forecastId: string; runId: string }) 
       },
       generatedAt: completedAt.toISOString(),
       points: result.points,
+      regressors: regressorForecasts,
       meta: {
         ...result.meta,
         timings: {
-          loadMs,
-          modelMs,
-          saveMs: 0,
-          totalMs: 0,
+          ...timings,
         },
       },
     };

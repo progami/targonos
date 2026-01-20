@@ -19,34 +19,34 @@ export interface StatsCardProps {
 
 const variantStyles = {
  default: {
- container: 'bg-white ',
- icon: 'text-slate-400 ',
- value: 'text-slate-900 ',
- border: 'border-slate-200 '
+ container: 'bg-white dark:bg-slate-800',
+ icon: 'text-slate-400 dark:text-slate-500',
+ value: 'text-slate-900 dark:text-slate-100',
+ border: 'border-slate-200 dark:border-slate-700'
  },
  success: {
- container: 'bg-white ',
- icon: 'text-green-600 ',
- value: 'text-green-600 ',
- border: 'border-slate-200 '
+ container: 'bg-white dark:bg-slate-800',
+ icon: 'text-cyan-600 dark:text-cyan-400',
+ value: 'text-cyan-600 dark:text-cyan-400',
+ border: 'border-slate-200 dark:border-slate-700'
  },
  warning: {
- container: 'bg-white ',
- icon: 'text-amber-600 ',
- value: 'text-amber-600 ',
- border: 'border-slate-200 '
+ container: 'bg-white dark:bg-slate-800',
+ icon: 'text-slate-500 dark:text-slate-400',
+ value: 'text-slate-700 dark:text-slate-300',
+ border: 'border-slate-200 dark:border-slate-700'
  },
  danger: {
- container: 'bg-white ',
- icon: 'text-red-600 ',
- value: 'text-red-600 ',
- border: 'border-slate-200 '
+ container: 'bg-white dark:bg-slate-800',
+ icon: 'text-slate-600 dark:text-slate-400',
+ value: 'text-slate-700 dark:text-slate-300',
+ border: 'border-slate-200 dark:border-slate-700'
  },
  info: {
- container: 'bg-white ',
- icon: 'text-cyan-600 ',
- value: 'text-cyan-600 ',
- border: 'border-slate-200 '
+ container: 'bg-white dark:bg-slate-800',
+ icon: 'text-cyan-600 dark:text-cyan-400',
+ value: 'text-cyan-600 dark:text-cyan-400',
+ border: 'border-slate-200 dark:border-slate-700'
  }
 }
 
@@ -102,25 +102,25 @@ export function StatsCard({
  >
  <div className="flex items-start justify-between">
  <div className="flex-1">
- <p className={cn('text-slate-500 font-medium uppercase tracking-wider', sizes.titleSize)}>{title}</p>
+ <p className={cn('text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider', sizes.titleSize)}>{title}</p>
  <div className="flex items-baseline gap-2 mt-2">
  <p className={cn('font-bold', sizes.valueSize, styles.value)}>
  {typeof value === 'number' ? value.toLocaleString() : value}
  </p>
  {subtitle && (
- <p className={cn('text-slate-500 ', sizes.subtitleSize)}>{subtitle}</p>
+ <p className={cn('text-slate-500 dark:text-slate-400', sizes.subtitleSize)}>{subtitle}</p>
  )}
  </div>
  {trend && (
  <div className="flex items-center gap-1 mt-2">
  <span className={cn(
  'text-xs font-medium',
- trend.value >= 0 ? 'text-green-600' : 'text-red-600'
+ trend.value >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
  )}>
  {trend.value >= 0 ? '+' : ''}{trend.value}%
  </span>
  {trend.label && (
- <span className="text-xs text-slate-500">{trend.label}</span>
+ <span className="text-xs text-slate-500 dark:text-slate-400">{trend.label}</span>
  )}
  </div>
  )}

@@ -7,6 +7,8 @@ import { DataTable, ColumnMeta } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TransactionEditModal } from '@/components/transaction-edit-modal';
+import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { getComplianceStatus } from '@/lib/sop/config';
 import { cn } from '@/lib/utils';
 
 interface Purchase {
@@ -38,7 +40,7 @@ interface Pagination {
   totalPages: number;
 }
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/plutus';
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
@@ -137,15 +139,29 @@ export default function TransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
   const [filter, setFilter] = useState<'all' | 'compliant' | 'partial' | 'non-compliant'>('all');
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
-  const fetchPurchases = useCallback(async (page: number = 1) => {
+  const checkConnectionAndFetch = useCallback(async (page: number = 1) => {
     setLoading(true);
     setError(null);
     try {
+      // First check connection status
+      const statusRes = await fetch(`${basePath}/api/qbo/status`);
+      const statusData = await statusRes.json();
+
+      if (!statusData.connected) {
+        setIsConnected(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsConnected(true);
+
+      // Now fetch purchases
       const res = await fetch(`${basePath}/api/qbo/purchases?page=${page}&pageSize=50`);
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to fetch purchases');
+        throw new Error(data.error ?? 'Failed to fetch purchases');
       }
       const data = await res.json();
       setPurchases(data.purchases);
@@ -158,11 +174,11 @@ export default function TransactionsPage() {
   }, []);
 
   useEffect(() => {
-    fetchPurchases();
-  }, [fetchPurchases]);
+    checkConnectionAndFetch();
+  }, [checkConnectionAndFetch]);
 
   const handlePageChange = (newPage: number) => {
-    fetchPurchases(newPage);
+    checkConnectionAndFetch(newPage);
   };
 
   const handleEdit = (purchase: Purchase) => {
@@ -182,7 +198,7 @@ export default function TransactionsPage() {
               reference: updatedPurchase.reference,
               memo: updatedPurchase.memo,
               syncToken: updatedPurchase.syncToken,
-              complianceStatus: updatedPurchase.reference && updatedPurchase.memo ? 'compliant' : 'partial',
+              complianceStatus: getComplianceStatus(updatedPurchase.reference, updatedPurchase.memo),
             }
           : p
       )
@@ -316,6 +332,10 @@ export default function TransactionsPage() {
     []
   );
 
+  if (isConnected === false) {
+    return <NotConnectedScreen title="Transactions" />;
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-background p-8">
@@ -323,7 +343,7 @@ export default function TransactionsPage() {
           <div className="rounded-xl border border-danger-200 bg-danger-50 dark:border-danger-900 dark:bg-danger-950/50 p-8 text-center">
             <h2 className="text-lg font-semibold text-danger-700 dark:text-danger-400 mb-2">Error</h2>
             <p className="text-danger-600 dark:text-danger-300 mb-4">{error}</p>
-            <Button onClick={() => fetchPurchases()} variant="outline">
+            <Button onClick={() => checkConnectionAndFetch()} variant="outline">
               <RefreshIcon className="h-4 w-4 mr-2" />
               Retry
             </Button>
@@ -348,7 +368,7 @@ export default function TransactionsPage() {
             </Link>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Transactions</h1>
           </div>
-          <Button onClick={() => fetchPurchases(pagination.page)} variant="outline" size="sm">
+          <Button onClick={() => checkConnectionAndFetch(pagination.page)} variant="outline" size="sm">
             <RefreshIcon className="h-4 w-4 mr-2" />
             Refresh
           </Button>

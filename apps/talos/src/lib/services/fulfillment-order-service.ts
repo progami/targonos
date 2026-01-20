@@ -151,7 +151,7 @@ export async function createFulfillmentOrder(
       throw new ValidationError('SKU code is required for all line items')
     }
     if (!line.batchLot) {
-      throw new ValidationError(`Batch/Lot is required for SKU ${line.skuCode}`)
+      throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
     }
     if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
       throw new ValidationError(`Quantity must be a positive integer for SKU ${line.skuCode}`)
@@ -205,7 +205,7 @@ export async function createFulfillmentOrder(
     const key = `${sku.id}::${line.batchLot}`
     if (!batchKeySet.has(key)) {
       throw new ValidationError(
-        `Batch/Lot ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
+        `Batch ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
       )
     }
   }
@@ -479,7 +479,7 @@ export async function transitionFulfillmentOrderStage(
       const batch = batchMap.get(`${sku.id}::${line.batchLot}`)
       if (!batch) {
         throw new ValidationError(
-          `Batch/Lot ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
+          `Batch ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
         )
       }
 

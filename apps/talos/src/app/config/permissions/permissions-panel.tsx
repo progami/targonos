@@ -11,9 +11,12 @@ import {
   X,
 } from '@/lib/lucide-icons'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+
+const PAGE_KEY = '/config/permissions'
 
 interface Permission {
   id: string
@@ -34,10 +37,12 @@ interface UserWithPermissions {
 }
 
 export default function PermissionsPanel() {
+  const pageState = usePageState(PAGE_KEY)
   const [users, setUsers] = useState<UserWithPermissions[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = pageState.search ?? ''
+  const setSearchTerm = pageState.setSearch
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
   const [savingPermission, setSavingPermission] = useState<string | null>(null)
 
@@ -133,7 +138,7 @@ export default function PermissionsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-white shadow-soft">
+      <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -161,7 +166,7 @@ export default function PermissionsPanel() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search users..."
-              className="w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 transition-shadow"
             />
           </div>
         </div>
@@ -170,7 +175,7 @@ export default function PermissionsPanel() {
           <div className="p-6">
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div key={i} className="animate-pulse rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 p-4">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-slate-200" />
                     <div className="flex-1">
@@ -223,7 +228,7 @@ export default function PermissionsPanel() {
                             className={
                               user.role === 'admin'
                                 ? 'bg-purple-50 text-purple-700 border-purple-200 text-xs'
-                                : 'bg-slate-100 text-slate-600 border-slate-200 text-xs'
+                                : 'bg-slate-100 text-slate-600 border-slate-200 dark:border-slate-700 text-xs'
                             }
                           >
                             {user.role}
@@ -267,7 +272,7 @@ export default function PermissionsPanel() {
                                     className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
                                       hasPermission
                                         ? 'border-emerald-200 bg-emerald-50/50'
-                                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                                        : 'border-slate-200 dark:border-slate-700 bg-white hover:bg-slate-50'
                                     }`}
                                   >
                                     <div className="flex-1 min-w-0">

@@ -1,5 +1,6 @@
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import {
+  CostCategory,
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderStatus,
@@ -15,6 +16,7 @@ import { auditLog } from '@/lib/security/audit-logger'
 import { toPublicOrderNumber } from './purchase-order-utils'
 import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
+import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
@@ -662,29 +664,36 @@ async function computeManufacturingCargoTotals(
 }
 
 /**
- * Generate the next PO number in sequence (PO-0001 format)
+ * Generate the next PO number in sequence (TG-<Country>-<number> format)
+ * Format: TG-US-2601, TG-US-2602, etc. for US tenant
+ *         TG-UK-2601, TG-UK-2602, etc. for UK tenant
+ * Starting number: 2601
  */
 export async function generatePoNumber(): Promise<string> {
   const prisma = await getTenantPrisma()
+  const tenant = await getCurrentTenant()
+  const prefix = `TG-${tenant.code}-`
+  const startingNumber = 2601
 
-  // Find the highest existing PO number
-  const lastPo = await prisma.purchaseOrder.findFirst({
-    where: {
-      poNumber: { startsWith: 'PO-' },
-    },
-    orderBy: { poNumber: 'desc' },
-    select: { poNumber: true },
-  })
+  const lastPoRows = await prisma.$queryRaw<{ po_number: string | null }[]>`
+    SELECT po_number
+    FROM purchase_orders
+    WHERE po_number LIKE ${`${prefix}%`}
+    ORDER BY CAST(substring(po_number FROM '\\d+$') AS bigint) DESC
+    LIMIT 1
+  `
 
-  let nextNumber = 1
-  if (lastPo?.poNumber) {
-    const match = lastPo.poNumber.match(/PO-(\d+)/)
+  const lastPoNumber = lastPoRows.length > 0 ? lastPoRows[0]?.po_number : null
+
+  let nextNumber = startingNumber
+  if (typeof lastPoNumber === 'string') {
+    const match = lastPoNumber.match(new RegExp(`^${prefix}(\\d+)$`))
     if (match) {
       nextNumber = parseInt(match[1], 10) + 1
     }
   }
 
-  return `PO-${nextNumber.toString().padStart(4, '0')}`
+  return `${prefix}${nextNumber}`
 }
 
 export interface CreatePurchaseOrderLineInput {
@@ -811,16 +820,16 @@ export async function createPurchaseOrder(
         throw new ValidationError('SKU code is required for all line items')
       }
 
-      const key = line.skuCode.toLowerCase()
+      const key = `${line.skuCode.toLowerCase()}::${line.batchLot?.trim().toUpperCase()}`
       if (keySet.has(key)) {
         throw new ValidationError(
-          `Duplicate SKU line detected: ${line.skuCode}. Combine quantities into a single line.`
+          `Duplicate SKU/batch line detected: ${line.skuCode} ${line.batchLot}. Combine quantities into a single line.`
         )
       }
       keySet.add(key)
 
       if (!line.batchLot || line.batchLot === 'DEFAULT') {
-        throw new ValidationError(`Batch / lot is required for SKU ${line.skuCode}`)
+        throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
       }
 
       if (typeof line.currency !== 'string' || line.currency.trim().length === 0) {
@@ -890,7 +899,7 @@ export async function createPurchaseOrder(
 
 	            const batchCode = line.batchLot?.trim().toUpperCase() ?? ''
 	            if (!batchCode || batchCode === 'DEFAULT') {
-	              throw new ValidationError(`Batch / lot is required for SKU ${skuRecord.skuCode}`)
+	              throw new ValidationError(`Batch is required for SKU ${skuRecord.skuCode}`)
 	            }
 
 	            const key = `${skuRecord.id}::${batchCode}`
@@ -1216,7 +1225,7 @@ export async function transitionPurchaseOrderStage(
 
     for (const line of order.lines) {
       if (!line.batchLot) {
-        throw new ValidationError(`Batch/Lot is required for SKU ${line.skuCode}`)
+        throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
       }
     }
   }
@@ -1534,7 +1543,7 @@ export async function transitionPurchaseOrderStage(
         const batch = batchMap.get(`${sku.id}::${batchLot}`)
         if (!batch) {
           throw new ValidationError(
-            `Batch/Lot ${batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
+            `Batch ${batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
           )
         }
 
@@ -1698,6 +1707,51 @@ export async function transitionPurchaseOrderStage(
 
       if (costLedgerEntries.length > 0) {
         await tx.costLedger.createMany({ data: costLedgerEntries })
+      }
+
+      const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
+        where: {
+          purchaseOrderId: nextOrder.id,
+          warehouseId: warehouse.id,
+        },
+        select: {
+          costName: true,
+          totalCost: true,
+        },
+        orderBy: [{ createdAt: 'asc' }],
+      })
+
+      const transactionIds = createdTransactions.map(row => row.id)
+      await tx.costLedger.deleteMany({
+        where: {
+          transactionId: { in: transactionIds },
+          costCategory: CostCategory.Forwarding,
+        },
+      })
+
+      if (forwardingCosts.length > 0) {
+        const lines = createdTransactions.map(row => ({
+          transactionId: row.id,
+          skuCode: row.skuCode,
+          cartons: row.cartons,
+          cartonDimensionsCm: row.cartonDimensionsCm,
+        }))
+
+        const forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
+          buildPoForwardingCostLedgerEntries({
+            costName: cost.costName,
+            totalCost: Number(cost.totalCost),
+            lines,
+            warehouseCode: warehouse.code,
+            warehouseName: warehouse.name,
+            createdAt: receivedAt,
+            createdByName: user.name,
+          })
+        )
+
+        if (forwardingLedgerEntries.length > 0) {
+          await tx.costLedger.createMany({ data: forwardingLedgerEntries })
+        }
       }
 
       await tx.purchaseOrder.update({

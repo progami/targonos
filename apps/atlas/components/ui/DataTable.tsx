@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './dropdown-menu'
-import { ChevronUpIcon, ChevronDownIcon, ChevronDownIcon as FilterIcon } from './Icons'
+import { ChevronUpIcon, ChevronDownIcon, ChevronDownIcon as FilterIcon, PlusIcon } from './Icons'
 
 export type FilterOption = { value: string; label: string }
 
@@ -36,6 +36,12 @@ export interface ColumnMeta {
   align?: 'left' | 'center' | 'right'
   filterKey?: string
   filterOptions?: FilterOption[]
+}
+
+export type DataTableAddRowAction = {
+  label: string
+  onClick: () => void
+  disabled?: boolean
 }
 
 interface DataTableProps<TData, TValue> {
@@ -48,6 +54,7 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData) => void
   filters?: Record<string, string>
   onFilterChange?: (filters: Record<string, string>) => void
+  addRow?: DataTableAddRowAction
 }
 
 function ColumnFilterDropdown({
@@ -112,6 +119,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   filters = {},
   onFilterChange,
+  addRow,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(() => initialSorting ?? [])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -149,6 +157,8 @@ export function DataTable<TData, TValue>({
     },
     [filters, onFilterChange]
   )
+
+  const hasRows = table.getRowModel().rows.length > 0
 
   return (
     <Table>
@@ -210,11 +220,11 @@ export function DataTable<TData, TValue>({
           <>
             {Array.from({ length: skeletonRows }).map((_, i) => (
               <TableRow key={i} hoverable={false}>
-                <TableCell colSpan={columns.length} className="h-14" />
-              </TableRow>
-            ))}
+              <TableCell colSpan={columns.length} className="h-14" />
+            </TableRow>
+          ))}
           </>
-        ) : table.getRowModel().rows.length === 0 ? (
+        ) : !hasRows ? (
           emptyState ? (
             <TableRow hoverable={false}>
               <TableCell colSpan={columns.length} className="h-24 text-center">
@@ -223,24 +233,52 @@ export function DataTable<TData, TValue>({
             </TableRow>
           ) : null
         ) : (
-          table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              hoverable={Boolean(onRowClick)}
-              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-              data-state={row.getIsSelected() && 'selected'}
-            >
-              {row.getVisibleCells().map((cell) => {
-                const align = (cell.column.columnDef.meta as ColumnMeta | undefined)?.align
+          <>
+            {table.getRowModel().rows.map((row) => (
+              <TableRow
+                key={row.id}
+                hoverable={Boolean(onRowClick)}
+                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                data-state={row.getIsSelected() && 'selected'}
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const align = (cell.column.columnDef.meta as ColumnMeta | undefined)?.align
 
-                return (
-                  <TableCell key={cell.id} align={align}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                )
-              })}
-            </TableRow>
-          ))
+                  return (
+                    <TableCell key={cell.id} align={align}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            ))}
+
+            {addRow ? (
+              <TableRow hoverable={false} className="border-dashed">
+                <TableCell colSpan={columns.length} className="p-0">
+                  <button
+                    type="button"
+                    onClick={addRow.onClick}
+                    disabled={addRow.disabled}
+                    className={cn(
+                      'group w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground transition-colors',
+                      'hover:bg-muted/30 hover:text-foreground',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                      addRow.disabled ? 'opacity-50 pointer-events-none' : null
+                    )}
+                  >
+                    <span className={cn(
+                      'h-8 w-8 rounded-lg border border-dashed border-border bg-background/50 flex items-center justify-center transition-colors',
+                      'group-hover:border-border/80 group-hover:bg-background'
+                    )}>
+                      <PlusIcon className="h-4 w-4" />
+                    </span>
+                    <span>{addRow.label}</span>
+                  </button>
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </>
         )}
       </TableBody>
     </Table>

@@ -4,10 +4,8 @@
     "talos": "/talos",
     "kairos": "/kairos/forecasts",
     "atlas": "/atlas",
-    "fcc": "/fcc",
     "website": "https://worktree.website.targonglobal.com",
-    "x-plan": "/x-plan/1-strategies",
-    "plutus": "/plutus",
-    "margin-master": "/margin-master"
+    "xplan": "/xplan/1-strategies",
+    "plutus": "/plutus"
   }
 }

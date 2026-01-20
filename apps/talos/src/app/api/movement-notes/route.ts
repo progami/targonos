@@ -4,7 +4,7 @@ import { createMovementNote, listMovementNotes, type CreateMovementNoteInput } f
 const lineSchema = z.object({
  purchaseOrderLineId: z.string().min(1, 'Purchase order line is required'),
  quantity: z.number().int('Quantity must be an integer').positive('Quantity must be greater than zero'),
- batchLot: z.string().trim().min(1, 'Batch/Lot cannot be empty').optional().nullable(),
+ batchLot: z.string().trim().min(1, 'Batch cannot be empty').optional().nullable(),
  storageCartonsPerPallet: z.number().int().positive().optional().nullable(),
  shippingCartonsPerPallet: z.number().int().positive().optional().nullable(),
  attachments: z.record(z.string(), z.any()).optional().nullable(),

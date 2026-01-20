@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { fetchPurchaseById, updatePurchase, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
+import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-purchase-update' });
 
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     const connection: QboConnection = JSON.parse(connectionCookie);
+    await ensureServerQboConnection(connection);
     const { purchase, updatedConnection } = await fetchPurchaseById(connection, id);
 
     // Update cookie if token was refreshed
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
       });
+      await saveServerQboConnection(updatedConnection);
     }
 
     return NextResponse.json({ purchase });
@@ -52,6 +55,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     const connection: QboConnection = JSON.parse(connectionCookie);
+    await ensureServerQboConnection(connection);
     const body = await req.json();
 
     const { syncToken, paymentType, reference, memo } = body;
@@ -83,6 +87,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
       });
+      await saveServerQboConnection(updatedConnection);
     }
 
     logger.info('Purchase updated successfully', { id, reference, memo });

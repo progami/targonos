@@ -16,7 +16,7 @@ export function InventoryTabs({ activeTab, onTabChange }: InventoryTabsProps) {
  }
 
  return (
- <div className="bg-white border rounded-lg">
+ <div className="bg-white dark:bg-slate-800 border rounded-lg">
  <div className="border-b">
  <nav className="-mb-px flex" role="tablist">
  <button

@@ -63,7 +63,7 @@ const parseRateListAttachment = (value: Prisma.JsonValue | null): RateListAttach
 }
 
 // Validation schemas with sanitization
-const createWarehouseSchema = z.object({
+const _createWarehouseSchema = z.object({
   code: warehouseCodeSchema,
   name: z
     .string()
@@ -166,57 +166,9 @@ export const GET = withAuth(async (req, _session) => {
   return ApiResponses.success(warehousesWithCounts)
 })
 
-// POST /api/warehouses - Create warehouse
-export const POST = withRole(['admin', 'staff'], async (request, _session) => {
-  const prisma = await getTenantPrisma()
-  const body = await request.json()
-  const validatedData = createWarehouseSchema.parse(body)
-
-  // Check if warehouse code already exists (case-insensitive)
-  const existingWarehouse = await prisma.warehouse.findFirst({
-    where: {
-      OR: [
-        { code: { equals: validatedData.code, mode: 'insensitive' } },
-        { name: { equals: validatedData.name, mode: 'insensitive' } },
-      ],
-    },
-  })
-
-  if (existingWarehouse) {
-    if (existingWarehouse.code.toLowerCase() === validatedData.code.toLowerCase()) {
-      return ApiResponses.badRequest('Warehouse code already exists (case-insensitive match)')
-    } else {
-      return ApiResponses.badRequest('Warehouse name already exists (case-insensitive match)')
-    }
-  }
-
-  const warehouse = await prisma.$transaction(async tx => {
-    const created = await tx.warehouse.create({
-      data: {
-        code: validatedData.code,
-        name: validatedData.name,
-        address: validatedData.address || null,
-        latitude: validatedData.latitude || null,
-        longitude: validatedData.longitude || null,
-        contactEmail: validatedData.contactEmail || null,
-        contactPhone: validatedData.contactPhone || null,
-        kind: validatedData.kind,
-        isActive: true,
-      },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            costRates: true,
-          },
-        },
-      },
-    })
-
-    return created
-  })
-
-  return ApiResponses.created(warehouse)
+// POST /api/warehouses - Create warehouse (DISABLED)
+export const POST = withRole(['admin', 'staff'], async () => {
+  return ApiResponses.forbidden('Warehouse creation is disabled. Contact an administrator.')
 })
 
 // PATCH /api/warehouses - Update warehouse
@@ -285,47 +237,7 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
   return ApiResponses.success(updatedWarehouse)
 })
 
-// DELETE /api/warehouses - Delete warehouse
-export const DELETE = withRole(['admin'], async (request, _session) => {
-  const prisma = await getTenantPrisma()
-  const searchParams = request.nextUrl.searchParams
-  const warehouseId = searchParams.get('id')
-
-  if (!warehouseId) {
-    return ApiResponses.badRequest('Warehouse ID is required')
-  }
-
-  // Check if warehouse has related data
-  const relatedData = await prisma.warehouse.findUnique({
-    where: { id: warehouseId },
-    include: {
-      _count: {
-        select: {
-          users: true,
-          costRates: true,
-        },
-      },
-    },
-  })
-
-  if (!relatedData) {
-    return ApiResponses.notFound('Warehouse not found')
-  }
-
-  // Check if warehouse has any related data
-  const hasRelatedData = Object.values(relatedData._count).some(count => (count as number) > 0)
-
-  if (hasRelatedData) {
-    return ApiResponses.conflict(
-      `Cannot delete warehouse "${relatedData.code}". References found: users=${relatedData._count.users}, cost rates=${relatedData._count.costRates}.`
-    )
-  }
-
-  await prisma.warehouse.delete({
-    where: { id: warehouseId },
-  })
-
-  return ApiResponses.success({
-    message: 'Warehouse deleted successfully',
-  })
+// DELETE /api/warehouses - Delete warehouse (DISABLED)
+export const DELETE = withRole(['admin'], async () => {
+  return ApiResponses.forbidden('Warehouse deletion is disabled. Contact an administrator.')
 })

@@ -15,7 +15,8 @@
       "@targon/theme": ["packages/theme/src"],
       "@targon/config": ["packages/config/src"],
       "@targon/logger": ["packages/logger/src"],
-      "@targon/ledger": ["packages/ledger/src"]
+      "@targon/ledger": ["packages/ledger/src"],
+      "@targon/amazon-sp-api": ["packages/amazon-sp-api/dist"]
     }
   }
 }

@@ -196,6 +196,7 @@ export default function DisciplinaryPage() {
           onRowClick={handleRowClick}
           filters={filters}
           onFilterChange={setFilters}
+          addRow={{ label: 'New Violation', onClick: () => router.push('/performance/violations/add') }}
           emptyState={
             <TableEmptyContent
               icon={<ExclamationTriangleIcon className="h-10 w-10" />}

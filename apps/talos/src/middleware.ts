@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames } from '@targon/auth'
+import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
 import { withBasePath, withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
@@ -9,6 +9,52 @@ applyDevAuthDefaults({
   // Align with portal default secret in local dev when ALLOW_DEV_AUTH_DEFAULTS=true.
   appId: 'targon',
 })
+
+// Session cache to avoid repeated JWT decoding on every request
+// Key: hash of session token, Value: { decoded payload, expiry timestamp }
+const SESSION_CACHE_TTL_MS = 60_000 // 1 minute cache
+const sessionCache = new Map<string, { payload: PortalJwtPayload | null; expiresAt: number }>()
+
+function getSessionCacheKey(cookieHeader: string | null): string {
+  if (!cookieHeader) return ''
+  // Extract session token value to use as cache key (first 64 chars for safety)
+  const sessionTokenMatch = cookieHeader.match(/(?:__Secure-)?(?:targon\.)?next-auth\.session-token=([^;]+)/)
+  return sessionTokenMatch?.[1]?.slice(0, 64) ?? ''
+}
+
+async function getCachedSession(
+  cookieHeader: string | null,
+  cookieNames: string[],
+  secret: string,
+  debug: boolean
+): Promise<PortalJwtPayload | null> {
+  const cacheKey = getSessionCacheKey(cookieHeader)
+  if (!cacheKey) {
+    return decodePortalSession({ cookieHeader, cookieNames, secret, debug })
+  }
+
+  const cached = sessionCache.get(cacheKey)
+  const now = Date.now()
+
+  if (cached && cached.expiresAt > now) {
+    return cached.payload
+  }
+
+  // Decode and cache
+  const decoded = await decodePortalSession({ cookieHeader, cookieNames, secret, debug })
+  sessionCache.set(cacheKey, { payload: decoded, expiresAt: now + SESSION_CACHE_TTL_MS })
+
+  // Prune old entries periodically (keep cache size bounded)
+  if (sessionCache.size > 1000) {
+    for (const [key, value] of sessionCache) {
+      if (value.expiresAt < now) {
+        sessionCache.delete(key)
+      }
+    }
+  }
+
+  return decoded
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -77,12 +123,7 @@ export async function middleware(request: NextRequest) {
     ['1', 'true', 'yes', 'on'].includes(process.env.NEXTAUTH_DEBUG.toLowerCase())
 
   const cookieHeader = request.headers.get('cookie')
-  const decoded = await decodePortalSession({
-    cookieHeader,
-    cookieNames,
-    secret: sharedSecret,
-    debug: authDebugFlag,
-  })
+  const decoded = await getCachedSession(cookieHeader, cookieNames, sharedSecret, authDebugFlag)
 
   const hasSession = !!decoded
   const talosEntitlement = decoded ? getAppEntitlement(decoded.roles, 'talos') : undefined

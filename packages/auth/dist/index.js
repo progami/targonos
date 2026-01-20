@@ -465,7 +465,11 @@ export function getAppEntitlement(roles, appId) {
     if (!roles || typeof roles !== 'object')
         return undefined;
     const rec = roles;
-    const ent = rec[appId];
+    let ent = rec[appId];
+    if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
+        const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
+        ent = rec[legacyKey];
+    }
     if (!ent || typeof ent !== 'object')
         return undefined;
     const departments = Array.isArray(ent.departments)

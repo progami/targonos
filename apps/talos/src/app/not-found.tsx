@@ -2,11 +2,21 @@
 
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { AlertCircle, ArrowLeft, Home } from '@/lib/lucide-icons'
+import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
+import { AlertCircle } from '@/lib/lucide-icons'
 
 export default function NotFound() {
  return (
  <DashboardLayout>
+ <PageContainer>
+ <PageHeaderSection
+ title="Page Not Found"
+ description="Error"
+ icon={AlertCircle}
+ backHref="/dashboard"
+ backLabel="Back"
+ />
+ <PageContent>
  <div className="flex min-h-[400px] items-center justify-center">
  <div className="text-center space-y-6">
  <div className="flex justify-center">
@@ -23,24 +33,16 @@ export default function NotFound() {
  </p>
  </div>
  
- <div className="flex items-center justify-center gap-4">
- <button
- onClick={() => window.history.back()}
- className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
- >
- <ArrowLeft className="h-4 w-4 mr-2" />
- Go Back
- </button>
  <Link
  href="/dashboard"
  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-soft text-sm font-medium text-white bg-primary hover:bg-primary/90"
  >
- <Home className="h-4 w-4 mr-2" />
  Go to Dashboard
  </Link>
  </div>
  </div>
- </div>
+ </PageContent>
+ </PageContainer>
  </DashboardLayout>
  )
 }

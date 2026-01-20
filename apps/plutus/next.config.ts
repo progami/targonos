@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_VERSION: resolvedVersion,
     NEXT_PUBLIC_BASE_PATH: appBasePath,
   },
+  turbopack: {
+    resolveAlias: {
+      '@targon/auth': '../../packages/auth/dist/index.js',
+    },
+  },
 }
 
 export default nextConfig

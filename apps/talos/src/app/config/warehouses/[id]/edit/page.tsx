@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Loader2 } from '@/lib/lucide-icons'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
+import { Building, Save, Loader2 } from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
@@ -251,31 +252,36 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  if (loading || !warehouse) {
  return (
  <DashboardLayout>
- <div className="flex items-center justify-center h-64">
+ <PageContainer>
+ <PageHeaderSection
+ title="Edit Warehouse"
+ description="Configuration"
+ icon={Building}
+ backHref="/config/warehouses"
+ backLabel="Back"
+ />
+ <PageContent className="flex items-center justify-center">
  <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
- </div>
+ </PageContent>
+ </PageContainer>
  </DashboardLayout>
  )
  }
 
  return (
  <DashboardLayout>
+ <PageContainer>
+ <PageHeaderSection
+ title="Edit Warehouse"
+ description="Configuration"
+ icon={Building}
+ backHref="/config/warehouses"
+ backLabel="Back"
+ metadata={<p className="text-sm text-muted-foreground">Update warehouse information</p>}
+ />
+ <PageContent>
  <div className="max-w-4xl mx-auto space-y-6">
- <div className="flex items-center gap-4">
- <Button asChild variant="ghost" size="icon">
- <Link href="/config/warehouses">
- <ArrowLeft className="h-5 w-5" />
- </Link>
- </Button>
- <div>
- <h1 className="text-3xl font-bold">Edit Warehouse</h1>
- <p className="text-muted-foreground">
- Update warehouse information
- </p>
- </div>
- </div>
-
- <form onSubmit={handleSubmit} className="bg-white border rounded-lg p-6">
+ <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 border rounded-lg p-6">
  <div className="space-y-6">
  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <div>
@@ -480,8 +486,9 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  </Button>
  </div>
  </form>
-
  </div>
+ </PageContent>
+ </PageContainer>
  </DashboardLayout>
  )
 }

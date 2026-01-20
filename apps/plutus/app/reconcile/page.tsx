@@ -1,61 +1,57 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { TransactionEditModal } from '@/components/transaction-edit-modal';
 import { cn } from '@/lib/utils';
-import type { ComplianceStatus, BulkUpdateRequest, BulkUpdateResponse } from '@/lib/sop/types';
+import type { ComplianceStatus } from '@/lib/sop/types';
 
 interface Purchase {
   id: string;
+  syncToken: string;
   date: string;
   amount: number;
-  vendorName?: string;
-  accountName?: string;
-  accountId?: string;
-  reference?: string;
-  memo?: string;
   paymentType: string;
-  syncToken: string;
+  reference: string;
+  memo: string;
+  vendor: string;
+  vendorId?: string;
+  account: string;
+  accountId?: string;
+  complianceStatus: ComplianceStatus;
 }
 
 interface PurchasesResponse {
   purchases: Purchase[];
-  total: number;
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
 }
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/plutus';
+
+interface ConnectionStatus {
+  connected: boolean;
+}
+
+async function fetchConnectionStatus(): Promise<ConnectionStatus> {
+  const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
 
 async function fetchPurchases(page: number = 1): Promise<PurchasesResponse> {
-  const res = await fetch(`${basePath}/api/qbo/purchases?page=${page}&limit=100`);
+  const res = await fetch(`${basePath}/api/qbo/purchases?page=${page}&pageSize=100`);
   if (!res.ok) {
     const data = await res.json();
-    throw new Error(data.error || 'Failed to fetch purchases');
+    throw new Error(data.error ?? 'Failed to fetch purchases');
   }
   return res.json();
-}
-
-async function bulkUpdatePurchases(updates: BulkUpdateRequest): Promise<BulkUpdateResponse> {
-  const res = await fetch(`${basePath}/api/qbo/purchases/bulk-update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Bulk update failed');
-  }
-  return res.json();
-}
-
-function getComplianceStatus(purchase: Purchase): ComplianceStatus {
-  const hasRef = Boolean(purchase.reference?.trim());
-  const hasMemo = Boolean(purchase.memo?.trim());
-
-  if (hasRef && hasMemo) return 'compliant';
-  if (hasRef || hasMemo) return 'partial';
-  return 'non-compliant';
 }
 
 function ComplianceBadge({ status }: { status: ComplianceStatus }) {
@@ -127,29 +123,47 @@ export default function ReconcilePage() {
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
+    queryKey: ['qbo-status'],
+    queryFn: fetchConnectionStatus,
+    staleTime: 30 * 1000,
+  });
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['qbo-purchases-reconcile'],
     queryFn: () => fetchPurchases(1),
     staleTime: 2 * 60 * 1000,
+    enabled: connectionStatus?.connected === true,
   });
 
-  const bulkUpdateMutation = useMutation({
-    mutationFn: bulkUpdatePurchases,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['qbo-purchases-reconcile'] });
-      setSelectedIds(new Set());
-    },
-  });
+  const purchases = useMemo(() => data?.purchases ?? [], [data?.purchases]);
 
-  const purchases = data?.purchases ?? [];
+  const [bulkEditPurchases, setBulkEditPurchases] = useState<Purchase[]>([]);
+  const [bulkEditIndex, setBulkEditIndex] = useState<number | null>(null);
+
+  const activePurchase = useMemo(() => {
+    if (bulkEditIndex === null) return null;
+    return bulkEditPurchases[bulkEditIndex] ?? null;
+  }, [bulkEditPurchases, bulkEditIndex]);
+
+  const stopBulkEdit = useCallback(() => {
+    setBulkEditPurchases([]);
+    setBulkEditIndex(null);
+  }, []);
+
+  useEffect(() => {
+    if (bulkEditIndex === null) return;
+    if (bulkEditIndex < bulkEditPurchases.length) return;
+    stopBulkEdit();
+  }, [bulkEditIndex, bulkEditPurchases.length, stopBulkEdit]);
 
   // Group by account
   const accountGroups = useMemo(() => {
     const groups: Record<string, { name: string; purchases: Purchase[] }> = {};
 
     for (const purchase of purchases) {
-      const accountId = purchase.accountId || 'unknown';
-      const accountName = purchase.accountName || 'Uncategorized';
+      const accountId = purchase.accountId ?? 'unknown';
+      const accountName = purchase.account;
 
       if (!groups[accountId]) {
         groups[accountId] = { name: accountName, purchases: [] };
@@ -168,7 +182,7 @@ export default function ReconcilePage() {
   // Filter purchases
   const filteredPurchases = useMemo(() => {
     return purchases.filter((p) => {
-      const status = getComplianceStatus(p);
+      const status = p.complianceStatus;
       const matchesFilter = filter === 'all' || status === filter;
       const matchesAccount = !accountFilter || p.accountId === accountFilter;
       return matchesFilter && matchesAccount;
@@ -180,8 +194,8 @@ export default function ReconcilePage() {
     const groups: Record<string, { name: string; purchases: Purchase[] }> = {};
 
     for (const purchase of filteredPurchases) {
-      const accountId = purchase.accountId || 'unknown';
-      const accountName = purchase.accountName || 'Uncategorized';
+      const accountId = purchase.accountId ?? 'unknown';
+      const accountName = purchase.account;
 
       if (!groups[accountId]) {
         groups[accountId] = { name: accountName, purchases: [] };
@@ -194,9 +208,9 @@ export default function ReconcilePage() {
 
   // Stats
   const stats = useMemo(() => {
-    const compliant = purchases.filter((p) => getComplianceStatus(p) === 'compliant').length;
-    const partial = purchases.filter((p) => getComplianceStatus(p) === 'partial').length;
-    const nonCompliant = purchases.filter((p) => getComplianceStatus(p) === 'non-compliant').length;
+    const compliant = purchases.filter((p) => p.complianceStatus === 'compliant').length;
+    const partial = purchases.filter((p) => p.complianceStatus === 'partial').length;
+    const nonCompliant = purchases.filter((p) => p.complianceStatus === 'non-compliant').length;
     return { compliant, partial, nonCompliant, total: purchases.length };
   }, [purchases]);
 
@@ -220,21 +234,44 @@ export default function ReconcilePage() {
     setSelectedIds(new Set());
   }, []);
 
-  const handleBulkUpdate = useCallback(() => {
-    // For now, just log - the actual SOP application will come from the edit modal
-    console.log('Selected for bulk update:', Array.from(selectedIds));
-    // TODO: Open bulk edit modal with SOP selection
-  }, [selectedIds]);
+  const startBulkEdit = useCallback(() => {
+    const selectedPurchases = purchases.filter((p) => selectedIds.has(p.id));
+    if (selectedPurchases.length === 0) return;
+
+    setBulkEditPurchases(selectedPurchases);
+    setBulkEditIndex(0);
+  }, [purchases, selectedIds]);
+
+  const handleEditSave = useCallback(
+    (updated: { id: string; reference: string; memo: string; syncToken: string }) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(updated.id);
+        return next;
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['qbo-purchases-reconcile'] });
+
+      setBulkEditIndex((prev) => {
+        if (prev === null) return null;
+        return prev + 1;
+      });
+    },
+    [queryClient]
+  );
+
+  if (!isCheckingConnection && connectionStatus?.connected === false) {
+    return <NotConnectedScreen title="Reconciliation" />;
+  }
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to load transactions';
     return (
       <div className="min-h-screen bg-background p-8">
         <div className="max-w-7xl mx-auto">
           <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50 p-8 text-center">
             <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2">Error</h2>
-            <p className="text-red-600 dark:text-red-300 mb-4">
-              {error instanceof Error ? error.message : 'Failed to load transactions'}
-            </p>
+            <p className="text-red-600 dark:text-red-300 mb-4">{errorMessage}</p>
             <Button onClick={() => refetch()} variant="outline">
               <RefreshIcon className="h-4 w-4 mr-2" />
               Retry
@@ -311,8 +348,11 @@ export default function ReconcilePage() {
             </select>
 
             <select
-              value={accountFilter || ''}
-              onChange={(e) => setAccountFilter(e.target.value || null)}
+              value={accountFilter ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                setAccountFilter(value === '' ? null : value);
+              }}
               className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30 dark:border-white/10 dark:bg-white/5 dark:text-white"
             >
               <option value="">All Accounts</option>
@@ -333,7 +373,7 @@ export default function ReconcilePage() {
                 <Button variant="outline" size="sm" onClick={selectNone}>
                   Clear
                 </Button>
-                <Button size="sm" onClick={handleBulkUpdate}>
+                <Button size="sm" onClick={startBulkEdit}>
                   <CheckIcon className="h-4 w-4 mr-2" />
                   Apply SOP
                 </Button>
@@ -349,7 +389,7 @@ export default function ReconcilePage() {
 
         {/* Grouped Transactions */}
         <div className="space-y-6">
-          {isLoading ? (
+          {isLoading || isCheckingConnection ? (
             <div className="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-8">
               <div className="flex items-center justify-center gap-2 text-slate-500">
                 <RefreshIcon className="h-5 w-5 animate-spin" />
@@ -385,7 +425,7 @@ export default function ReconcilePage() {
                 {/* Transactions */}
                 <div className="divide-y divide-slate-100 dark:divide-white/5 bg-white dark:bg-slate-900">
                   {group.purchases.map((purchase) => {
-                    const status = getComplianceStatus(purchase);
+                    const status = purchase.complianceStatus;
                     const isSelected = selectedIds.has(purchase.id);
 
                     return (
@@ -417,7 +457,7 @@ export default function ReconcilePage() {
                         {/* Vendor */}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-slate-900 dark:text-white truncate">
-                            {purchase.vendorName || 'Unknown Vendor'}
+                            {purchase.vendor}
                           </div>
                           {purchase.memo && (
                             <div className="text-sm text-slate-500 dark:text-slate-400 truncate">
@@ -428,7 +468,7 @@ export default function ReconcilePage() {
 
                         {/* Reference */}
                         <div className="w-32 text-sm font-mono text-slate-600 dark:text-slate-400 truncate">
-                          {purchase.reference || '—'}
+                          {purchase.reference === '' ? '—' : purchase.reference}
                         </div>
 
                         {/* Amount */}
@@ -454,6 +494,15 @@ export default function ReconcilePage() {
           Transactions from QuickBooks Online
         </div>
       </div>
+
+      {activePurchase && (
+        <TransactionEditModal
+          key={activePurchase.id}
+          purchase={activePurchase}
+          onClose={stopBulkEdit}
+          onSave={handleEditSave}
+        />
+      )}
     </div>
   );
 }

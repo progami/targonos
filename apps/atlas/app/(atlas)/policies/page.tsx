@@ -208,6 +208,7 @@ export default function PoliciesPage() {
           onRowClick={handleRowClick}
           filters={filters}
           onFilterChange={setFilters}
+          addRow={canManagePolicies ? { label: 'Add Policy', onClick: () => router.push('/policies/add') } : undefined}
           emptyState={
             <TableEmptyContent
               icon={<DocumentIcon className="h-10 w-10" />}

@@ -493,6 +493,7 @@ function LeavePageContent() {
           onRowClick={handleRowClick}
           filters={filters}
           onFilterChange={setFilters}
+          addRow={{ label: 'Request Leave', onClick: () => router.push('/leave/request') }}
           emptyState={
             <TableEmptyContent
               icon={<CalendarDaysIcon className="h-10 w-10" />}

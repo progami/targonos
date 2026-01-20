@@ -16,7 +16,13 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../..'),
   trailingSlash: false,
   // Turbopack is the default bundler in Next.js 16
-  turbopack: {},
+  turbopack: {
+    resolveAlias: {
+      '@targon/prisma-atlas': '../../packages/prisma-atlas/generated/index.js',
+      '@targon/auth': '../../packages/auth/dist/index.js',
+      '@targon/aws-s3': '../../packages/aws-s3/dist/index.js',
+    },
+  },
 }
 
 module.exports = nextConfig

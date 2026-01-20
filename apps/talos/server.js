@@ -109,35 +109,57 @@ if (!dev) {
   global.logger = logger;
 }
 
+// Skip logging for these URL patterns to reduce noise
+const shouldSkipLogging = (url) => {
+  if (!url) return true;
+  // Skip static assets
+  if (url.includes('/_next/static/')) return true;
+  if (url.includes('/_next/image')) return true;
+  if (url.endsWith('.ico') || url.endsWith('.svg') || url.endsWith('.png') || url.endsWith('.jpg')) return true;
+  // Skip RSC streaming requests (they're internal Next.js requests)
+  if (url.includes('_rsc=')) return true;
+  return false;
+};
+
 app.prepare().then(() => {
   createServer(async (req, res) => {
+    const startTime = Date.now();
+
     try {
       const parsedUrl = parse(req.url, true);
       const { pathname, query } = parsedUrl;
 
-      // Log requests in production
+      // Handle all requests through Next.js
+      await handle(req, res, parsedUrl);
+
+      // Log completed requests asynchronously (after response, non-blocking)
+      if (!dev && global.logger && !shouldSkipLogging(req.url)) {
+        const duration = Date.now() - startTime;
+        setImmediate(() => {
+          global.logger.info('Request', {
+            method: req.method,
+            url: req.url,
+            status: res.statusCode,
+            duration,
+            ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Error occurred handling', req.url, err);
+
       if (!dev && global.logger) {
-        global.logger.info('Request', {
-          method: req.method,
-          url: req.url,
-          ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-          userAgent: req.headers['user-agent']
+        const duration = Date.now() - startTime;
+        setImmediate(() => {
+          global.logger.error('Request handler error', {
+            error: err.message,
+            stack: err.stack,
+            url: req.url,
+            duration,
+          });
         });
       }
 
-      // Handle all requests through Next.js
-      await handle(req, res, parsedUrl);
-    } catch (err) {
-      console.error('Error occurred handling', req.url, err);
-      
-      if (!dev && global.logger) {
-        global.logger.error('Request handler error', {
-          error: err.message,
-          stack: err.stack,
-          url: req.url
-        });
-      }
-      
       res.statusCode = 500;
       res.end('Internal server error');
     }

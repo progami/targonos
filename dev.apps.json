@@ -5,7 +5,7 @@
     "kairos": "/kairos/forecasts",
     "atlas": "/atlas",
     "website": "https://dev.targonglobal.com",
-    "x-plan": "/x-plan",
+    "xplan": "/xplan",
     "plutus": "/plutus"
   }
 }

@@ -3,13 +3,19 @@ import {
   getCatalogItem,
   getCatalogListingTypesByAsin,
   getListingsItems,
+  getListingPrice,
   getProductFees,
   testCompareApis,
   type AmazonCatalogListingType,
 } from '@/lib/amazon/client'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
-import { parseAmazonProductFees, calculateSizeTier } from '@/lib/amazon/fees'
+import {
+  getReferralFeePercent2026,
+  normalizeReferralCategory2026,
+  parseAmazonProductFees,
+  calculateSizeTier,
+} from '@/lib/amazon/fees'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
@@ -56,28 +62,14 @@ function normalizeTitle(value: string | null): string | null {
   return normalized ? normalized : null
 }
 
-function parseCatalogDimensions(attributes: {
+function parseCatalogItemPackageDimensions(attributes: {
   item_package_dimensions?: Array<{
     length?: { value?: number; unit?: string }
     width?: { value?: number; unit?: string }
     height?: { value?: number; unit?: string }
   }>
-  package_dimensions?: Array<{
-    length?: { value?: number; unit?: string }
-    width?: { value?: number; unit?: string }
-    height?: { value?: number; unit?: string }
-  }>
-  item_dimensions?: Array<{
-    length?: { value?: number; unit?: string }
-    width?: { value?: number; unit?: string }
-    height?: { value?: number; unit?: string }
-  }>
 }): { side1Cm: number; side2Cm: number; side3Cm: number } | null {
-  const dims =
-    attributes.item_package_dimensions?.[0] ??
-    attributes.package_dimensions?.[0] ??
-    attributes.item_dimensions?.[0] ??
-    null
+  const dims = attributes.item_package_dimensions?.[0]
   if (!dims) return null
   const length = dims?.length?.value
   const width = dims?.width?.value
@@ -143,13 +135,10 @@ function convertMeasurementToCm(value: number, unit: string | undefined): number
   return null
 }
 
-function parseCatalogWeightKg(attributes: {
+function parseCatalogItemPackageWeightKg(attributes: {
   item_package_weight?: Array<{ value?: number; unit?: string }>
-  package_weight?: Array<{ value?: number; unit?: string }>
-  item_weight?: Array<{ value?: number; unit?: string }>
 }): number | null {
-  const measurement =
-    attributes.item_package_weight?.[0] ?? attributes.package_weight?.[0] ?? attributes.item_weight?.[0] ?? null
+  const measurement = attributes.item_package_weight?.[0]
   if (!measurement) return null
   const raw = measurement?.value
   if (raw === undefined || raw === null) return null
@@ -212,30 +201,31 @@ function parseCatalogItemWeightKg(attributes: {
   return null
 }
 
-function parseCatalogCategory(catalog: { summaries?: unknown }): string | null {
+function parseCatalogCategories(catalog: { summaries?: unknown }): { category: string | null; subcategory: string | null } {
   const summaries = catalog.summaries
   if (Array.isArray(summaries) && summaries.length > 0) {
     const summary = summaries[0]
     if (summary && typeof summary === 'object') {
       const summaryRecord = summary as Record<string, unknown>
-      const browse = summaryRecord.browseClassification
-      if (browse && typeof browse === 'object') {
-        const browseRecord = browse as Record<string, unknown>
-        const display = browseRecord.displayName
-        if (typeof display === 'string' && display.trim()) {
-          const sanitized = sanitizeForDisplay(display.trim())
-          return sanitized ? sanitized : null
-        }
-      }
+      const displayGroupRaw = summaryRecord.websiteDisplayGroupName
+      const displayGroup =
+        typeof displayGroupRaw === 'string' && displayGroupRaw.trim()
+          ? sanitizeForDisplay(displayGroupRaw.trim())
+          : null
+      const normalizedCategory = displayGroup ? normalizeReferralCategory2026(displayGroup) : ''
 
-      const displayGroup = summaryRecord.websiteDisplayGroupName
-      if (typeof displayGroup === 'string' && displayGroup.trim()) {
-        const sanitized = sanitizeForDisplay(displayGroup.trim())
-        return sanitized ? sanitized : null
-      }
+      const browse = summaryRecord.browseClassification
+      const browseDisplayRaw =
+        browse && typeof browse === 'object' ? (browse as Record<string, unknown>).displayName : null
+      const browseDisplay =
+        typeof browseDisplayRaw === 'string' && browseDisplayRaw.trim()
+          ? sanitizeForDisplay(browseDisplayRaw.trim())
+          : null
+
+      return { category: normalizedCategory ? normalizedCategory : null, subcategory: browseDisplay ?? null }
     }
   }
-  return null
+  return { category: null, subcategory: null }
 }
 
 function roundToTwoDecimals(value: number): number | null {
@@ -252,15 +242,39 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
   }
 
   // Test mode: fetch fees for a specific ASIN
+  // Use ?test-fees=ASIN to test with default price
+  // Use ?test-fees=ASIN&price=8.99 to test with specific price
+  // Use ?test-fees=ASIN&auto-price=1 to auto-fetch listing price from Amazon
+  // Use ?test-fees=ASIN&debug-pricing=1 to see raw getPricing response
   const testAsin = request.nextUrl.searchParams.get('test-fees')
   if (testAsin) {
     try {
       const tenantCode = await getCurrentTenantCode()
       const priceParam = request.nextUrl.searchParams.get('price')
-      const price = priceParam ? Number.parseFloat(priceParam) : DEFAULT_FEE_ESTIMATE_PRICE
+      const autoPrice = request.nextUrl.searchParams.get('auto-price') === '1'
+      const debugPricing = request.nextUrl.searchParams.get('debug-pricing') === '1'
+      let price: number
+      let fetchedListingPrice: number | null = null
+      let debugPricingResponse: unknown = null
+      if (autoPrice || debugPricing) {
+        // For debugging, we need to call the pricing API and capture the raw response
+        const { getListingPriceDebug } = await import('@/lib/amazon/client')
+        const result = await getListingPriceDebug(testAsin, tenantCode)
+        fetchedListingPrice = result.price
+        debugPricingResponse = debugPricing ? result.rawResponse : undefined
+        price = fetchedListingPrice ?? (priceParam ? Number.parseFloat(priceParam) : DEFAULT_FEE_ESTIMATE_PRICE)
+      } else {
+        price = priceParam ? Number.parseFloat(priceParam) : DEFAULT_FEE_ESTIMATE_PRICE
+      }
       const fees = await getProductFees(testAsin, price, tenantCode)
       const parsedFees = parseAmazonProductFees(fees)
-      return ApiResponses.success({ raw: fees, parsed: parsedFees, priceUsed: price })
+      return ApiResponses.success({
+        raw: fees,
+        parsed: parsedFees,
+        priceUsed: price,
+        fetchedListingPrice,
+        ...(debugPricing ? { debugPricingResponse } : {}),
+      })
     } catch (error) {
       return ApiResponses.success({
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -476,6 +490,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
   const existingSkus = await prisma.sku.findMany({
     where: { skuCode: { in: candidateSkus } },
     select: {
+      id: true,
       skuCode: true,
       itemDimensionsCm: true,
       itemSide1Cm: true,
@@ -599,9 +614,11 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     let itemWeightKg: number | null = null
     let itemTriplet: { side1Cm: number; side2Cm: number; side3Cm: number } | null = null
     let amazonCategory: string | null = null
+    let amazonSubcategory: string | null = null
     let amazonReferralFeePercent: number | null = null
     let amazonFbaFulfillmentFee: number | null = null
     let amazonSizeTier: string | null = null
+    let amazonListingPrice: number | null = null
 
     try {
       const catalog = await getCatalogItem(asin, tenantCode)
@@ -614,12 +631,14 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
             description = sanitizedTitle
           }
         }
-        unitWeightKg = parseCatalogWeightKg(attributes)
-        unitTriplet = parseCatalogDimensions(attributes)
+        unitWeightKg = parseCatalogItemPackageWeightKg(attributes)
+        unitTriplet = parseCatalogItemPackageDimensions(attributes)
         itemWeightKg = parseCatalogItemWeightKg(attributes)
         itemTriplet = parseCatalogItemDimensions(attributes)
       }
-      amazonCategory = parseCatalogCategory(catalog)
+      const categories = parseCatalogCategories(catalog)
+      amazonCategory = categories.category
+      amazonSubcategory = categories.subcategory
     } catch (error) {
       errors.push(
         `Amazon catalog lookup failed for ${skuCode} (ASIN ${asin}): ${
@@ -628,26 +647,34 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       )
     }
 
+    const calculatedSizeTier = calculateSizeTier(
+      unitTriplet?.side1Cm ?? null,
+      unitTriplet?.side2Cm ?? null,
+      unitTriplet?.side3Cm ?? null,
+      unitWeightKg
+    )
+    if (calculatedSizeTier) {
+      amazonSizeTier = calculatedSizeTier
+    }
+
     try {
-      const fees = await getProductFees(asin, DEFAULT_FEE_ESTIMATE_PRICE, tenantCode)
-      const parsedFees = parseAmazonProductFees(fees)
-      // Calculate referral fee percent from amount if available
-      if (parsedFees.referralFee !== null && Number.isFinite(parsedFees.referralFee)) {
-        amazonReferralFeePercent = roundToTwoDecimals((parsedFees.referralFee / DEFAULT_FEE_ESTIMATE_PRICE) * 100)
+      // Fetch actual listing price to get accurate Low-Price FBA rates for products under $10
+      const fetchedListingPrice = await getListingPrice(asin, tenantCode)
+      if (fetchedListingPrice === null) {
+        throw new Error('Amazon listing price unavailable for fee estimation')
       }
+
+      amazonListingPrice = roundToTwoDecimals(fetchedListingPrice)
+
+      if (amazonCategory !== null) {
+        amazonReferralFeePercent = getReferralFeePercent2026(amazonCategory, fetchedListingPrice)
+      }
+
+      const fees = await getProductFees(asin, fetchedListingPrice, tenantCode)
+      const parsedFees = parseAmazonProductFees(fees)
       amazonFbaFulfillmentFee = roundToTwoDecimals(parsedFees.fbaFees ?? Number.NaN)
-      const calculatedSizeTier = calculateSizeTier(
-        unitTriplet?.side1Cm ?? null,
-        unitTriplet?.side2Cm ?? null,
-        unitTriplet?.side3Cm ?? null,
-        unitWeightKg
-      )
-      if (calculatedSizeTier) {
-        amazonSizeTier = calculatedSizeTier
-      } else if (parsedFees.sizeTier) {
+      if (amazonSizeTier === null && parsedFees.sizeTier) {
         amazonSizeTier = parsedFees.sizeTier
-      } else {
-        amazonSizeTier = null
       }
     } catch (error) {
       errors.push(
@@ -706,19 +733,14 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           }
         }
 
-        const skuUpdateData: Prisma.SkuUpdateInput = {
-          description,
-          amazonCategory,
-          amazonSizeTier,
-          amazonReferralFeePercent,
-          amazonFbaFulfillmentFee,
-          amazonReferenceWeightKg: unitWeightKg,
-          unitDimensionsCm,
-          unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
-          unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
-          unitSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
-          unitWeightKg,
-        }
+        const skuUpdateData: Prisma.SkuUpdateInput = { description }
+
+        if (amazonCategory !== null) skuUpdateData.amazonCategory = amazonCategory
+        if (amazonSubcategory !== null) skuUpdateData.amazonSubcategory = amazonSubcategory
+        if (amazonSizeTier !== null) skuUpdateData.amazonSizeTier = amazonSizeTier
+        if (amazonReferralFeePercent !== null) skuUpdateData.amazonReferralFeePercent = amazonReferralFeePercent
+        if (amazonFbaFulfillmentFee !== null) skuUpdateData.amazonFbaFulfillmentFee = amazonFbaFulfillmentFee
+        if (amazonListingPrice !== null) skuUpdateData.amazonListingPrice = amazonListingPrice
 
         if (shouldSetItemDimensions && itemTriplet) {
           skuUpdateData.itemDimensionsCm = itemDimensionsCm
@@ -736,6 +758,43 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           where: { skuCode },
           data: skuUpdateData,
         })
+
+        if (!existingSku) {
+          throw new Error(`SKU not found during import: ${skuCode}`)
+        }
+
+        const batchUpdateData: Prisma.SkuBatchUpdateInput = {}
+        if (unitTriplet) {
+          batchUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
+          batchUpdateData.amazonItemPackageSide1Cm = unitTriplet.side1Cm
+          batchUpdateData.amazonItemPackageSide2Cm = unitTriplet.side2Cm
+          batchUpdateData.amazonItemPackageSide3Cm = unitTriplet.side3Cm
+        }
+        if (unitWeightKg !== null) {
+          batchUpdateData.amazonReferenceWeightKg = unitWeightKg
+        }
+        if (amazonSizeTier !== null) {
+          batchUpdateData.amazonSizeTier = amazonSizeTier
+        }
+        if (amazonFbaFulfillmentFee !== null) {
+          batchUpdateData.amazonFbaFulfillmentFee = amazonFbaFulfillmentFee
+        }
+
+        if (Object.keys(batchUpdateData).length > 0) {
+          const latestBatch = await prisma.skuBatch.findFirst({
+            where: { skuId: existingSku.id, isActive: true },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          })
+          if (!latestBatch) {
+            throw new Error(`No active batch found for SKU: ${skuCode}`)
+          }
+
+          await prisma.skuBatch.update({
+            where: { id: latestBatch.id },
+            data: batchUpdateData,
+          })
+        }
 
         imported += 1
         details.push({
@@ -759,19 +818,21 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               asin,
               description,
               amazonCategory,
+              amazonSubcategory,
               amazonSizeTier,
               amazonReferralFeePercent,
               amazonFbaFulfillmentFee,
-              amazonReferenceWeightKg: unitWeightKg,
+              amazonListingPrice,
+              amazonReferenceWeightKg: null,
               packSize: DEFAULT_PACK_SIZE,
               defaultSupplierId: null,
               secondarySupplierId: null,
               material: null,
-              unitDimensionsCm,
-              unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
-              unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
-              unitSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
-              unitWeightKg,
+              unitDimensionsCm: null,
+              unitSide1Cm: null,
+              unitSide2Cm: null,
+              unitSide3Cm: null,
+              unitWeightKg: null,
               itemDimensionsCm,
               itemSide1Cm: itemTriplet ? itemTriplet.side1Cm : null,
               itemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
@@ -798,7 +859,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               packSize: DEFAULT_PACK_SIZE,
               unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
               material: null,
-              // Note: Batch unit dimensions are for packaging, not product dimensions
+              // Note: Batch item package dimensions are for packaging, not product dimensions
               // Amazon catalog gives product dimensions, not packaging - leave null
               unitDimensionsCm: null,
               unitSide1Cm: null,
@@ -811,9 +872,13 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               cartonSide3Cm: null,
               cartonWeightKg: null,
               packagingType: null,
-              amazonSizeTier: null,
-              amazonFbaFulfillmentFee: null,
-              amazonReferenceWeightKg: null,
+              amazonItemPackageDimensionsCm: unitDimensionsCm,
+              amazonItemPackageSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
+              amazonItemPackageSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
+              amazonItemPackageSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
+              amazonSizeTier,
+              amazonFbaFulfillmentFee,
+              amazonReferenceWeightKg: unitWeightKg,
               storageCartonsPerPallet: DEFAULT_CARTONS_PER_PALLET,
               shippingCartonsPerPallet: DEFAULT_CARTONS_PER_PALLET,
               isActive: true,

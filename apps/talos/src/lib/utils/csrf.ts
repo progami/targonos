@@ -56,7 +56,7 @@ export async function refreshCSRFToken(): Promise<void> {
  try {
  // Make a GET request to any API endpoint to get a fresh CSRF token
  // The server will set the token cookie in the response
- await fetch('/api/auth/csrf', {
+ await fetch('/api/csrf', {
  method: 'GET',
  credentials: 'include'
  })

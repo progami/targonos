@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
 import { toast } from 'react-hot-toast'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
@@ -17,8 +17,11 @@ const ALLOWED_ROLES = ['admin', 'staff']
 
 function ProductsPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session, status } = useSession()
   const [openSkuModal, setOpenSkuModal] = useState(false)
+
+  const editSkuId = searchParams.get('editSkuId')
 
   const handleOpenSkuModal = useCallback(() => {
     setOpenSkuModal(true)
@@ -77,7 +80,11 @@ function ProductsPageContent() {
         <PageContent>
           <SkusPanel
             externalModalOpen={openSkuModal}
-            onExternalModalClose={() => setOpenSkuModal(false)}
+            externalEditSkuId={editSkuId}
+            onExternalModalClose={() => {
+              setOpenSkuModal(false)
+              if (editSkuId) router.replace('/config/products')
+            }}
           />
         </PageContent>
       </PageContainer>
@@ -86,5 +93,9 @@ function ProductsPageContent() {
 }
 
 export default function ProductsPage() {
-  return <ProductsPageContent />
+  return (
+    <Suspense fallback={null}>
+      <ProductsPageContent />
+    </Suspense>
+  )
 }

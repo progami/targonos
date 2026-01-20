@@ -8,8 +8,9 @@ import { toast } from 'react-hot-toast'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, FileEdit, Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
+import { FileEdit, Loader2, Plus, Trash2, AlertTriangle, Package, FileText } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
@@ -77,6 +78,8 @@ export default function NewPurchaseOrderPage() {
     notes: '',
   })
   const selectedSupplier = suppliers.find(supplier => supplier.id === formData.supplierId) ?? null
+  const [activeTab, setActiveTab] = useState<'details' | 'attributes'>('details')
+  const [showAttributesConfirm, setShowAttributesConfirm] = useState(false)
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
       id: generateTempId(),
@@ -95,7 +98,7 @@ export default function NewPurchaseOrderPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/purchase-orders/new`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/purchase-orders/new')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -317,14 +320,12 @@ export default function NewPurchaseOrderPage() {
     return parsed
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!formData.supplierId) { toast.error('Please select a supplier'); return }
-    if (!formData.expectedDate) { toast.error('Please set a cargo ready date'); return }
-    if (!formData.incoterms) { toast.error('Please select incoterms'); return }
-    if (!formData.paymentTerms.trim()) { toast.error('Please enter payment terms'); return }
-    if (lineItems.length === 0) { toast.error('Please add at least one line item'); return }
+  const validateForm = (): boolean => {
+    if (!formData.supplierId) { toast.error('Please select a supplier'); return false }
+    if (!formData.expectedDate) { toast.error('Please set a cargo ready date'); return false }
+    if (!formData.incoterms) { toast.error('Please select incoterms'); return false }
+    if (!formData.paymentTerms.trim()) { toast.error('Please enter payment terms'); return false }
+    if (lineItems.length === 0) { toast.error('Please add at least one line item'); return false }
 
     const isPositiveInteger = (value: unknown): value is number =>
       typeof value === 'number' && Number.isInteger(value) && value > 0
@@ -337,18 +338,31 @@ export default function NewPurchaseOrderPage() {
       return false
     })
     if (invalidLines.length > 0) {
-      toast.error('Please fill in SKU, batch/lot, units ordered, and units per carton for all line items')
-      return
+      toast.error('Please fill in SKU, batch, units ordered, and units per carton for all line items')
+      return false
     }
 
-    if (!selectedSupplier) { toast.error('Invalid supplier selected'); return }
+    if (!selectedSupplier) { toast.error('Invalid supplier selected'); return false }
 
     const invalidCostLine = lineItems.find(line => line.totalCost.trim() && parseMoney(line.totalCost) === null)
     if (invalidCostLine) {
       toast.error(`Invalid cost for SKU ${invalidCostLine.skuCode || 'line item'}`)
-      return
+      return false
     }
 
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validateForm()) return
+
+    // Show attributes confirmation modal
+    setShowAttributesConfirm(true)
+  }
+
+  const handleConfirmAndCreate = async () => {
+    setShowAttributesConfirm(false)
     setSubmitting(true)
     try {
       const response = await fetchWithCSRF('/api/purchase-orders', {
@@ -418,19 +432,13 @@ export default function NewPurchaseOrderPage() {
         title="New Purchase Order"
         description="Operations"
         icon={FileEdit}
-        actions={
-          <Button variant="outline" asChild className="gap-2">
-            <Link href="/operations/purchase-orders">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-        }
+        backHref="/operations/purchase-orders"
+        backLabel="Back"
       />
       <PageContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Order Details */}
-          <div className="rounded-xl border bg-white p-5">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
             <h3 className="text-sm font-semibold mb-4">Order Details</h3>
 
             {/* Row 1: Supplier + Ship To */}
@@ -440,7 +448,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.supplierId}
                   onChange={e => handleSupplierChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select supplier...</option>
@@ -458,7 +466,7 @@ export default function NewPurchaseOrderPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Ship To</label>
-                <div className="h-10 px-3 flex items-center border rounded-md bg-slate-50 text-sm text-muted-foreground">
+                <div className="h-10 px-3 flex items-center text-sm font-medium text-slate-900 dark:text-slate-100">
                   {tenantDestination}
                 </div>
               </div>
@@ -471,7 +479,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.currency}
                   onChange={e => handleCurrencyChange(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   {CURRENCY_OPTIONS.map(currency => (
@@ -494,7 +502,7 @@ export default function NewPurchaseOrderPage() {
                 <select
                   value={formData.incoterms}
                   onChange={e => setFormData(prev => ({ ...prev, incoterms: e.target.value }))}
-                  className="w-full h-10 px-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
                   <option value="">Select...</option>
@@ -527,9 +535,9 @@ export default function NewPurchaseOrderPage() {
             </div>
           </div>
 
-          {/* Products Table */}
-          <div className="rounded-xl border bg-white overflow-hidden">
-            <div className="px-5 py-4 border-b flex items-center justify-between">
+          {/* Products Table with Tabs */}
+          <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
+            <div className="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Products</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -537,62 +545,76 @@ export default function NewPurchaseOrderPage() {
                   {totals.cost > 0 && ` · ${formData.currency} ${totals.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={addLineItem} className="gap-1.5">
+              <Button type="button" variant="outline" size="sm" onClick={addLineItem} className="gap-1.5 w-full sm:w-auto">
                 <Plus className="h-4 w-4" />
                 Add Row
               </Button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50/50">
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3 w-[110px]">SKU</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3 w-[100px]">Batch / Lot</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3 w-[180px]">Description</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3 w-[80px]">Units</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3 w-[80px]">Units/Ctn</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3 w-[70px]">Cartons</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3 w-[110px]">Total</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3 w-[120px]">Notes</th>
-                    <th className="w-[44px]"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItems.map((item, idx) => {
-                    const cartons = item.unitsPerCarton && item.unitsOrdered > 0
-                      ? Math.ceil(item.unitsOrdered / item.unitsPerCarton)
-                      : null
-                    const totalCost = parseMoney(item.totalCost)
-                    const unitCost = totalCost !== null && item.unitsOrdered > 0
-                      ? (totalCost / item.unitsOrdered).toFixed(4)
-                      : null
-                    const isLast = idx === lineItems.length - 1
+            {/* Tabs */}
+            <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
+              <button
+                type="button"
+                onClick={() => setActiveTab('details')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === 'details'
+                    ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                    : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <FileText className="h-4 w-4" />
+                Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('attributes')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === 'attributes'
+                    ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                    : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Package className="h-4 w-4" />
+                Attributes
+              </button>
+            </div>
 
-                    // Build packaging details from batch data
-                    const batch = item.skuId && item.batchLot
-                      ? (batchesBySkuId[item.skuId] ?? []).find(b => b.batchCode === item.batchLot.trim().toUpperCase())
-                      : null
-                    const cartonTriplet = batch ? resolveDimensionTripletCm({
-                      side1Cm: batch.cartonSide1Cm,
-                      side2Cm: batch.cartonSide2Cm,
-                      side3Cm: batch.cartonSide3Cm,
-                      legacy: batch.cartonDimensionsCm,
-                    }) : null
-                    const cbmPerCarton = cartonTriplet
-                      ? (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
-                      : null
-                    const hasPackagingData = cartonTriplet || batch?.cartonWeightKg || batch?.packagingType
+            {/* PO Details Tab */}
+            {activeTab === 'details' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
+                  <thead>
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
+                      <th className="w-[36px]"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineItems.map((item) => {
+                      const cartons = item.unitsPerCarton && item.unitsOrdered > 0
+                        ? Math.ceil(item.unitsOrdered / item.unitsPerCarton)
+                        : null
+                      const totalCost = parseMoney(item.totalCost)
+                      const unitCost = totalCost !== null && item.unitsOrdered > 0
+                        ? (totalCost / item.unitsOrdered).toFixed(4)
+                        : null
 
-                    return (
-                      <Fragment key={item.id}>
-                        <tr className="border-t border-slate-200 hover:bg-slate-50/50">
+                      return (
+                                      <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                           {/* SKU */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2 min-w-[100px]">
                             <select
                               value={item.skuCode}
                               onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                              className="w-full h-9 px-2 border rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full h-8 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                             >
                               <option value="">Select...</option>
@@ -602,12 +624,12 @@ export default function NewPurchaseOrderPage() {
                             </select>
                           </td>
 
-                          {/* Batch / Lot */}
-                          <td className="px-4 py-2.5">
+                          {/* Batch */}
+                          <td className="px-3 py-2 min-w-[100px]">
                             <select
                               value={item.batchLot}
                               onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                              className="w-full h-9 px-2 border rounded bg-white text-sm disabled:bg-slate-50 disabled:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                              className="w-full h-8 px-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-sm disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
                               required
                               disabled={!item.skuId}
                             >
@@ -630,30 +652,30 @@ export default function NewPurchaseOrderPage() {
                             </select>
                           </td>
 
-                          {/* Description */}
-                          <td className="px-4 py-2.5">
+                          {/* Description (auto-filled, editable) */}
+                          <td className="px-3 py-2">
                             <Input
                               value={item.skuDescription}
                               onChange={e => updateLineItem(item.id, 'skuDescription', e.target.value)}
                               placeholder="Description"
-                              className="h-9 text-sm"
+                              className="h-8 text-sm min-w-[120px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
                           {/* Units */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="1"
                               value={item.unitsOrdered}
                               onChange={e => updateLineItem(item.id, 'unitsOrdered', parseInt(e.target.value) || 0)}
-                              className="h-9 text-sm text-right tabular-nums"
+                              className="h-8 text-sm text-right tabular-nums w-[70px] bg-white dark:bg-slate-800"
                               required
                             />
                           </td>
 
                           {/* Units/Ctn */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               type="number"
                               min="1"
@@ -663,20 +685,22 @@ export default function NewPurchaseOrderPage() {
                                 updateLineItem(item.id, 'unitsPerCarton', Number.isInteger(parsed) && parsed > 0 ? parsed : null)
                               }}
                               placeholder="—"
-                              className="h-9 text-sm text-right tabular-nums disabled:bg-slate-50"
+                              className="h-8 text-sm text-right tabular-nums w-[60px] bg-white dark:bg-slate-800 disabled:bg-slate-100 disabled:dark:bg-slate-700 disabled:text-slate-400"
                               disabled={!item.skuId || !item.batchLot}
                               required
                             />
                           </td>
 
                           {/* Cartons (calculated) */}
-                          <td className="px-4 py-2.5 text-right tabular-nums font-semibold">
-                            {cartons ?? '—'}
+                          <td className="px-3 py-2">
+                            <div className="h-8 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm w-[50px]">
+                              {cartons ?? '—'}
+                            </div>
                           </td>
 
                           {/* Total */}
-                          <td className="px-4 py-2.5">
-                            <div className="relative">
+                          <td className="px-3 py-2">
+                            <div className="relative w-[100px]">
                               <Input
                                 type="number"
                                 step="0.01"
@@ -684,97 +708,119 @@ export default function NewPurchaseOrderPage() {
                                 value={item.totalCost}
                                 onChange={e => updateLineItem(item.id, 'totalCost', e.target.value)}
                                 placeholder="0.00"
-                                className="h-9 text-sm text-right tabular-nums pr-12"
+                                className="h-8 text-sm text-right tabular-nums pr-10 bg-white dark:bg-slate-800"
                               />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">
                                 {item.currency}
                               </span>
                             </div>
-                            {unitCost && (
-                              <p className="text-[10px] text-muted-foreground text-right mt-0.5">Unit: {unitCost}</p>
-                            )}
+                          </td>
+
+                          {/* Unit Cost (calculated) */}
+                          <td className="px-3 py-2">
+                            <div className="h-8 flex items-center justify-end tabular-nums text-slate-500 dark:text-slate-400 text-sm">
+                              {unitCost ?? '—'}
+                            </div>
                           </td>
 
                           {/* Notes */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2">
                             <Input
                               value={item.notes}
                               onChange={e => updateLineItem(item.id, 'notes', e.target.value)}
                               placeholder="Notes..."
-                              className="h-9 text-sm"
+                              className="h-8 text-sm min-w-[80px] bg-white dark:bg-slate-800"
                             />
                           </td>
 
                           {/* Delete */}
-                          <td className="px-4 py-2.5">
+                          <td className="px-2 py-2">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => removeLineItem(item.id)}
                               disabled={lineItems.length === 1}
-                              className="h-9 w-9 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-20"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-20"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </td>
                         </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-                        {/* Packaging details sub-row */}
-                        {hasPackagingData ? (
-                          <tr className={`bg-slate-50/40 ${!isLast ? 'border-b-2 border-slate-200' : ''}`}>
-                            <td colSpan={9} className="px-4 pb-2 pt-1">
-                              <div className="grid grid-cols-6 gap-3 text-xs border-l-2 border-cyan-400 pl-3 py-1">
-                                <div>
-                                  <span className="text-muted-foreground">Carton</span>
-                                  <p className="font-medium text-slate-700">
-                                    {cartonTriplet ? `${formatDimensionTripletCm(cartonTriplet)} cm` : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">CBM/ctn</span>
-                                  <p className="font-medium text-slate-700">
-                                    {cbmPerCarton !== null ? cbmPerCarton.toFixed(3) : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">CBM Total</span>
-                                  <p className="font-medium text-slate-700">
-                                    {cbmPerCarton !== null && cartons ? (cbmPerCarton * cartons).toFixed(3) : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">KG/ctn</span>
-                                  <p className="font-medium text-slate-700">
-                                    {batch?.cartonWeightKg ? batch.cartonWeightKg.toFixed(2) : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">KG Total</span>
-                                  <p className="font-medium text-slate-700">
-                                    {batch?.cartonWeightKg && cartons ? (batch.cartonWeightKg * cartons).toFixed(2) : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Pkg Type</span>
-                                  <p className="font-medium text-slate-700">
-                                    {batch?.packagingType ?? '—'}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : !isLast ? (
-                          <tr className="border-b-2 border-slate-200">
-                            <td colSpan={9} className="h-0"></td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {/* Attributes Tab */}
+            {activeTab === 'attributes' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
+                  <thead>
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                      <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM/ctn</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM Total</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG/ctn</th>
+                      <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG Total</th>
+                      <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Pkg Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineItems.map((item) => {
+                      const cartons = item.unitsPerCarton && item.unitsOrdered > 0
+                        ? Math.ceil(item.unitsOrdered / item.unitsPerCarton)
+                        : null
+                      const batch = item.skuId && item.batchLot
+                        ? (batchesBySkuId[item.skuId] ?? []).find(b => b.batchCode === item.batchLot.trim().toUpperCase())
+                        : null
+                      const cartonTriplet = batch ? resolveDimensionTripletCm({
+                        side1Cm: batch.cartonSide1Cm,
+                        side2Cm: batch.cartonSide2Cm,
+                        side3Cm: batch.cartonSide3Cm,
+                        legacy: batch.cartonDimensionsCm,
+                      }) : null
+                      const cbmPerCarton = cartonTriplet
+                        ? (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
+                        : null
+
+                      return (
+                        <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 font-medium text-foreground min-w-[100px]">{item.skuCode || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-[100px]">{item.batchLot || '—'}</td>
+                          <td className="px-3 py-2 text-foreground">
+                            {cartonTriplet ? `${formatDimensionTripletCm(cartonTriplet)} cm` : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                            {cbmPerCarton !== null ? cbmPerCarton.toFixed(3) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
+                            {cbmPerCarton !== null && cartons ? (cbmPerCarton * cartons).toFixed(3) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                            {batch?.cartonWeightKg ? batch.cartonWeightKg.toFixed(2) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
+                            {batch?.cartonWeightKg && cartons ? (batch.cartonWeightKg * cartons).toFixed(2) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {batch?.packagingType ? (
+                              <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                {batch.packagingType}
+                              </span>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -802,6 +848,153 @@ export default function NewPurchaseOrderPage() {
             </Button>
           </div>
         </form>
+
+        {/* Attributes Verification Modal */}
+        {showAttributesConfirm && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <div
+                className="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity"
+                onClick={() => setShowAttributesConfirm(false)}
+              />
+              <div className="relative transform overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
+                <div className="bg-white dark:bg-slate-800 px-6 pt-6 pb-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900">
+                      <Package className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        Verify Product Attributes
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Please review the carton dimensions and weights before creating the purchase order.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50 dark:bg-slate-700">
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">SKU</th>
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Batch</th>
+                          <th className="text-left font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Carton Size</th>
+                          <th className="text-right font-medium text-slate-600 dark:text-slate-300 px-4 py-2">CBM Total</th>
+                          <th className="text-right font-medium text-slate-600 dark:text-slate-300 px-4 py-2">KG Total</th>
+                          <th className="text-center font-medium text-slate-600 dark:text-slate-300 px-4 py-2">Pkg Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lineItems.map((item) => {
+                          const cartons = item.unitsPerCarton && item.unitsOrdered > 0
+                            ? Math.ceil(item.unitsOrdered / item.unitsPerCarton)
+                            : null
+                          const batch = item.skuId && item.batchLot
+                            ? (batchesBySkuId[item.skuId] ?? []).find(b => b.batchCode === item.batchLot.trim().toUpperCase())
+                            : null
+                          const cartonTriplet = batch ? resolveDimensionTripletCm({
+                            side1Cm: batch.cartonSide1Cm,
+                            side2Cm: batch.cartonSide2Cm,
+                            side3Cm: batch.cartonSide3Cm,
+                            legacy: batch.cartonDimensionsCm,
+                          }) : null
+                          const cbmPerCarton = cartonTriplet
+                            ? (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
+                            : null
+
+                          return (
+                            <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700">
+                              <td className="px-4 py-2 font-medium text-foreground">{item.skuCode}</td>
+                              <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{item.batchLot}</td>
+                              <td className="px-4 py-2">
+                                {cartonTriplet ? (
+                                  `${formatDimensionTripletCm(cartonTriplet)} cm`
+                                ) : (
+                                  <span className="text-amber-600 flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    Missing
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums">
+                                {cbmPerCarton !== null && cartons ? (
+                                  (cbmPerCarton * cartons).toFixed(3)
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums">
+                                {batch?.cartonWeightKg && cartons ? (
+                                  (batch.cartonWeightKg * cartons).toFixed(2)
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {batch?.packagingType ? (
+                                  <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                    {batch.packagingType}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {lineItems.some(item => {
+                    const batch = item.skuId && item.batchLot
+                      ? (batchesBySkuId[item.skuId] ?? []).find(b => b.batchCode === item.batchLot.trim().toUpperCase())
+                      : null
+                    const cartonTriplet = batch ? resolveDimensionTripletCm({
+                      side1Cm: batch.cartonSide1Cm,
+                      side2Cm: batch.cartonSide2Cm,
+                      side3Cm: batch.cartonSide3Cm,
+                      legacy: batch.cartonDimensionsCm,
+                    }) : null
+                    return !cartonTriplet && !batch?.cartonWeightKg
+                  }) && (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                      <span>Some products are missing carton dimensions or weights. You can still proceed, but shipping calculations may be incomplete.</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-700 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
+                  <Button
+                    onClick={handleConfirmAndCreate}
+                    disabled={submitting}
+                    className="w-full sm:w-auto"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Confirm & Create PO'
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAttributesConfirm(false)}
+                    disabled={submitting}
+                    className="w-full sm:w-auto"
+                  >
+                    Go Back
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </PageContent>
     </PageContainer>
   )

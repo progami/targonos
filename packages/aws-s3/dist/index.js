@@ -43,6 +43,18 @@ export class S3Service {
                 const documentType = this.sanitizeFilename(context.documentType);
                 return `transactions/${year}/${month}/${context.transactionId}/${documentType}_${timestamp}_${hash}_${sanitizedFilename}`;
             }
+            case 'fulfillment-order': {
+                const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
+                const fulfillmentOrderNumber = context.fulfillmentOrderNumber
+                    ? this.sanitizeFilename(context.fulfillmentOrderNumber)
+                    : null;
+                const fulfillmentOrderFolder = fulfillmentOrderNumber
+                    ? `${fulfillmentOrderNumber}--${context.fulfillmentOrderId}`
+                    : context.fulfillmentOrderId;
+                const stage = this.sanitizeFilename(context.stage);
+                const documentType = this.sanitizeFilename(context.documentType);
+                return `fulfillment-orders/${tenant}/${fulfillmentOrderFolder}/${stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
+            }
             case 'purchase-order': {
                 const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
                 const purchaseOrderNumber = context.purchaseOrderNumber
@@ -55,17 +67,6 @@ export class S3Service {
                 // Keep all documents for a single PO under one stable prefix (no year/month sharding),
                 // so uploads over multiple months don't scatter across folders.
                 return `purchase-orders/${tenant}/${purchaseOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
-            }
-            case 'fulfillment-order': {
-                const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
-                const fulfillmentOrderNumber = context.fulfillmentOrderNumber
-                    ? this.sanitizeFilename(context.fulfillmentOrderNumber)
-                    : null;
-                const fulfillmentOrderFolder = fulfillmentOrderNumber
-                    ? `${fulfillmentOrderNumber}--${context.fulfillmentOrderId}`
-                    : context.fulfillmentOrderId;
-                const documentType = this.sanitizeFilename(context.documentType);
-                return `fulfillment-orders/${tenant}/${fulfillmentOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
             }
             case 'export-temp': {
                 const exportType = this.sanitizeFilename(context.exportType);

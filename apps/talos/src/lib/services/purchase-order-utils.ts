@@ -42,7 +42,7 @@ export function generateBatchHash(seedParts: string[]): string {
 }
 
 /**
- * Resolve batch lot from raw input (required)
+ * Resolve batch from raw input (required)
  */
 export function resolveBatchLot(params: {
   rawBatchLot?: string | null
@@ -53,7 +53,7 @@ export function resolveBatchLot(params: {
 }): string {
   const normalized = normalizeNullable(params.rawBatchLot)
   if (!normalized) {
-    throw new ValidationError(`Batch/Lot is required for SKU ${params.skuCode}`)
+    throw new ValidationError(`Batch is required for SKU ${params.skuCode}`)
   }
 
   return normalized

@@ -14,6 +14,36 @@ export interface QboCompanyInfo {
   LegalName?: string;
   Country?: string;
   FiscalYearStartMonth?: string;
+  CompanyAddr?: {
+    Country?: string;
+  };
+  // QBO returns the home currency in the MetaData or via Preferences
+  // However, the easiest place to get it is from the Preferences endpoint or CompanyCurrency
+  // For simplicity, we'll add subscription level from the Preferences API
+}
+
+// QBO Subscription info from Preferences
+export interface QboPreferences {
+  AccountingInfoPrefs?: {
+    BookCloseDate?: string;
+    ClassTrackingPerTxnLine?: boolean;
+    ClassTrackingPerTxn?: boolean;
+    DepositToAccountsEnabled?: boolean;
+    TrackDepartments?: boolean;
+  };
+  CurrencyPrefs?: {
+    HomeCurrency?: {
+      value: string;
+      name?: string;
+    };
+    MultiCurrencyEnabled?: boolean;
+  };
+  ProductAndServicesPrefs?: {
+    ForSales?: boolean;
+    ForPurchase?: boolean;
+    QuantityWithPriceAndRate?: boolean;
+    QuantityOnHand?: boolean;
+  };
 }
 
 // QBO Account
@@ -124,6 +154,8 @@ export interface QboConnectionStatus {
   connected: boolean;
   realmId?: string;
   companyName?: string;
+  homeCurrency?: string;
+  subscription?: string;
   lastSyncAt?: Date;
   error?: string;
 }

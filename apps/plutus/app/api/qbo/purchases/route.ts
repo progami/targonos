@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { fetchPurchases, type QboConnection } from '@/lib/qbo/api';
 import { getComplianceStatus } from '@/lib/sop/config';
 import { createLogger } from '@targon/logger';
+import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-purchases' });
 
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     const connection: QboConnection = JSON.parse(connectionCookie);
+    await ensureServerQboConnection(connection);
 
     // Get query params
     const searchParams = req.nextUrl.searchParams;
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
       });
+      await saveServerQboConnection(updatedConnection);
     }
 
     // Transform purchases for frontend with compliance status

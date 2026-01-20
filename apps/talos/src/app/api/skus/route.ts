@@ -77,6 +77,18 @@ const skuSchemaBase = z.object({
       const sanitized = sanitizeForDisplay(val)
       return sanitized ? sanitized : null
     }),
+  subcategory: z
+    .string()
+    .trim()
+    .max(255)
+    .optional()
+    .nullable()
+    .transform(val => {
+      if (val === undefined) return undefined
+      if (val === null) return null
+      const sanitized = sanitizeForDisplay(val)
+      return sanitized ? sanitized : null
+    }),
   sizeTier: z
     .string()
     .trim()
@@ -205,7 +217,7 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
     if (unitAny && !unitAll) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Unit dimensions require all three sides',
+        message: 'Item package dimensions require all three sides',
       })
     }
 
@@ -395,6 +407,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         skuCode: validatedData.skuCode,
         asin: validatedData.asin ?? null,
         category: validatedData.category ?? null,
+        subcategory: validatedData.subcategory ?? null,
         sizeTier: validatedData.sizeTier ?? null,
         referralFeePercent: validatedData.referralFeePercent ?? null,
         fbaFulfillmentFee: validatedData.fbaFulfillmentFee ?? null,
@@ -564,7 +577,7 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
       Boolean(unitDimensionsCm) ||
       [unitSide1Cm, unitSide2Cm, unitSide3Cm].some(value => value !== undefined && value !== null)
     if (unitInputProvided && !unitTriplet) {
-      return ApiResponses.badRequest('Unit dimensions must be a valid LxWxH triple')
+      return ApiResponses.badRequest('Item package dimensions must be a valid LxWxH triple')
     }
 
     updateData.unitDimensionsCm = unitTriplet ? formatDimensionTripletCm(unitTriplet) : null

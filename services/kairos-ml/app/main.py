@@ -45,6 +45,12 @@ class ForecastRequest(BaseModel):
     y: List[float]
     horizon: int = Field(..., ge=1)
     config: Optional[Dict[str, Any]] = None
+    regressors: Optional[Dict[str, List[float]]] = Field(
+        None, description="Optional exogenous regressors aligned to ds."
+    )
+    regressorsFuture: Optional[Dict[str, List[float]]] = Field(
+        None, description="Optional future regressor values, each length=horizon."
+    )
 
 
 class ForecastPoint(BaseModel):
@@ -72,6 +78,29 @@ class ForecastMeta(BaseModel):
 class ForecastResponse(BaseModel):
     points: List[ForecastPoint]
     meta: ForecastMeta
+
+
+# ============================================================================
+# Batch Forecasting Models
+# ============================================================================
+
+
+class BatchForecastRequestItem(ForecastRequest):
+    id: str
+
+
+class BatchForecastRequest(BaseModel):
+    items: List[BatchForecastRequestItem]
+
+
+class BatchForecastResponseItem(BaseModel):
+    id: str
+    points: List[ForecastPoint]
+    meta: ForecastMeta
+
+
+class BatchForecastResponse(BaseModel):
+    items: List[BatchForecastResponseItem]
 
 
 # ============================================================================
@@ -184,7 +213,8 @@ def forecast_ets(
     from statsforecast import StatsForecast
     from statsforecast.models import AutoETS
 
-    config = config or {}
+    if config is None:
+        config = {}
     step_seconds = infer_step_seconds(ds)
     n_obs = len(y)
 
@@ -242,7 +272,8 @@ def forecast_arima(
     from statsforecast import StatsForecast
     from statsforecast.models import AutoARIMA
 
-    config = config or {}
+    if config is None:
+        config = {}
     step_seconds = infer_step_seconds(ds)
     # Use provided seasonLength or infer from data frequency
     season_length = int(config.get("seasonLength", infer_season_length(step_seconds)))
@@ -282,7 +313,8 @@ def forecast_theta(
     from statsforecast import StatsForecast
     from statsforecast.models import Theta
 
-    config = config or {}
+    if config is None:
+        config = {}
     step_seconds = infer_step_seconds(ds)
     # Use provided seasonLength or infer from data frequency
     season_length = int(config.get("seasonLength", infer_season_length(step_seconds)))
@@ -314,6 +346,8 @@ def forecast_prophet(
     y: List[float],
     horizon: int,
     config: Optional[Dict[str, Any]] = None,
+    regressors: Optional[Dict[str, List[float]]] = None,
+    regressors_future: Optional[Dict[str, List[float]]] = None,
 ) -> Tuple[List[float], List[Optional[float]], List[Optional[float]]]:
     """
     Prophet - Facebook/Meta's decomposable time series model.
@@ -321,8 +355,10 @@ def forecast_prophet(
     """
     from prophet import Prophet
 
-    config = config or {}
+    if config is None:
+        config = {}
     interval_width = float(config.get("intervalWidth", 0.95))
+    uncertainty_samples = int(config.get("uncertaintySamples", 1000))
     seasonality_mode = config.get("seasonalityMode", "additive")
     yearly = config.get("yearlySeasonality", "auto")
     weekly = config.get("weeklySeasonality", "auto")
@@ -342,14 +378,25 @@ def forecast_prophet(
         "y": y,
     })
 
+    if regressors is not None:
+        for key, values in regressors.items():
+            if len(values) != len(y):
+                raise ValueError(f"Regressor '{key}' length mismatch.")
+            df[key] = values
+
     # Create and configure model
     model = Prophet(
         interval_width=interval_width,
+        uncertainty_samples=uncertainty_samples,
         seasonality_mode=seasonality_mode,
         yearly_seasonality=parse_seasonality(yearly),
         weekly_seasonality=parse_seasonality(weekly),
         daily_seasonality=parse_seasonality(daily),
     )
+
+    if regressors is not None:
+        for key in regressors.keys():
+            model.add_regressor(key)
 
     # Fit model
     model.fit(df)
@@ -358,6 +405,17 @@ def forecast_prophet(
     step_seconds = infer_step_seconds(ds)
     freq = infer_frequency(step_seconds)
     future = model.make_future_dataframe(periods=horizon, freq=freq, include_history=False)
+
+    if regressors is not None:
+        if regressors_future is None:
+            raise ValueError("Future regressor values are required when regressors are provided.")
+        for key in regressors.keys():
+            values = regressors_future.get(key)
+            if values is None:
+                raise ValueError(f"Future regressor '{key}' is missing.")
+            if len(values) != horizon:
+                raise ValueError(f"Future regressor '{key}' length mismatch.")
+            future[key] = values
 
     # Predict
     forecast = model.predict(future)
@@ -383,7 +441,8 @@ def forecast_neuralprophet(
 
     set_log_level("ERROR")
 
-    config = config or {}
+    if config is None:
+        config = {}
     seasonality_mode = config.get("seasonalityMode", "additive")
     yearly = config.get("yearlySeasonality", "auto")
     weekly = config.get("weeklySeasonality", "auto")
@@ -492,11 +551,57 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
 
     Supports: ETS, PROPHET, ARIMA, THETA, NEURALPROPHET
     """
+    return run_forecast(req)
+
+
+@app.post("/v1/forecast/batch", response_model=BatchForecastResponse)
+def forecast_batch(req: BatchForecastRequest) -> BatchForecastResponse:
+    return BatchForecastResponse(
+        items=[
+            BatchForecastResponseItem(id=item.id, **run_forecast(item).model_dump())
+            for item in req.items
+        ]
+    )
+
+
+def run_forecast(req: ForecastRequest) -> ForecastResponse:
     # Validate input
     if len(req.ds) != len(req.y):
         raise HTTPException(status_code=400, detail="Training data length mismatch.")
     if len(req.ds) < 2:
         raise HTTPException(status_code=400, detail="At least 2 observations are required.")
+
+    if req.regressors is not None and req.model != "PROPHET":
+        raise HTTPException(status_code=400, detail="Regressors are only supported for PROPHET.")
+
+    if req.regressorsFuture is not None and req.regressors is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Future regressor values were provided without regressors.",
+        )
+
+    if req.regressors is not None:
+        if req.regressorsFuture is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Future regressor values are required when regressors are provided.",
+            )
+        for key, values in req.regressors.items():
+            if len(values) != len(req.y):
+                raise HTTPException(status_code=400, detail=f"Regressor '{key}' length mismatch.")
+            if key not in req.regressorsFuture:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Future regressor '{key}' is missing.",
+                )
+
+    if req.regressorsFuture is not None:
+        for key, values in req.regressorsFuture.items():
+            if len(values) != req.horizon:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Future regressor '{key}' length mismatch.",
+                )
 
     step = infer_step_seconds(req.ds)
     last_ds = req.ds[-1]
@@ -507,7 +612,14 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         if req.model == "ETS":
             yhat, yhat_lower, yhat_upper = forecast_ets(req.ds, req.y, req.horizon, req.config)
         elif req.model == "PROPHET":
-            yhat, yhat_lower, yhat_upper = forecast_prophet(req.ds, req.y, req.horizon, req.config)
+            yhat, yhat_lower, yhat_upper = forecast_prophet(
+                req.ds,
+                req.y,
+                req.horizon,
+                req.config,
+                regressors=req.regressors,
+                regressors_future=req.regressorsFuture,
+            )
         elif req.model == "ARIMA":
             yhat, yhat_lower, yhat_upper = forecast_arima(req.ds, req.y, req.horizon, req.config)
         elif req.model == "THETA":
@@ -536,7 +648,6 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
 
     # Compute in-sample metrics (fit on full data, so this is training metrics)
     # For proper evaluation, we'd need a holdout set
-    y_array = np.array(req.y)
     mae, rmse, mape = None, None, None
 
     return ForecastResponse(

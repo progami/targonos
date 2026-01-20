@@ -186,8 +186,13 @@ const nextConfig = {
 
   
   // Turbopack is the default bundler in Next.js 16
-  // Add empty config to silence webpack config warning
-  turbopack: {},
+  turbopack: {
+    resolveAlias: {
+      '@targon/prisma-talos': '../../packages/prisma-talos/generated/index.js',
+      '@targon/auth': '../../packages/auth/dist/index.js',
+      '@targon/aws-s3': '../../packages/aws-s3/dist/index.js',
+    },
+  },
 
   // Enable experimental features for production optimization
   experimental: {

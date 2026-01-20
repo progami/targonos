@@ -323,6 +323,7 @@ export default function ContractorsPage() {
           loading={loading}
           skeletonRows={6}
           onRowClick={openEditModal}
+          addRow={{ label: 'Add Contractor', onClick: openCreateModal }}
           emptyState={
             <TableEmptyContent
               icon={<BriefcaseIcon className="h-10 w-10" />}

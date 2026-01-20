@@ -21,10 +21,11 @@ export function Breadcrumb() {
  const breadcrumbs = segments.map((segment, index) => {
  const href = '/' + segments.slice(0, index + 1).join('/')
  const previousSegment = index > 0 ? segments[index - 1] : null
+ const nextSegment = index < segments.length - 1 ? segments[index + 1] : null
 
  // Skip warehouse IDs in breadcrumbs (they don't have their own page)
  // Warehouse IDs appear after 'warehouses' and before 'rates' or 'edit'
- const isWarehouseId = previousSegment === 'warehouses' && segment.match(/^[a-f0-9-]{36}$/i)
+ const isWarehouseId = previousSegment === 'warehouses' && nextSegment !== null && ['edit', 'rates'].includes(nextSegment)
  const isOperationsRoot = segment === 'operations'
 
  // Handle special cases for better labels
@@ -66,32 +67,32 @@ export function Breadcrumb() {
 
  const homeLink = '/dashboard'
 
- return (
- <nav className="flex items-center space-x-1 text-sm text-slate-600 mb-4">
- <Link
- href={homeLink}
- className="flex items-center hover:text-slate-900 transition-colors"
- >
- <Home className="h-4 w-4" />
- </Link>
- 
- {breadcrumbs.map((breadcrumb, index) => (
- <div key={breadcrumb.href} className="flex items-center">
- <ChevronRight className="h-4 w-4 mx-1 text-slate-400" />
- {index === breadcrumbs.length - 1 ? (
- <span className="font-medium text-slate-900">
- {breadcrumb.label}
- </span>
- ) : (
- <Link
- href={breadcrumb.href}
- className="hover:text-slate-900 transition-colors"
- >
- {breadcrumb.label}
- </Link>
- )}
- </div>
- ))}
- </nav>
- )
+  return (
+  <nav className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400 mb-4">
+  <Link
+  href={homeLink}
+  className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+  >
+  <Home className="h-4 w-4" />
+  </Link>
+  
+  {breadcrumbs.map((breadcrumb, index) => (
+  <div key={breadcrumb.href} className="flex items-center">
+  <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
+  {index === breadcrumbs.length - 1 ? (
+  <span className="font-medium text-slate-900 dark:text-slate-100">
+  {breadcrumb.label}
+  </span>
+  ) : (
+  <Link
+  href={breadcrumb.href}
+  className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+  >
+  {breadcrumb.label}
+  </Link>
+  )}
+  </div>
+  ))}
+  </nav>
+  )
 }

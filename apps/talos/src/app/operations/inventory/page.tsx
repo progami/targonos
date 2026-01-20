@@ -23,6 +23,7 @@ import { LoadingSpinner, PageLoading } from '@/components/ui/loading-spinner'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import {
   useInventoryFilters,
   type InventoryBalance,
@@ -32,6 +33,7 @@ import { getMovementTypeFromTransaction, getMovementMultiplier } from '@/lib/uti
 import { usePageState } from '@/lib/store'
 
 const LEDGER_TIME_FORMAT = 'PPP p'
+
 
 function formatLedgerTimestamp(value: string | Date | null | undefined) {
   if (!value) {
@@ -107,7 +109,7 @@ function InventoryPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/inventory`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/inventory')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -155,7 +157,7 @@ function InventoryPage() {
 
   const headerActions = useMemo(
     () => (
-      <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
+      <label className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">
         <input
           type="checkbox"
           checked={showZeroStock}
@@ -163,10 +165,9 @@ function InventoryPage() {
           className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
         />
         Show zero stock
-        {loading ? <LoadingSpinner size="sm" className="ml-1" /> : null}
       </label>
     ),
-    [loading, showZeroStock]
+    [showZeroStock]
   )
 
   const tableTotals = useMemo(() => {
@@ -229,7 +230,7 @@ function InventoryPage() {
   }, [balances, summary])
 
   const baseFilterInputClass =
-    'w-full rounded-md border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
+    'w-full rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
 
   if (status === 'loading') {
     return (
@@ -273,7 +274,7 @@ function InventoryPage() {
             />
           </StatsCardGrid>
 
-          <div className="flex min-h-0 flex-col rounded-xl border bg-white shadow-soft overflow-x-auto flex-1">
+          <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-x-auto flex-1">
             {/* Scrollable table area */}
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
               <table className="w-full min-w-[1200px] table-auto text-sm">
@@ -461,14 +462,14 @@ function InventoryPage() {
                           className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
                           onClick={() => handleSort('batch')}
                         >
-                          Batch / Lot
+                          Batch
                           {getSortIcon('batch')}
                         </button>
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
                               type="button"
-                              aria-label="Filter batch / lot values"
+                              aria-label="Filter batch values"
                               className={cn(
                                 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
                                 isFilterActive(['batch'])
@@ -482,7 +483,7 @@ function InventoryPage() {
                           <PopoverContent align="end" className="w-64 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-foreground">
-                                Batch / lot filter
+                                Batch filter
                               </span>
                               <button
                                 type="button"

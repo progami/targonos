@@ -327,7 +327,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
       </Button>
 
       <PortalModal open={isOpen} className="items-center">
-        <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+        <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-xl bg-white dark:bg-slate-800 shadow-2xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b px-6 py-4">
             <div className="flex items-center gap-4">
@@ -454,7 +454,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
           </div>
 
           {/* Search and Filters */}
-          <div className="flex items-center gap-3 border-b bg-white px-6 py-3">
+          <div className="flex items-center gap-3 border-b bg-white dark:bg-slate-800 px-6 py-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input

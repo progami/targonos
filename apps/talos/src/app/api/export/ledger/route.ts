@@ -191,7 +191,7 @@ export const GET = withAuth(async (request, session) => {
  'Warehouse': item.warehouseName,
  'SKU Code': item.skuCode,
  'Description': item.skuDescription,
- 'Batch/Lot': item.batchLot,
+ 'Batch': item.batchLot,
  'Cartons': item.currentCartons,
  'Last Activity': formatDateGMT(item.lastActivity)
  }))

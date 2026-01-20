@@ -1,12 +1,29 @@
-import Link from 'next/link'
-import { ShieldX, ArrowLeft, ExternalLink } from '@/lib/lucide-icons'
+import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
+import { ExternalLink, ShieldX } from '@/lib/lucide-icons'
 
 export default function NoAccessPage() {
   const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || process.env.PORTAL_AUTH_URL || '/'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 text-center">
+    <PageContainer className="min-h-screen">
+      <PageHeaderSection
+        title="No Access to Talos"
+        description="Access"
+        icon={ShieldX}
+        backHref={portalUrl}
+        backLabel="Back"
+        actions={
+          <a
+            href={`mailto:support@targonglobal.com?subject=Talos Access Request`}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 shadow-soft hover:bg-slate-50"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Request Access
+          </a>
+        }
+      />
+      <PageContent className="flex items-center justify-center">
+        <div className="max-w-md w-full space-y-8 text-center">
         <div>
           <div className="mx-auto h-24 w-24 bg-amber-100 rounded-full flex items-center justify-center">
             <ShieldX className="h-12 w-12 text-amber-600" />
@@ -33,27 +50,11 @@ export default function NoAccessPage() {
           </ul>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href={portalUrl}
-            className="inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Portal
-          </Link>
-          <a
-              href={`mailto:support@targonglobal.com?subject=Talos Access Request`}
-            className="inline-flex items-center px-5 py-2.5 border border-slate-300 text-sm font-medium rounded-lg text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors"
-          >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Request Access
-          </a>
-        </div>
-
         <p className="text-xs text-slate-500">
           If you believe this is an error, please contact your system administrator.
         </p>
-      </div>
-    </div>
+        </div>
+      </PageContent>
+    </PageContainer>
   )
 }

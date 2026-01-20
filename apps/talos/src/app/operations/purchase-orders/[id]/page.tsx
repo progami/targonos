@@ -20,10 +20,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
-  ArrowLeft,
   Check,
-  ChevronDown,
   ChevronRight,
+  DollarSign,
   Download,
   ExternalLink,
   Eye,
@@ -45,10 +44,10 @@ import {
   XCircle,
 } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
-import { withBasePath } from '@/lib/utils/base-path'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
 // 5-Stage State Machine Types
@@ -334,6 +333,30 @@ interface PurchaseOrderDocumentSummary {
   viewUrl: string
 }
 
+type CostRateSummary = {
+  id: string
+  costName: string
+  costValue: number
+  unitOfMeasure: string
+}
+
+type PurchaseOrderForwardingCostSummary = {
+  id: string
+  purchaseOrderId: string
+  warehouse: { code: string; name: string }
+  costRateId: string | null
+  costName: string
+  quantity: number
+  unitRate: number
+  totalCost: number
+  currency: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  createdById: string | null
+  createdByName: string | null
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -490,8 +513,8 @@ function getAuditActionTheme(action: string): {
     case 'UPDATE_DETAILS':
       return {
         Icon: FileEdit,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
-        iconClassName: 'text-slate-700',
+        wrapperClassName: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        iconClassName: 'text-slate-700 dark:text-slate-300',
       }
     case 'STATUS_TRANSITION':
       return {
@@ -536,8 +559,8 @@ function getAuditActionTheme(action: string): {
     default:
       return {
         Icon: History,
-        wrapperClassName: 'bg-slate-50 border-slate-200',
-        iconClassName: 'text-slate-700',
+        wrapperClassName: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+        iconClassName: 'text-slate-700 dark:text-slate-300',
       }
   }
 }
@@ -670,13 +693,38 @@ export default function PurchaseOrderDetailPage() {
 
   // Stage transition form data
   const [stageFormData, setStageFormData] = useState<Record<string, string>>({})
-  const [warehouses, setWarehouses] = useState<Array<{ code: string; name: string }>>([])
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; code: string; name: string }>>(
+    []
+  )
   const [warehousesLoading, setWarehousesLoading] = useState(false)
   const [documents, setDocuments] = useState<PurchaseOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+
+  const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>(
+    []
+  )
+  const [forwardingCostsLoading, setForwardingCostsLoading] = useState(false)
+  const [forwardingRates, setForwardingRates] = useState<CostRateSummary[]>([])
+  const [forwardingRatesLoading, setForwardingRatesLoading] = useState(false)
+  const [forwardingWarehouseCode, setForwardingWarehouseCode] = useState('')
+  const [newForwardingCostDraft, setNewForwardingCostDraft] = useState({
+    costName: '',
+    quantity: '',
+    notes: '',
+    currency: '',
+  })
+  const [forwardingCostSubmitting, setForwardingCostSubmitting] = useState(false)
+  const [editingForwardingCostId, setEditingForwardingCostId] = useState<string | null>(null)
+  const [editingForwardingCostDraft, setEditingForwardingCostDraft] = useState({
+    costName: '',
+    quantity: '',
+    notes: '',
+    currency: '',
+  })
+  const [forwardingCostDeletingId, setForwardingCostDeletingId] = useState<string | null>(null)
 
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
@@ -717,14 +765,10 @@ export default function PurchaseOrderDetailPage() {
 
   // Bottom section tabs
   const [activeBottomTab, setActiveBottomTab] = useState<
-    'cargo' | 'documents' | 'details' | 'history'
+    'cargo' | 'costs' | 'documents' | 'details' | 'history'
   >('details')
+  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [previewDocument, setPreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
-
-  // Collapsible sections state for Details tab
-  const [collapsedDetailSections, setCollapsedDetailSections] = useState<Record<string, boolean>>(
-    {}
-  )
 
   // Advance stage modal
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false)
@@ -734,7 +778,7 @@ export default function PurchaseOrderDetailPage() {
     if (!session) {
       redirectToPortal(
         '/login',
-        `${window.location.origin}/operations/purchase-orders/${params.id}`
+        `${window.location.origin}${withBasePath(`/operations/purchase-orders/${params.id}`)}`
       )
       return
     }
@@ -761,16 +805,18 @@ export default function PurchaseOrderDetailPage() {
         }
 
         const parsed = listCandidate
-          .map((item): { code: string; name: string } | null => {
+          .map((item): { id: string; code: string; name: string } | null => {
             if (!item || typeof item !== 'object' || Array.isArray(item)) return null
             const record = item as Record<string, unknown>
+            const id = record.id
             const code = record.code
             const name = record.name
-            if (typeof code !== 'string' || typeof name !== 'string') return null
+            if (typeof id !== 'string' || typeof code !== 'string' || typeof name !== 'string') return null
+            if (!id.trim()) return null
             if (!code.trim() || !name.trim()) return null
-            return { code, name }
+            return { id, code, name }
           })
-          .filter((value): value is { code: string; name: string } => value !== null)
+          .filter((value): value is { id: string; code: string; name: string } => value !== null)
 
         setWarehouses(parsed)
       } catch (_error) {
@@ -892,6 +938,319 @@ export default function PurchaseOrderDetailPage() {
     void refreshAuditLogs()
   }, [refreshAuditLogs])
 
+  useEffect(() => {
+    const selected = forwardingWarehouseCode.trim()
+    if (selected) return
+    const next = order?.warehouseCode
+    if (!next) return
+    setForwardingWarehouseCode(next)
+  }, [forwardingWarehouseCode, order?.warehouseCode])
+
+  const refreshForwardingCosts = useCallback(async () => {
+    const orderId = order?.id
+    if (!orderId) return
+
+    try {
+      setForwardingCostsLoading(true)
+      const response = await fetch(`/api/purchase-orders/${orderId}/forwarding-costs`)
+      if (!response.ok) {
+        setForwardingCosts([])
+        return
+      }
+
+      const payload = await response.json().catch(() => null)
+      const list = payload?.data
+      setForwardingCosts(Array.isArray(list) ? (list as PurchaseOrderForwardingCostSummary[]) : [])
+    } catch {
+      setForwardingCosts([])
+    } finally {
+      setForwardingCostsLoading(false)
+    }
+  }, [order?.id])
+
+  useEffect(() => {
+    void refreshForwardingCosts()
+  }, [refreshForwardingCosts])
+
+  const selectedForwardingWarehouse = useMemo(() => {
+    const code = forwardingWarehouseCode.trim()
+    if (!code) return null
+    const match = warehouses.find(row => row.code === code)
+    if (!match) return null
+    return match
+  }, [forwardingWarehouseCode, warehouses])
+
+  const forwardingWarehouseId = selectedForwardingWarehouse ? selectedForwardingWarehouse.id : null
+
+  useEffect(() => {
+    if (!forwardingWarehouseId) {
+      setForwardingRates([])
+      return
+    }
+
+    const loadRates = async () => {
+      try {
+        setForwardingRatesLoading(true)
+        const response = await fetch(
+          `/api/rates?warehouseId=${encodeURIComponent(forwardingWarehouseId)}&costCategory=Forwarding&activeOnly=true`
+        )
+
+        if (!response.ok) {
+          setForwardingRates([])
+          return
+        }
+
+        const payload: unknown = await response.json().catch(() => null)
+        if (!Array.isArray(payload)) {
+          setForwardingRates([])
+          return
+        }
+
+        const byName = new Map<string, CostRateSummary>()
+        for (const item of payload) {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+          const record = item as Record<string, unknown>
+          const id = record.id
+          const costName = record.costName
+          const unitOfMeasure = record.unitOfMeasure
+          const rawValue = record.costValue
+
+          if (typeof id !== 'string') continue
+          if (typeof costName !== 'string') continue
+          if (typeof unitOfMeasure !== 'string') continue
+
+          const parsedValue = typeof rawValue === 'number' ? rawValue : Number(rawValue)
+          if (!Number.isFinite(parsedValue)) continue
+
+          if (!byName.has(costName)) {
+            byName.set(costName, {
+              id,
+              costName,
+              unitOfMeasure,
+              costValue: parsedValue,
+            })
+          }
+        }
+
+        const nextRates = Array.from(byName.values()).sort((a, b) => a.costName.localeCompare(b.costName))
+        setForwardingRates(nextRates)
+      } catch {
+        setForwardingRates([])
+      } finally {
+        setForwardingRatesLoading(false)
+      }
+    }
+
+    void loadRates()
+  }, [forwardingWarehouseId])
+
+  const forwardingRateByName = useMemo(() => {
+    const map = new Map<string, CostRateSummary>()
+    for (const rate of forwardingRates) {
+      map.set(rate.costName, rate)
+    }
+    return map
+  }, [forwardingRates])
+
+  const forwardingSubtotal = useMemo(
+    () => forwardingCosts.reduce((sum, row) => sum + Number(row.totalCost), 0),
+    [forwardingCosts]
+  )
+
+  const createForwardingCost = useCallback(async () => {
+    if (!order) return
+    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+      return
+    }
+
+    const warehouseCode = forwardingWarehouseCode.trim()
+    if (!warehouseCode) {
+      toast.error('Select a warehouse to use its forwarding rates')
+      return
+    }
+
+    const costName = newForwardingCostDraft.costName.trim()
+    if (!costName) {
+      toast.error('Select a cost type')
+      return
+    }
+
+    const quantity = Number(newForwardingCostDraft.quantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Quantity must be a positive number')
+      return
+    }
+
+    try {
+      setForwardingCostSubmitting(true)
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/forwarding-costs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warehouseCode,
+          costName,
+          quantity,
+          notes: newForwardingCostDraft.notes,
+          currency: newForwardingCostDraft.currency,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+        if (errorMessage && detailsMessage) {
+          toast.error(`${errorMessage}: ${detailsMessage}`)
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Failed to add cargo cost (HTTP ${response.status})`)
+        }
+        return
+      }
+
+      const created = (await response.json()) as PurchaseOrderForwardingCostSummary
+      setForwardingCosts(prev => [...prev, created])
+      setNewForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
+      toast.success('Cargo cost added')
+    } catch {
+      toast.error('Failed to add cargo cost')
+    } finally {
+      setForwardingCostSubmitting(false)
+    }
+  }, [
+    forwardingWarehouseCode,
+    newForwardingCostDraft.costName,
+    newForwardingCostDraft.currency,
+    newForwardingCostDraft.notes,
+    newForwardingCostDraft.quantity,
+    order,
+  ])
+
+  const startEditForwardingCost = useCallback((row: PurchaseOrderForwardingCostSummary) => {
+    setEditingForwardingCostId(row.id)
+    setEditingForwardingCostDraft({
+      costName: row.costName,
+      quantity: String(row.quantity),
+      notes: row.notes ?? '',
+      currency: row.currency ?? '',
+    })
+  }, [])
+
+  const cancelEditForwardingCost = useCallback(() => {
+    setEditingForwardingCostId(null)
+    setEditingForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
+  }, [])
+
+  const saveEditForwardingCost = useCallback(async () => {
+    if (!order) return
+    if (!editingForwardingCostId) return
+    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+      return
+    }
+
+    const costName = editingForwardingCostDraft.costName.trim()
+    if (!costName) {
+      toast.error('Select a cost type')
+      return
+    }
+
+    const quantity = Number(editingForwardingCostDraft.quantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Quantity must be a positive number')
+      return
+    }
+
+    try {
+      setForwardingCostSubmitting(true)
+      const response = await fetchWithCSRF(
+        `/api/purchase-orders/${order.id}/forwarding-costs/${editingForwardingCostId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            costName,
+            quantity,
+            notes: editingForwardingCostDraft.notes,
+            currency: editingForwardingCostDraft.currency,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+        if (errorMessage && detailsMessage) {
+          toast.error(`${errorMessage}: ${detailsMessage}`)
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Failed to update cargo cost (HTTP ${response.status})`)
+        }
+        return
+      }
+
+      const updated = (await response.json()) as PurchaseOrderForwardingCostSummary
+      setForwardingCosts(prev => prev.map(row => (row.id === updated.id ? updated : row)))
+      cancelEditForwardingCost()
+      toast.success('Cargo cost updated')
+    } catch {
+      toast.error('Failed to update cargo cost')
+    } finally {
+      setForwardingCostSubmitting(false)
+    }
+  }, [
+    cancelEditForwardingCost,
+    editingForwardingCostDraft.costName,
+    editingForwardingCostDraft.currency,
+    editingForwardingCostDraft.notes,
+    editingForwardingCostDraft.quantity,
+    editingForwardingCostId,
+    order,
+  ])
+
+  const deleteForwardingCost = useCallback(
+    async (row: PurchaseOrderForwardingCostSummary) => {
+      if (!order) return
+      if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+        toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+        return
+      }
+
+      try {
+        setForwardingCostDeletingId(row.id)
+        const response = await fetchWithCSRF(
+          `/api/purchase-orders/${order.id}/forwarding-costs/${row.id}`,
+          {
+            method: 'DELETE',
+          }
+        )
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+          if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to delete cargo cost (HTTP ${response.status})`)
+          }
+          return
+        }
+
+        setForwardingCosts(prev => prev.filter(item => item.id !== row.id))
+        toast.success('Cargo cost deleted')
+      } catch {
+        toast.error('Failed to delete cargo cost')
+      } finally {
+        setForwardingCostDeletingId(null)
+      }
+    },
+    [order]
+  )
+
   const handleDocumentUpload = useCallback(
     async (
       event: ChangeEvent<HTMLInputElement>,
@@ -912,15 +1271,22 @@ export default function PurchaseOrderDetailPage() {
         formData.append('stage', stage)
         formData.append('documentType', documentType)
 
-        const response = await fetch(`/api/purchase-orders/${orderId}/documents`, {
+        const completeResponse = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
           body: formData,
-          credentials: 'include',
         })
 
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null)
-          toast.error(payload?.error ?? 'Failed to upload document')
+        if (!completeResponse.ok) {
+          const payload = await completeResponse.json().catch(() => null)
+          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+          const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+          if (errorMessage && detailsMessage) {
+            toast.error(`${errorMessage}: ${detailsMessage}`)
+          } else if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to upload document (HTTP ${completeResponse.status})`)
+          }
           return
         }
 
@@ -1236,6 +1602,28 @@ export default function PurchaseOrderDetailPage() {
   const isTerminal =
     order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
   const canEdit = !isTerminal && order.status === 'DRAFT'
+  const canEditForwardingCosts =
+    !isTerminal && (order.status === 'OCEAN' || order.status === 'WAREHOUSE')
+
+  const draftForwardingRate = forwardingRateByName.get(newForwardingCostDraft.costName.trim())
+  const draftForwardingUnitRate = draftForwardingRate ? draftForwardingRate.costValue : null
+  const draftForwardingQuantity = Number(newForwardingCostDraft.quantity)
+  const draftForwardingTotal =
+    draftForwardingUnitRate !== null &&
+    Number.isFinite(draftForwardingQuantity) &&
+    draftForwardingQuantity > 0
+      ? Number((draftForwardingUnitRate * draftForwardingQuantity).toFixed(2))
+      : null
+
+  const editingForwardingRate = forwardingRateByName.get(editingForwardingCostDraft.costName.trim())
+  const editingForwardingUnitRate = editingForwardingRate ? editingForwardingRate.costValue : null
+  const editingForwardingQuantity = Number(editingForwardingCostDraft.quantity)
+  const editingForwardingTotal =
+    editingForwardingUnitRate !== null &&
+    Number.isFinite(editingForwardingQuantity) &&
+    editingForwardingQuantity > 0
+      ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
+      : null
   const canDownloadPdf = true
   const documentsCount = documents.length
   const historyCount = auditLogs.length || order.approvalHistory?.length || 0
@@ -1321,7 +1709,7 @@ export default function PurchaseOrderDetailPage() {
 
     const batchLot = editLineDraft.batchLot.trim().toUpperCase()
     if (!batchLot || batchLot === 'DEFAULT') {
-      toast.error('Batch / lot is required')
+      toast.error('Batch is required')
       return
     }
 
@@ -1429,7 +1817,7 @@ export default function PurchaseOrderDetailPage() {
 
     const batchLot = newLineDraft.batchLot.trim()
     if (!batchLot) {
-      toast.error('Please select a batch / lot')
+      toast.error('Please select a batch')
       return
     }
 
@@ -1540,7 +1928,7 @@ export default function PurchaseOrderDetailPage() {
 
             return (
               <div className="space-y-3">
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-slate-700 dark:text-slate-300">
                   Marking this PO as issued means the supplier accepted it (signed PI received).
                   This locks draft edits.
                 </p>
@@ -1620,7 +2008,7 @@ export default function PurchaseOrderDetailPage() {
         <div className="grid grid-cols-1 gap-4">
           {fields.map(field => (
             <div key={field.key} className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">{field.label}</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{field.label}</label>
               {field.type === 'select' ? (
                 <select
                   value={stageFormData[field.key] || ''}
@@ -1629,7 +2017,7 @@ export default function PurchaseOrderDetailPage() {
                     setStageFormData(prev => ({ ...prev, [field.key]: value }))
                   }}
                   disabled={field.disabled}
-                  className="w-full px-3 py-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                 >
                   <option value="">
                     {field.key === 'warehouseCode'
@@ -1661,7 +2049,7 @@ export default function PurchaseOrderDetailPage() {
         {requiredDocs.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h5 className="text-sm font-semibold text-slate-900">Required Documents</h5>
+              <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Required Documents</h5>
               {documentsLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
             </div>
             <div className="space-y-2">
@@ -1673,7 +2061,7 @@ export default function PurchaseOrderDetailPage() {
                 return (
                   <div
                     key={key}
-                    className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 px-3 py-2.5"
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {existing ? (
@@ -1682,7 +2070,7 @@ export default function PurchaseOrderDetailPage() {
                         <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
                       )}
                       <div className="min-w-0">
-                        <span className="text-sm font-medium text-slate-900">{doc.label}</span>
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{doc.label}</span>
                         {existing ? (
                           <a
                             href={existing.viewUrl}
@@ -1701,7 +2089,7 @@ export default function PurchaseOrderDetailPage() {
                       </div>
                     </div>
 
-                    <label className="inline-flex items-center gap-2 rounded-md border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                    <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
                       <Upload className="h-3.5 w-3.5" />
                       {existing ? 'Replace' : 'Upload'}
                       <input
@@ -1728,12 +2116,10 @@ export default function PurchaseOrderDetailPage() {
         title={order.poNumber || order.orderNumber}
         description="Operations"
         icon={Package2}
+        backHref="/operations/purchase-orders"
+        backLabel="Back"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => router.back()} className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
             {canDownloadPdf && (
               <Button
                 variant="outline"
@@ -1763,8 +2149,8 @@ export default function PurchaseOrderDetailPage() {
         <div className="flex flex-col gap-6">
           {/* Stage Progress Bar */}
           {!order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED' && (
-            <div className="rounded-xl border bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900 mb-4">Order Progress</h2>
+            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Order Progress</h2>
 
               {/* Stage Progress - Clickable Navigation */}
               <div className="flex items-center justify-between relative">
@@ -1812,7 +2198,7 @@ export default function PurchaseOrderDetailPage() {
                           isViewing
                             ? 'text-emerald-600'
                             : isCompleted || isCurrent
-                              ? 'text-slate-900 group-hover:text-emerald-600'
+                              ? 'text-slate-900 dark:text-slate-100 group-hover:text-emerald-600'
                               : 'text-slate-400'
                         }`}
                       >
@@ -1842,37 +2228,12 @@ export default function PurchaseOrderDetailPage() {
                   </Button>
                 )}
 
-                {/* Secondary: Back to Draft (ISSUED only) */}
-                {order.status === 'ISSUED' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => handleTransition('DRAFT')}
-                    disabled={transitioning}
-                    className="gap-2"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Draft
-                  </Button>
-                )}
-
-                {/* Secondary: Mark Rejected (ISSUED only) */}
-                {order.status === 'ISSUED' && (
-                  <Button
-                    variant="outline"
-                    onClick={() => handleTransition('REJECTED')}
-                    disabled={transitioning}
-                    className="gap-2 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                  >
-                    <PackageX className="h-4 w-4" />
-                    Mark Rejected
-                  </Button>
-                )}
               </div>
 
               {order.status === 'WAREHOUSE' && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-4">
                   <div>
-                    <p className="text-sm font-medium text-slate-900">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                       Shipping is handled via Fulfillment Orders
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -1892,7 +2253,7 @@ export default function PurchaseOrderDetailPage() {
           {/* Cancelled banner */}
           {order.status === 'CANCELLED' && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
                 This order has been cancelled and cannot be modified.
               </p>
             </div>
@@ -1901,7 +2262,7 @@ export default function PurchaseOrderDetailPage() {
           {/* Rejected banner */}
           {order.status === 'REJECTED' && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
                 This PO was rejected by the supplier. Reopen it as a draft to revise and re-issue.
               </p>
               <Button
@@ -1917,7 +2278,7 @@ export default function PurchaseOrderDetailPage() {
           )}
 
           {/* Details, Cargo, Documents & History Tabs */}
-          <div className="rounded-xl border bg-white shadow-sm">
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
             {/* Tab Headers */}
             <div className="flex items-center border-b">
               <button
@@ -1950,6 +2311,21 @@ export default function PurchaseOrderDetailPage() {
                   {order.lines.length}
                 </Badge>
                 {activeBottomTab === 'cargo' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab('costs')}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'costs'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <DollarSign className="h-4 w-4" />
+                Costs
+                {activeBottomTab === 'costs' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
@@ -2016,7 +2392,7 @@ export default function PurchaseOrderDetailPage() {
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-[420px] space-y-4">
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-900">Add line item</h4>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Add line item</h4>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             Add another SKU to this purchase order.
                           </p>
@@ -2042,7 +2418,7 @@ export default function PurchaseOrderDetailPage() {
                               void ensureSkuBatchesLoaded(skuId)
                             }}
                             disabled={skusLoading || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           >
                             <option value="">Select SKU</option>
                             {skus.map(sku => (
@@ -2060,7 +2436,7 @@ export default function PurchaseOrderDetailPage() {
 
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Batch / Lot
+                            Batch
                           </label>
                           <select
                             value={newLineDraft.batchLot}
@@ -2077,7 +2453,7 @@ export default function PurchaseOrderDetailPage() {
                               })
                             }}
                             disabled={!newLineDraft.skuId || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
                           >
                             {!newLineDraft.skuId ? (
                               <option value="">Select SKU first</option>
@@ -2274,13 +2650,14 @@ export default function PurchaseOrderDetailPage() {
             {/* Tab Content */}
             {activeBottomTab === 'cargo' && (
               <div>
-                <div className="border-b bg-slate-50/50 px-4 py-3">
+                {/* Summary Stats */}
+                <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Units
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {totalUnits.toLocaleString()}
                       </p>
                     </div>
@@ -2288,7 +2665,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Cartons
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {totalCartons.toLocaleString()}
                       </p>
                     </div>
@@ -2296,7 +2673,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Pallets
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalPallets?.toLocaleString() ?? '—'}
                       </p>
                     </div>
@@ -2304,7 +2681,7 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Weight (kg)
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalWeightKg?.toLocaleString() ?? '—'}
                       </p>
                     </div>
@@ -2312,188 +2689,222 @@ export default function PurchaseOrderDetailPage() {
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Total Volume (CBM)
                       </p>
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalVolumeCbm?.toLocaleString() ?? '—'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full table-auto text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-semibold">SKU</th>
-                        <th className="px-4 py-2 text-left font-semibold">Batch / Lot</th>
-                        <th className="px-4 py-2 text-left font-semibold">Description</th>
-                        <th className="px-4 py-2 text-right font-semibold">Units</th>
-                        <th className="px-4 py-2 text-right font-semibold">Units/Ctn</th>
-                        <th className="px-4 py-2 text-right font-semibold">Cartons</th>
-                        <th className="px-4 py-2 text-right font-semibold">Total</th>
-                        <th className="px-4 py-2 text-left font-semibold">Notes</th>
-                        <th className="px-4 py-2 text-right font-semibold">Cartons Received</th>
-                        {canEdit && <th className="px-4 py-2 text-right font-semibold">Actions</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.lines.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={canEdit ? 10 : 9}
-                            className="px-4 py-6 text-center text-muted-foreground"
-                          >
-                            No lines added to this order yet.
-                          </td>
+                {/* Sub-tabs */}
+                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setCargoSubTab('details')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cargoSubTab === 'details'
+                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCargoSubTab('attributes')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      cargoSubTab === 'attributes'
+                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <Package2 className="h-4 w-4" />
+                    Attributes
+                  </button>
+                </div>
+
+                {/* Details Sub-tab */}
+                {cargoSubTab === 'details' && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[800px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Received</th>
+                          {canEdit && <th className="w-[60px]"></th>}
                         </tr>
-                      ) : (
-                        order.lines.map((line, idx) => {
-                          const pkg = buildLinePackagingDetails(line)
-                          const isLast = idx === order.lines.length - 1
-                          return (
-                            <Fragment key={line.id}>
-                              <tr className="border-t border-slate-200 hover:bg-muted/10">
-                                <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
-                                  {line.skuCode}
-                                </td>
-                                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                                  {line.batchLot || '—'}
-                                </td>
-                                <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap max-w-[220px] truncate">
-                                  {line.skuDescription || '—'}
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
-                                  {line.unitsOrdered.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
-                                  {line.unitsPerCarton.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
-                                  {line.quantity.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                                  <div className="text-right">
-                                    <div className="font-semibold text-foreground">
-                                      {line.totalCost !== null
-                                        ? `${line.totalCost.toLocaleString(undefined, {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })} ${(line.currency || tenantCurrency).toUpperCase()}`
-                                        : '—'}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Unit:{' '}
-                                      {line.unitCost !== null
-                                        ? Number(line.unitCost).toFixed(4)
-                                        : '—'}
-                                    </div>
+                      </thead>
+                      <tbody>
+                        {order.lines.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={canEdit ? 11 : 10}
+                              className="px-3 py-6 text-center text-muted-foreground"
+                            >
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          order.lines.map((line) => (
+                            <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
+                                {line.skuCode}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                                {line.batchLot || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
+                                {line.skuDescription || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                {line.unitsOrdered.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {line.unitsPerCarton.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                {line.quantity.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                {line.totalCost !== null
+                                  ? `${line.totalCost.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })} ${(line.currency || tenantCurrency).toUpperCase()}`
+                                  : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {line.unitCost !== null
+                                  ? Number(line.unitCost).toFixed(4)
+                                  : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
+                                {line.lineNotes || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
+                              </td>
+                              {canEdit && (
+                                <td className="px-2 py-2 whitespace-nowrap text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => openLineEditor(line)}
+                                      title="Edit line"
+                                    >
+                                      <FileEdit className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                      onClick={() =>
+                                        setConfirmDialog({
+                                          open: true,
+                                          type: 'delete-line',
+                                          title: 'Remove line item',
+                                          message: `Remove SKU ${line.skuCode} (${line.batchLot || '—'}) from this draft PO?`,
+                                          lineId: line.id,
+                                        })
+                                      }
+                                      title="Remove line"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
                                   </div>
                                 </td>
-                                <td className="px-4 py-2.5 text-muted-foreground max-w-[220px] truncate">
-                                  {line.lineNotes || '—'}
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Attributes Sub-tab */}
+                {cargoSubTab === 'attributes' && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[800px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM/ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM Total</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG/ctn</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG Total</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Pkg Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.lines.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          order.lines.map((line) => {
+                            const pkg = buildLinePackagingDetails(line)
+                            return (
+                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
+                                  {line.skuCode}
                                 </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
-                                  {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
+                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                                  {line.batchLot || '—'}
                                 </td>
-                                {canEdit && (
-                                  <td className="px-4 py-2.5 whitespace-nowrap text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0"
-                                        onClick={() => openLineEditor(line)}
-                                        title="Edit line"
-                                      >
-                                        <FileEdit className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0 text-rose-700 hover:text-rose-800"
-                                        onClick={() =>
-                                          setConfirmDialog({
-                                            open: true,
-                                            type: 'delete-line',
-                                            title: 'Remove line item',
-                                            message: `Remove SKU ${line.skuCode} (${line.batchLot || '—'}) from this draft PO?`,
-                                            lineId: line.id,
-                                          })
-                                        }
-                                        title="Remove line"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                )}
+                                <td className="px-3 py-2 text-foreground whitespace-nowrap">
+                                  {pkg?.cartonDims ? (
+                                    pkg.cartonDims
+                                  ) : (
+                                    <span className="text-amber-600">Not set</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                  {pkg?.cbmPerCarton ?? <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                  {pkg?.cbmTotal ?? <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                  {pkg?.kgPerCarton ?? <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
+                                  {pkg?.kgTotal ?? <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  {pkg?.packagingType ? (
+                                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                      {pkg.packagingType}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </td>
                               </tr>
-                              {pkg ? (
-                                <tr
-                                  className={`bg-slate-50/40 ${!isLast ? 'border-b-2 border-slate-200' : ''}`}
-                                >
-                                  <td colSpan={canEdit ? 10 : 9} className="px-4 pb-2 pt-1">
-                                    <div
-                                      className={`grid grid-cols-6 gap-3 text-xs border-l-2 ${
-                                        pkg.hasWarning
-                                          ? 'border-amber-400 bg-amber-50/30'
-                                          : 'border-cyan-400 bg-transparent'
-                                      } pl-3 py-1`}
-                                    >
-                                      <div>
-                                        <span className="text-muted-foreground">Carton</span>
-                                        <p
-                                          className={`font-medium ${pkg.cartonDims ? 'text-slate-700' : 'text-amber-600'}`}
-                                        >
-                                          {pkg.cartonDims ?? 'Not set'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">CBM/ctn</span>
-                                        <p className="font-medium text-slate-700">
-                                          {pkg.cbmPerCarton ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">CBM Total</span>
-                                        <p className="font-medium text-slate-700">
-                                          {pkg.cbmTotal ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">KG/ctn</span>
-                                        <p className="font-medium text-slate-700">
-                                          {pkg.kgPerCarton ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">KG Total</span>
-                                        <p className="font-medium text-slate-700">
-                                          {pkg.kgTotal ?? '—'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <span className="text-muted-foreground">Pkg Type</span>
-                                        <p className="font-medium text-slate-700">
-                                          {pkg.packagingType ?? '—'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ) : !isLast ? (
-                                <tr className="border-b-2 border-slate-200">
-                                  <td colSpan={canEdit ? 11 : 10} className="h-0"></td>
-                                </tr>
-                              ) : null}
-                            </Fragment>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2661,658 +3072,1045 @@ export default function PurchaseOrderDetailPage() {
               </div>
             )}
 
-            {activeBottomTab === 'details' && (
+            {activeBottomTab === 'costs' && (
               <div className="p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900">Order Details</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Consolidated view of all essential information across stages.
+                {/* Product Costs Section */}
+                <div className="mb-6">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Product Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left px-4 py-2 font-medium">SKU</th>
+                          <th className="text-left px-4 py-2 font-medium">Batch</th>
+                          <th className="text-right px-4 py-2 font-medium">Qty</th>
+                          <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
+                          <th className="text-right px-4 py-2 font-medium">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.lines.map(line => {
+                          const unitCost = line.totalCost && line.unitsOrdered > 0
+                            ? line.totalCost / line.unitsOrdered
+                            : null
+                          return (
+                            <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
+                              <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
+                              <td className="px-4 py-2 text-muted-foreground">{line.batchLot || '—'}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{line.unitsOrdered.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                {unitCost !== null ? `${tenantCurrency} ${unitCost.toFixed(4)}` : '—'}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                {line.totalCost !== null ? `${line.currency || tenantCurrency} ${line.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                          <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">Product Subtotal</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Cargo Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Cargo Costs
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      {forwardingCosts.length} item{forwardingCosts.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Warehouse
+                          </p>
+                          <select
+                            value={forwardingWarehouseCode}
+                            onChange={e => setForwardingWarehouseCode(e.target.value)}
+                            disabled={
+                              !canEditForwardingCosts ||
+                              warehousesLoading ||
+                              (order.status === 'WAREHOUSE' && Boolean(order.warehouseCode))
+                            }
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                          >
+                            <option value="">
+                              {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
+                            </option>
+                            {warehouses.map(w => (
+                              <option key={w.code} value={w.code}>
+                                {w.name} ({w.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Cost Type
+                          </p>
+                          <select
+                            value={newForwardingCostDraft.costName}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, costName: e.target.value }))
+                            }
+                            disabled={
+                              !canEditForwardingCosts ||
+                              forwardingRatesLoading ||
+                              forwardingRates.length === 0 ||
+                              !forwardingWarehouseId
+                            }
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                          >
+                            <option value="">
+                              {!forwardingWarehouseId
+                                ? 'Select warehouse first'
+                                : forwardingRatesLoading
+                                  ? 'Loading rates…'
+                                  : forwardingRates.length === 0
+                                    ? 'No forwarding rates'
+                                    : 'Select cost type'}
+                            </option>
+                            {forwardingRates.map(rate => (
+                              <option key={rate.id} value={rate.costName}>
+                                {rate.costName} ({rate.unitOfMeasure})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Quantity
+                          </p>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newForwardingCostDraft.quantity}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, quantity: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            className="w-full gap-2"
+                            onClick={() => void createForwardingCost()}
+                            disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                          >
+                            {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Add Cost
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Notes (Optional)
+                          </p>
+                          <Input
+                            value={newForwardingCostDraft.notes}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, notes: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder="e.g. invoice #, vendor"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Currency (Optional)
+                          </p>
+                          <Input
+                            value={newForwardingCostDraft.currency}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, currency: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder={tenantCurrency}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <p>
+                          Unit rate:{' '}
+                          {draftForwardingUnitRate !== null
+                            ? `${tenantCurrency} ${draftForwardingUnitRate.toFixed(4)}`
+                            : '—'}
+                        </p>
+                        <p className="tabular-nums">
+                          Total:{' '}
+                          {draftForwardingTotal !== null
+                            ? `${tenantCurrency} ${draftForwardingTotal.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : '—'}
+                        </p>
+                      </div>
+
+                      {!canEditForwardingCosts && (
+                        <p className="text-xs text-muted-foreground">
+                          Cargo costs are editable during In Transit or At Warehouse stages.
+                        </p>
+                      )}
+                    </div>
+
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-white dark:bg-slate-900 text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left px-4 py-2 font-medium">Cost</th>
+                          <th className="text-right px-4 py-2 font-medium">Qty</th>
+                          <th className="text-right px-4 py-2 font-medium">Unit Rate</th>
+                          <th className="text-right px-4 py-2 font-medium">Total</th>
+                          <th className="text-left px-4 py-2 font-medium">Notes</th>
+                          <th className="text-right px-4 py-2 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {forwardingCostsLoading ? (
+                          <tr className="border-t border-slate-100 dark:border-slate-700">
+                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                              Loading cargo costs...
+                            </td>
+                          </tr>
+                        ) : forwardingCosts.length === 0 ? (
+                          <tr className="border-t border-slate-100 dark:border-slate-700">
+                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                              No cargo costs added.
+                            </td>
+                          </tr>
+                        ) : (
+                          forwardingCosts.map(row => {
+                            const currencyLabel = row.currency ? row.currency : tenantCurrency
+                            const isEditing = editingForwardingCostId === row.id
+                            const isDeleting = forwardingCostDeletingId === row.id
+
+                            return (
+                              <tr key={row.id} className="border-t border-slate-100 dark:border-slate-700">
+                                <td className="px-4 py-2">
+                                  {isEditing ? (
+                                    <select
+                                      value={editingForwardingCostDraft.costName}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          costName: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                      className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                                    >
+                                      {forwardingRates.every(rate => rate.costName !== row.costName) && (
+                                        <option value={row.costName}>{row.costName}</option>
+                                      )}
+                                      {forwardingRates.map(rate => (
+                                        <option key={rate.id} value={rate.costName}>
+                                          {rate.costName} ({rate.unitOfMeasure})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <p className="font-medium text-foreground">{row.costName}</p>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums">
+                                  {isEditing ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={editingForwardingCostDraft.quantity}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          quantity: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                    />
+                                  ) : (
+                                    row.quantity.toLocaleString(undefined, {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 4,
+                                    })
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                  {isEditing ? (
+                                    editingForwardingUnitRate !== null
+                                      ? `${currencyLabel} ${editingForwardingUnitRate.toFixed(4)}`
+                                      : '—'
+                                  ) : (
+                                    `${currencyLabel} ${row.unitRate.toFixed(4)}`
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                  {isEditing ? (
+                                    editingForwardingTotal !== null
+                                      ? `${currencyLabel} ${editingForwardingTotal.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}`
+                                      : '—'
+                                  ) : (
+                                    `${currencyLabel} ${row.totalCost.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}`
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2">
+                                  {isEditing ? (
+                                    <Input
+                                      value={editingForwardingCostDraft.notes}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          notes: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                      placeholder="Notes"
+                                    />
+                                  ) : (
+                                    <p className="text-muted-foreground">{row.notes ? row.notes : '—'}</p>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {isEditing ? (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={cancelEditForwardingCost}
+                                          disabled={forwardingCostSubmitting}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => void saveEditForwardingCost()}
+                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                          className="gap-2"
+                                        >
+                                          {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => startEditForwardingCost(row)}
+                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                          className="gap-2"
+                                        >
+                                          <FileEdit className="h-4 w-4" />
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            const confirmed = window.confirm('Delete this cargo cost?')
+                                            if (!confirmed) return
+                                            void deleteForwardingCost(row)
+                                          }}
+                                          disabled={!canEditForwardingCosts || isDeleting}
+                                          className="gap-2"
+                                        >
+                                          {isDeleting ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Trash2 className="h-4 w-4" />
+                                          )}
+                                          Delete
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                          <td colSpan={3} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                            Cargo Subtotal
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                            {tenantCurrency}{' '}
+                            {forwardingSubtotal.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Inbound Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Inbound Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Inbound costs will be calculated when the PO is received at warehouse.
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Order Info Section */}
-                  {(() => {
-                    const sectionKey = 'order-info'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 text-slate-700">
-                              <FileEdit className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">Order Info</p>
-                              <p className="text-xs text-muted-foreground">Basic order details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          {canEdit && (
-                            <div className="mb-4 flex items-center justify-end gap-2">
-                              {orderInfoEditing ? (
-                                <>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setOrderInfoEditing(false)}
-                                    disabled={orderInfoSaving}
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => void handleSaveOrderInfo()}
-                                    disabled={
-                                      orderInfoSaving || !orderInfoDraft.counterpartyName.trim()
-                                    }
-                                    className="gap-2"
-                                  >
-                                    {orderInfoSaving && (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    )}
-                                    Save
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setOrderInfoEditing(true)}
-                                >
-                                  Edit
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                PO Number
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {order.poNumber || order.orderNumber}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Supplier
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  value={orderInfoDraft.counterpartyName}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      counterpartyName: e.target.value,
-                                    }))
-                                  }
-                                  placeholder="Supplier"
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900">
-                                  {order.counterpartyName || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Destination
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {tenantDestination || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Cargo Ready Date
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  type="date"
-                                  value={orderInfoDraft.expectedDate}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      expectedDate: e.target.value,
-                                    }))
-                                  }
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900">
-                                  {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Incoterms
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <select
-                                  value={orderInfoDraft.incoterms}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      incoterms: e.target.value,
-                                    }))
-                                  }
-                                  disabled={orderInfoSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                >
-                                  <option value="">Select incoterms</option>
-                                  {INCOTERMS_OPTIONS.map(option => (
-                                    <option key={option} value={option}>
-                                      {option}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900">
-                                  {order.incoterms || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Payment Terms
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Input
-                                  value={orderInfoDraft.paymentTerms}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({
-                                      ...prev,
-                                      paymentTerms: e.target.value,
-                                    }))
-                                  }
-                                  placeholder="Payment terms"
-                                  disabled={orderInfoSaving}
-                                />
-                              ) : (
-                                <p className="text-sm font-medium text-slate-900">
-                                  {order.paymentTerms || '—'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Created
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(order.createdAt) || '—'}
-                                {order.createdByName ? ` by ${order.createdByName}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                          {(order.notes || (canEdit && orderInfoEditing)) && (
-                            <div className="mt-4 pt-3 border-t">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                Notes
-                              </p>
-                              {canEdit && orderInfoEditing ? (
-                                <Textarea
-                                  value={orderInfoDraft.notes}
-                                  onChange={e =>
-                                    setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
-                                  }
-                                  placeholder="Optional internal notes..."
-                                  disabled={orderInfoSaving}
-                                  className="min-h-[88px]"
-                                />
-                              ) : (
-                                <p className="text-sm text-slate-700">{order.notes}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Manufacturing Section */}
-                  {(() => {
-                    const mfg = order.stageData.manufacturing
-                    const hasData =
-                      mfg?.proformaInvoiceNumber ||
-                      mfg?.manufacturingStartDate ||
-                      mfg?.totalCartons ||
-                      mfg?.totalWeightKg
-                    if (!hasData) return null
-                    const sectionKey = 'manufacturing'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-amber-50 text-amber-700">
-                              <Factory className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">Manufacturing</p>
-                              <p className="text-xs text-muted-foreground">Production details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Proforma Invoice
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {mfg?.proformaInvoiceNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Start Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(
-                                  mfg?.manufacturingStartDate || mfg?.manufacturingStart
-                                ) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Expected Completion
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Cartons
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {mfg?.totalCartons?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Pallets
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {mfg?.totalPallets?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Weight (kg)
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {mfg?.totalWeightKg?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Volume (CBM)
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* In Transit Section */}
-                  {(() => {
-                    const ocean = order.stageData.ocean
-                    const hasData =
-                      ocean?.houseBillOfLading ||
-                      ocean?.masterBillOfLading ||
-                      ocean?.vesselName ||
-                      ocean?.portOfLoading ||
-                      ocean?.estimatedDeparture
-                    if (!hasData) return null
-                    const sectionKey = 'ocean'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-blue-50 text-blue-700">
-                              <Ship className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">In Transit</p>
-                              <p className="text-xs text-muted-foreground">Shipping & logistics</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                House B/L
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.houseBillOfLading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Master B/L
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.masterBillOfLading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Vessel
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.vesselName || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Voyage
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.voyageNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Port of Loading
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.portOfLoading || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Port of Discharge
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.portOfDischarge || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                ETD
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(ocean?.estimatedDeparture) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                ETA
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(ocean?.estimatedArrival) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Commercial Invoice
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {ocean?.commercialInvoiceNumber || '—'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Warehouse Section */}
-                  {(() => {
-                    const wh = order.stageData.warehouse
-                    const hasData =
-                      wh?.warehouseName ||
-                      wh?.warehouseCode ||
-                      wh?.customsEntryNumber ||
-                      wh?.customsClearedDate ||
-                      wh?.receivedDate
-                    if (!hasData) return null
-                    const sectionKey = 'warehouse'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-purple-50 text-purple-700">
-                              <Warehouse className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">Warehouse</p>
-                              <p className="text-xs text-muted-foreground">Receiving & customs</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Warehouse
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {wh?.warehouseName || wh?.warehouseCode || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Customs Entry
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {wh?.customsEntryNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Customs Cleared
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(wh?.customsClearedDate) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Duty Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {wh?.dutyAmount != null
-                                  ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
-                                  : '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Received Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(wh?.receivedDate) || '—'}
-                              </p>
-                            </div>
-                          </div>
-                          {wh?.discrepancyNotes && (
-                            <div className="mt-4 pt-3 border-t">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                Discrepancy Notes
-                              </p>
-                              <p className="text-sm text-slate-700">{wh.discrepancyNotes}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Shipped Section */}
-                  {(() => {
-                    const shipped = order.stageData.shipped
-                    const hasData =
-                      shipped?.shipToName ||
-                      shipped?.shippingCarrier ||
-                      shipped?.trackingNumber ||
-                      shipped?.shippedDate
-                    if (!hasData) return null
-                    const sectionKey = 'shipped'
-                    const isCollapsed = collapsedDetailSections[sectionKey] ?? false
-                    return (
-                      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedDetailSections(prev => ({
-                              ...prev,
-                              [sectionKey]: !isCollapsed,
-                            }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-emerald-50 text-emerald-700">
-                              <Package2 className="h-4 w-4" />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">Shipped</p>
-                              <p className="text-xs text-muted-foreground">Delivery details</p>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
-                          />
-                        </button>
-                        <div
-                          className={`border-t px-4 py-4 transition-all duration-200 ${isCollapsed ? 'hidden' : ''}`}
-                        >
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1 col-span-2">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Ship To
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {[
-                                  shipped?.shipToName,
-                                  shipped?.shipToAddress,
-                                  shipped?.shipToCity,
-                                  shipped?.shipToCountry,
-                                ]
-                                  .filter(Boolean)
-                                  .join(', ') || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Carrier
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {shipped?.shippingCarrier || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Method
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {shipped?.shippingMethod || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Tracking
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {shipped?.trackingNumber || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Shipped Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Delivered Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900">
-                                {formatDateOnly(shipped?.deliveredDate) || '—'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
+                {/* Storage Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Storage Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Storage costs accrue daily based on warehouse rates.
+                    </p>
+                  </div>
                 </div>
+
+                {/* Outbound Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Outbound Costs
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Outbound costs will be calculated when inventory is shipped.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Customs/Duty Section */}
+                {order.stageData.warehouse?.dutyAmount != null && (
+                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                      Customs & Duty
+                    </h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Duty Amount
+                        </p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cost Summary */}
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                    Cost Summary
+                  </h4>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Cargo Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                            {forwardingSubtotal > 0
+                              ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}`
+                              : '—'}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Inbound Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Storage Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Outbound Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                        {order.stageData.warehouse?.dutyAmount != null && (
+                          <tr className="border-b border-slate-100 dark:border-slate-700">
+                            <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
+                            <td className="px-4 py-2 text-right tabular-nums font-medium">
+                              {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50">
+                          <td className="px-4 py-3 font-semibold">Total Cost</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
+                            {tenantCurrency} {(
+                              order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0) +
+                              forwardingSubtotal +
+                              (order.stageData.warehouse?.dutyAmount || 0)
+                            ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeBottomTab === 'details' && (
+              <div className="p-6">
+                {/* Order Info Section */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Order Info
+                    </h4>
+                    {canEdit && (
+                      <div className="flex items-center gap-2">
+                        {orderInfoEditing ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setOrderInfoEditing(false)}
+                              disabled={orderInfoSaving}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handleSaveOrderInfo()}
+                              disabled={orderInfoSaving || !orderInfoDraft.counterpartyName.trim()}
+                              className="gap-2"
+                            >
+                              {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                              Save
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setOrderInfoEditing(true)}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        PO Number
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {order.poNumber || order.orderNumber}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Supplier
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          value={orderInfoDraft.counterpartyName}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              counterpartyName: e.target.value,
+                            }))
+                          }
+                          placeholder="Supplier"
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.counterpartyName || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Destination
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {tenantDestination || '—'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Cargo Ready Date
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          type="date"
+                          value={orderInfoDraft.expectedDate}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              expectedDate: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Incoterms
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <select
+                          value={orderInfoDraft.incoterms}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              incoterms: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                        >
+                          <option value="">Select incoterms</option>
+                          {INCOTERMS_OPTIONS.map(option => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.incoterms || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Payment Terms
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          value={orderInfoDraft.paymentTerms}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              paymentTerms: e.target.value,
+                            }))
+                          }
+                          placeholder="Payment terms"
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.paymentTerms || '—'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Created
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {formatDateOnly(order.createdAt) || '—'}
+                        {order.createdByName ? ` by ${order.createdByName}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  {(order.notes || (canEdit && orderInfoEditing)) && (
+                    <div className="mt-4">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                        Notes
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Textarea
+                          value={orderInfoDraft.notes}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
+                          }
+                          placeholder="Optional internal notes..."
+                          disabled={orderInfoSaving}
+                          className="min-h-[88px]"
+                        />
+                      ) : (
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{order.notes}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Manufacturing Section */}
+                {(() => {
+                  const mfg = order.stageData.manufacturing
+                  const hasData =
+                    mfg?.proformaInvoiceNumber ||
+                    mfg?.manufacturingStartDate ||
+                    mfg?.totalCartons ||
+                    mfg?.totalWeightKg
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Manufacturing
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Proforma Invoice
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.proformaInvoiceNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Start Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(mfg?.manufacturingStartDate || mfg?.manufacturingStart) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Expected Completion
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Cartons
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalCartons?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Pallets
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalPallets?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Weight (kg)
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalWeightKg?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Volume (CBM)
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* In Transit Section */}
+                {(() => {
+                  const ocean = order.stageData.ocean
+                  const hasData =
+                    ocean?.houseBillOfLading ||
+                    ocean?.masterBillOfLading ||
+                    ocean?.vesselName ||
+                    ocean?.portOfLoading ||
+                    ocean?.estimatedDeparture
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        In Transit
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            House B/L
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.houseBillOfLading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Master B/L
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.masterBillOfLading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Vessel
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.vesselName || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Voyage
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.voyageNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Port of Loading
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.portOfLoading || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Port of Discharge
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.portOfDischarge || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            ETD
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(ocean?.estimatedDeparture) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            ETA
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(ocean?.estimatedArrival) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Commercial Invoice
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ocean?.commercialInvoiceNumber || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Warehouse Section */}
+                {(() => {
+                  const wh = order.stageData.warehouse
+                  const hasData =
+                    wh?.warehouseName ||
+                    wh?.warehouseCode ||
+                    wh?.customsEntryNumber ||
+                    wh?.customsClearedDate ||
+                    wh?.receivedDate
+                  if (!hasData) return null
+                  return (
+                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Warehouse
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Warehouse
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.warehouseName || wh?.warehouseCode || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Customs Entry
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.customsEntryNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Customs Cleared
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(wh?.customsClearedDate) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Duty Amount
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {wh?.dutyAmount != null
+                              ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Received Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(wh?.receivedDate) || '—'}
+                          </p>
+                        </div>
+                      </div>
+                      {wh?.discrepancyNotes && (
+                        <div className="mt-4">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                            Discrepancy Notes
+                          </p>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">{wh.discrepancyNotes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Shipped Section */}
+                {(() => {
+                  const shipped = order.stageData.shipped
+                  const hasData =
+                    shipped?.shipToName ||
+                    shipped?.shippingCarrier ||
+                    shipped?.trackingNumber ||
+                    shipped?.shippedDate
+                  if (!hasData) return null
+                  return (
+                    <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                        Shipped
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="space-y-1 col-span-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Ship To
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {[
+                              shipped?.shipToName,
+                              shipped?.shipToAddress,
+                              shipped?.shipToCity,
+                              shipped?.shipToCountry,
+                            ]
+                              .filter(Boolean)
+                              .join(', ') || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Carrier
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.shippingCarrier || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Method
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.shippingMethod || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Tracking
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {shipped?.trackingNumber || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Shipped Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Delivered Date
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatDateOnly(shipped?.deliveredDate) || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
@@ -3412,10 +4210,10 @@ export default function PurchaseOrderDetailPage() {
                 setEditingLine(null)
               }}
             />
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Edit line item</h2>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit line item</h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     {editingLine.skuCode} • {editingLine.batchLot || '—'}
                   </p>
@@ -3427,7 +4225,7 @@ export default function PurchaseOrderDetailPage() {
                     setEditLineOpen(false)
                     setEditingLine(null)
                   }}
-                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
                   disabled={editLineSubmitting}
                 >
                   <X className="h-5 w-5" />
@@ -3452,7 +4250,7 @@ export default function PurchaseOrderDetailPage() {
                     <>
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Batch / Lot
+                          Batch
                         </label>
                         <select
                           value={editLineDraft.batchLot}
@@ -3467,7 +4265,7 @@ export default function PurchaseOrderDetailPage() {
                             }))
                           }}
                           disabled={editLineSubmitting || batchesLoading || !skuId}
-                          className="w-full h-10 px-3 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                         >
                           <option value="">{!skuId ? 'Select SKU first' : 'Select batch'}</option>
                           {batchOptions.map(option => (
@@ -3604,7 +4402,7 @@ export default function PurchaseOrderDetailPage() {
                 })()}
               </div>
 
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -3644,11 +4442,11 @@ export default function PurchaseOrderDetailPage() {
               onClick={() => !transitioning && setAdvanceModalOpen(false)}
             />
             {/* Modal */}
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                     Advance to {nextStage.label}
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
@@ -3659,7 +4457,7 @@ export default function PurchaseOrderDetailPage() {
                 <button
                   type="button"
                   onClick={() => !transitioning && setAdvanceModalOpen(false)}
-                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
                   disabled={transitioning}
                 >
                   <X className="h-5 w-5" />
@@ -3670,7 +4468,7 @@ export default function PurchaseOrderDetailPage() {
               <div className="flex-1 overflow-y-auto px-6 py-5">{renderStageTransitionForm()}</div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
                 <Button
                   variant="outline"
                   onClick={() => setAdvanceModalOpen(false)}
@@ -3750,15 +4548,15 @@ export default function PurchaseOrderDetailPage() {
                 onClick={() => setPreviewDocument(null)}
               />
 
-              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white text-left shadow-xl">
+              <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b px-6 py-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 text-slate-700">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {PreviewStageIcon && <PreviewStageIcon className="h-4 w-4" />}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 truncate">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {previewDocument.fileName}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -3792,7 +4590,7 @@ export default function PurchaseOrderDetailPage() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50">
+                <div className="bg-slate-50 dark:bg-slate-700">
                   <div className="h-[75vh] w-full">
                     {previewIsImage ? (
                       <div
@@ -3807,11 +4605,11 @@ export default function PurchaseOrderDetailPage() {
                       />
                     ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-                        <div className="rounded-full border bg-white p-3 text-slate-700 shadow-sm">
+                        <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                             Preview not available
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">

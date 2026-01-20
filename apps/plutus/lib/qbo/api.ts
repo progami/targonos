@@ -12,7 +12,7 @@ const QBO_TIMEOUT_MS = 60000;
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeoutMs: number = QBO_TIMEOUT_MS
+  timeoutMs: number = QBO_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -68,8 +68,37 @@ export interface QboPurchase {
   };
 }
 
+export interface QboBill {
+  Id: string;
+  SyncToken: string;
+  TxnDate: string;
+  TotalAmt: number;
+  DocNumber?: string;
+  PrivateNote?: string;
+  VendorRef?: {
+    value: string;
+    name: string;
+  };
+  Line?: Array<{
+    Id: string;
+    Amount: number;
+    Description?: string;
+    AccountBasedExpenseLineDetail?: {
+      AccountRef: {
+        value: string;
+        name: string;
+      };
+    };
+  }>;
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
 export interface QboAccount {
   Id: string;
+  SyncToken: string;
   Name: string;
   AccountType: string;
   AccountSubType?: string;
@@ -90,18 +119,203 @@ export interface QboAccount {
   };
 }
 
+export interface QboJournalEntryLine {
+  Id?: string;
+  Amount?: number;
+  Description?: string;
+  DetailType: 'JournalEntryLineDetail';
+  JournalEntryLineDetail: {
+    PostingType: 'Debit' | 'Credit';
+    AccountRef: {
+      value: string;
+      name?: string;
+    };
+  };
+}
+
+export interface QboJournalEntry {
+  Id: string;
+  SyncToken: string;
+  TxnDate: string;
+  DocNumber?: string;
+  PrivateNote?: string;
+  Line: QboJournalEntryLine[];
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
+export async function fetchJournalEntries(
+  connection: QboConnection,
+  params: {
+    startDate?: string;
+    endDate?: string;
+    maxResults?: number;
+    startPosition?: number;
+    docNumberContains?: string;
+  } = {},
+): Promise<{ journalEntries: QboJournalEntry[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = params.maxResults === undefined ? 50 : params.maxResults;
+  const startPosition = params.startPosition === undefined ? 1 : params.startPosition;
+
+  const conditions: string[] = [];
+  if (params.startDate) {
+    conditions.push(`TxnDate >= '${params.startDate}'`);
+  }
+  if (params.endDate) {
+    conditions.push(`TxnDate <= '${params.endDate}'`);
+  }
+  if (params.docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${params.docNumberContains}%'`);
+  }
+
+  let query = `SELECT * FROM JournalEntry`;
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ` ORDERBY TxnDate DESC`;
+  query += ` STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching journal entries from QBO', { query });
+
+  const response = await fetchWithTimeout(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch journal entries', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch journal entries: ${response.status} ${errorText}`);
+  }
+
+  const data: QboQueryResponse = await response.json();
+  const journalEntries = data.QueryResponse.JournalEntry;
+  if (!journalEntries) {
+    return { journalEntries: [], totalCount: 0, updatedConnection };
+  }
+
+  let totalCount = journalEntries.length;
+  if (journalEntries.length > 0) {
+    const countQuery = `SELECT COUNT(*) FROM JournalEntry${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
+    const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
+
+    try {
+      const countResponse = await fetchWithTimeout(
+        countUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+        },
+        30000,
+      );
+
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        if (countData.QueryResponse?.totalCount !== undefined) {
+          totalCount = countData.QueryResponse.totalCount;
+        } else {
+          totalCount = journalEntries.length;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { journalEntries, totalCount, updatedConnection };
+}
+
+export async function createJournalEntry(
+  connection: QboConnection,
+  input: {
+    txnDate: string;
+    docNumber?: string;
+    privateNote?: string;
+    lines: Array<{
+      amount: number;
+      postingType: 'Debit' | 'Credit';
+      accountId: string;
+      description?: string;
+    }>;
+  },
+): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/journalentry`;
+
+  const payload = {
+    TxnDate: input.txnDate,
+    DocNumber: input.docNumber,
+    PrivateNote: input.privateNote,
+    Line: input.lines.map((line) => ({
+      DetailType: 'JournalEntryLineDetail',
+      Amount: line.amount,
+      Description: line.description,
+      JournalEntryLineDetail: {
+        PostingType: line.postingType,
+        AccountRef: {
+          value: line.accountId,
+        },
+      },
+    })),
+  };
+
+  logger.info('Creating journal entry in QBO', { txnDate: input.txnDate, docNumber: input.docNumber });
+
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create journal entry', { status: response.status, error: errorText });
+    throw new Error(`Failed to create journal entry: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { JournalEntry: QboJournalEntry };
+  return { journalEntry: data.JournalEntry, updatedConnection };
+}
+
 export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
-    Account?: QboAccount[];
+    Bill?: QboBill[];
+    Account: QboAccount[];
+    JournalEntry?: QboJournalEntry[];
+    totalCount?: number;
     startPosition?: number;
     maxResults?: number;
-    totalCount?: number;
   };
-  time: string;
 }
 
+
 export interface FetchPurchasesOptions {
+  startDate?: string;
+  endDate?: string;
+  maxResults?: number;
+  startPosition?: number;
+}
+
+export interface FetchBillsOptions {
   startDate?: string;
   endDate?: string;
   maxResults?: number;
@@ -112,7 +326,7 @@ export interface FetchPurchasesOptions {
  * Ensure we have a valid access token, refreshing if needed
  */
 export async function getValidToken(
-  connection: QboConnection
+  connection: QboConnection,
 ): Promise<{ accessToken: string; updatedConnection?: QboConnection }> {
   const expiresAt = new Date(connection.expiresAt);
   const now = new Date();
@@ -138,7 +352,7 @@ export async function getValidToken(
  */
 export async function fetchPurchases(
   connection: QboConnection,
-  options: FetchPurchasesOptions = {}
+  options: FetchPurchasesOptions = {},
 ): Promise<{ purchases: QboPurchase[]; totalCount: number; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
@@ -176,12 +390,18 @@ export async function fetchPurchases(
 
   if (!response.ok) {
     const errorText = await response.text();
-    logger.error('Failed to fetch purchases', { status: response.status, error: errorText });
+    logger.error('Failed to fetch purchases', {
+      status: response.status,
+      error: errorText,
+    });
     throw new Error(`Failed to fetch purchases: ${response.status} ${errorText}`);
   }
 
   const data: QboQueryResponse = await response.json();
-  const purchases = data.QueryResponse?.Purchase || [];
+  const purchases = data.QueryResponse?.Purchase;
+  if (!purchases) {
+    return { purchases: [], totalCount: 0, updatedConnection };
+  }
 
   // Get total count with a separate query if we have results
   let totalCount = purchases.length;
@@ -190,22 +410,114 @@ export async function fetchPurchases(
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
     try {
-      const countResponse = await fetchWithTimeout(countUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
+      const countResponse = await fetchWithTimeout(
+        countUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
         },
-      }, 30000); // 30 second timeout for count query
+        30000,
+      );
       if (countResponse.ok) {
         const countData = await countResponse.json();
-        totalCount = countData.QueryResponse?.totalCount || purchases.length;
+        if (countData.QueryResponse?.totalCount !== undefined) {
+          totalCount = countData.QueryResponse.totalCount;
+        } else {
+          totalCount = purchases.length;
+        }
       }
     } catch {
-      // Ignore count errors, use purchases.length as fallback
+      // ignore
     }
   }
 
   return { purchases, totalCount, updatedConnection };
+}
+
+export async function fetchBills(
+  connection: QboConnection,
+  options: FetchBillsOptions = {},
+): Promise<{ bills: QboBill[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+
+  let query = `SELECT * FROM Bill`;
+  const conditions: string[] = [];
+
+  if (startDate) {
+    conditions.push(`TxnDate >= '${startDate}'`);
+  }
+  if (endDate) {
+    conditions.push(`TxnDate <= '${endDate}'`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ` ORDERBY TxnDate DESC`;
+  query += ` STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching bills from QBO', { query });
+
+  const response = await fetchWithTimeout(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch bills', {
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to fetch bills: ${response.status} ${errorText}`);
+  }
+
+  const data: QboQueryResponse = await response.json();
+  const bills = data.QueryResponse?.Bill;
+  if (!bills) {
+    return { bills: [], totalCount: 0, updatedConnection };
+  }
+
+  let totalCount = bills.length;
+  if (bills.length > 0) {
+    const countQuery = `SELECT COUNT(*) FROM Bill${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
+    const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
+
+    try {
+      const countResponse = await fetchWithTimeout(
+        countUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+        },
+        30000,
+      );
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        if (countData.QueryResponse?.totalCount !== undefined) {
+          totalCount = countData.QueryResponse.totalCount;
+        } else {
+          totalCount = bills.length;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { bills, totalCount, updatedConnection };
 }
 
 /**
@@ -213,7 +525,7 @@ export async function fetchPurchases(
  */
 export async function fetchPurchaseById(
   connection: QboConnection,
-  purchaseId: string
+  purchaseId: string,
 ): Promise<{ purchase: QboPurchase; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
@@ -229,7 +541,11 @@ export async function fetchPurchaseById(
 
   if (!response.ok) {
     const errorText = await response.text();
-    logger.error('Failed to fetch purchase', { purchaseId, status: response.status, error: errorText });
+    logger.error('Failed to fetch purchase', {
+      purchaseId,
+      status: response.status,
+      error: errorText,
+    });
     throw new Error(`Failed to fetch purchase: ${response.status} ${errorText}`);
   }
 
@@ -245,7 +561,7 @@ export async function updatePurchase(
   purchaseId: string,
   syncToken: string,
   paymentType: string,
-  updates: { docNumber?: string; privateNote?: string }
+  updates: { docNumber?: string; privateNote?: string },
 ): Promise<{ purchase: QboPurchase; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
@@ -292,15 +608,21 @@ export async function updatePurchase(
  * Fetch Chart of Accounts from QBO
  */
 export async function fetchAccounts(
-  connection: QboConnection
+  connection: QboConnection,
+  options?: {
+    includeInactive?: boolean;
+  },
 ): Promise<{ accounts: QboAccount[]; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const query = `SELECT * FROM Account WHERE Active = true MAXRESULTS 1000`;
+  const includeInactive = options?.includeInactive === true;
+  const query = includeInactive
+    ? `SELECT * FROM Account MAXRESULTS 1000`
+    : `SELECT * FROM Account WHERE Active = true MAXRESULTS 1000`;
   const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
 
-  logger.info('Fetching accounts from QBO');
+  logger.info('Fetching accounts from QBO', { includeInactive });
 
   const response = await fetchWithTimeout(queryUrl, {
     headers: {
@@ -315,6 +637,125 @@ export async function fetchAccounts(
     throw new Error(`Failed to fetch accounts: ${response.status} ${errorText}`);
   }
 
+  const data = (await response.json()) as QboQueryResponse;
+  const accounts = data.QueryResponse.Account;
+  return { accounts: accounts ? accounts : [], updatedConnection };
+}
+
+export async function fetchAccountsByFullyQualifiedName(
+  connection: QboConnection,
+  fullyQualifiedName: string,
+): Promise<{ accounts: QboAccount[]; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM Account WHERE FullyQualifiedName = '${fullyQualifiedName.replace(/'/g, "\\'")}' MAXRESULTS 10`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching account by fully qualified name from QBO', { fullyQualifiedName });
+
+  const response = await fetchWithTimeout(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch account', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch account: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as QboQueryResponse;
+  const accounts = data.QueryResponse.Account;
+  return { accounts: accounts ? accounts : [], updatedConnection };
+}
+
+export async function createAccount(
+  connection: QboConnection,
+  input: {
+    name: string;
+    accountType: string;
+    accountSubType?: string;
+    parentId?: string;
+  },
+): Promise<{ account: QboAccount; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/account`;
+  const payload: Record<string, unknown> = {
+    Name: input.name,
+    AccountType: input.accountType,
+  };
+  if (input.accountSubType) {
+    payload.AccountSubType = input.accountSubType;
+  }
+  if (input.parentId) {
+    payload.SubAccount = true;
+    payload.ParentRef = { value: input.parentId };
+  }
+
+  logger.info('Creating account in QBO', { name: input.name, accountType: input.accountType, parentId: input.parentId });
+
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create account', { status: response.status, error: errorText, name: input.name });
+    throw new Error(`Failed to create account: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Account: QboAccount };
+  return { account: data.Account, updatedConnection };
+}
+
+export async function updateAccountActive(
+  connection: QboConnection,
+  accountId: string,
+  syncToken: string,
+  name: string,
+  active: boolean,
+): Promise<{ account: QboAccount; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/account?operation=update`;
+  const payload = {
+    sparse: true,
+    Id: accountId,
+    SyncToken: syncToken,
+    Name: name,
+    Active: active,
+  };
+
+  logger.info('Updating account in QBO', { accountId, active });
+
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update account', { accountId, status: response.status, error: errorText });
+    throw new Error(`Failed to update account: ${response.status} ${errorText}`);
+  }
+
   const data = await response.json();
-  return { accounts: data.QueryResponse?.Account || [], updatedConnection };
+  return { account: data.Account, updatedConnection };
 }

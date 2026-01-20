@@ -85,14 +85,102 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "units_per_carton" integer`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "material" text`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_dimensions_cm" text`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_length_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_width_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_height_cm" DECIMAL(8,2)`,
+    `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_length_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_side1_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "unit_length_cm" TO "unit_side1_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_width_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_side2_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "unit_width_cm" TO "unit_side2_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_height_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'unit_side3_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "unit_height_cm" TO "unit_side3_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_length_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_side1_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "carton_length_cm" TO "carton_side1_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_width_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_side2_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "carton_width_cm" TO "carton_side2_cm";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_height_cm'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'sku_batches'
+            AND column_name = 'carton_side3_cm'
+        ) THEN
+          ALTER TABLE "sku_batches" RENAME COLUMN "carton_height_cm" TO "carton_side3_cm";
+        END IF;
+      END $$;
+    `,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_side1_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_side2_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_side3_cm" DECIMAL(8,2)`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "unit_weight_kg" DECIMAL(8,3)`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_dimensions_cm" text`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_length_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_width_cm" DECIMAL(8,2)`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_height_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_side1_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_side2_cm" DECIMAL(8,2)`,
+    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_side3_cm" DECIMAL(8,2)`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "carton_weight_kg" DECIMAL(8,3)`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "packaging_type" text`,
   ]
@@ -106,6 +194,97 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     await prisma.$executeRawUnsafe(statement)
   }
 
+  const backfillFromLegacyNumericSql = `
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'unit_length_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET unit_side1_cm = COALESCE(unit_side1_cm, unit_length_cm)
+        WHERE unit_length_cm IS NOT NULL AND unit_side1_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'unit_width_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET unit_side2_cm = COALESCE(unit_side2_cm, unit_width_cm)
+        WHERE unit_width_cm IS NOT NULL AND unit_side2_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'unit_height_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET unit_side3_cm = COALESCE(unit_side3_cm, unit_height_cm)
+        WHERE unit_height_cm IS NOT NULL AND unit_side3_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'carton_length_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET carton_side1_cm = COALESCE(carton_side1_cm, carton_length_cm)
+        WHERE carton_length_cm IS NOT NULL AND carton_side1_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'carton_width_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET carton_side2_cm = COALESCE(carton_side2_cm, carton_width_cm)
+        WHERE carton_width_cm IS NOT NULL AND carton_side2_cm IS NULL;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'sku_batches'
+          AND column_name = 'carton_height_cm'
+      ) THEN
+        UPDATE sku_batches
+        SET carton_side3_cm = COALESCE(carton_side3_cm, carton_height_cm)
+        WHERE carton_height_cm IS NOT NULL AND carton_side3_cm IS NULL;
+      END IF;
+    END $$;
+  `
+
+  const dropLegacyColumnsStatements = [
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "unit_length_cm"`,
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "unit_width_cm"`,
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "unit_height_cm"`,
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "carton_length_cm"`,
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "carton_width_cm"`,
+    `ALTER TABLE "sku_batches" DROP COLUMN IF EXISTS "carton_height_cm"`,
+  ]
+
+  if (options.dryRun) {
+    console.log(`[${tenant}] DRY RUN: cleanup legacy sku_batches dimension columns`)
+    for (const statement of dropLegacyColumnsStatements) console.log(`[${tenant}] DRY RUN: ${statement}`)
+    return
+  }
+
+  await prisma.$executeRawUnsafe(backfillFromLegacyNumericSql)
+  for (const statement of dropLegacyColumnsStatements) {
+    await prisma.$executeRawUnsafe(statement)
+  }
+
   console.log(`[${tenant}] Backfilling sku_batches attributes from skus`)
   const backfillSql = `
     UPDATE sku_batches b
@@ -114,14 +293,14 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       units_per_carton = COALESCE(b.units_per_carton, s.units_per_carton),
       material = COALESCE(b.material, s.material),
       unit_dimensions_cm = COALESCE(b.unit_dimensions_cm, s.unit_dimensions_cm),
-      unit_length_cm = COALESCE(b.unit_length_cm, s.unit_length_cm),
-      unit_width_cm = COALESCE(b.unit_width_cm, s.unit_width_cm),
-      unit_height_cm = COALESCE(b.unit_height_cm, s.unit_height_cm),
+      unit_side1_cm = COALESCE(b.unit_side1_cm, s.unit_side1_cm),
+      unit_side2_cm = COALESCE(b.unit_side2_cm, s.unit_side2_cm),
+      unit_side3_cm = COALESCE(b.unit_side3_cm, s.unit_side3_cm),
       unit_weight_kg = COALESCE(b.unit_weight_kg, s.unit_weight_kg),
       carton_dimensions_cm = COALESCE(b.carton_dimensions_cm, s.carton_dimensions_cm),
-      carton_length_cm = COALESCE(b.carton_length_cm, s.carton_length_cm),
-      carton_width_cm = COALESCE(b.carton_width_cm, s.carton_width_cm),
-      carton_height_cm = COALESCE(b.carton_height_cm, s.carton_height_cm),
+      carton_side1_cm = COALESCE(b.carton_side1_cm, s.carton_side1_cm),
+      carton_side2_cm = COALESCE(b.carton_side2_cm, s.carton_side2_cm),
+      carton_side3_cm = COALESCE(b.carton_side3_cm, s.carton_side3_cm),
       carton_weight_kg = COALESCE(b.carton_weight_kg, s.carton_weight_kg),
       packaging_type = COALESCE(b.packaging_type, s.packaging_type)
     FROM skus s

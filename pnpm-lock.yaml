@@ -355,6 +355,9 @@ importers:
       decimal.js:
         specifier: ^10.5.0
         version: 10.6.0
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       intuit-oauth:
         specifier: ^4.2.2
         version: 4.2.2
@@ -840,7 +843,7 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
-  apps/x-plan:
+  apps/xplan:
     dependencies:
       '@prisma/client':
         specifier: 6.19.0
@@ -878,6 +881,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.12
         version: 3.13.12(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
+      '@targon/amazon-sp-api':
+        specifier: workspace:*
+        version: link:../../packages/amazon-sp-api
       '@targon/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -890,9 +896,9 @@ importers:
       '@targon/prisma-talos':
         specifier: workspace:*
         version: link:../../packages/prisma-talos
-      '@targon/prisma-x-plan':
+      '@targon/prisma-xplan':
         specifier: workspace:*
-        version: link:../../packages/prisma-x-plan
+        version: link:../../packages/prisma-xplan
       '@total-typescript/ts-reset':
         specifier: ^0.6.1
         version: 0.6.1
@@ -1015,6 +1021,19 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.3.3)(jiti@2.5.1)(jsdom@26.1.0)(tsx@4.21.0)(yaml@2.8.1)
 
+  packages/amazon-sp-api:
+    dependencies:
+      amazon-sp-api:
+        specifier: ^1.0.12
+        version: 1.1.6
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.3.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/auth:
     dependencies:
       '@prisma/client':
@@ -1108,7 +1127,7 @@ importers:
 
   packages/prisma-talos: {}
 
-  packages/prisma-x-plan: {}
+  packages/prisma-xplan: {}
 
   packages/theme:
     devDependencies:

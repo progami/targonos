@@ -93,7 +93,7 @@ export function InventoryReconciliationReport() {
  setError(null);
  
  // Get CSRF token
- const csrfResponse = await fetch('/api/auth/csrf');
+ const csrfResponse = await fetch('/api/csrf');
  const { csrfToken } = await csrfResponse.json();
  
  const response = await fetch('/api/reconciliation/inventory', {

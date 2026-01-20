@@ -252,6 +252,7 @@ export default function PerformanceReviewsPage() {
           onRowClick={handleRowClick}
           filters={filters}
           onFilterChange={setFilters}
+          addRow={{ label: 'New Review', onClick: () => router.push('/performance/reviews/add') }}
           emptyState={
             <TableEmptyContent
               icon={<ClipboardDocumentCheckIcon className="h-10 w-10" />}

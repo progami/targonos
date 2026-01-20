@@ -11,7 +11,7 @@ const paramsSchema = z.object({
 
 const bodySchema = z
   .object({
-    model: z.enum(['PROPHET', 'ETS']).optional(),
+    model: z.enum(['PROPHET', 'ETS', 'ARIMA', 'THETA', 'NEURALPROPHET']).optional(),
     config: z.unknown().optional(),
   })
   .strict();

@@ -288,7 +288,7 @@ export function ForecastsTable() {
   }, [createSeriesId]);
 
   useEffect(() => {
-    if (createModel === 'ETS') {
+    if (createModel !== 'PROPHET') {
       setSelectedRegressors([]);
     }
   }, [createModel]);
@@ -325,21 +325,26 @@ export function ForecastsTable() {
         throw new Error('Horizon must be an integer between 1 and 3650.');
       }
 
-      const name =
-        createName.trim() ||
-        (selectedSeries ? `${selectedSeries.name} (${createModel})` : `${createModel} Forecast`);
+      const name = (() => {
+        const trimmed = createName.trim();
+        if (trimmed.length > 0) return trimmed;
+        if (selectedSeries) return `${selectedSeries.name} (${createModel})`;
+        return `${createModel} Forecast`;
+      })();
 
-      const config =
-        createModel === 'ETS'
-          ? {
-              seasonLength: parseOptionalInt(etsSeasonLength) ?? undefined,
-              spec: etsSpec.trim() || undefined,
-              intervalLevel: etsIntervalLevel.trim() === '' ? null : (parseInterval(etsIntervalLevel) ?? undefined),
-            }
-          : {
-              intervalWidth: parseInterval(prophetIntervalWidth) ?? undefined,
-              uncertaintySamples: parseOptionalInt(prophetUncertaintySamples) ?? undefined,
-            };
+      const config = ['PROPHET', 'NEURALPROPHET'].includes(createModel)
+        ? {
+            intervalWidth: parseInterval(prophetIntervalWidth) ?? undefined,
+            uncertaintySamples: parseOptionalInt(prophetUncertaintySamples) ?? undefined,
+          }
+        : {
+            seasonLength: parseOptionalInt(etsSeasonLength) ?? undefined,
+            spec: (() => {
+              const spec = etsSpec.trim();
+              return spec.length > 0 ? spec : undefined;
+            })(),
+            intervalLevel: etsIntervalLevel.trim() === '' ? null : (parseInterval(etsIntervalLevel) ?? undefined),
+          };
 
       const configCleaned = Object.fromEntries(
         Object.entries(config).filter(([, value]) => value !== undefined),
@@ -351,7 +356,7 @@ export function ForecastsTable() {
         body: JSON.stringify({
           name,
           targetSeriesId: createSeriesId,
-          regressorSeriesIds: selectedRegressors.map((r) => r.seriesId),
+          regressors: selectedRegressors,
           model: createModel,
           horizon,
           runNow: true,

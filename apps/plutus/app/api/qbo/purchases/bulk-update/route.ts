@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { updatePurchase, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
 import type { BulkUpdateRequest, BulkUpdateResponse } from '@/lib/sop/types';
+import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-bulk-update' });
 
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       logger.error('Failed to parse QBO connection cookie');
       return NextResponse.json({ error: 'Invalid connection' }, { status: 401 });
     }
+    await ensureServerQboConnection(connection);
 
     const body: BulkUpdateRequest = await request.json();
     const { updates } = body;
@@ -107,6 +109,7 @@ export async function POST(request: Request) {
         maxAge: 60 * 60 * 24 * 100, // 100 days
         path: '/',
       });
+      await saveServerQboConnection(currentConnection);
     }
 
     logger.info('Bulk update completed', {

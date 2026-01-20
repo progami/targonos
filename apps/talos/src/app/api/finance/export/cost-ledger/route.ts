@@ -126,7 +126,7 @@ export const GET = withAuth(async (request, session) => {
 
  // Detailed transactions sheet
  const detailHeaders = [
- 'Date', 'Transaction ID', 'Type', 'Warehouse', 'SKU', 'Batch/Lot', 
+ 'Date', 'Transaction ID', 'Type', 'Warehouse', 'SKU', 'Batch', 
   'Category', 'Quantity', 'Rate', 'Cost'
  ]
  const detailData: (string | number | null)[][] = [detailHeaders]

@@ -6,10 +6,12 @@
   color-scheme: light;
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 body {
-  @apply min-h-screen antialiased;
-  background: #f8fafc;
-  color: #0f172a;
+  @apply min-h-screen antialiased bg-background text-foreground;
   font-feature-settings: "cv11", "ss01";
   font-optical-sizing: auto;
 }
@@ -68,6 +70,27 @@ input:-webkit-autofill:active {
     --radius: 0.75rem;
   }
 
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 20% 98%;
+    --card: 222 47% 13%;
+    --card-foreground: 210 20% 98%;
+    --popover: 222 47% 13%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 192 93% 45%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 177 100% 45%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 217 33% 22%;
+    --input: 217 33% 22%;
+    --ring: 192 93% 45%;
+  }
 }
 
 @layer base {

@@ -23,7 +23,7 @@ const LineItemSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .refine(value => value.trim().toUpperCase() !== 'DEFAULT', 'Batch / lot is required'),
+    .refine(value => value.trim().toUpperCase() !== 'DEFAULT', 'Batch is required'),
   unitsOrdered: z.number().int().positive(),
   unitsPerCarton: z.number().int().positive(),
   totalCost: z.number().min(0).optional(),

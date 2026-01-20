@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save } from '@/lib/lucide-icons'
+import { Building, Save } from '@/lib/lucide-icons'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
@@ -131,20 +132,18 @@ export default function NewWarehousePage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button asChild variant="ghost" size="icon">
-            <Link href="/config/warehouses">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Create New Warehouse</h1>
-            <p className="text-muted-foreground">Add a new warehouse to the system</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="bg-white border rounded-lg p-6">
+      <PageContainer>
+        <PageHeaderSection
+          title="Create Warehouse"
+          description="Configuration"
+          icon={Building}
+          backHref="/config/warehouses"
+          backLabel="Back"
+          metadata={<p className="text-sm text-muted-foreground">Add a new warehouse to the system</p>}
+        />
+        <PageContent>
+          <div className="max-w-4xl mx-auto space-y-6">
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 border rounded-lg p-6">
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -342,7 +341,9 @@ export default function NewWarehousePage() {
             </Button>
           </div>
         </form>
-      </div>
+          </div>
+        </PageContent>
+      </PageContainer>
     </DashboardLayout>
   )
 }

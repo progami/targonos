@@ -1,5 +1,0 @@
-{
-  "error": "Failed to fetch cash flow data from Xero",
-  "details": "No cash flow statement data returned from Xero",
-  "recommendation": "Please check your Xero connection and try again"
-}

@@ -101,11 +101,11 @@ async function importSkus(data: ExcelRow[], _userId: string, prisma: PrismaClien
     'description',
     'packSize',
     'material',
-    'unitDimensionsCm',
-    'unitSide1Cm',
-    'unitSide2Cm',
-    'unitSide3Cm',
-    'unitWeightKg',
+    'itemDimensionsCm',
+    'itemSide1Cm',
+    'itemSide2Cm',
+    'itemSide3Cm',
+    'itemWeightKg',
     'unitsPerCarton',
     'cartonDimensionsCm',
     'cartonSide1Cm',
@@ -134,14 +134,14 @@ async function importSkus(data: ExcelRow[], _userId: string, prisma: PrismaClien
         continue
       }
 
-      const unitDimensionsCm = mappedData.unitDimensionsCm as string | undefined
+      const itemDimensionsCm = mappedData.itemDimensionsCm as string | undefined
       const cartonDimensionsCm = mappedData.cartonDimensionsCm as string | undefined
 
-      const unitTriplet = resolveDimensionTripletCm({
-        legacy: unitDimensionsCm,
+      const itemTriplet = resolveDimensionTripletCm({
+        legacy: itemDimensionsCm,
       })
-      if (unitDimensionsCm && !unitTriplet) {
-        errors.push(`SKU ${skuCode}: Unit dimensions must be a valid LxWxH triple`)
+      if (itemDimensionsCm && !itemTriplet) {
+        errors.push(`SKU ${skuCode}: Item dimensions must be a valid LxWxH triple`)
         skipped++
         continue
       }
@@ -155,11 +155,11 @@ async function importSkus(data: ExcelRow[], _userId: string, prisma: PrismaClien
         continue
       }
 
-      if (unitTriplet) {
-        mappedData.unitDimensionsCm = formatDimensionTripletCm(unitTriplet)
-        mappedData.unitSide1Cm = unitTriplet.side1Cm
-        mappedData.unitSide2Cm = unitTriplet.side2Cm
-        mappedData.unitSide3Cm = unitTriplet.side3Cm
+      if (itemTriplet) {
+        mappedData.itemDimensionsCm = formatDimensionTripletCm(itemTriplet)
+        mappedData.itemSide1Cm = itemTriplet.side1Cm
+        mappedData.itemSide2Cm = itemTriplet.side2Cm
+        mappedData.itemSide3Cm = itemTriplet.side3Cm
       }
 
       if (cartonTriplet) {

@@ -220,24 +220,24 @@ async function applyForSchema(
     }
   }
 
-  const missingLines = await client.query<{ count: string }>(
-    `
-      SELECT COUNT(*)::text AS count
-      FROM purchase_order_lines pol
+	  const missingLines = await client.query<{ count: string }>(
+	    `
+	      SELECT COUNT(*)::text AS count
+	      FROM purchase_order_lines pol
       WHERE pol.batch_lot IS NOT NULL
         AND upper(regexp_replace(pol.batch_lot, '^.* - ', '')) <> 'DEFAULT'
-        AND (
-          pol.carton_dimensions_cm IS NULL
-          OR pol.carton_length_cm IS NULL
-          OR pol.carton_width_cm IS NULL
-          OR pol.carton_height_cm IS NULL
-          OR pol.carton_weight_kg IS NULL
-          OR pol.packaging_type IS NULL
-          OR pol.storage_cartons_per_pallet IS NULL
-          OR pol.shipping_cartons_per_pallet IS NULL
-        )
-    `
-  )
+	        AND (
+	          pol.carton_dimensions_cm IS NULL
+	          OR pol.carton_side1_cm IS NULL
+	          OR pol.carton_side2_cm IS NULL
+	          OR pol.carton_side3_cm IS NULL
+	          OR pol.carton_weight_kg IS NULL
+	          OR pol.packaging_type IS NULL
+	          OR pol.storage_cartons_per_pallet IS NULL
+	          OR pol.shipping_cartons_per_pallet IS NULL
+	        )
+	    `
+	  )
 
   const missingCount = Number.parseInt(missingLines.rows[0]?.count ?? '0', 10)
   console.log(`${banner} purchase_order_lines needing snapshot backfill=${missingCount}`)
@@ -252,40 +252,40 @@ async function applyForSchema(
     return
   }
 
-  await client.query(
-    `
-      UPDATE purchase_order_lines pol
-      SET
-        carton_dimensions_cm = COALESCE(
-          pol.carton_dimensions_cm,
-          src.batch_carton_dimensions_cm,
-          src.sku_carton_dimensions_cm
-        ),
-        carton_length_cm = COALESCE(pol.carton_length_cm, src.batch_carton_length_cm, src.sku_carton_length_cm),
-        carton_width_cm = COALESCE(pol.carton_width_cm, src.batch_carton_width_cm, src.sku_carton_width_cm),
-        carton_height_cm = COALESCE(pol.carton_height_cm, src.batch_carton_height_cm, src.sku_carton_height_cm),
-        carton_weight_kg = COALESCE(pol.carton_weight_kg, src.batch_carton_weight_kg, src.sku_carton_weight_kg),
-        packaging_type = COALESCE(pol.packaging_type, src.batch_packaging_type, src.sku_packaging_type),
-        storage_cartons_per_pallet = COALESCE(pol.storage_cartons_per_pallet, src.batch_storage_cartons_per_pallet),
-        shipping_cartons_per_pallet = COALESCE(pol.shipping_cartons_per_pallet, src.batch_shipping_cartons_per_pallet)
-      FROM (
-        SELECT
-          pol2.id AS pol_id,
-          s.carton_dimensions_cm AS sku_carton_dimensions_cm,
-          s.carton_length_cm AS sku_carton_length_cm,
-          s.carton_width_cm AS sku_carton_width_cm,
-          s.carton_height_cm AS sku_carton_height_cm,
-          s.carton_weight_kg AS sku_carton_weight_kg,
-          s.packaging_type AS sku_packaging_type,
-          b.carton_dimensions_cm AS batch_carton_dimensions_cm,
-          b.carton_length_cm AS batch_carton_length_cm,
-          b.carton_width_cm AS batch_carton_width_cm,
-          b.carton_height_cm AS batch_carton_height_cm,
-          b.carton_weight_kg AS batch_carton_weight_kg,
-          b.packaging_type AS batch_packaging_type,
-          b.storage_cartons_per_pallet AS batch_storage_cartons_per_pallet,
-          b.shipping_cartons_per_pallet AS batch_shipping_cartons_per_pallet
-        FROM purchase_order_lines pol2
+	  await client.query(
+	    `
+	      UPDATE purchase_order_lines pol
+	      SET
+	        carton_dimensions_cm = COALESCE(
+	          pol.carton_dimensions_cm,
+	          src.batch_carton_dimensions_cm,
+	          src.sku_carton_dimensions_cm
+	        ),
+	        carton_side1_cm = COALESCE(pol.carton_side1_cm, src.batch_carton_side1_cm, src.sku_carton_side1_cm),
+	        carton_side2_cm = COALESCE(pol.carton_side2_cm, src.batch_carton_side2_cm, src.sku_carton_side2_cm),
+	        carton_side3_cm = COALESCE(pol.carton_side3_cm, src.batch_carton_side3_cm, src.sku_carton_side3_cm),
+	        carton_weight_kg = COALESCE(pol.carton_weight_kg, src.batch_carton_weight_kg, src.sku_carton_weight_kg),
+	        packaging_type = COALESCE(pol.packaging_type, src.batch_packaging_type, src.sku_packaging_type),
+	        storage_cartons_per_pallet = COALESCE(pol.storage_cartons_per_pallet, src.batch_storage_cartons_per_pallet),
+	        shipping_cartons_per_pallet = COALESCE(pol.shipping_cartons_per_pallet, src.batch_shipping_cartons_per_pallet)
+	      FROM (
+	        SELECT
+	          pol2.id AS pol_id,
+	          s.carton_dimensions_cm AS sku_carton_dimensions_cm,
+	          s.carton_side1_cm AS sku_carton_side1_cm,
+	          s.carton_side2_cm AS sku_carton_side2_cm,
+	          s.carton_side3_cm AS sku_carton_side3_cm,
+	          s.carton_weight_kg AS sku_carton_weight_kg,
+	          s.packaging_type AS sku_packaging_type,
+	          b.carton_dimensions_cm AS batch_carton_dimensions_cm,
+	          b.carton_side1_cm AS batch_carton_side1_cm,
+	          b.carton_side2_cm AS batch_carton_side2_cm,
+	          b.carton_side3_cm AS batch_carton_side3_cm,
+	          b.carton_weight_kg AS batch_carton_weight_kg,
+	          b.packaging_type AS batch_packaging_type,
+	          b.storage_cartons_per_pallet AS batch_storage_cartons_per_pallet,
+	          b.shipping_cartons_per_pallet AS batch_shipping_cartons_per_pallet
+	        FROM purchase_order_lines pol2
         JOIN skus s
           ON upper(s.sku_code) = upper(pol2.sku_code)
         LEFT JOIN sku_batches b
@@ -297,18 +297,18 @@ async function applyForSchema(
       WHERE pol.id = src.pol_id
         AND pol.batch_lot IS NOT NULL
         AND upper(regexp_replace(pol.batch_lot, '^.* - ', '')) <> 'DEFAULT'
-        AND (
-          pol.carton_dimensions_cm IS NULL
-          OR pol.carton_length_cm IS NULL
-          OR pol.carton_width_cm IS NULL
-          OR pol.carton_height_cm IS NULL
-          OR pol.carton_weight_kg IS NULL
-          OR pol.packaging_type IS NULL
-          OR pol.storage_cartons_per_pallet IS NULL
-          OR pol.shipping_cartons_per_pallet IS NULL
-        )
-    `
-  )
+	        AND (
+	          pol.carton_dimensions_cm IS NULL
+	          OR pol.carton_side1_cm IS NULL
+	          OR pol.carton_side2_cm IS NULL
+	          OR pol.carton_side3_cm IS NULL
+	          OR pol.carton_weight_kg IS NULL
+	          OR pol.packaging_type IS NULL
+	          OR pol.storage_cartons_per_pallet IS NULL
+	          OR pol.shipping_cartons_per_pallet IS NULL
+	        )
+	    `
+	  )
 
   await client.query('COMMIT')
 }

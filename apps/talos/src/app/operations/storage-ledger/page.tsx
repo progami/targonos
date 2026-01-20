@@ -18,8 +18,12 @@ import {
   type StorageLedgerColumnFilters,
 } from '@/components/finance/storage-ledger/StorageLedgerTable'
 import { useStorageLedger } from '@/hooks/useStorageLedger'
+import { usePageState } from '@/lib/store/page-state'
 import { format } from 'date-fns'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
+
+const PAGE_KEY = '/operations/storage-ledger'
 
 export default function StorageLedgerPage() {
   const { data: session, status } = useSession()
@@ -28,7 +32,7 @@ export default function StorageLedgerPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}/operations/storage-ledger`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/storage-ledger')}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -53,12 +57,24 @@ export default function StorageLedgerPage() {
 }
 
 function StorageLedgerContent() {
-  const [aggregationView, setAggregationView] = useState<'weekly' | 'monthly'>(
-    'weekly',
+  const pageState = usePageState(PAGE_KEY)
+  
+  const aggregationView = (pageState.custom?.aggregationView as 'weekly' | 'monthly') ?? 'weekly'
+  const setAggregationView = (value: 'weekly' | 'monthly') => pageState.setCustom('aggregationView', value)
+  
+  const storedFilters = pageState.custom?.filters as StorageLedgerColumnFilters | undefined
+  const [filters, setFiltersState] = useState<StorageLedgerColumnFilters>(
+    () => storedFilters ?? createDefaultFilters(),
   )
-  const [filters, setFilters] = useState<StorageLedgerColumnFilters>(
-    createDefaultFilters,
-  )
+  
+  const setFilters = (newFilters: StorageLedgerColumnFilters | ((prev: StorageLedgerColumnFilters) => StorageLedgerColumnFilters)) => {
+    setFiltersState(prev => {
+      const resolved = typeof newFilters === 'function' ? newFilters(prev) : newFilters
+      pageState.setCustom('filters', resolved)
+      return resolved
+    })
+  }
+  
   const [dateRange] = useState({
     start: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
       .toISOString()

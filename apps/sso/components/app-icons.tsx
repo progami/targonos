@@ -175,7 +175,7 @@ export const APP_ICONS: Record<string, ReactNode> = {
   talos: TalosIcon,
   atlas: AtlasIcon,
   kairos: KairosIcon,
-  'x-plan': XPlanIcon,
+  xplan: XPlanIcon,
   plutus: PlutusIcon,
   website: WebsiteIcon,
 }

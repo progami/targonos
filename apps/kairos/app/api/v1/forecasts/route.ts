@@ -11,8 +11,18 @@ import { runForecastNow } from '@/lib/forecasts/run';
 const createSchema = z.object({
   name: z.string().trim().min(1),
   targetSeriesId: z.string().min(1),
-  regressorSeriesIds: z.array(z.string()).optional().default([]),
-  model: z.enum(['PROPHET', 'ETS']).default('PROPHET'),
+  regressors: z
+    .array(
+      z
+        .object({
+          seriesId: z.string().min(1),
+          futureMode: z.enum(['FORECAST', 'USER_INPUT']).default('FORECAST'),
+        })
+        .strict(),
+    )
+    .optional()
+    .default([]),
+  model: z.enum(['PROPHET', 'ETS', 'ARIMA', 'THETA', 'NEURALPROPHET']).default('PROPHET'),
   horizon: z.coerce.number().int().min(1).max(3650),
   runNow: z.coerce.boolean().optional().default(true),
   config: z.unknown().optional(),
@@ -101,10 +111,18 @@ export const POST = withKairosAuth(async (request, session) => {
 
     // Validate regressor series if provided
     let regressorSeries: { id: string; name: string; source: string }[] = [];
-    if (payload.regressorSeriesIds.length > 0) {
+    const regressorSeriesIds = payload.regressors.map((r) => r.seriesId);
+    if (regressorSeriesIds.length > 0) {
+      if (payload.model !== 'PROPHET') {
+        return NextResponse.json(
+          { error: 'Regressors are only supported for Prophet forecasts.' },
+          { status: 400 },
+        );
+      }
+
       regressorSeries = await prisma.timeSeries.findMany({
         where: {
-          id: { in: payload.regressorSeriesIds },
+          id: { in: regressorSeriesIds },
           ...buildKairosOwnershipWhere(actor),
         },
         select: {
@@ -114,7 +132,7 @@ export const POST = withKairosAuth(async (request, session) => {
         },
       });
 
-      if (regressorSeries.length !== payload.regressorSeriesIds.length) {
+      if (regressorSeries.length !== regressorSeriesIds.length) {
         return NextResponse.json({ error: 'One or more regressor series not found' }, { status: 404 });
       }
     }
@@ -122,9 +140,9 @@ export const POST = withKairosAuth(async (request, session) => {
     const config =
       payload.config === undefined
         ? null
-        : payload.model === 'ETS'
-          ? etsConfigSchema.parse(payload.config)
-          : prophetConfigSchema.parse(payload.config);
+        : payload.model === 'PROPHET' || payload.model === 'NEURALPROPHET'
+          ? prophetConfigSchema.parse(payload.config)
+          : etsConfigSchema.parse(payload.config);
 
     const configJson = config
       ? (JSON.parse(JSON.stringify(config)) as Prisma.InputJsonValue)
@@ -141,9 +159,9 @@ export const POST = withKairosAuth(async (request, session) => {
         createdById: actor.id,
         createdByEmail: actor.email,
         regressors: {
-          create: payload.regressorSeriesIds.map((seriesId) => ({
-            seriesId,
-            futureMode: 'FORECAST',
+          create: payload.regressors.map((regressor) => ({
+            seriesId: regressor.seriesId,
+            futureMode: regressor.futureMode,
           })),
         },
       },
@@ -160,6 +178,7 @@ export const POST = withKairosAuth(async (request, session) => {
     });
 
     if (!payload.runNow) {
+      const regressorSeriesById = new Map(regressorSeries.map((series) => [series.id, series]));
       return NextResponse.json({
         forecast: {
           ...forecast,
@@ -167,11 +186,14 @@ export const POST = withKairosAuth(async (request, session) => {
           createdAt: forecast.createdAt.toISOString(),
           updatedAt: forecast.updatedAt.toISOString(),
           targetSeries,
-          regressors: regressorSeries.map((s) => ({
-            seriesId: s.id,
-            futureMode: 'FORECAST',
-            series: s,
-          })),
+          regressors: payload.regressors.map((regressor) => {
+            const series = regressorSeriesById.get(regressor.seriesId) as { id: string; name: string; source: string };
+            return {
+              seriesId: series.id,
+              futureMode: regressor.futureMode,
+              series,
+            };
+          }),
         },
       });
     }
@@ -192,11 +214,17 @@ export const POST = withKairosAuth(async (request, session) => {
         createdAt: forecast.createdAt.toISOString(),
         updatedAt: forecast.updatedAt.toISOString(),
         targetSeries,
-        regressors: regressorSeries.map((s) => ({
-          seriesId: s.id,
-          futureMode: 'FORECAST',
-          series: s,
-        })),
+        regressors: (() => {
+          const regressorSeriesById = new Map(regressorSeries.map((series) => [series.id, series]));
+          return payload.regressors.map((regressor) => {
+            const series = regressorSeriesById.get(regressor.seriesId) as { id: string; name: string; source: string };
+            return {
+              seriesId: series.id,
+              futureMode: regressor.futureMode,
+              series,
+            };
+          });
+        })(),
       },
       run: run.run,
     });

@@ -13,6 +13,7 @@ import {
 } from '@/lib/lucide-icons'
 import { Badge } from '@/components/ui/badge'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
 
 interface CostRate {
@@ -164,7 +165,9 @@ export function WarehouseRatesPanel({
   warehouseName,
   warehouseCode,
 }: WarehouseRatesPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('inbound')
+  const pageState = usePageState(`/config/warehouses/${warehouseId}/rates`)
+  const activeTab = (pageState.activeTab as TabKey) ?? 'inbound'
+  const setActiveTab = (tab: TabKey) => pageState.setActiveTab(tab)
   const [rates, setRates] = useState<CostRate[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

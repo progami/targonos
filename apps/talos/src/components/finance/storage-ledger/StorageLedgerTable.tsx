@@ -156,7 +156,7 @@ export function StorageLedgerTable({
 
 
  return (
- <div className="rounded-xl border border-slate-200 bg-white shadow-soft">
+ <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
  <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b">
  <div className="flex items-center gap-2 text-sm text-muted-foreground">
  <Filter className="h-4 w-4" />

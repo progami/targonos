@@ -146,7 +146,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   const skuCode = result.data.skuCode.trim()
   const batchLot = result.data.batchLot.trim().toUpperCase()
   if (batchLot === 'DEFAULT') {
-    return ApiResponses.badRequest('Batch / lot is required')
+    return ApiResponses.badRequest('Batch is required')
   }
 
   const sku = await prisma.sku.findFirst({

@@ -89,8 +89,8 @@ export const INVENTORY_TRANSACTION_COLUMNS: ColumnDefinition[] = [
  },
  {
  fieldName: 'batchLot',
- displayName: 'Batch/Lot',
- exportName: 'Batch/Lot',
+ displayName: 'Batch',
+ exportName: 'Batch',
  group: 'product',
  order: 8,
  showInUI: true,
@@ -368,8 +368,8 @@ export const INVENTORY_BALANCE_COLUMNS: ColumnDefinition[] = [
  },
  {
  fieldName: 'batchLot',
- displayName: 'Batch/Lot',
- exportName: 'Batch/Lot',
+ displayName: 'Batch',
+ exportName: 'Batch',
  group: 'product',
  order: 4,
  showInUI: true,

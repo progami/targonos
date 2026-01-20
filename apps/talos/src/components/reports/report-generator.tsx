@@ -305,7 +305,7 @@ interface ReportSectionComponentProps {
 
 function ReportSectionComponent({ title, icon: Icon, reports }: ReportSectionComponentProps) {
  return (
- <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-soft ">
+ <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-soft ">
  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
  <Icon className="h-5 w-5" />
  {title}

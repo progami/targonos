@@ -101,6 +101,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     totalCost: line.totalCost ? Number(line.totalCost) : null,
     currency: line.currency || tenant.currency,
     status: line.status,
+    postedQuantity: line.postedQuantity,
     quantityReceived: line.quantityReceived,
     lineNotes: line.lineNotes,
     createdAt: line.createdAt.toISOString(),
@@ -239,11 +240,11 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       requestedBatchLot && requestedBatchLot.length > 0 ? requestedBatchLot.toUpperCase() : null
 
     if (skuCodeChanged && !normalizedRequestedBatchLot) {
-      return ApiResponses.badRequest('Batch / lot is required when changing SKU')
+      return ApiResponses.badRequest('Batch is required when changing SKU')
     }
 
     if (normalizedRequestedBatchLot === 'DEFAULT') {
-      return ApiResponses.badRequest('Batch / lot is required')
+      return ApiResponses.badRequest('Batch is required')
     }
 
     const batchLotChanged =
@@ -256,7 +257,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       const nextBatchLot = (normalizedRequestedBatchLot ?? currentBatchLot ?? '').trim().toUpperCase()
 
       if (!nextBatchLot || nextBatchLot === 'DEFAULT') {
-        return ApiResponses.badRequest('Batch / lot is required')
+        return ApiResponses.badRequest('Batch is required')
       }
 
       const sku = await prisma.sku.findFirst({
@@ -422,8 +423,10 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     totalCost: updated.totalCost ? Number(updated.totalCost) : null,
     currency: updated.currency,
     status: updated.status,
+    postedQuantity: updated.postedQuantity,
     quantityReceived: updated.quantityReceived,
     lineNotes: updated.lineNotes,
+    createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),
   })
 })
