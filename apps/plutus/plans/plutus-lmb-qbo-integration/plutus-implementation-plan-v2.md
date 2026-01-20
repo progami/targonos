@@ -24,7 +24,15 @@ Hybrid accounting system for Amazon FBA business using Link My Books (LMB) + Plu
 
 **⚠️ CRITICAL: Complete LMB Accounts & Taxes Wizard BEFORE starting Plutus setup.**
 
-LMB creates the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc). Plutus will create brand sub-accounts under those parents so LMB Product Groups can post to them.
+LMB creates the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc).
+
+Important behavior discovered during implementation:
+- LMB Product Groups split **sales/refunds** by Product Group (brand).
+- LMB Product Groups do **not** split most **fees** by Product Group.
+
+Therefore:
+- Plutus creates brand sub-accounts under the Sales/Refunds parents so LMB can post revenue/refunds by brand.
+- Plutus allocates fees by brand after a settlement is posted (using LMB Audit Data) and posts a reclass Journal Entry in QBO.
 
 **Important:** account *names* vary between companies (and can be renamed), so Plutus does not assume literal names like "Amazon Sales". During setup, Plutus asks you to select the correct QBO parent accounts by ID.
 
@@ -78,8 +86,9 @@ Settlement Report                    Manual Inventory Count
 
 | System | Data Source | Posts to QBO |
 |--------|-------------|--------------|
-| LMB | Settlement Report | Revenue, Refunds, Fees (by brand via Product Groups) |
+| LMB | Settlement Report | Revenue + refunds (split by brand via Product Groups). Fees are not reliably split by brand. |
 | Plutus | LMB Audit Data CSV (manual upload) | COGS (by brand, by component) |
+| Plutus | LMB Audit Data CSV (manual upload) | Fee reclass JE (allocate fees by brand after LMB posts) |
 | Plutus | Amazon Seller Central (manual count) | Reconciliation adjustments |
 | Plutus | QBO Bills | Landed cost extraction |
 
@@ -770,7 +779,8 @@ Even reprocessing leaves a trail of what happened and why.
 
 **Note:** The Plutus Setup Wizard automates Phase 1. It creates ALL brand sub-accounts:
 - **Inventory Asset + COGS** (Plutus posts to these)
-- **Revenue + Fee sub-accounts** (LMB posts to these via Product Groups)
+- **Revenue sub-accounts** (LMB Product Groups post sales/refunds to these)
+- **Fee sub-accounts** (Plutus posts fee reclass JEs to these after LMB posts the settlement)
 
 The account names below are **suggestions** - users can customize names during setup. See `plutus-setup-wizard-ui.md` for the UI flow.
 
@@ -811,7 +821,8 @@ Because account names vary between companies, Plutus does not assume literal nam
 
 **Note:** The Plutus Setup Wizard automates Phase 1. It creates ALL brand sub-accounts:
 - **Inventory Asset + COGS** (Plutus posts to these)
-- **Revenue + Fee sub-accounts** (LMB posts to these via Product Groups)
+- **Revenue sub-accounts** (LMB Product Groups post sales/refunds to these)
+- **Fee sub-accounts** (Plutus posts fee reclass JEs to these after LMB posts the settlement)
 
 The account names below are **suggestions** - users can customize names during setup. See `plutus-setup-wizard-ui.md` for the UI flow.
 
@@ -871,7 +882,11 @@ Plutus does not need to know Amazon → QBO mapping details (LMB handles that in
 | 7 | Amazon Advertising Costs | Cost of Goods Sold | Shipping, Freight & Delivery - COS | ✅ EXISTS |
 | 8 | Amazon Promotions | Cost of Goods Sold | Other Costs of Services - COS | ✅ EXISTS |
 
-### INCOME SUB-ACCOUNTS (6 accounts) - Created by Plutus, LMB posts here
+### INCOME SUB-ACCOUNTS (6 accounts) - Created by Plutus
+
+Posting behavior:
+- LMB Product Groups can reliably post **Sales** and **Refunds** to these brand sub-accounts.
+- In practice, **fees** are not split by Product Group, and some non-sales categories (e.g. reimbursements) are not reliably split either. Plutus should treat non-sales splits as a post-settlement reclass concern.
 
 | # | Account Name | Parent Account | Account Type | Detail Type | Status |
 |---|--------------|----------------|--------------|-------------|--------|
@@ -882,7 +897,11 @@ Plutus does not need to know Amazon → QBO mapping details (LMB handles that in
 | 5 | Amazon FBA Inventory Reimbursement - US-Dust Sheets | Amazon FBA Inventory Reimbursement | Other Income | Other Miscellaneous Income | ✅ DONE |
 | 6 | Amazon FBA Inventory Reimbursement - UK-Dust Sheets | Amazon FBA Inventory Reimbursement | Other Income | Other Miscellaneous Income | ✅ DONE |
 
-### FEE SUB-ACCOUNTS (10 accounts) - Created by Plutus, LMB posts here
+### FEE SUB-ACCOUNTS (10 accounts) - Created by Plutus
+
+Posting behavior:
+- LMB posts fees to the **parent** fee accounts.
+- Plutus posts a **fee reclass Journal Entry** after settlement posting to allocate fees into these brand sub-accounts.
 
 | # | Account Name | Parent Account | Account Type | Detail Type | Status |
 |---|--------------|----------------|--------------|-------------|--------|
@@ -2442,7 +2461,8 @@ Memo: "Returns reversal - Jan 2026"
 
 | Check | Expected Result |
 |-------|-----------------|
-| LMB posts to brand accounts | Revenue split by brand |
+| LMB posts to brand accounts | Sales/Refunds split by brand (Product Groups) |
+| Plutus posts fee reclass journal | Fees split by brand (after LMB posts settlement) |
 | Plutus posts COGS journal | COGS split by brand + component |
 | P&L by brand (Amazon ops) | Adds up to 100% of Amazon ops P&L* |
 | Inventory Asset balance | Matches expected on-hand value |
@@ -2466,7 +2486,7 @@ Memo: "Returns reversal - Jan 2026"
 
 | Task | Frequency | Owner |
 |------|-----------|-------|
-| Process settlements | Per settlement (~biweekly) | Plutus (auto) |
+| Process settlements | Per settlement (~biweekly) | User + Plutus (audit upload + automation) |
 | Run inventory reconciliation | Monthly | Plutus + Accountant |
 | Add new SKUs | As needed | Manual (LMB + Plutus) |
 | Enter bills | Per PO (~every 2-3 months) | Manual (QBO) |
@@ -2825,7 +2845,7 @@ CREDITS (COGS - reduces expense):
 **Scenario:** Amazon loses/damages inventory and reimburses seller.
 
 **What happens:**
-1. LMB posts income to Amazon FBA Inventory Reimbursement - [Brand]
+1. LMB posts income to Amazon FBA Inventory Reimbursement (typically not split by Product Group)
 2. Inventory is gone (Amazon lost it)
 3. But Inventory Asset still has the cost on books
 
