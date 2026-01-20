@@ -78,6 +78,7 @@ model Warehouse {
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
   costRates          CostRate[]
+  forwardingCosts    PurchaseOrderForwardingCost[]
   skuStorageConfigs  WarehouseSkuStorageConfig[]
   users              User[]
 
@@ -254,6 +255,7 @@ model CostRate {
   createdById   String       @map("created_by")
   createdBy     User         @relation(fields: [createdById], references: [id])
   warehouse     Warehouse    @relation(fields: [warehouseId], references: [id])
+  purchaseOrderForwardingCosts PurchaseOrderForwardingCost[]
 
   @@unique([warehouseId, costName, effectiveDate])
   @@index([warehouseId, costName, effectiveDate])
@@ -452,6 +454,7 @@ model PurchaseOrder {
   transactions  InventoryTransaction[]   @relation("TransactionPurchaseOrder")
   movementNotes MovementNote[]
   invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLinePurchaseOrder")
+  forwardingCosts PurchaseOrderForwardingCost[]
 
   @@unique([orderNumber])
   @@index([status])
@@ -588,6 +591,32 @@ model PurchaseOrderDocument {
   @@index([stage])
   @@index([documentType])
   @@map("purchase_order_documents")
+}
+
+model PurchaseOrderForwardingCost {
+  id              String   @id @default(uuid())
+  purchaseOrderId String   @map("purchase_order_id")
+  warehouseId     String   @map("warehouse_id")
+  costRateId      String?  @map("cost_rate_id")
+  costName        String   @map("cost_name")
+  quantity        Decimal  @db.Decimal(12, 4)
+  unitRate        Decimal  @map("unit_rate") @db.Decimal(12, 4)
+  totalCost       Decimal  @map("total_cost") @db.Decimal(12, 2)
+  currency        String?
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdById     String?  @map("created_by_id")
+  createdByName   String?  @map("created_by_name")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  costRate      CostRate?     @relation(fields: [costRateId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseOrderId])
+  @@index([warehouseId])
+  @@index([costRateId])
+  @@map("purchase_order_forwarding_costs")
 }
 
 model PurchaseOrderLine {

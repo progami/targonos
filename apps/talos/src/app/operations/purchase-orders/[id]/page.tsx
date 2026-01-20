@@ -333,6 +333,30 @@ interface PurchaseOrderDocumentSummary {
   viewUrl: string
 }
 
+type CostRateSummary = {
+  id: string
+  costName: string
+  costValue: number
+  unitOfMeasure: string
+}
+
+type PurchaseOrderForwardingCostSummary = {
+  id: string
+  purchaseOrderId: string
+  warehouse: { code: string; name: string }
+  costRateId: string | null
+  costName: string
+  quantity: number
+  unitRate: number
+  totalCost: number
+  currency: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  createdById: string | null
+  createdByName: string | null
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -669,13 +693,38 @@ export default function PurchaseOrderDetailPage() {
 
   // Stage transition form data
   const [stageFormData, setStageFormData] = useState<Record<string, string>>({})
-  const [warehouses, setWarehouses] = useState<Array<{ code: string; name: string }>>([])
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; code: string; name: string }>>(
+    []
+  )
   const [warehousesLoading, setWarehousesLoading] = useState(false)
   const [documents, setDocuments] = useState<PurchaseOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+
+  const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>(
+    []
+  )
+  const [forwardingCostsLoading, setForwardingCostsLoading] = useState(false)
+  const [forwardingRates, setForwardingRates] = useState<CostRateSummary[]>([])
+  const [forwardingRatesLoading, setForwardingRatesLoading] = useState(false)
+  const [forwardingWarehouseCode, setForwardingWarehouseCode] = useState('')
+  const [newForwardingCostDraft, setNewForwardingCostDraft] = useState({
+    costName: '',
+    quantity: '',
+    notes: '',
+    currency: '',
+  })
+  const [forwardingCostSubmitting, setForwardingCostSubmitting] = useState(false)
+  const [editingForwardingCostId, setEditingForwardingCostId] = useState<string | null>(null)
+  const [editingForwardingCostDraft, setEditingForwardingCostDraft] = useState({
+    costName: '',
+    quantity: '',
+    notes: '',
+    currency: '',
+  })
+  const [forwardingCostDeletingId, setForwardingCostDeletingId] = useState<string | null>(null)
 
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
@@ -756,16 +805,18 @@ export default function PurchaseOrderDetailPage() {
         }
 
         const parsed = listCandidate
-          .map((item): { code: string; name: string } | null => {
+          .map((item): { id: string; code: string; name: string } | null => {
             if (!item || typeof item !== 'object' || Array.isArray(item)) return null
             const record = item as Record<string, unknown>
+            const id = record.id
             const code = record.code
             const name = record.name
-            if (typeof code !== 'string' || typeof name !== 'string') return null
+            if (typeof id !== 'string' || typeof code !== 'string' || typeof name !== 'string') return null
+            if (!id.trim()) return null
             if (!code.trim() || !name.trim()) return null
-            return { code, name }
+            return { id, code, name }
           })
-          .filter((value): value is { code: string; name: string } => value !== null)
+          .filter((value): value is { id: string; code: string; name: string } => value !== null)
 
         setWarehouses(parsed)
       } catch (_error) {
@@ -886,6 +937,319 @@ export default function PurchaseOrderDetailPage() {
   useEffect(() => {
     void refreshAuditLogs()
   }, [refreshAuditLogs])
+
+  useEffect(() => {
+    const selected = forwardingWarehouseCode.trim()
+    if (selected) return
+    const next = order?.warehouseCode
+    if (!next) return
+    setForwardingWarehouseCode(next)
+  }, [forwardingWarehouseCode, order?.warehouseCode])
+
+  const refreshForwardingCosts = useCallback(async () => {
+    const orderId = order?.id
+    if (!orderId) return
+
+    try {
+      setForwardingCostsLoading(true)
+      const response = await fetch(`/api/purchase-orders/${orderId}/forwarding-costs`)
+      if (!response.ok) {
+        setForwardingCosts([])
+        return
+      }
+
+      const payload = await response.json().catch(() => null)
+      const list = payload?.data
+      setForwardingCosts(Array.isArray(list) ? (list as PurchaseOrderForwardingCostSummary[]) : [])
+    } catch {
+      setForwardingCosts([])
+    } finally {
+      setForwardingCostsLoading(false)
+    }
+  }, [order?.id])
+
+  useEffect(() => {
+    void refreshForwardingCosts()
+  }, [refreshForwardingCosts])
+
+  const selectedForwardingWarehouse = useMemo(() => {
+    const code = forwardingWarehouseCode.trim()
+    if (!code) return null
+    const match = warehouses.find(row => row.code === code)
+    if (!match) return null
+    return match
+  }, [forwardingWarehouseCode, warehouses])
+
+  const forwardingWarehouseId = selectedForwardingWarehouse ? selectedForwardingWarehouse.id : null
+
+  useEffect(() => {
+    if (!forwardingWarehouseId) {
+      setForwardingRates([])
+      return
+    }
+
+    const loadRates = async () => {
+      try {
+        setForwardingRatesLoading(true)
+        const response = await fetch(
+          `/api/rates?warehouseId=${encodeURIComponent(forwardingWarehouseId)}&costCategory=Forwarding&activeOnly=true`
+        )
+
+        if (!response.ok) {
+          setForwardingRates([])
+          return
+        }
+
+        const payload: unknown = await response.json().catch(() => null)
+        if (!Array.isArray(payload)) {
+          setForwardingRates([])
+          return
+        }
+
+        const byName = new Map<string, CostRateSummary>()
+        for (const item of payload) {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+          const record = item as Record<string, unknown>
+          const id = record.id
+          const costName = record.costName
+          const unitOfMeasure = record.unitOfMeasure
+          const rawValue = record.costValue
+
+          if (typeof id !== 'string') continue
+          if (typeof costName !== 'string') continue
+          if (typeof unitOfMeasure !== 'string') continue
+
+          const parsedValue = typeof rawValue === 'number' ? rawValue : Number(rawValue)
+          if (!Number.isFinite(parsedValue)) continue
+
+          if (!byName.has(costName)) {
+            byName.set(costName, {
+              id,
+              costName,
+              unitOfMeasure,
+              costValue: parsedValue,
+            })
+          }
+        }
+
+        const nextRates = Array.from(byName.values()).sort((a, b) => a.costName.localeCompare(b.costName))
+        setForwardingRates(nextRates)
+      } catch {
+        setForwardingRates([])
+      } finally {
+        setForwardingRatesLoading(false)
+      }
+    }
+
+    void loadRates()
+  }, [forwardingWarehouseId])
+
+  const forwardingRateByName = useMemo(() => {
+    const map = new Map<string, CostRateSummary>()
+    for (const rate of forwardingRates) {
+      map.set(rate.costName, rate)
+    }
+    return map
+  }, [forwardingRates])
+
+  const forwardingSubtotal = useMemo(
+    () => forwardingCosts.reduce((sum, row) => sum + Number(row.totalCost), 0),
+    [forwardingCosts]
+  )
+
+  const createForwardingCost = useCallback(async () => {
+    if (!order) return
+    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+      return
+    }
+
+    const warehouseCode = forwardingWarehouseCode.trim()
+    if (!warehouseCode) {
+      toast.error('Select a warehouse to use its forwarding rates')
+      return
+    }
+
+    const costName = newForwardingCostDraft.costName.trim()
+    if (!costName) {
+      toast.error('Select a cost type')
+      return
+    }
+
+    const quantity = Number(newForwardingCostDraft.quantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Quantity must be a positive number')
+      return
+    }
+
+    try {
+      setForwardingCostSubmitting(true)
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/forwarding-costs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warehouseCode,
+          costName,
+          quantity,
+          notes: newForwardingCostDraft.notes,
+          currency: newForwardingCostDraft.currency,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+        if (errorMessage && detailsMessage) {
+          toast.error(`${errorMessage}: ${detailsMessage}`)
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Failed to add cargo cost (HTTP ${response.status})`)
+        }
+        return
+      }
+
+      const created = (await response.json()) as PurchaseOrderForwardingCostSummary
+      setForwardingCosts(prev => [...prev, created])
+      setNewForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
+      toast.success('Cargo cost added')
+    } catch {
+      toast.error('Failed to add cargo cost')
+    } finally {
+      setForwardingCostSubmitting(false)
+    }
+  }, [
+    forwardingWarehouseCode,
+    newForwardingCostDraft.costName,
+    newForwardingCostDraft.currency,
+    newForwardingCostDraft.notes,
+    newForwardingCostDraft.quantity,
+    order,
+  ])
+
+  const startEditForwardingCost = useCallback((row: PurchaseOrderForwardingCostSummary) => {
+    setEditingForwardingCostId(row.id)
+    setEditingForwardingCostDraft({
+      costName: row.costName,
+      quantity: String(row.quantity),
+      notes: row.notes ?? '',
+      currency: row.currency ?? '',
+    })
+  }, [])
+
+  const cancelEditForwardingCost = useCallback(() => {
+    setEditingForwardingCostId(null)
+    setEditingForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
+  }, [])
+
+  const saveEditForwardingCost = useCallback(async () => {
+    if (!order) return
+    if (!editingForwardingCostId) return
+    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+      return
+    }
+
+    const costName = editingForwardingCostDraft.costName.trim()
+    if (!costName) {
+      toast.error('Select a cost type')
+      return
+    }
+
+    const quantity = Number(editingForwardingCostDraft.quantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Quantity must be a positive number')
+      return
+    }
+
+    try {
+      setForwardingCostSubmitting(true)
+      const response = await fetchWithCSRF(
+        `/api/purchase-orders/${order.id}/forwarding-costs/${editingForwardingCostId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            costName,
+            quantity,
+            notes: editingForwardingCostDraft.notes,
+            currency: editingForwardingCostDraft.currency,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+        if (errorMessage && detailsMessage) {
+          toast.error(`${errorMessage}: ${detailsMessage}`)
+        } else if (errorMessage) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Failed to update cargo cost (HTTP ${response.status})`)
+        }
+        return
+      }
+
+      const updated = (await response.json()) as PurchaseOrderForwardingCostSummary
+      setForwardingCosts(prev => prev.map(row => (row.id === updated.id ? updated : row)))
+      cancelEditForwardingCost()
+      toast.success('Cargo cost updated')
+    } catch {
+      toast.error('Failed to update cargo cost')
+    } finally {
+      setForwardingCostSubmitting(false)
+    }
+  }, [
+    cancelEditForwardingCost,
+    editingForwardingCostDraft.costName,
+    editingForwardingCostDraft.currency,
+    editingForwardingCostDraft.notes,
+    editingForwardingCostDraft.quantity,
+    editingForwardingCostId,
+    order,
+  ])
+
+  const deleteForwardingCost = useCallback(
+    async (row: PurchaseOrderForwardingCostSummary) => {
+      if (!order) return
+      if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
+        toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+        return
+      }
+
+      try {
+        setForwardingCostDeletingId(row.id)
+        const response = await fetchWithCSRF(
+          `/api/purchase-orders/${order.id}/forwarding-costs/${row.id}`,
+          {
+            method: 'DELETE',
+          }
+        )
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+          if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to delete cargo cost (HTTP ${response.status})`)
+          }
+          return
+        }
+
+        setForwardingCosts(prev => prev.filter(item => item.id !== row.id))
+        toast.success('Cargo cost deleted')
+      } catch {
+        toast.error('Failed to delete cargo cost')
+      } finally {
+        setForwardingCostDeletingId(null)
+      }
+    },
+    [order]
+  )
 
   const handleDocumentUpload = useCallback(
     async (
@@ -1238,6 +1602,28 @@ export default function PurchaseOrderDetailPage() {
   const isTerminal =
     order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
   const canEdit = !isTerminal && order.status === 'DRAFT'
+  const canEditForwardingCosts =
+    !isTerminal && (order.status === 'OCEAN' || order.status === 'WAREHOUSE')
+
+  const draftForwardingRate = forwardingRateByName.get(newForwardingCostDraft.costName.trim())
+  const draftForwardingUnitRate = draftForwardingRate ? draftForwardingRate.costValue : null
+  const draftForwardingQuantity = Number(newForwardingCostDraft.quantity)
+  const draftForwardingTotal =
+    draftForwardingUnitRate !== null &&
+    Number.isFinite(draftForwardingQuantity) &&
+    draftForwardingQuantity > 0
+      ? Number((draftForwardingUnitRate * draftForwardingQuantity).toFixed(2))
+      : null
+
+  const editingForwardingRate = forwardingRateByName.get(editingForwardingCostDraft.costName.trim())
+  const editingForwardingUnitRate = editingForwardingRate ? editingForwardingRate.costValue : null
+  const editingForwardingQuantity = Number(editingForwardingCostDraft.quantity)
+  const editingForwardingTotal =
+    editingForwardingUnitRate !== null &&
+    Number.isFinite(editingForwardingQuantity) &&
+    editingForwardingQuantity > 0
+      ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
+      : null
   const canDownloadPdf = true
   const documentsCount = documents.length
   const historyCount = auditLogs.length || order.approvalHistory?.length || 0
@@ -2736,6 +3122,373 @@ export default function PurchaseOrderDetailPage() {
                   </div>
                 </div>
 
+                {/* Cargo Costs Section */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Cargo Costs
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      {forwardingCosts.length} item{forwardingCosts.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Warehouse
+                          </p>
+                          <select
+                            value={forwardingWarehouseCode}
+                            onChange={e => setForwardingWarehouseCode(e.target.value)}
+                            disabled={
+                              !canEditForwardingCosts ||
+                              warehousesLoading ||
+                              (order.status === 'WAREHOUSE' && Boolean(order.warehouseCode))
+                            }
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                          >
+                            <option value="">
+                              {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
+                            </option>
+                            {warehouses.map(w => (
+                              <option key={w.code} value={w.code}>
+                                {w.name} ({w.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Cost Type
+                          </p>
+                          <select
+                            value={newForwardingCostDraft.costName}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, costName: e.target.value }))
+                            }
+                            disabled={
+                              !canEditForwardingCosts ||
+                              forwardingRatesLoading ||
+                              forwardingRates.length === 0 ||
+                              !forwardingWarehouseId
+                            }
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                          >
+                            <option value="">
+                              {!forwardingWarehouseId
+                                ? 'Select warehouse first'
+                                : forwardingRatesLoading
+                                  ? 'Loading rates…'
+                                  : forwardingRates.length === 0
+                                    ? 'No forwarding rates'
+                                    : 'Select cost type'}
+                            </option>
+                            {forwardingRates.map(rate => (
+                              <option key={rate.id} value={rate.costName}>
+                                {rate.costName} ({rate.unitOfMeasure})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Quantity
+                          </p>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newForwardingCostDraft.quantity}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, quantity: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            className="w-full gap-2"
+                            onClick={() => void createForwardingCost()}
+                            disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                          >
+                            {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Add Cost
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Notes (Optional)
+                          </p>
+                          <Input
+                            value={newForwardingCostDraft.notes}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, notes: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder="e.g. invoice #, vendor"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Currency (Optional)
+                          </p>
+                          <Input
+                            value={newForwardingCostDraft.currency}
+                            onChange={e =>
+                              setNewForwardingCostDraft(prev => ({ ...prev, currency: e.target.value }))
+                            }
+                            disabled={!canEditForwardingCosts}
+                            placeholder={tenantCurrency}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <p>
+                          Unit rate:{' '}
+                          {draftForwardingUnitRate !== null
+                            ? `${tenantCurrency} ${draftForwardingUnitRate.toFixed(4)}`
+                            : '—'}
+                        </p>
+                        <p className="tabular-nums">
+                          Total:{' '}
+                          {draftForwardingTotal !== null
+                            ? `${tenantCurrency} ${draftForwardingTotal.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : '—'}
+                        </p>
+                      </div>
+
+                      {!canEditForwardingCosts && (
+                        <p className="text-xs text-muted-foreground">
+                          Cargo costs are editable during In Transit or At Warehouse stages.
+                        </p>
+                      )}
+                    </div>
+
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-white dark:bg-slate-900 text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left px-4 py-2 font-medium">Cost</th>
+                          <th className="text-right px-4 py-2 font-medium">Qty</th>
+                          <th className="text-right px-4 py-2 font-medium">Unit Rate</th>
+                          <th className="text-right px-4 py-2 font-medium">Total</th>
+                          <th className="text-left px-4 py-2 font-medium">Notes</th>
+                          <th className="text-right px-4 py-2 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {forwardingCostsLoading ? (
+                          <tr className="border-t border-slate-100 dark:border-slate-700">
+                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                              Loading cargo costs...
+                            </td>
+                          </tr>
+                        ) : forwardingCosts.length === 0 ? (
+                          <tr className="border-t border-slate-100 dark:border-slate-700">
+                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                              No cargo costs added.
+                            </td>
+                          </tr>
+                        ) : (
+                          forwardingCosts.map(row => {
+                            const currencyLabel = row.currency ? row.currency : tenantCurrency
+                            const isEditing = editingForwardingCostId === row.id
+                            const isDeleting = forwardingCostDeletingId === row.id
+
+                            return (
+                              <tr key={row.id} className="border-t border-slate-100 dark:border-slate-700">
+                                <td className="px-4 py-2">
+                                  {isEditing ? (
+                                    <select
+                                      value={editingForwardingCostDraft.costName}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          costName: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                      className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                                    >
+                                      {forwardingRates.every(rate => rate.costName !== row.costName) && (
+                                        <option value={row.costName}>{row.costName}</option>
+                                      )}
+                                      {forwardingRates.map(rate => (
+                                        <option key={rate.id} value={rate.costName}>
+                                          {rate.costName} ({rate.unitOfMeasure})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <p className="font-medium text-foreground">{row.costName}</p>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums">
+                                  {isEditing ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={editingForwardingCostDraft.quantity}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          quantity: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                    />
+                                  ) : (
+                                    row.quantity.toLocaleString(undefined, {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 4,
+                                    })
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                  {isEditing ? (
+                                    editingForwardingUnitRate !== null
+                                      ? `${currencyLabel} ${editingForwardingUnitRate.toFixed(4)}`
+                                      : '—'
+                                  ) : (
+                                    `${currencyLabel} ${row.unitRate.toFixed(4)}`
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                  {isEditing ? (
+                                    editingForwardingTotal !== null
+                                      ? `${currencyLabel} ${editingForwardingTotal.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}`
+                                      : '—'
+                                  ) : (
+                                    `${currencyLabel} ${row.totalCost.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}`
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2">
+                                  {isEditing ? (
+                                    <Input
+                                      value={editingForwardingCostDraft.notes}
+                                      onChange={e =>
+                                        setEditingForwardingCostDraft(prev => ({
+                                          ...prev,
+                                          notes: e.target.value,
+                                        }))
+                                      }
+                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                      placeholder="Notes"
+                                    />
+                                  ) : (
+                                    <p className="text-muted-foreground">{row.notes ? row.notes : '—'}</p>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-2 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {isEditing ? (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={cancelEditForwardingCost}
+                                          disabled={forwardingCostSubmitting}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => void saveEditForwardingCost()}
+                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                          className="gap-2"
+                                        >
+                                          {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => startEditForwardingCost(row)}
+                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                          className="gap-2"
+                                        >
+                                          <FileEdit className="h-4 w-4" />
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            const confirmed = window.confirm('Delete this cargo cost?')
+                                            if (!confirmed) return
+                                            void deleteForwardingCost(row)
+                                          }}
+                                          disabled={!canEditForwardingCosts || isDeleting}
+                                          className="gap-2"
+                                        >
+                                          {isDeleting ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Trash2 className="h-4 w-4" />
+                                          )}
+                                          Delete
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                          <td colSpan={3} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                            Cargo Subtotal
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                            {tenantCurrency}{' '}
+                            {forwardingSubtotal.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
                 {/* Inbound Costs Section */}
                 <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
@@ -2806,6 +3559,17 @@ export default function PurchaseOrderDetailPage() {
                           </td>
                         </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
+                          <td className="px-4 py-2 text-muted-foreground">Cargo Costs</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                            {forwardingSubtotal > 0
+                              ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}`
+                              : '—'}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Inbound Costs</td>
                           <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
                         </tr>
@@ -2832,6 +3596,7 @@ export default function PurchaseOrderDetailPage() {
                           <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
                             {tenantCurrency} {(
                               order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0) +
+                              forwardingSubtotal +
                               (order.stageData.warehouse?.dutyAmount || 0)
                             ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
