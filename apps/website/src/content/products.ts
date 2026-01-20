@@ -74,16 +74,12 @@ export type Product = {
 // NOTE: Some Amazon regions hide prices unless signed in.
 // We show the latest price we *can* verify and otherwise say “See Amazon”.
 
-// User-provided Amazon links (kept verbatim).
-// NOTE: Prices can change and Amazon can hide pricing unless signed in.
-const AMAZON_US_6PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0FP66CWQ6/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
-const AMAZON_US_1PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0FLKJ7WWM/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
-const AMAZON_US_3PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B0CR1GSBQ9/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
-const AMAZON_US_12PK =
-  'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B09HXC3NL8/ref=zg_bs_g_13399811_d_sccl_23/137-9710728-0147067?th=1';
+// User-provided Amazon links (clean URLs).
+// Verified ASIN mapping: 1PK=B0FLKJ7WWM, 3PK=B0CR1GSBQ9, 6PK=B09HXC3NL8, 12PK=B0FP66CWQ6
+const AMAZON_US_1PK = 'https://www.amazon.com/dp/B0FLKJ7WWM?th=1';
+const AMAZON_US_3PK = 'https://www.amazon.com/dp/B0CR1GSBQ9?th=1';
+const AMAZON_US_6PK = 'https://www.amazon.com/dp/B09HXC3NL8?th=1';
+const AMAZON_US_12PK = 'https://www.amazon.com/dp/B0FP66CWQ6?th=1';
 
 /**
  * Product set:
