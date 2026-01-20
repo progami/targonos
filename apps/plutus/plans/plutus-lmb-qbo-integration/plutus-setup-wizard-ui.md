@@ -1,424 +1,310 @@
-# Plutus Setup Wizard - UI Design
+# Plutus Setup - UI Design
 
 ## Overview
 
-The Setup Wizard guides users through all prerequisites before Plutus can process COGS. Each step has validation to ensure completion before moving forward.
+The Setup page guides users through prerequisites before Plutus can process COGS. Uses a sidebar navigation pattern with focused, non-scrolling sections.
 
 **Prerequisite:** User must complete LMB Accounts & Taxes Wizard BEFORE starting Plutus setup. LMB creates accounts in QBO for revenue, fees, etc.
 
 ---
 
-## Wizard Structure
+## Design Principles
+
+1. **Sidebar navigation** - Settings-style layout with sections in left sidebar
+2. **Focused sections** - Each section fits on screen without scrolling
+3. **Full-width content** - Use available horizontal space (no narrow wizards)
+4. **NotConnectedScreen pattern** - Show QBO connect prompt if not connected
+
+---
+
+## Page Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  PLUTUS SETUP WIZARD                                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ○ Step 1: Connect QuickBooks          (skip if connected)      │
-│  ○ Step 2: Verify LMB Setup                                     │
-│  ○ Step 3: Brand Setup                                          │
-│  ○ Step 4: Plutus Account Setup                                 │
-│  ○ Step 5: SKU Setup                                            │
-│  ○ Step 6: LMB Product Groups          (external)               │
-│  ○ Step 7: Bill Entry Guidelines                                │
-│  ○ Step 8: Historical Catch-Up                                  │
-│  ○ Step 9: Review & Complete                                    │
-│                                                                 │
-│  Progress: ████████░░░░░░░░░░░░ 40%                             │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Dashboard                                          PLUTUS SETUP   │
+├────────────────────┬─────────────────────────────────────────────────────────┤
+│                    │                                                         │
+│  SETUP             │   [Content area for selected section]                   │
+│                    │                                                         │
+│  ┌──────────────┐  │                                                         │
+│  │ ● Brands     │  │                                                         │
+│  │   Accounts   │  │                                                         │
+│  │   SKUs       │  │                                                         │
+│  └──────────────┘  │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┴─────────────────────────────────────────────────────────┤
+│  Status: 2 brands configured • 0/19 accounts mapped • 0 SKUs                 │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Step 1: Connect QuickBooks
+## QBO Connection (NotConnectedScreen Pattern)
 
-**Purpose:** Authenticate with QBO and verify connection.
-
-**Note:** This step is automatically skipped if QBO is already connected.
-
-**UI Elements:**
+If QBO is not connected, show the standard NotConnectedScreen instead of the setup page.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 1: CONNECT QUICKBOOKS                                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Plutus needs access to your QuickBooks Online account to:      │
-│  • Read your Chart of Accounts                                  │
-│  • Read supplier bills (for landed cost calculation)            │
-│  • Post COGS journal entries                                    │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  [Connect to QuickBooks]                                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  Status: ❌ Not Connected                                       │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  [Back]                                        [Next →] (disabled)
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                              PLUTUS SETUP                                    │
+│                                                                              │
+│                         ┌─────────────────────┐                              │
+│                         │                     │                              │
+│                         │    [QBO Logo]       │                              │
+│                         │                     │                              │
+│                         └─────────────────────┘                              │
+│                                                                              │
+│                    Connect QuickBooks to continue                            │
+│                                                                              │
+│              Plutus needs access to your QuickBooks Online                   │
+│              account to read accounts and post journal entries.              │
+│                                                                              │
+│                      [Connect to QuickBooks]                                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**After Connection:**
-
-```
-│  Status: ✅ Connected                                           │
-│                                                                 │
-│  Company: Targon LLC                                            │
-│  Home Currency: USD                                             │
-│  Subscription: QuickBooks Online Plus                           │
-│                                                                 │
-│  [Disconnect]                                  [Next →]         │
-```
-
-**Validation:**
-- QBO OAuth token obtained
-- Company info retrieved
-
-**Data Captured:**
-- `qboRealmId`
-- `qboCompanyName`
-- `qboHomeCurrency`
-- `qboAccessToken` (encrypted)
-- `qboRefreshToken` (encrypted)
+Once connected, show the setup page with sidebar navigation.
 
 ---
 
-## Step 2: Verify LMB Setup
+## Section 1: Brands
 
-**Purpose:** Confirm user has completed LMB Accounts & Taxes Wizard before continuing.
+**Purpose:** Define brand names and their marketplaces for P&L tracking.
 
-**UI Elements:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 2: VERIFY LMB SETUP                                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Plutus works alongside Link My Books. You must complete the    │
-│  LMB Accounts & Taxes Setup Wizard BEFORE continuing.           │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  WHAT TO DO IN LMB:                                             │
-│                                                                 │
-│  For EACH LMB connection (US, UK, etc.):                        │
-│                                                                 │
-│  1. Go to LMB → Accounts & Taxes → Setup Wizard                 │
-│  2. Step 1: Map transactions to accounts                        │
-│     • You can use LMB defaults or your own account names        │
-│     • Plutus doesn't care what you call them                    │
-│  3. Step 2: Configure QuickBooks bank accounts                  │
-│  4. Step 3: Confirm tax rates                                   │
-│  5. Complete the wizard                                         │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  ☑ I have completed the LMB Accounts & Taxes Wizard for all     │
-│    my Amazon connections                                        │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                    [Next →] (disabled)  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Why Plutus doesn't scan for LMB accounts:**
-- LMB lets users map to ANY account names (not just "LMB1: Amazon Sales")
-- Plutus only needs to know its own accounts (Inventory Asset + COGS)
-- LMB handles revenue/fees independently - Plutus handles COGS
-
-**Validation:**
-- Checkbox must be checked
-
-**Data Captured:**
-- `lmbSetupAcknowledged: true`
-- `lmbSetupAcknowledgedAt: timestamp`
-
----
-
-## Step 3: Brand Setup
-
-**Purpose:** Define brand names and their marketplaces.
-
-**UI Elements:**
+**Sidebar indicator:** Shows checkmark when at least 1 brand is configured.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 3: BRAND SETUP                                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Brands let you track P&L separately for different product      │
-│  lines or marketplaces. Plutus will create sub-accounts for     │
-│  each brand you define.                                         │
-│                                                                 │
-│  YOUR BRANDS                                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                                                         │   │
-│  │  ┌─────────────────────────────────────────────────┐   │   │
-│  │  │ Brand Name *   [US-Dust Sheets            ]     │   │   │
-│  │  │ Marketplace *  [Amazon.com           ▼]         │   │   │
-│  │  │ Currency:      USD (auto from marketplace)      │   │   │
-│  │  │                                        [Remove] │   │   │
-│  │  └─────────────────────────────────────────────────┘   │   │
-│  │                                                         │   │
-│  │  ┌─────────────────────────────────────────────────┐   │   │
-│  │  │ Brand Name *   [UK-Dust Sheets            ]     │   │   │
-│  │  │ Marketplace *  [Amazon.co.uk         ▼]         │   │   │
-│  │  │ Currency:      GBP (auto from marketplace)      │   │   │
-│  │  │                                        [Remove] │   │   │
-│  │  └─────────────────────────────────────────────────┘   │   │
-│  │                                                         │   │
-│  │  [+ Add Brand]                                          │   │
-│  │                                                         │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                        [Next →]         │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│                    │                                                         │
+│  SETUP             │   BRANDS                                                │
+│                    │   ─────────────────────────────────────────────────     │
+│  ┌──────────────┐  │                                                         │
+│  │ ● Brands     │  │   Add brands for separate P&L tracking. Plutus will    │
+│  │   Accounts   │  │   create sub-accounts in QBO for each brand.           │
+│  │   SKUs       │  │                                                         │
+│  └──────────────┘  │   ┌─────────────────────────────────────────────────┐   │
+│                    │   │ Brand Name       │ Marketplace     │ Currency │   │
+│                    │   ├──────────────────┼─────────────────┼──────────┤   │
+│                    │   │ US-Dust Sheets   │ Amazon.com      │ USD      │ ✕ │
+│                    │   │ UK-Dust Sheets   │ Amazon.co.uk    │ GBP      │ ✕ │
+│                    │   └─────────────────────────────────────────────────┘   │
+│                    │                                                         │
+│                    │   ┌─────────────────────────────────────────────────┐   │
+│                    │   │ [Brand name...    ] [Amazon.com ▼] [+ Add]     │   │
+│                    │   └─────────────────────────────────────────────────┘   │
+│                    │                                                         │
+└────────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
 **Marketplace Options:**
-- Amazon.com (USD)
-- Amazon.co.uk (GBP)
-- Amazon.ca (CAD)
-- Amazon.de (EUR)
-- Amazon.fr (EUR)
-- Amazon.es (EUR)
-- Amazon.it (EUR)
-- Amazon.com.mx (MXN)
-- Amazon.co.jp (JPY)
-- Amazon.com.au (AUD)
+| Marketplace | Currency |
+|-------------|----------|
+| Amazon.com | USD |
+| Amazon.co.uk | GBP |
+| Amazon.ca | CAD |
+| Amazon.de | EUR |
+| Amazon.fr | EUR |
+| Amazon.es | EUR |
+| Amazon.it | EUR |
 
 **Validation:**
-- At least 1 brand defined
-- Brand names are unique
-- Brand names are valid for QBO account names (no special characters)
+- At least 1 brand required
+- Brand names must be unique
+- Brand names must be valid for QBO account names (no special characters)
 
 **Data Captured:**
-- `brands` table entries (name, marketplace, currency)
+- `brands[]` - Array of { name, marketplace, currency }
 
 ---
 
-## Step 4: Plutus Account Setup
+## Section 2: Account Mapping
 
-**Purpose:** Create or select all sub-accounts needed for brand-level tracking. This includes:
-- **For Plutus:** Inventory Asset and COGS sub-accounts
-- **For LMB:** Revenue sub-accounts for **Sales/Refunds** (Product Groups split sales/refunds by brand)
-- **For Plutus:** Fee/other-income sub-accounts used as targets for **post-settlement reclass JEs** (fees are not split by Product Group)
+**Purpose:** Map QBO parent accounts so Plutus can create brand sub-accounts.
 
-**UI Elements:**
+**Sidebar indicator:** Shows checkmark when all 19 accounts are mapped and sub-accounts created.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 4: PLUTUS ACCOUNT SETUP                                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Plutus needs accounts to track inventory and COGS by brand.    │
-│  We'll also create revenue sub-accounts for LMB (Sales/Refunds) │
-│  and fee sub-accounts for Plutus to post reclass JEs later.     │
-│                                                                 │
-│  We've pre-filled suggested account names. You can customize    │
-│  them or select existing accounts from your Chart of Accounts.  │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  PARENT ACCOUNTS (required)                                     │
-│                                                                 │
-│  These parents must exist. Plutus will create sub-accounts      │
-│  under them for each brand.                                     │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ PLUTUS ACCOUNTS (Inventory + COGS)                      │   │
-│  │                                                         │   │
-│  │  Inventory Asset Parent                                 │   │
-│  │  [Inventory Asset               ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Manufacturing COGS Parent                              │   │
-│  │  [Manufacturing                 ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Freight & Duty COGS Parent                             │   │
-│  │  [Freight & Custom Duty         ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Land Freight COGS Parent                               │   │
-│  │  [Land Freight                  ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Storage 3PL COGS Parent                                │   │
-│  │  [Storage 3PL                   ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Mfg Accessories COGS Parent                            │   │
-│  │  [Mfg Accessories               ▼] ❌ Not found         │   │
-│  │                                     [Create Account]    │   │
-│  │                                                         │   │
-│  │  Inventory Shrinkage Parent                             │   │
-│  │  [Inventory Shrinkage           ▼] ❌ Not found         │   │
-│  │                                     [Create Account]    │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ LMB ACCOUNTS (Revenue + Fees) - LMB posts here          │   │
-│  │                                                         │   │
-│  │  Amazon Sales Parent                                    │   │
-│  │  [Amazon Sales                  ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon Refunds Parent                                  │   │
-│  │  [Amazon Refunds                ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon FBA Fees Parent                                 │   │
-│  │  [Amazon FBA Fees               ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon Seller Fees Parent                              │   │
-│  │  [Amazon Seller Fees            ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon Storage Fees Parent                             │   │
-│  │  [Amazon Storage Fees           ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon Advertising Costs Parent                        │   │
-│  │  [Amazon Advertising Costs      ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon Promotions Parent                               │   │
-│  │  [Amazon Promotions             ▼] ✅ Found in QBO      │   │
-│  │                                                         │   │
-│  │  Amazon FBA Inv Reimbursement Parent                    │   │
-│  │  [Amazon FBA Inventory Reimb.   ▼] ✅ Found in QBO      │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  [Create All Missing Parent Accounts]                           │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│                    │                                                         │
+│  SETUP             │   ACCOUNT MAPPING                                       │
+│                    │   ─────────────────────────────────────────────────     │
+│  ┌──────────────┐  │                                                         │
+│  │   Brands ✓   │  │   Map your QBO accounts. Plutus creates brand          │
+│  │ ● Accounts   │  │   sub-accounts under each parent you select.           │
+│  │   SKUs       │  │                                                         │
+│  └──────────────┘  │                                                         │
+│                    │   INVENTORY ASSET                                       │
+│                    │   ┌───────────────────────────────────────────────┐     │
+│                    │   │ Manufacturing    │ [Select account...     ▼] │     │
+│                    │   │ Freight          │ [Select account...     ▼] │     │
+│                    │   │ Duty             │ [Select account...     ▼] │     │
+│                    │   │ Mfg Accessories  │ [Select account...     ▼] │     │
+│                    │   └───────────────────────────────────────────────┘     │
+│                    │                                                         │
+│                    │   COST OF GOODS SOLD                                    │
+│                    │   ┌───────────────────────────────────────────────┐     │
+│                    │   │ Manufacturing    │ [Select account...     ▼] │     │
+│                    │   │ Freight          │ [Select account...     ▼] │     │
+│                    │   │ Duty             │ [Select account...     ▼] │     │
+│                    │   │ Mfg Accessories  │ [Select account...     ▼] │     │
+│                    │   │ Land Freight     │ [Select account...     ▼] │     │
+│                    │   │ Storage 3PL      │ [Select account...     ▼] │     │
+│                    │   │ Shrinkage        │ [Select account...     ▼] │     │
+│                    │   └───────────────────────────────────────────────┘     │
+│                    │                                                         │
+│                    │   REVENUE & FEES (LMB)                                  │
+│                    │   ┌───────────────────────────────────────────────┐     │
+│                    │   │ Amazon Sales     │ [Select account...     ▼] │     │
+│                    │   │ Amazon Refunds   │ [Select account...     ▼] │     │
+│                    │   │ FBA Reimbursement│ [Select account...     ▼] │     │
+│                    │   │ Seller Fees      │ [Select account...     ▼] │     │
+│                    │   │ FBA Fees         │ [Select account...     ▼] │     │
+│                    │   │ Storage Fees     │ [Select account...     ▼] │     │
+│                    │   │ Advertising      │ [Select account...     ▼] │     │
+│                    │   │ Promotions       │ [Select account...     ▼] │     │
+│                    │   └───────────────────────────────────────────────┘     │
+│                    │                                                         │
+│                    │   ┌─────────────────────────────────────────────────┐   │
+│                    │   │      [Create Sub-Accounts for 2 Brands]        │   │
+│                    │   └─────────────────────────────────────────────────┘   │
+│                    │                                                         │
+└────────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
-**After Parents Verified - Sub-Accounts Section:**
+### Account Categories
 
-```
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  SUB-ACCOUNTS BY BRAND                                          │
-│                                                                 │
-│  These sub-accounts will be created for each brand. You can     │
-│  customize the names if needed.                                 │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ US-DUST SHEETS                                          │   │
-│  │ ─────────────────────────────────────────────────────── │   │
-│  │                                                         │   │
-│  │ INVENTORY ASSET SUB-ACCOUNTS (Plutus posts)             │   │
-│  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Manufacturing  [Inv Manufacturing - US-Dust Sheets] │ │   │
-│  │ │ Freight        [Inv Freight - US-Dust Sheets      ] │ │   │
-│  │ │ Duty           [Inv Duty - US-Dust Sheets         ] │ │   │
-│  │ │ Mfg Accessories[Inv Mfg Accessories - US-Dust She ] │ │   │
-│  │ └─────────────────────────────────────────────────────┘ │   │
-│  │                                                         │   │
-│  │ COGS SUB-ACCOUNTS (Plutus posts)                        │   │
-│  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Manufacturing  [Manufacturing - US-Dust Sheets    ] │ │   │
-│  │ │ Freight        [Freight - US-Dust Sheets          ] │ │   │
-│  │ │ Duty           [Duty - US-Dust Sheets             ] │ │   │
-│  │ │ Mfg Accessories[Mfg Accessories - US-Dust Sheets  ] │ │   │
-│  │ │ Shrinkage      [Inventory Shrinkage - US-Dust Shee] │ │   │
-│  │ └─────────────────────────────────────────────────────┘ │   │
-│  │                                                         │   │
-│  │ COGS SUB-ACCOUNTS (Manual - user enters bills)          │   │
-│  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Land Freight   [Land Freight - US-Dust Sheets     ] │ │   │
-│  │ │ Storage 3PL    [Storage 3PL - US-Dust Sheets      ] │ │   │
-│  │ └─────────────────────────────────────────────────────┘ │   │
-│  │                                                         │   │
-│  │ REVENUE SUB-ACCOUNTS (LMB Product Groups)               │   │
-│  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Sales          [Amazon Sales - US-Dust Sheets     ] │ │   │
-│  │ │ Refunds        [Amazon Refunds - US-Dust Sheets   ] │ │   │
-│  │ └─────────────────────────────────────────────────────┘ │   │
-│  │                                                         │   │
-│  │ FEE/OTHER-INCOME SUB-ACCOUNTS (Plutus reclass targets)   │   │
-│  │ ┌─────────────────────────────────────────────────────┐ │   │
-│  │ │ Seller Fees    [Amazon Seller Fees - US-Dust Sheet] │ │   │
-│  │ │ FBA Fees       [Amazon FBA Fees - US-Dust Sheets  ] │ │   │
-│  │ │ Storage Fees   [Amazon Storage Fees - US-Dust She ] │ │   │
-│  │ │ Advertising    [Amazon Advertising - US-Dust Sheet] │ │   │
-│  │ │ Promotions     [Amazon Promotions - US-Dust Sheets] │ │   │
-│  │ │ Reimbursement  [Amazon FBA Inv Reimb - US-Dust She] │ │   │
-│  │ └─────────────────────────────────────────────────────┘ │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ UK-DUST SHEETS                                          │   │
-│  │ ─────────────────────────────────────────────────────── │   │
-│  │ (same structure as above)                               │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  SUMMARY: 38 sub-accounts to create                             │
-│  • 8 Inventory Asset sub-accounts (4 per brand)                 │
-│  • 14 COGS sub-accounts (7 per brand)                           │
-│  • 16 Revenue/Fee sub-accounts (8 per brand)                    │
-│    - Sales/Refunds used by LMB Product Groups                    │
-│    - Fees used by Plutus fee reclass JEs                         │
-│                                                                 │
-│  [Create All Sub-Accounts in QBO]                               │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                    [Next →] (disabled)  │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Inventory Asset (4 accounts)**
 
-**After Creation:**
+| Key | Label | QBO Account Type | Detail Type |
+|-----|-------|------------------|-------------|
+| invManufacturing | Manufacturing | Other Current Asset | Inventory |
+| invFreight | Freight | Other Current Asset | Inventory |
+| invDuty | Duty | Other Current Asset | Inventory |
+| invMfgAccessories | Mfg Accessories | Other Current Asset | Inventory |
 
-```
-│  ✅ 38 sub-accounts created successfully                        │
-│                                                                 │
-│  [Back]                                        [Next →]         │
-```
+**Cost of Goods Sold (7 accounts)**
+
+| Key | Label | QBO Account Type | Detail Type |
+|-----|-------|------------------|-------------|
+| cogsManufacturing | Manufacturing | Cost of Goods Sold | Supplies & Materials - COGS |
+| cogsFreight | Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| cogsDuty | Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| cogsMfgAccessories | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS |
+| cogsLandFreight | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| cogsStorage3pl | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| cogsShrinkage | Shrinkage | Cost of Goods Sold | Other Costs of Services - COS |
+
+**Revenue & Fees - LMB (8 accounts)**
+
+| Key | Label | QBO Account Type | Detail Type |
+|-----|-------|------------------|-------------|
+| amazonSales | Amazon Sales | Income | Sales of Product Income |
+| amazonRefunds | Amazon Refunds | Income | Discounts/Refunds Given |
+| amazonFbaInventoryReimbursement | FBA Reimbursement | Other Income | Other Miscellaneous Income |
+| amazonSellerFees | Seller Fees | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| amazonFbaFees | FBA Fees | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| amazonStorageFees | Storage Fees | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| amazonAdvertisingCosts | Advertising | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| amazonPromotions | Promotions | Cost of Goods Sold | Other Costs of Services - COS |
+
+### Sub-Account Naming Convention
+
+When creating sub-accounts, Plutus uses this pattern:
+- **Inventory Asset:** `Inv {Component} - {BrandName}` (e.g., "Inv Manufacturing - US-Dust Sheets")
+- **COGS:** `{Component} - {BrandName}` (e.g., "Manufacturing - US-Dust Sheets")
+- **Revenue/Fees:** `{Parent Name} - {BrandName}` (e.g., "Amazon Sales - US-Dust Sheets")
+
+The "Inv" prefix on Inventory Asset accounts prevents name collision with COGS accounts.
+
+### Sub-Account Creation Summary
+
+For 2 brands, the API creates:
+- 8 Inventory Asset sub-accounts (4 components × 2 brands)
+- 14 COGS sub-accounts (7 components × 2 brands)
+- 16 Revenue/Fee sub-accounts (8 categories × 2 brands)
+- **Total: 38 sub-accounts**
 
 **Validation:**
-- All parent accounts exist (or created)
-- All sub-accounts created in QBO
-- No duplicate account names (user responsibility; handle via optional manual cleanup script if needed)
+- All 19 parent accounts must be selected
+- Brands must be configured first (navigate to Brands section if empty)
 
-**Data Captured:**
-- `qboAccountId` for all accounts
-- Account name mappings stored in Plutus DB
+**API Endpoint:** `POST /api/qbo/accounts/create-plutus-qbo-lmb-plan`
+
+```typescript
+// Request
+{
+  brandNames: string[],
+  accountMappings: {
+    invManufacturing: string,    // QBO account ID
+    invFreight: string,
+    invDuty: string,
+    invMfgAccessories: string,
+    cogsManufacturing: string,
+    cogsFreight: string,
+    cogsDuty: string,
+    cogsMfgAccessories: string,
+    cogsLandFreight: string,
+    cogsStorage3pl: string,
+    cogsShrinkage: string,
+    amazonSales: string,
+    amazonRefunds: string,
+    amazonFbaInventoryReimbursement: string,
+    amazonSellerFees: string,
+    amazonFbaFees: string,
+    amazonStorageFees: string,
+    amazonAdvertisingCosts: string,
+    amazonPromotions: string,
+  }
+}
+
+// Response
+{
+  success: true,
+  created: 38,
+  accounts: [
+    { name: "Inv Manufacturing - US-Dust Sheets", qboId: "123" },
+    // ...
+  ]
+}
+```
 
 ---
 
-## Step 5: SKU Setup
+## Section 3: SKUs
 
-**Purpose:** Map SKUs to brands. Costs are NOT entered here - they come from bills.
+**Purpose:** Map product SKUs to brands for COGS calculation.
 
-**UI Elements:**
+**Sidebar indicator:** Shows checkmark when at least 1 SKU is configured.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 5: SKU SETUP                                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Add your product SKUs and assign them to brands.               │
-│                                                                 │
-│  ℹ️  You don't need to enter costs here. Plutus calculates      │
-│     unit costs automatically from your supplier bills.          │
-│                                                                 │
-│  [+ Add SKU]  [Bulk Import CSV]                                 │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ SKU        │ Product Name              │ Brand          │   │
-│  ├────────────┼───────────────────────────┼────────────────┤   │
-│  │ CS-007     │ 6 Pack Drop Cloth 12x9ft  │ US-Dust Sheets │   │
-│  │ CS-010     │ 3 Pack Drop Cloth 12x9ft  │ US-Dust Sheets │   │
-│  │ CS-12LD-7M │ 12 Pack Drop Cloth 12x9ft │ US-Dust Sheets │   │
-│  │ CS-1SD-32M │ 1 Pack Drop Cloth 12x9ft  │ US-Dust Sheets │   │
-│  │ CS-007-UK  │ 6 Pack Drop Cloth 12x9ft  │ UK-Dust Sheets │   │
-│  │ CS-010-UK  │ 3 Pack Drop Cloth 12x9ft  │ UK-Dust Sheets │   │
-│  │ ...        │                           │                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  Total: 12 SKUs configured                                      │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                        [Next →]         │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│                    │                                                         │
+│  SETUP             │   SKUs                                                  │
+│                    │   ─────────────────────────────────────────────────     │
+│  ┌──────────────┐  │                                                         │
+│  │   Brands ✓   │  │   Add your product SKUs and assign them to brands.     │
+│  │   Accounts ✓ │  │   Costs come from bills - no need to enter them here.  │
+│  │ ● SKUs       │  │                                                         │
+│  └──────────────┘  │   [+ Add SKU]  [Import CSV]                             │
+│                    │                                                         │
+│                    │   ┌─────────────────────────────────────────────────┐   │
+│                    │   │ SKU          │ Product Name          │ Brand   │   │
+│                    │   ├──────────────┼───────────────────────┼─────────┤   │
+│                    │   │ CS-007       │ 6 Pack Drop Cloth     │ US-Dust │ ✕ │
+│                    │   │ CS-010       │ 3 Pack Drop Cloth     │ US-Dust │ ✕ │
+│                    │   │ CS-12LD-7M   │ 12 Pack Drop Cloth    │ US-Dust │ ✕ │
+│                    │   │ CS-007-UK    │ 6 Pack Drop Cloth     │ UK-Dust │ ✕ │
+│                    │   │ CS-010-UK    │ 3 Pack Drop Cloth     │ UK-Dust │ ✕ │
+│                    │   └─────────────────────────────────────────────────┘   │
+│                    │                                                         │
+│                    │   Total: 5 SKUs configured                              │
+│                    │                                                         │
+└────────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
 **Add SKU Modal:**
@@ -428,17 +314,17 @@ The Setup Wizard guides users through all prerequisites before Plutus can proces
 │  ADD SKU                                                    [X] │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  SKU *                    [CS-007                    ]          │
-│  Product Name             [6 Pack Drop Cloth 12x9ft  ]          │
-│  Brand *                  [US-Dust Sheets        ▼]             │
-│  ASIN (optional)          [B08XYZ123             ]              │
+│  SKU *              [CS-007                    ]                │
+│  Product Name       [6 Pack Drop Cloth 12x9ft  ]                │
+│  Brand *            [US-Dust Sheets        ▼]                   │
+│  ASIN (optional)    [B08XYZ123             ]                    │
 │                                                                 │
-│  [Cancel]                                      [Save SKU]       │
+│  [Cancel]                                      [Save]           │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Bulk Import Template:**
+**CSV Import Format:**
 
 ```csv
 sku,product_name,brand,asin
@@ -447,528 +333,91 @@ CS-010,3 Pack Drop Cloth 12x9ft,US-Dust Sheets,B08XYZ456
 ```
 
 **Validation:**
-- SKU is unique
-- Brand exists
+- SKU must be unique
+- Brand must exist (from Brands section)
 
 **Data Captured:**
-- `sku` table entries (sku, productName, brandId, asin)
+- `skus[]` - Array of { sku, productName, brandId, asin }
 
 ---
 
-## Step 6: LMB Product Groups (External)
+## Status Bar
 
-**Purpose:** Guide user to configure LMB Product Groups so **sales/refunds** post to brand sub-accounts.
-
-**Important:** Product Groups do not split most fee categories by brand. Fees are mapped in LMB Accounts & Taxes and are re-allocated by Plutus after the settlement is posted.
-
-**UI Elements:**
+The status bar at the bottom provides a quick summary of setup progress:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 6: LMB PRODUCT GROUPS                                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ⚠️  This step is completed in Link My Books, not in Plutus.    │
-│                                                                 │
-│  You need to create Product Groups in LMB and map them to the   │
-│  Sales/Refunds brand sub-accounts created in Step 4.            │
-│                                                                 │
-│  Complete these steps for EACH LMB connection:                  │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  CONNECTION 1: AMAZON NORTH AMERICA (US)                        │
-│                                                                 │
-│  □ Step 6.1: Create Product Group                               │
-│      LMB → Inventory → Product Groups → Create                  │
-│      Group Name: US-Dust Sheets                                 │
-│                                                                 │
-│  □ Step 6.2: Map Accounts (use accounts from Step 4)            │
-│      ┌───────────────────────────────────────────────────┐     │
-│      │ Sales Account:        Amazon Sales - US-Dust Sheets│     │
-│      │ Refunds Account:      Amazon Refunds - US-Dust...  │     │
-│      │ (Fees):               Leave as inherited/default   │     │
-│      │ COGS:                 OFF (Plutus handles this)    │     │
-│      └───────────────────────────────────────────────────┘     │
-│                                                                 │
-│  □ Step 6.3: Assign SKUs to Product Group                       │
-│      LMB → Inventory → Product Groups → US-Dust Sheets          │
-│      Add: CS-007, CS-010, CS-12LD-7M, CS-1SD-32M                │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  CONNECTION 2: AMAZON EUROPE (UK)                               │
-│                                                                 │
-│  □ Step 6.4: Create Product Group "UK-Dust Sheets"              │
-│      (Same process as above, using UK-Dust Sheets accounts)     │
-│                                                                 │
-│  □ Step 6.5: Map Accounts (same pattern, UK accounts)           │
-│                                                                 │
-│  □ Step 6.6: Assign UK SKUs to Product Group                    │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  [Open Link My Books ↗]                                         │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  ☑ I have created Product Groups for all my brands              │
-│  ☑ I have assigned all SKUs to their Product Groups             │
-│  ☑ I have set COGS to OFF (Plutus handles COGS)                 │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                    [Next →] (disabled)  │
-└─────────────────────────────────────────────────────────────────┘
+Status: 2 brands configured • 19/19 accounts mapped • 12 SKUs
 ```
 
-**Validation:**
-- All checkboxes checked (honor system - we can't verify LMB config)
-
-**Data Captured:**
-- `lmbProductGroupsConfigured: true`
-- `lmbProductGroupsConfiguredAt: timestamp`
+States:
+- `0 brands configured` → Red indicator
+- `N brands configured` → Green indicator
+- `0/19 accounts mapped` → Red indicator
+- `N/19 accounts mapped` → Yellow indicator (partial)
+- `19/19 accounts mapped` → Green indicator
+- `0 SKUs` → Yellow indicator (optional but recommended)
+- `N SKUs` → Green indicator
 
 ---
 
-## Step 7: Bill Entry Guidelines
+## Data Persistence
 
-**Purpose:** Explain how to enter Bills so Plutus can link them to POs.
-
-**UI Elements:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 7: BILL ENTRY GUIDELINES                                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Plutus links supplier bills together using the PO Number.      │
-│  You'll enter the PO in the bill's "Memo" field (PrivateNote).  │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  REQUIRED FORMAT FOR BILL MEMO:                                 │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  PO: PO-2026-001                                        │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  • Start with "PO: " (including the space)                      │
-│  • Follow with your PO number (e.g., PO-2026-001)               │
-│  • Keep the memo EXACTLY this format - no extra text            │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  EXAMPLE: Entering a Manufacturing Bill                         │
-│                                                                 │
-│  1. Go to QBO → Expenses → Bills → Create Bill                  │
-│  2. Enter vendor, date, amount                                  │
-│  3. In the Memo field, enter: PO: PO-2026-001                   │
-│  4. Select account: Inv Manufacturing - [Brand]                 │
-│  5. Save                                                        │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  WHY THIS MATTERS:                                              │
-│                                                                 │
-│  Plutus reads all bills with the same PO number and combines    │
-│  them to calculate your landed cost per unit:                   │
-│                                                                 │
-│    Manufacturing Bill (PO: PO-2026-001) → $5,000 / 1000 units   │
-│    + Freight Bill (PO: PO-2026-001)     → $500 / 1000 units     │
-│    + Duty Bill (PO: PO-2026-001)        → $200 / 1000 units     │
-│    ─────────────────────────────────────────────────────────    │
-│    = Total Landed Cost                  → $5.70 per unit        │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  ☑ I understand how to enter bills with the PO memo format      │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                    [Next →] (disabled)  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Validation:**
-- Checkbox must be checked (honor system - no API verification needed)
-
-**Data Captured:**
-- `billGuidelinesAcknowledged: true`
-- `billGuidelinesAcknowledgedAt: timestamp`
-
-**Technical Note (for developers):**
-Plutus queries bills using `PrivateNote` field:
-1. Try exact match: `SELECT * FROM Bill WHERE PrivateNote = 'PO: PO-2026-001'`
-2. Fallback: Pull bills by date range, filter client-side by memo prefix
-
----
-
-## Step 8: Historical Catch-Up
-
-**Purpose:** Choose how to sync Plutus with historical data. Opening position requires source documentation.
-
-**UI Elements:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 8: HISTORICAL CATCH-UP                                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Plutus maintains a strict audit trail. Every inventory         │
-│  movement must be linked to a source document:                  │
-│                                                                 │
-│  • INVENTORY IN  → Bills in QBO (Plutus reads these)            │
-│  • INVENTORY OUT → LMB Settlements (via Audit Data CSV)         │
-│  • OPENING POS.  → Amazon Inventory Report + Valuation          │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  SELECT YOUR STARTING POINT:                                    │
-│                                                                 │
-│  ○ I'm just starting (no historical data)                       │
-│    You're a new seller or just started using LMB.               │
-│    Plutus will process settlements as they come.                │
-│                                                                 │
-│  ○ Catch up from a specific date (with opening snapshot)        │
-│    Start from: [2025-01-01        📅]                           │
-│    Requires: Opening inventory snapshot (see below)             │
-│                                                                 │
-│  ○ Catch up from the beginning                                  │
-│    Process ALL historical bills and settlements.                │
-│    Most accurate, but more work upfront.                        │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                        [Next →]         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**If "Catch up from specific date" selected - Additional Panel:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  OPENING INVENTORY SNAPSHOT                                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  To start from 2025-01-01, we need to know your inventory       │
-│  position on that date. This requires source documents.         │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  STEP 1: UPLOAD AMAZON INVENTORY REPORT                         │
-│                                                                 │
-│  Download from: Seller Central → Reports → Inventory →          │
-│                 Inventory Ledger (as-of 2025-01-01)             │
-│                                                                 │
-│  [Choose File] fba-inventory-2025-01-01.csv                     │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  STEP 2: PROVIDE INVENTORY VALUATION                            │
-│                                                                 │
-│  ○ Compute from historical bills in QBO                         │
-│    Plutus will read all bills before 2025-01-01 to              │
-│    calculate weighted average cost per SKU.                     │
-│    ⚠️ Bills must have PO in Memo field                          │
-│                                                                 │
-│  ○ Use accountant's valuation                                   │
-│    Upload component breakdown from your accountant:             │
-│    [Choose File] inventory-valuation-2025-01-01.xlsx            │
-│                                                                 │
-│    Required columns: SKU, Qty, Mfg, Freight, Duty, MfgAcc       │
-│    [Download Template]                                          │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  PREVIEW:                                                       │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ SKU       │ Units │ Mfg/unit │ Frt/unit │ Total Value  │   │
-│  │ CS-007    │ 500   │ $2.50    │ $0.30    │ $1,500.00    │   │
-│  │ CS-010    │ 300   │ $2.50    │ $0.30    │ $900.00      │   │
-│  │ ...       │ ...   │ ...      │ ...      │ ...          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  STEP 3: QBO INITIALIZATION JOURNAL ENTRY                       │
-│                                                                 │
-│  ⚠️ IMPORTANT: Your QBO inventory sub-accounts are currently   │
-│  at $0. Without an initialization JE, they will go NEGATIVE    │
-│  when you post your first COGS.                                │
-│                                                                 │
-│  ○ Let Plutus create the initialization JE automatically       │
-│    (Recommended)                                                │
-│                                                                 │
-│  ○ I'll create it manually / have my accountant do it          │
-│    [Download JE Details]                                        │
-│                                                                 │
-│  Preview of Initialization JE:                                  │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ Date: 2025-01-01                                        │   │
-│  │                                                         │   │
-│  │ DEBITS:                                                 │   │
-│  │   Inv Manufacturing - US-Dust Sheets  $1,250.00         │   │
-│  │   Inv Freight - US-Dust Sheets        $150.00           │   │
-│  │   Inv Manufacturing - UK-Dust Sheets  $800.00           │   │
-│  │   ...                                                   │   │
-│  │                                                         │   │
-│  │ CREDITS:                                                │   │
-│  │   Opening Balance Equity              $2,400.00         │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                           [Create Opening Snapshot →]   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Validation:**
-- If "specific date" selected:
-  - Date must be in the past
-  - Amazon inventory report must be uploaded
-  - Valuation source must be selected (bills or accountant file)
-  - If accountant file, must have required columns
-  - QBO initialization method must be selected
-
-**Data Captured:**
-- `catchUpMode: 'none' | 'from_date' | 'full'`
-- `catchUpStartDate: Date | null`
-- `openingSnapshotFile: File | null` (Amazon inventory report)
-- `valuationSource: 'bills' | 'accountant' | null`
-- `valuationFile: File | null` (accountant spreadsheet)
-- `qboInitMethod: 'auto' | 'manual' | null`
-- `qboInitJeId: String | null` (if auto-created)
-
-**What happens after wizard completes:**
-
-| Mode | Dashboard Behavior |
-|------|-------------------|
-| `none` (just starting) | Ready for first settlement. No catch-up needed. |
-| `from_date` | Shows "Catch-Up Mode" banner with start date. User uploads Audit Data CSVs. Banner disappears when user marks catch-up complete. |
-| `full` | Same as above, but banner shows "Full historical catch-up in progress." |
-
-**CSV-Only Mode (no QBO polling):**
-Plutus does NOT poll QBO to detect LMB settlements. The user is responsible for:
-1. Checking LMB for settlements that are "Ready to Post" or already posted
-2. Downloading Audit Data CSV from LMB for each settlement
-3. Uploading CSVs to Plutus
-
-This keeps the architecture simple and avoids issues with LMB posting Journal Entries vs Invoices.
-
----
-
-## Step 9: Review & Complete
-
-**Purpose:** Final review of all setup and mark wizard complete.
-
-**UI Elements:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 9: REVIEW & COMPLETE                                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  🎉 Setup is almost complete! Review your configuration:        │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  QUICKBOOKS CONNECTION                                          │
-│  ✅ Connected to: Targon LLC                                    │
-│  ✅ Home Currency: USD                                          │
-│                                                                 │
-│  LMB SETUP                                                      │
-│  ✅ Acknowledged as complete                                    │
-│                                                                 │
-│  BRANDS                                                         │
-│  ✅ US-Dust Sheets (Amazon.com)                                 │
-│  ✅ UK-Dust Sheets (Amazon.co.uk)                               │
-│                                                                 │
-│  ACCOUNTS                                                       │
-│  ✅ 15 parent accounts verified                                 │
-│  ✅ 38 sub-accounts created                                     │
-│  ✅ Bill memo format guidelines acknowledged                    │
-│                                                                 │
-│  SKUS                                                           │
-│  ✅ 12 SKUs configured                                          │
-│  ✅ All SKUs assigned to brands                                 │
-│                                                                 │
-│  LMB PRODUCT GROUPS                                             │
-│  ✅ Acknowledged as complete                                    │
-│                                                                 │
-│  HISTORICAL CATCH-UP                                            │
-│  ✅ Mode: From specific date (2025-01-01)                       │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  WHAT'S NEXT?                                                   │
-│                                                                 │
-│  After completing setup, you'll enter "Catch-Up Mode":          │
-│                                                                 │
-│  1. Ensure all bills since 2025-01-01 are in QBO                │
-│  2. Go to LMB and check for settlements since 2025-01-01        │
-│  3. Download Audit Data CSV for each settlement from LMB        │
-│  4. Upload CSVs to Plutus to process COGS                       │
-│  5. Once caught up, process new settlements as they come        │
-│                                                                 │
-│  [View Bill Entry Guide]   [View COGS Processing Guide]         │
-│                                                                 │
-│  ─────────────────────────────────────────────────────────────  │
-│  [Back]                                   [Complete Setup ✓]    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**After Completion:**
-
-```
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  ✅ SETUP COMPLETE                                              │
-│                                                                 │
-│  You can now start processing COGS!                             │
-│                                                                 │
-│  [Go to Dashboard]                                              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Data Captured:**
-- `setupComplete: true`
-- `setupCompletedAt: timestamp`
-
----
-
-## Database Schema for Setup State
+Setup state is saved to localStorage with key `plutus-setup-v4`:
 
 ```typescript
-model SetupState {
-  id                    String   @id @default(cuid())
-
-  // Step 1: QBO Connection
-  qboConnected          Boolean  @default(false)
-  qboRealmId            String?
-  qboCompanyName        String?
-
-  // Step 2: LMB Setup Acknowledgment
-  lmbSetupAcknowledged  Boolean  @default(false)
-  lmbSetupAcknowledgedAt DateTime?
-
-  // Step 3: Brands
-  brandsConfigured      Boolean  @default(false)
-  brandCount            Int      @default(0)
-
-  // Step 4: Plutus Accounts
-  parentAccountsVerified Boolean @default(false)
-  subAccountsCreated    Boolean  @default(false)
-  subAccountsCreatedAt  DateTime?
-
-  // Step 5: SKUs
-  skusConfigured        Boolean  @default(false)
-  skuCount              Int      @default(0)
-
-  // Step 6: LMB Product Groups (external)
-  lmbProductGroupsConfigured Boolean @default(false)
-  lmbProductGroupsConfiguredAt DateTime?
-
-  // Step 7: Bill Entry Guidelines
-  billGuidelinesAcknowledged Boolean @default(false)
-  billGuidelinesAcknowledgedAt DateTime?
-
-  // Step 8: Historical Catch-Up
-  catchUpMode           String?  // 'none' | 'from_date' | 'full'
-  catchUpStartDate      DateTime?
-  catchUpComplete       Boolean  @default(false)
-
-  // Opening Snapshot (required if catchUpMode = 'from_date')
-  openingSnapshotFileId String?  // Reference to uploaded Amazon inventory report
-  valuationSource       String?  // 'bills' | 'accountant'
-  valuationFileId       String?  // Reference to accountant valuation file (if applicable)
-  openingSnapshotCreated Boolean @default(false)
-
-  // Step 9: Complete
-  setupComplete         Boolean  @default(false)
-  setupCompletedAt      DateTime?
-
-  // Metadata
-  currentStep           Int      @default(1)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-}
+type SetupState = {
+  brands: Array<{ name: string; marketplace: string; currency: string }>;
+  accountMappings: Record<string, string>;  // key → QBO account ID
+  accountsCreated: boolean;
+  skus: Array<{ sku: string; productName: string; brand: string; asin?: string }>;
+};
 ```
 
 ---
 
-## Navigation Rules
+## Implementation Notes
 
-| Current Step | Can Go Back? | Can Go Next? |
-|--------------|--------------|--------------|
-| Step 1 | No | Only if QBO connected (auto-skip if already connected) |
-| Step 2 | Yes | Only if checkbox checked |
-| Step 3 | Yes | Only if at least 1 brand defined |
-| Step 4 | Yes | Only if all parent + sub-accounts exist |
-| Step 5 | Yes | Only if at least 1 SKU added |
-| Step 6 | Yes | Only if all checkboxes checked |
-| Step 7 | Yes | Only if checkbox checked |
-| Step 8 | Yes | Only if catch-up option valid (none/full = immediate, from_date = requires snapshot) |
-| Step 9 | Yes | Complete button enabled |
+### Route Structure
+
+```
+/setup                  → Redirects to /setup/brands
+/setup/brands           → Brands section
+/setup/accounts         → Account Mapping section
+/setup/skus             → SKUs section
+```
+
+Or use a single `/setup` route with query param: `/setup?section=brands`
+
+### Component Structure
+
+```
+SetupPage
+├── SetupSidebar
+│   ├── SidebarItem (Brands)
+│   ├── SidebarItem (Accounts)
+│   └── SidebarItem (SKUs)
+├── SetupContent
+│   ├── BrandsSection
+│   ├── AccountsSection
+│   └── SkusSection
+└── StatusBar
+```
+
+### Files to Modify
+
+- `apps/plutus/app/setup/page.tsx` - Main setup page with sidebar layout
 
 ---
 
-## Re-entry Behavior
+## Removed from Setup UI
 
-If user returns to wizard after partial completion:
-- Resume at `currentStep`
-- Previous steps show ✅ but remain editable
-- User can jump to any completed step
+The following items from the original 9-step wizard are NOT part of the setup UI. They are documented in the implementation plan or shown as help content elsewhere:
 
-If user returns after full completion:
-- Show "Setup Complete" summary
-- Offer "Edit Configuration" to modify settings
-- Changes to brands/SKUs don't require re-running full wizard
-
----
-
-## Error States
-
-**QBO Connection Failed:**
-```
-❌ Connection Failed
-
-Could not connect to QuickBooks. Please try again.
-Error: Invalid OAuth token
-
-[Retry Connection]
-```
-
-**Account Creation Failed:**
-```
-❌ Account Creation Failed
-
-Could not create account "Mfg Accessories" in QuickBooks.
-Error: Account name already exists
-
-Options:
-• Select the existing account from the dropdown
-• Or rename the new account
-
-[Select Existing]  [Rename]  [Retry]
-```
-
-**Parent Account Not Found:**
-```
-⚠️ Parent Account Not Found
-
-"Amazon Sales" parent account not found in QBO.
-This account should have been created by the LMB wizard.
-
-Options:
-• Create it now in Plutus
-• Or go to LMB and complete the Accounts & Taxes wizard
-
-[Create Now]  [Go to LMB]
-```
-
-**SKU Validation Error:**
-```
-❌ Invalid SKU
-
-SKU "CS-007" already exists. Please use a unique SKU.
-
-[OK]
-```
+| Original Step | New Location |
+|---------------|--------------|
+| Step 1: Connect QuickBooks | NotConnectedScreen pattern (automatic) |
+| Step 2: Verify LMB Setup | Mentioned in prerequisites / help docs |
+| Step 6: LMB Product Groups | Help documentation |
+| Step 7: Bill Entry Guidelines | Help documentation |
+| Step 8: Historical Catch-Up | Future feature / separate workflow |
+| Step 9: Review & Complete | Status bar shows completion state |
