@@ -365,7 +365,7 @@ export function CustomOpsCostGrid({
             {
               key: 'grossProfit',
               header: 'GP %',
-              width: 110,
+              width: 80,
               type: 'percent',
               editable: false,
               precision: 2,
@@ -374,7 +374,7 @@ export function CustomOpsCostGrid({
             {
               key: 'netProfit',
               header: 'NP %',
-              width: 110,
+              width: 80,
               type: 'percent',
               editable: false,
               precision: 2,
@@ -385,7 +385,7 @@ export function CustomOpsCostGrid({
               {
                 key: 'grossProfit',
                 header: 'GP $',
-                width: 130,
+                width: 90,
                 type: 'numeric',
                 editable: false,
                 precision: profitDisplayMode === 'total' ? 0 : 2,
@@ -394,7 +394,7 @@ export function CustomOpsCostGrid({
               {
                 key: 'netProfit',
                 header: 'NP $',
-                width: 130,
+                width: 90,
                 type: 'numeric',
                 editable: false,
                 precision: profitDisplayMode === 'total' ? 0 : 2,
