@@ -84,7 +84,9 @@ export function parseLmbAuditCsv(content: string): ParsedLmbAuditCsv {
     const market = cols[marketIdx]?.trim();
     const date = cols[dateIdx]?.trim();
     const orderId = cols[orderIdIdx]?.trim();
-    const sku = cols[skuIdx]?.trim();
+    const skuRaw = cols[skuIdx]?.trim();
+    const skuLower = skuRaw ? skuRaw.toLowerCase() : '';
+    const sku = skuLower === 'n/a' || skuLower === 'na' ? '' : skuRaw ? skuRaw : '';
     const quantityRaw = cols[quantityIdx]?.trim();
     const description = cols[descriptionIdx]?.trim();
     const netRaw = cols[netIdx]?.trim();
@@ -108,7 +110,7 @@ export function parseLmbAuditCsv(content: string): ParsedLmbAuditCsv {
       market,
       date,
       orderId,
-      sku: sku ? sku : '',
+      sku,
       quantity,
       description,
       net,
