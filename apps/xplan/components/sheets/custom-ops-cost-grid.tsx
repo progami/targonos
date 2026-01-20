@@ -13,9 +13,13 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useMutationQueue } from '@/hooks/useMutationQueue';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { usePersistentScroll } from '@/hooks/usePersistentScroll';
-import { useGridUndoRedo, type CellEdit } from '@/hooks/useGridUndoRedo';
+import {
+  useOpsPlanningStore,
+  type CellEdit,
+  type ProfitDisplayMode,
+  type TariffInputMode,
+} from '@/stores';
 import { cn } from '@/lib/utils';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
 import {
@@ -313,8 +317,7 @@ function computeCbm(row: OpsBatchRow): number | null {
   return cbmPerCarton * totalCartons;
 }
 
-type TariffInputMode = 'rate' | 'cost';
-type ProfitDisplayMode = 'unit' | 'total' | 'percent';
+// TariffInputMode and ProfitDisplayMode imported from @/stores
 
 const CELL_ID_PREFIX = 'xplan-ops-batch';
 
@@ -341,21 +344,14 @@ export function CustomOpsCostGrid({
   products,
   onSync,
 }: CustomOpsCostGridProps) {
-  const [tariffInputMode, setTariffInputMode] = usePersistentState<TariffInputMode>(
-    'xplan:ops:batch-tariff-mode',
-    'rate',
-  );
-  const [profitDisplayMode, setProfitDisplayMode] = usePersistentState<ProfitDisplayMode>(
-    'xplan:ops:batch-profit-display-mode',
-    'unit',
-  );
-
-  const setProfitMode = useCallback(
-    (next: ProfitDisplayMode) => {
-      setProfitDisplayMode(next);
-    },
-    [setProfitDisplayMode],
-  );
+  // Get state and actions from zustand store
+  const tariffInputMode = useOpsPlanningStore((s) => s.tariffInputMode);
+  const profitDisplayMode = useOpsPlanningStore((s) => s.profitDisplayMode);
+  const toggleTariffMode = useOpsPlanningStore((s) => s.toggleTariffMode);
+  const setProfitMode = useOpsPlanningStore((s) => s.setProfitMode);
+  const recordEdits = useOpsPlanningStore((s) => s.recordEdits);
+  const storeUndo = useOpsPlanningStore((s) => s.undo);
+  const storeRedo = useOpsPlanningStore((s) => s.redo);
 
   const columns = useMemo(() => {
     const tariffColumn = tariffInputMode === 'cost' ? TARIFF_COST_COLUMN : TARIFF_RATE_COLUMN;
@@ -505,9 +501,9 @@ export function CustomOpsCostGrid({
     onFlush: handleFlush,
   });
 
-  // Undo/redo functionality
+  // Undo/redo functionality - apply edits to local rows and queue for API
   const applyUndoRedoEdits = useCallback(
-    (edits: CellEdit<string>[]) => {
+    (edits: CellEdit[]) => {
       let updatedRows = [...localRows];
       for (const edit of edits) {
         const rowIndex = updatedRows.findIndex((r) => r.id === edit.rowKey);
@@ -533,10 +529,16 @@ export function CustomOpsCostGrid({
     [localRows, pendingRef, scheduleFlush, onRowsChange],
   );
 
-  const { recordEdits, undo, redo } = useGridUndoRedo<string>({
-    maxHistory: 50,
-    onApplyEdits: applyUndoRedoEdits,
-  });
+  // Undo/redo handlers that use the store
+  const undo = useCallback(() => {
+    const edits = storeUndo();
+    if (edits) applyUndoRedoEdits(edits);
+  }, [storeUndo, applyUndoRedoEdits]);
+
+  const redo = useCallback(() => {
+    const edits = storeRedo();
+    if (edits) applyUndoRedoEdits(edits);
+  }, [storeRedo, applyUndoRedoEdits]);
 
   const flushNowRef = useRef(flushNow);
   useEffect(() => {
@@ -585,8 +587,8 @@ export function CustomOpsCostGrid({
 
   const toggleTariffInputMode = useCallback(() => {
     cancelEditing();
-    setTariffInputMode((previous) => (previous === 'rate' ? 'cost' : 'rate'));
-  }, [cancelEditing, setTariffInputMode]);
+    toggleTariffMode();
+  }, [cancelEditing, toggleTariffMode]);
 
   const commitEdit = useCallback(
     (overrideValue?: string) => {
@@ -681,7 +683,7 @@ export function CustomOpsCostGrid({
       }
 
       // Record edits for undo/redo
-      const undoEdits: CellEdit<string>[] = [];
+      const undoEdits: CellEdit[] = [];
       if (colKey === 'productName') {
         const selected = products.find((p) => p.name === finalValue);
         if (selected) {
@@ -964,7 +966,7 @@ export function CustomOpsCostGrid({
     const { top, bottom, left, right } = normalizeRange(resolvedRange);
     let updatedRows = [...localRows];
     let cleared = 0;
-    const undoEdits: CellEdit<string>[] = [];
+    const undoEdits: CellEdit[] = [];
 
     for (let rowIndex = top; rowIndex <= bottom; rowIndex += 1) {
       const row = updatedRows[rowIndex];
@@ -1053,7 +1055,7 @@ export function CustomOpsCostGrid({
       let updatedRows = [...localRows];
       let applied = 0;
       let skipped = 0;
-      const undoEdits: CellEdit<string>[] = [];
+      const undoEdits: CellEdit[] = [];
 
       for (let r = 0; r < matrix.length; r += 1) {
         for (let c = 0; c < matrix[r]!.length; c += 1) {

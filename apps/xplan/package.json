@@ -19,12 +19,6 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
-    "@targon/amazon-sp-api": "workspace:*",
-    "@targon/auth": "workspace:*",
-    "@targon/config": "workspace:*",
-    "@targon/logger": "workspace:*",
-    "@targon/prisma-talos": "workspace:*",
-    "@targon/prisma-xplan": "workspace:*",
     "@prisma/client": "6.19.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -37,6 +31,12 @@
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.12",
+    "@targon/amazon-sp-api": "workspace:*",
+    "@targon/auth": "workspace:*",
+    "@targon/config": "workspace:*",
+    "@targon/logger": "workspace:*",
+    "@targon/prisma-talos": "workspace:*",
+    "@targon/prisma-xplan": "workspace:*",
     "@total-typescript/ts-reset": "^0.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -56,7 +56,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.4"
+    "zod": "^3.24.4",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
