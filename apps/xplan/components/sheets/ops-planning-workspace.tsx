@@ -42,7 +42,7 @@ import {
 import { formatDateDisplay, parseDate, toIsoDate } from '@/lib/utils/dates';
 import { withAppBasePath } from '@/lib/base-path';
 import { isRemovedPaymentCategory, REMOVED_PAYMENT_CATEGORY } from '@/lib/payments';
-import { usePersistentState } from '@/hooks/usePersistentState';
+import { useOpsPlanningStore } from '@/stores';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -909,17 +909,20 @@ export function OpsPlanningWorkspace({
   const [orders, setOrders] = useState<PurchaseOrderInput[]>(initialOrders);
   const [paymentRows, setPaymentRows] = useState<PurchasePaymentRow[]>(initialPayments);
   const [batchRows, setBatchRows] = useState<OpsBatchRow[]>(initialBatchRows);
-  const [activeOrderId, setActiveOrderId] = usePersistentState<string | null>(
-    `xplan:ops:active-order:${strategyId}`,
-    poTableRows[0]?.id ?? null,
-  );
-  const [activeBatchId, setActiveBatchId] = usePersistentState<string | null>(
-    `xplan:ops:active-batch:${strategyId}`,
-    null,
-  );
-  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
+
+  // Zustand store for selection and modal state
+  const activeOrderId = useOpsPlanningStore((s) => s.activeOrderId);
+  const setActiveOrderId = useOpsPlanningStore((s) => s.setActiveOrder);
+  const activeBatchId = useOpsPlanningStore((s) => s.activeBatchId);
+  const setActiveBatchId = useOpsPlanningStore((s) => s.setActiveBatch);
+  const isCreateOrderOpen = useOpsPlanningStore((s) => s.isCreateOrderOpen);
+  const openCreateOrder = useOpsPlanningStore((s) => s.openCreateOrder);
+  const closeCreateOrder = useOpsPlanningStore((s) => s.closeCreateOrder);
+  const isImportOrderOpen = useOpsPlanningStore((s) => s.isImportOrderOpen);
+  const openImportOrder = useOpsPlanningStore((s) => s.openImportOrder);
+  const closeImportOrder = useOpsPlanningStore((s) => s.closeImportOrder);
+
   const [newOrderCode, setNewOrderCode] = useState('');
-  const [isImportOrderOpen, setIsImportOrderOpen] = useState(false);
   const [talosReference, setTalosReference] = useState('');
   const [talosOrderCode, setTalosOrderCode] = useState('');
   const [talosOrdersQuery, setTalosOrdersQuery] = useState('');
@@ -1853,7 +1856,7 @@ export function OpsPlanningWorkspace({
         if (createdId) {
           setActiveOrderId(createdId);
         }
-        setIsCreateOrderOpen(false);
+        closeCreateOrder();
         setNewOrderCode('');
         toast.success('Purchase order created');
         router.refresh();
@@ -1862,7 +1865,7 @@ export function OpsPlanningWorkspace({
         toast.error(error instanceof Error ? error.message : 'Unable to create purchase order');
       }
     });
-  }, [strategyId, newOrderCode, productOptions, router, setActiveOrderId, startTransition]);
+  }, [strategyId, newOrderCode, productOptions, router, setActiveOrderId, closeCreateOrder, startTransition]);
 
   const handleImportFromTalos = useCallback(() => {
     const reference = talosReference.trim();
@@ -1901,7 +1904,7 @@ export function OpsPlanningWorkspace({
           setActiveOrderId(createdId);
         }
 
-        setIsImportOrderOpen(false);
+        closeImportOrder();
         setTalosReference('');
         setTalosOrderCode('');
         setTalosOrdersQuery('');
@@ -1919,6 +1922,7 @@ export function OpsPlanningWorkspace({
     isTalosImporting,
     router,
     setActiveOrderId,
+    closeImportOrder,
     startTransition,
 	    strategyId,
 	    talosOrderCode,
@@ -1949,8 +1953,8 @@ export function OpsPlanningWorkspace({
             scrollKey={`ops-planning:po:${strategyId}`}
             onSelectOrder={(orderId) => setActiveOrderId(orderId)}
             onRowsChange={handleInputRowsChange}
-            onCreateOrder={() => setIsCreateOrderOpen(true)}
-            onImportFromTalos={() => setIsImportOrderOpen(true)}
+            onCreateOrder={openCreateOrder}
+            onImportFromTalos={openImportOrder}
             onDuplicateOrder={handleDuplicateOrder}
             onDeleteOrder={handleDeleteOrder}
             disableCreate={isPending || productOptions.length === 0}
@@ -1963,7 +1967,8 @@ export function OpsPlanningWorkspace({
 	            open={isImportOrderOpen}
 	            onOpenChange={(nextOpen) => {
 	              if (isTalosImporting) return;
-	              setIsImportOrderOpen(nextOpen);
+	              if (nextOpen) openImportOrder();
+	              else closeImportOrder();
 	              if (!nextOpen) {
 	                setTalosImportError(null);
 	                setTalosReference('');
@@ -2226,7 +2231,7 @@ export function OpsPlanningWorkspace({
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsCreateOrderOpen(false)}
+                    onClick={closeCreateOrder}
                     className="rounded-lg border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
                   >
                     Cancel
