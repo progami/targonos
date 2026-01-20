@@ -7,7 +7,7 @@ type GlobalWithPrisma = typeof globalThis & {
 const DEFAULT_SCHEMA = 'plutus';
 
 function resolveDatasourceUrl() {
-  const raw = process.env.PLUTUS_DATABASE_URL || process.env.DATABASE_URL;
+  const raw = process.env.DATABASE_URL;
   if (!raw) return undefined;
 
   try {
