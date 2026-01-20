@@ -132,8 +132,6 @@ export default function FbaFeeTablesPage() {
         title="FBA Fee Tables (2026)"
         description="Amazon"
         icon={DollarSign}
-        backHref="/config/products"
-        backLabel="Products"
       />
 
       <PageContent className="space-y-8">
