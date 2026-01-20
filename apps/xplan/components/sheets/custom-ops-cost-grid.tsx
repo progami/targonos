@@ -190,7 +190,7 @@ function normalizeRange(range: CellRange): {
 
 const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
-  { key: 'productName', header: 'Product', width: 200, type: 'dropdown', editable: true },
+  { key: 'productName', header: 'Product', width: 140, type: 'dropdown', editable: true },
   { key: 'quantity', header: 'Qty', width: 110, type: 'numeric', editable: true, precision: 0 },
   {
     key: 'sellingPrice',
