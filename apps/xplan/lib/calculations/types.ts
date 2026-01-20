@@ -139,6 +139,12 @@ export interface BatchTableRowInput {
   overrideFbaFee?: number | null;
   overrideReferralRate?: number | null;
   overrideStoragePerMonth?: number | null;
+  // Carton dimensions for CBM calculation
+  cartonSide1Cm?: number | null;
+  cartonSide2Cm?: number | null;
+  cartonSide3Cm?: number | null;
+  cartonWeightKg?: number | null;
+  unitsPerCarton?: number | null;
 }
 
 export interface SalesWeekInput {

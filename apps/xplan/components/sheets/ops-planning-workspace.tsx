@@ -57,12 +57,17 @@ import {
 
 const BATCH_NUMERIC_PRECISION = {
   quantity: 0,
-  sellingPrice: 2,
+  sellingPrice: 3,
   manufacturingCost: 3,
   freightCost: 3,
   tariffCost: 3,
   fbaFee: 3,
   storagePerMonth: 3,
+  cartonSide1Cm: 2,
+  cartonSide2Cm: 2,
+  cartonSide3Cm: 2,
+  cartonWeightKg: 3,
+  unitsPerCarton: 0,
 } as const;
 
 const BATCH_PERCENT_PRECISION = {
@@ -832,6 +837,27 @@ export function OpsPlanningWorkspace({
         batch.overrideStoragePerMonth,
         BATCH_NUMERIC_PRECISION.storagePerMonth,
       ),
+      // Carton dimensions for CBM
+      cartonSide1Cm: formatNumericInput(
+        batch.cartonSide1Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide1Cm,
+      ),
+      cartonSide2Cm: formatNumericInput(
+        batch.cartonSide2Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide2Cm,
+      ),
+      cartonSide3Cm: formatNumericInput(
+        batch.cartonSide3Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide3Cm,
+      ),
+      cartonWeightKg: formatNumericInput(
+        batch.cartonWeightKg,
+        BATCH_NUMERIC_PRECISION.cartonWeightKg,
+      ),
+      unitsPerCarton: formatNumericInput(
+        batch.unitsPerCarton,
+        BATCH_NUMERIC_PRECISION.unitsPerCarton,
+      ),
     }),
     [productNameIndex],
   );
@@ -1362,6 +1388,11 @@ export function OpsPlanningWorkspace({
           fbaFee: '',
           referralRate: '',
           storagePerMonth: '',
+          cartonSide1Cm: '',
+          cartonSide2Cm: '',
+          cartonSide3Cm: '',
+          cartonWeightKg: '',
+          unitsPerCarton: '',
         };
         setBatchRows((previous) => {
           const next = [...previous, nextRow];
@@ -1388,6 +1419,11 @@ export function OpsPlanningWorkspace({
                 overrideFbaFee: null,
                 overrideReferralRate: null,
                 overrideStoragePerMonth: null,
+                cartonSide1Cm: null,
+                cartonSide2Cm: null,
+                cartonSide3Cm: null,
+                cartonWeightKg: null,
+                unitsPerCarton: null,
               } satisfies BatchTableRowInput,
             ];
             return {
