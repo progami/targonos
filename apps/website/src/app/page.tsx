@@ -1,304 +1,343 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowUpRight, Droplets, Package, Recycle, Shield } from 'lucide-react';
+
+import { ArrowRight, ExternalLink } from 'lucide-react';
 
 import { Container } from '@/components/Container';
-import { Button } from '@/components/Button';
-import { Badge } from '@/components/Badge';
-import { Card } from '@/components/Card';
 import { ProductFeatureCard } from '@/components/ProductFeatureCard';
-import { FAQ } from '@/components/FAQ';
-import { faqs } from '@/content/faqs';
+import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Reveal } from '@/components/Reveal';
 import { products } from '@/content/products';
 import { site } from '@/content/site';
+import { cn } from '@/lib/utils';
+
+function WideImage({
+  src,
+  alt,
+  className
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
+        // Our EBC wide creatives are 1464x600.
+        'aspect-[61/25]',
+        className
+      )}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 1024px) 100vw, 1920px"
+        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.02]"
+      />
+    </div>
+  );
+}
+
+function SquareImage({
+  src,
+  alt,
+  className
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
+        'aspect-square',
+        className
+      )}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 900px"
+        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.03]"
+      />
+    </div>
+  );
+}
 
 export default function HomePage() {
   const primary = products.find((p) => p.primary) ?? products[0];
+  const highlightChips = primary.highlights.slice(0, 3);
 
   return (
-    <div>
-      {/* Hero */}
+    <main>
+      {/* HERO */}
       <section className="pt-10 md:pt-16">
         <Container>
-          <div className="grid gap-10 md:grid-cols-12 md:items-center">
-            <div className="md:col-span-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge>{site.productBrandName}</Badge>
-                <Badge className="border-accent/30 bg-accent/10">
-                  {primary.packLabel} · {primary.thicknessLabel}
-                </Badge>
-              </div>
+          <div className="grid items-center gap-10 lg:grid-cols-12">
+            <div className="lg:col-span-5">
+              <Reveal delay={0}>
+                <Badge variant="subtle">Caelum Star</Badge>
+              </Reveal>
 
-              <h1 className="mt-5 text-balance text-5xl font-semibold tracking-tightish md:text-7xl">
-                Paint with confidence.
-              </h1>
+              <Reveal delay={80}>
+                <h1 className="mt-4 text-balance text-5xl font-semibold tracking-tight md:text-6xl">
+                  Extra-large dust sheets.
+                </h1>
+              </Reveal>
 
-              <p className="mt-4 max-w-xl text-base text-muted md:text-lg">
-                Extra‑large dust sheets for decorating, painting, and protection.
-              </p>
+              <Reveal delay={160}>
+                <p className="mt-4 max-w-xl text-pretty text-lg text-muted">
+                  Cover more. Clean up less.
+                </p>
+              </Reveal>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Button asChild size="lg" variant="accent">
-                  <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
-                    Buy {primary.name} <ArrowUpRight className="h-4 w-4" />
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="lg">
-                  <Link href="/products">Compare packs</Link>
-                </Button>
-              </div>
+              <Reveal delay={240}>
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <Button asChild size="lg">
+                    <Link href={`/products/${primary.slug}`}>Learn more</Link>
+                  </Button>
+                  <Button asChild variant="accent" size="lg">
+                    <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
+                      Buy on Amazon
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </a>
+                  </Button>
+                </div>
+              </Reveal>
 
-              <div className="mt-6 flex flex-wrap items-baseline gap-3">
-                {primary.price ? (
-                  <div className="text-sm font-semibold text-ink">
-                    From {primary.price}
-                    <span className="ml-1 text-xs font-normal text-muted">(on Amazon)</span>
-                  </div>
-                ) : (
-                  <div className="text-sm font-semibold text-ink">Price and availability on Amazon</div>
-                )}
-                {primary.coverageLabel ? (
-                  <div className="text-xs text-muted">{primary.coverageLabel} total coverage</div>
-                ) : null}
-              </div>
+              <Reveal delay={320}>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {highlightChips.map((h) => (
+                    <span
+                      key={h}
+                      className="rounded-full border bg-white/70 px-3 py-1 text-xs font-medium text-slate-800"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              </Reveal>
 
-              <div className="mt-10 grid gap-3 sm:grid-cols-3">
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <Package className="h-4 w-4" /> 12×9 ft
-                  </div>
-                  <div className="mt-1 text-xs text-muted">3.6m × 2.7m per sheet</div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <Shield className="h-4 w-4" /> Protect
-                  </div>
-                  <div className="mt-1 text-xs text-muted">Dust · paint · light spills</div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <Recycle className="h-4 w-4" /> Recycled
-                  </div>
-                  <div className="mt-1 text-xs text-muted">GRS certified (pack‑dependent)</div>
-                </Card>
-              </div>
+              <Reveal delay={400}>
+                <p className="mt-6 text-sm text-muted">
+                  Checkout stays on Amazon. This site is built for product details.
+                </p>
+              </Reveal>
             </div>
 
-            <div className="md:col-span-6">
-              <Card className="overflow-hidden">
-                <div className="relative aspect-[4/3] bg-white">
+            <div className="lg:col-span-7">
+              <Reveal variant="zoom" delay={140} className="h-full">
+                <div className="relative mx-auto max-w-[680px]">
                   <Image
                     src={primary.image.src}
                     alt={primary.image.alt}
-                    fill
-                    className="object-contain p-8"
+                    width={1200}
+                    height={1200}
                     priority
-                    sizes="(min-width: 1024px) 720px, 100vw"
+                    className="h-auto w-full drop-shadow-2xl"
                   />
                 </div>
-              </Card>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Card className="p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Coverage</div>
-                  <div className="mt-2 text-sm font-semibold text-ink">
-                    {primary.coverageLabel ?? '—'}
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Checkout</div>
-                  <div className="mt-2 text-sm font-semibold text-ink">On Amazon</div>
-                  <div className="mt-1 text-xs text-muted">Fast shipping · easy returns</div>
-                </Card>
-              </div>
+              </Reveal>
             </div>
           </div>
         </Container>
       </section>
 
-      {/* Category row (Apple Store-style) */}
-      <section className="mt-10">
+      {/* APPLE-LIKE: BIG VISUAL SECTIONS */}
+      <section className="py-10 md:py-14">
         <Container>
-          <div className="flex gap-8 overflow-x-auto pb-3 [-webkit-overflow-scrolling:touch]">
-            {products.map((p) => (
-              <Link
-                key={p.slug}
-                href={`/products/${p.slug}`}
-                className="group flex min-w-[120px] flex-col items-center gap-2"
-              >
-                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-surface shadow-softer transition group-hover:-translate-y-0.5">
-                  <span className="text-xl font-semibold tracking-tightish">
-                    {p.packLabel.replace(' PK', '')}
-                  </span>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs font-semibold text-ink">{p.name}</div>
-                  <div className="text-xs text-muted">{p.coverageLabel ?? p.thicknessLabel}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* Image-led: benefits */}
-      <section className="mt-16 md:mt-20">
-        <Container>
-          <div className="flex items-end justify-between gap-6">
-            <div>
-              <div className="text-sm font-semibold text-muted">Benefits</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tightish md:text-4xl">
-                One sheet. Multiple benefits.
+          <Reveal>
+            <div className="text-center">
+              <h2 className="text-balance text-4xl font-semibold tracking-tight md:text-5xl">
+                Pick your protection.
               </h2>
-            </div>
-            <div className="hidden md:block">
-              <Button asChild variant="outline">
-                <Link href="/products">Explore packs</Link>
-              </Button>
-            </div>
-          </div>
-        </Container>
-
-        <div className="mx-auto mt-8 max-w-[1680px] px-4 sm:px-6">
-          <Card className="overflow-hidden">
-            <div className="relative aspect-[970/600] bg-black">
-              <Image
-                src="/images/amazon/aplus-4.jpg"
-                alt="One sheet, multiple benefits"
-                fill
-                className="object-cover"
-                sizes="100vw"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
-            </div>
-          </Card>
-        </div>
-
-        <Container>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <Card className="p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Droplets className="h-4 w-4" /> Water resistant
-              </div>
-              <div className="mt-1 text-xs text-muted">Helps protect from light spills.</div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Shield className="h-4 w-4" /> Dust & debris
-              </div>
-              <div className="mt-1 text-xs text-muted">Designed for decorating prep.</div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Recycle className="h-4 w-4" /> Recyclability
-              </div>
-              <div className="mt-1 text-xs text-muted">See pack listing for details.</div>
-            </Card>
-          </div>
-        </Container>
-      </section>
-
-      {/* Image-led: fit */}
-      <section className="mt-16 md:mt-20">
-        <Container>
-          <div className="flex items-end justify-between gap-6">
-            <div>
-              <div className="text-sm font-semibold text-muted">Compare</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tightish md:text-4xl">Find your perfect fit.</h2>
-            </div>
-            <div className="hidden md:block">
-              <Button asChild variant="outline">
-                <Link href="/products">Compare packs</Link>
-              </Button>
-            </div>
-          </div>
-        </Container>
-
-        <div className="mx-auto mt-8 max-w-[1680px] px-4 sm:px-6">
-          <Card className="overflow-hidden">
-            <div className="relative aspect-[970/600] bg-black">
-              <Image
-                src="/images/amazon/fit-coverage.jpg"
-                alt="Find your perfect fit"
-                fill
-                className="object-cover"
-                sizes="100vw"
-              />
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {/* The latest */}
-      <section className="mt-16 md:mt-20">
-        <Container>
-          <div className="flex items-end justify-between gap-6">
-            <div>
-              <div className="text-sm font-semibold text-muted">The latest</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tightish md:text-4xl">
-                Packs, ready for the next job.
-              </h2>
-            </div>
-            <div className="hidden md:block">
-              <Button asChild variant="outline">
-                <Link href="/products">Compare packs</Link>
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-8 flex gap-5 overflow-x-auto pb-4 [-webkit-overflow-scrolling:touch]">
-            {products.map((p) => (
-              <ProductFeatureCard key={p.slug} product={p} />
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* FAQ */}
-      <section className="mt-20 md:mt-24">
-        <Container>
-          <div className="grid gap-10 md:grid-cols-12">
-            <div className="md:col-span-4">
-              <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Questions.</h2>
-              <p className="mt-3 text-sm text-muted">
-                Email{' '}
-                <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>
-                  {site.contactEmail}
-                </a>
-                .
-              </p>
-            </div>
-            <div className="md:col-span-8">
-              <div className="grid gap-3">
-                <FAQ items={faqs} />
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {/* CTA */}
-      <section className="mt-20 md:mt-24">
-        <Container>
-          <div className="rounded-card bg-ink p-8 text-white shadow-soft md:p-12">
-            <div className="grid gap-8 md:grid-cols-12 md:items-center">
-              <div className="md:col-span-8">
-                <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Ready when you are.</h2>
-                <p className="mt-3 max-w-2xl text-sm text-white/75 md:text-base">
-                  Choose a pack. Checkout stays on Amazon.
-                </p>
-              </div>
-              <div className="md:col-span-4 md:flex md:justify-end">
-                <Button asChild variant="accent" size="lg" className="bg-accent text-ink">
-                  <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
-                    Buy {primary.name} <ArrowUpRight className="h-4 w-4" />
-                  </a>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <Button asChild size="lg">
+                  <Link href="/products">Explore packs</Link>
+                </Button>
+                <Button asChild variant="ghost" size="lg">
+                  <Link href="/where-to-buy">
+                    Where to buy <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
                 </Button>
               </div>
             </div>
+          </Reveal>
+
+          <Reveal variant="media" delay={120}>
+            <div className="mt-8">
+              <WideImage
+                src="/images/amazon/pick-protection.jpg"
+                alt="Pick your protection — Caelum Star dust sheet packs"
+              />
+            </div>
+          </Reveal>
+        </Container>
+      </section>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal>
+            <div className="text-center">
+              <h2 className="text-balance text-4xl font-semibold tracking-tight md:text-5xl">
+                Find your perfect fit.
+              </h2>
+            </div>
+          </Reveal>
+
+          <Reveal variant="media" delay={120}>
+            <div className="mt-8">
+              <WideImage
+                src="/images/amazon/fit-coverage.jpg"
+                alt="Find your perfect fit — coverage comparison"
+              />
+            </div>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* 2-UP GRID (like Apple tiles) */}
+      <section className="py-10 md:py-14">
+        <Container>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Reveal variant="media" delay={0}>
+              <SquareImage
+                src="/images/amazon/general-projects.jpg"
+                alt="Ideal for general projects — 6 pack essentials"
+              />
+            </Reveal>
+            <Reveal variant="media" delay={120}>
+              <SquareImage
+                src="/images/amazon/multi-room-projects.jpg"
+                alt="Ideal for multi-room projects — 12 pack deluxe"
+              />
+            </Reveal>
           </div>
         </Container>
       </section>
-    </div>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal variant="media">
+            <WideImage
+              src="/images/amazon/applications.jpg"
+              alt="Applications — moving, painting, renovating"
+            />
+          </Reveal>
+        </Container>
+      </section>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal variant="media">
+            <WideImage
+              src="/images/amazon/strong-vs-light.jpg"
+              alt="Strong vs light durability comparison"
+            />
+          </Reveal>
+        </Container>
+      </section>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal variant="media">
+            <WideImage
+              src="/images/amazon/aplus-4.jpg"
+              alt="One sheet, multiple benefits"
+            />
+          </Reveal>
+        </Container>
+      </section>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal variant="media">
+            <WideImage
+              src="/images/amazon/sustainable-process.jpg"
+              alt="Sustainable efficiency process"
+            />
+          </Reveal>
+        </Container>
+      </section>
+
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal variant="media">
+            <WideImage
+              src="/images/amazon/sustainable-efficiency.jpg"
+              alt="Sustainable efficiency — 55% recycled plastic"
+            />
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* PRODUCTS */}
+      <section className="py-10 md:py-14">
+        <Container>
+          <Reveal>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
+                  Explore packs.
+                </h2>
+                <p className="mt-2 text-sm text-muted">
+                  Start with the 6 pack. Scale up when you need it.
+                </p>
+              </div>
+              <Button asChild variant="ghost" className="hidden md:inline-flex">
+                <Link href="/products">
+                  View all <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </Reveal>
+
+          <Reveal variant="media" delay={120}>
+            <div className="mt-8 flex gap-6 overflow-x-auto pb-2">
+              {products.map((product) => (
+                <ProductFeatureCard key={product.slug} product={product} />
+              ))}
+            </div>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* SUPPORT */}
+      <section className="pb-16">
+        <Container>
+          <Reveal variant="media">
+            <Card className="p-6 md:p-10">
+              <div className="grid gap-8 md:grid-cols-12 md:items-center">
+                <div className="md:col-span-8">
+                  <h3 className="text-balance text-2xl font-semibold tracking-tight md:text-3xl">
+                    Need help choosing the right pack?
+                  </h3>
+                  <p className="mt-3 text-sm text-muted">
+                    Email{' '}
+                    <a className="underline" href={`mailto:${site.contactEmail}`}>
+                      {site.contactEmail}
+                    </a>
+                    .
+                  </p>
+                </div>
+                <div className="md:col-span-4 md:flex md:justify-end">
+                  <Button asChild size="lg">
+                    <Link href="/where-to-buy">
+                      Buy on Amazon <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </Reveal>
+        </Container>
+      </section>
+    </main>
   );
 }

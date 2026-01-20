@@ -3,6 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { Container } from '@/components/Container';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Reveal } from '@/components/Reveal';
 import { products } from '@/content/products';
 import { site } from '@/content/site';
 
@@ -10,11 +11,11 @@ const bySlug = (slug: string) => products.find((p) => p.slug === slug)?.amazonUr
 
 const internationalAmazonLinks = [
   {
-    label: '6 Pack — Light (Amazon.co.uk — Primary)',
+    label: '6 Pack — Light (Primary)',
     url: site.amazonStoreUrl
   },
   {
-    label: '6 Pack — Light (Amazon.com)',
+    label: '12 Pack — Light (Alternate)',
     url: site.amazonStoreAltUrl
   },
   {
@@ -40,8 +41,12 @@ export default function WhereToBuyPage() {
     <div>
       <section className="pt-14 md:pt-20">
         <Container>
-          <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Where to buy</h1>
-          <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">We sell on Amazon.</p>
+          <Reveal>
+            <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Where to buy</h1>
+          </Reveal>
+          <Reveal delay={80}>
+            <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">We sell on Amazon.</p>
+          </Reveal>
         </Container>
       </section>
 
@@ -49,7 +54,8 @@ export default function WhereToBuyPage() {
         <Container>
           <div className="grid gap-6 md:grid-cols-12">
             <div className="md:col-span-5">
-              <Card className="p-6">
+              <Reveal variant="media">
+                <Card className="p-6">
                 <div className="text-sm font-semibold text-ink">Amazon</div>
                 <p className="mt-2 text-sm text-muted">Checkout stays on Amazon.</p>
                 <div className="mt-5">
@@ -60,9 +66,11 @@ export default function WhereToBuyPage() {
                   </Button>
                 </div>
                 <div className="mt-5 text-xs text-muted">Tip: compare packs here, then buy on Amazon.</div>
-              </Card>
+                </Card>
+              </Reveal>
 
-              <Card className="mt-6 p-6">
+              <Reveal variant="media" delay={120}>
+                <Card className="mt-6 p-6">
                 <div className="text-sm font-semibold text-ink">Bulk / wholesale</div>
                 <p className="mt-2 text-sm text-muted">
                   Need larger quantities for trade, facilities, or recurring jobs?
@@ -72,11 +80,13 @@ export default function WhereToBuyPage() {
                     <a href={`mailto:${site.contactEmail}`}>Email {site.contactEmail}</a>
                   </Button>
                 </div>
-              </Card>
+                </Card>
+              </Reveal>
             </div>
 
             <div className="md:col-span-7">
-              <Card className="overflow-hidden">
+              <Reveal variant="media" delay={120}>
+                <Card className="overflow-hidden">
                 <div className="border-b border-border bg-surface px-6 py-4">
                   <div className="text-sm font-semibold text-ink">Packs</div>
                   <div className="mt-1 text-xs text-muted">Pricing and availability are live on Amazon.</div>
@@ -118,9 +128,11 @@ export default function WhereToBuyPage() {
                     </li>
                   ))}
                 </ul>
-              </Card>
+                </Card>
+              </Reveal>
 
-              <Card className="mt-6 p-6">
+              <Reveal variant="media" delay={220}>
+                <Card className="mt-6 p-6">
                 <div className="text-sm font-semibold text-ink">International Amazon links</div>
                 <p className="mt-2 text-sm text-muted">Direct links by pack.</p>
                 <ul className="mt-4 space-y-2">
@@ -132,7 +144,8 @@ export default function WhereToBuyPage() {
                     </li>
                   ))}
                 </ul>
-              </Card>
+                </Card>
+              </Reveal>
             </div>
           </div>
         </Container>
