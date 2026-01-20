@@ -676,7 +676,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
             <TableCell
               key={column.key}
               className={cellClassName}
-              style={{ width: column.width, minWidth: column.width, boxShadow }}
+              style={{ boxShadow }}
             >
               {isDropdownCell ? (
                 <select
@@ -766,7 +766,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
             key={column.key}
             id={cellDomId(row.id, column.key)}
             className={cellClassName}
-            style={{ width: column.width, minWidth: column.width, boxShadow }}
+            style={{ boxShadow }}
             title={showPlaceholder ? undefined : formattedValue}
             onPointerDown={(e) => onPointerDown?.(e, rowIndex, colIndex)}
             onPointerMove={(e) => onPointerMove?.(e, rowIndex, colIndex)}
@@ -2184,7 +2184,7 @@ export function CustomOpsPlanningGrid({
     return (
       <TableHead
         key={column.key}
-        style={{ width: column.width, minWidth: column.width }}
+        style={{}}
         className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
       >
         {isStageColumn ? (
@@ -2282,7 +2282,7 @@ export function CustomOpsPlanningGrid({
           onPaste={handlePaste}
           className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <Table className="table-fixed border-collapse">
+          <Table className="border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">{COLUMNS.map(renderHeader)}</TableRow>
             </TableHeader>
