@@ -1,15 +1,22 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'react-hot-toast'
+import { useSession } from '@/hooks/usePortalSession'
+import { redirectToPortal } from '@/lib/portal'
 import {
   SMALL_STANDARD_TABLE_2026,
   LARGE_STANDARD_OZ_TABLE_2026,
   LARGE_STANDARD_LB_TABLE_2026,
   getReferralFeePercent2026,
 } from '@/lib/amazon/fees'
+import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
-import { DollarSign, ArrowLeft } from '@/lib/lucide-icons'
+import { DollarSign, ArrowLeft, Loader2 } from '@/lib/lucide-icons'
+
+const ALLOWED_ROLES = ['admin', 'staff'] as const
 
 const AMAZON_REFERRAL_CATEGORIES_2026 = [
   'Amazon Device Accessories',
@@ -60,6 +67,30 @@ function formatCurrency(value: number): string {
 }
 
 export default function FbaFeeTablesPage() {
+  const router = useRouter()
+  const { data: session, status } = useSession()
+
+  const isAllowed = useMemo(() => {
+    if (!session) return false
+    type AllowedRole = (typeof ALLOWED_ROLES)[number]
+    return ALLOWED_ROLES.includes(session.user.role as AllowedRole)
+  }, [session])
+
+  useEffect(() => {
+    if (status === 'loading') return
+
+    if (!session) {
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+      redirectToPortal('/login', `${window.location.origin}${basePath}/amazon/fba-fee-tables`)
+      return
+    }
+
+    if (!isAllowed) {
+      toast.error('You are not authorised to view this page')
+      router.push('/dashboard')
+    }
+  }, [isAllowed, router, session, status])
+
   const referralFeeData = useMemo(() => {
     return AMAZON_REFERRAL_CATEGORIES_2026.map(category => {
       const feeAt5 = getReferralFeePercent2026(category, 5)
@@ -80,7 +111,23 @@ export default function FbaFeeTablesPage() {
     })
   }, [])
 
+  if (status === 'loading') {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
+            <span className="text-sm text-slate-500">Loading...</span>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (!session || !isAllowed) return null
+
   return (
+    <DashboardLayout>
     <PageContainer>
       <PageHeaderSection
         title="FBA Fee Tables (2026)"
@@ -432,5 +479,6 @@ export default function FbaFeeTablesPage() {
         </p>
       </PageContent>
     </PageContainer>
+    </DashboardLayout>
   )
 }
