@@ -1,0 +1,14 @@
+{
+  "name": "@targon/prisma-plutus",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "main": "generated/index.js",
+  "types": "generated/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./generated/index.d.ts",
+      "default": "./generated/index.js"
+    }
+  }
+}
