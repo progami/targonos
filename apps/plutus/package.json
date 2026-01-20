@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "next dev -p 3012",
     "clean": "rm -rf .next out dist",
-    "build": "next build",
+    "build": "prisma generate --schema prisma/schema.prisma && next build",
     "start": "next start -p 3012",
     "lint": "eslint app components lib",
     "type-check": "tsc --noEmit",
     "format": "prettier --check \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
     "format:write": "prettier --write \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
-    "qbo": "tsx scripts/qbo.ts"
+    "qbo": "tsx scripts/qbo.ts",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:push": "prisma db push --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:studio": "prisma studio --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -26,6 +30,7 @@
     "@targon/auth": "workspace:*",
     "@targon/config": "workspace:*",
     "@targon/logger": "workspace:*",
+    "@targon/prisma-plutus": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -47,6 +52,7 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "prisma": "^6.5.0",
     "@types/node": "^24.3.0",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.6",
