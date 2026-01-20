@@ -1,5 +1,6 @@
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import {
+  CostCategory,
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderStatus,
@@ -15,6 +16,7 @@ import { auditLog } from '@/lib/security/audit-logger'
 import { toPublicOrderNumber } from './purchase-order-utils'
 import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
+import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
@@ -1705,6 +1707,51 @@ export async function transitionPurchaseOrderStage(
 
       if (costLedgerEntries.length > 0) {
         await tx.costLedger.createMany({ data: costLedgerEntries })
+      }
+
+      const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
+        where: {
+          purchaseOrderId: nextOrder.id,
+          warehouseId: warehouse.id,
+        },
+        select: {
+          costName: true,
+          totalCost: true,
+        },
+        orderBy: [{ createdAt: 'asc' }],
+      })
+
+      const transactionIds = createdTransactions.map(row => row.id)
+      await tx.costLedger.deleteMany({
+        where: {
+          transactionId: { in: transactionIds },
+          costCategory: CostCategory.Forwarding,
+        },
+      })
+
+      if (forwardingCosts.length > 0) {
+        const lines = createdTransactions.map(row => ({
+          transactionId: row.id,
+          skuCode: row.skuCode,
+          cartons: row.cartons,
+          cartonDimensionsCm: row.cartonDimensionsCm,
+        }))
+
+        const forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
+          buildPoForwardingCostLedgerEntries({
+            costName: cost.costName,
+            totalCost: Number(cost.totalCost),
+            lines,
+            warehouseCode: warehouse.code,
+            warehouseName: warehouse.name,
+            createdAt: receivedAt,
+            createdByName: user.name,
+          })
+        )
+
+        if (forwardingLedgerEntries.length > 0) {
+          await tx.costLedger.createMany({ data: forwardingLedgerEntries })
+        }
       }
 
       await tx.purchaseOrder.update({

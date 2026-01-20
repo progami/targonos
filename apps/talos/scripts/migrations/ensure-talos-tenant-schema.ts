@@ -430,6 +430,84 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         END IF;
       END $$;
     `,
+
+    // PO-level forwarding/cargo costs (allocated into cost ledger at receipt)
+    `
+      CREATE TABLE IF NOT EXISTS "purchase_order_forwarding_costs" (
+        "id" text NOT NULL,
+        "purchase_order_id" text NOT NULL,
+        "warehouse_id" text NOT NULL,
+        "cost_rate_id" text,
+        "cost_name" text NOT NULL,
+        "quantity" numeric(12,4) NOT NULL,
+        "unit_rate" numeric(12,4) NOT NULL,
+        "total_cost" numeric(12,2) NOT NULL,
+        "currency" text,
+        "notes" text,
+        "created_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "created_by_id" text,
+        "created_by_name" text,
+        CONSTRAINT "purchase_order_forwarding_costs_pkey" PRIMARY KEY ("id")
+      )
+    `,
+    `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.conname = 'purchase_order_forwarding_costs_purchase_order_id_fkey'
+            AND n.nspname = current_schema()
+        ) THEN
+          ALTER TABLE "purchase_order_forwarding_costs"
+            ADD CONSTRAINT "purchase_order_forwarding_costs_purchase_order_id_fkey"
+            FOREIGN KEY ("purchase_order_id") REFERENCES "purchase_orders"("id")
+            ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `,
+    `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.conname = 'purchase_order_forwarding_costs_warehouse_id_fkey'
+            AND n.nspname = current_schema()
+        ) THEN
+          ALTER TABLE "purchase_order_forwarding_costs"
+            ADD CONSTRAINT "purchase_order_forwarding_costs_warehouse_id_fkey"
+            FOREIGN KEY ("warehouse_id") REFERENCES "warehouses"("id")
+            ON DELETE RESTRICT ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `,
+    `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.conname = 'purchase_order_forwarding_costs_cost_rate_id_fkey'
+            AND n.nspname = current_schema()
+        ) THEN
+          ALTER TABLE "purchase_order_forwarding_costs"
+            ADD CONSTRAINT "purchase_order_forwarding_costs_cost_rate_id_fkey"
+            FOREIGN KEY ("cost_rate_id") REFERENCES "cost_rates"("id")
+            ON DELETE SET NULL ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `,
+    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_purchase_order_id_idx" ON "purchase_order_forwarding_costs"("purchase_order_id")`,
+    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_warehouse_id_idx" ON "purchase_order_forwarding_costs"("warehouse_id")`,
+    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_cost_rate_id_idx" ON "purchase_order_forwarding_costs"("cost_rate_id")`,
   ]
 
   for (const statement of ddlStatements) {
