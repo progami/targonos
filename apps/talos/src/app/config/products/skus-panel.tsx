@@ -832,40 +832,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     }
   }
 
-  const formatPackagingType = (value: string | null | undefined) => {
-    const trimmed = value?.trim()
-    if (!trimmed) return null
-    const normalized = trimmed.toUpperCase()
-    if (normalized === 'BOX') return 'Box'
-    if (normalized === 'POLYBAG') return 'Polybag'
-    return trimmed
-  }
-
-  const formatBatchSummary = (batch: SkuBatchRow | undefined) => {
-    if (!batch) return '—'
-
-    const packSize = batch.packSize ? `Pack ${batch.packSize}` : null
-    const unitsPerCarton = batch.unitsPerCarton ? `${batch.unitsPerCarton} units/ctn` : null
-    const cartonsPerPallet =
-      batch.storageCartonsPerPallet || batch.shippingCartonsPerPallet
-        ? `Ctn/pallet S ${batch.storageCartonsPerPallet ?? '—'} • Ship ${batch.shippingCartonsPerPallet ?? '—'}`
-        : null
-    const packagingType = formatPackagingType(batch.packagingType)
-    const unitWeightKg =
-      typeof batch.unitWeightKg === 'number'
-        ? `${batch.unitWeightKg.toFixed(3)} kg/unit`
-        : batch.unitWeightKg
-          ? `${batch.unitWeightKg} kg/unit`
-          : null
-
-    const summary = [packSize, unitsPerCarton, cartonsPerPallet, unitWeightKg, packagingType]
-      .filter(Boolean)
-      .join(' • ')
-
-    if (summary) return summary
-    return '—'
-  }
-
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
@@ -931,17 +897,12 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                   <th className="px-4 py-3 text-left font-semibold">SKU</th>
                   <th className="px-4 py-3 text-left font-semibold">Description</th>
                   <th className="px-4 py-3 text-left font-semibold">ASIN</th>
-                  <th className="px-4 py-3 text-left font-semibold hidden xl:table-cell">
-                    Latest Batch
-                  </th>
                   <th className="px-4 py-3 text-right font-semibold">Txns</th>
                   <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredSkus.map(sku => {
-                  const latestBatch = sku.batches?.[0]
-                  const batchSummary = formatBatchSummary(latestBatch)
                   const isExpanded = expandedSkuIds.has(sku.id)
 
                   const toggleExpand = () => {
@@ -974,30 +935,19 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                           </button>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          <div className="space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(sku)}
-                              className="text-cyan-700 dark:text-cyan-400 hover:underline"
-                            >
-                              {sku.skuCode}
-                            </button>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 xl:hidden">{batchSummary}</div>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(sku)}
+                            className="text-cyan-700 dark:text-cyan-400 hover:underline"
+                          >
+                            {sku.skuCode}
+                          </button>
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                           {sku.description}
                         </td>
                         <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                           {sku.asin ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap hidden xl:table-cell">
-                          <div className="space-y-1">
-                            <div className="font-mono text-slate-700 dark:text-slate-300">
-                              {latestBatch?.batchCode ?? '—'}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{batchSummary}</div>
-                          </div>
                         </td>
                         <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
                           {sku._count?.inventoryTransactions ?? 0}
@@ -1015,7 +965,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={7} className="p-0 bg-slate-50/80 dark:bg-slate-900/50">
+                          <td colSpan={6} className="p-0 bg-slate-50/80 dark:bg-slate-900/50">
                             <div className="p-4">
                               <SkuBatchesPanel
                                 sku={{
