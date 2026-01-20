@@ -1,108 +1,59 @@
-import type { Config } from "tailwindcss"
-import { brandColors, brandFontFamilies } from "@targon/theme"
+import type { Config } from 'tailwindcss';
+import typography from '@tailwindcss/typography';
 
 const config: Config = {
-  darkMode: ["class"],
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  darkMode: ['class'],
+  content: ['./src/**/*.{ts,tsx}'],
   theme: {
-    container: {
-      center: true,
-      padding: {
-        DEFAULT: "1.5rem",
-        sm: "2rem",
-        lg: "4rem",
-        xl: "5rem",
-        "2xl": "6rem",
-      },
-      screens: {
-        sm: "640px",
-        md: "768px",
-        lg: "1024px",
-        xl: "1280px",
-        "2xl": "1920px",
-      },
-    },
     extend: {
-      fontFamily: {
-        sans: ["var(--font-montserrat)", "ui-sans-serif", "system-ui"],
-        brand: [brandFontFamilies.primary],
-      },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        brand: {
-          primary: brandColors.primary,
-          primaryMuted: brandColors.primaryMuted,
-          primaryDeep: brandColors.primaryDeep,
-          primaryOverlay: brandColors.primaryOverlay,
-          secondary: brandColors.secondary,
-          accent: brandColors.accent,
-          accentHover: brandColors.accentHover,
-          accentShadow: brandColors.accentShadow,
-          accentShadowHover: brandColors.accentShadowHover,
-          supportNavy: brandColors.supportNavy,
-          supportInk: brandColors.supportInk,
-          slate: brandColors.slate,
-          white: brandColors.white,
-        },
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
+        bg: 'rgb(var(--bg) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        ink: 'rgb(var(--ink) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        border: 'rgb(var(--border) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        'accent-strong': 'rgb(var(--accent-strong) / <alpha-value>)',
+        ring: 'rgb(var(--ring) / <alpha-value>)'
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        card: 'var(--radius-card)',
+        pill: '9999px'
+      },
+      boxShadow: {
+        soft: '0 12px 40px rgba(0,0,0,0.10)',
+        softer: '0 8px 24px rgba(0,0,0,0.08)'
+      },
+      letterSpacing: {
+        tightish: '-0.02em'
       },
       keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' }
         },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' }
+        }
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
+        'accordion-down': 'accordion-down 200ms ease-out',
+        'accordion-up': 'accordion-up 200ms ease-out'
       },
-    },
+      typography: {
+        DEFAULT: {
+          css: {
+            color: 'rgb(var(--ink))',
+            a: { color: 'rgb(var(--ink))', textDecoration: 'underline' },
+            h2: { letterSpacing: '-0.02em' },
+            h3: { letterSpacing: '-0.02em' }
+          }
+        }
+      }
+    }
   },
-  plugins: [],
-}
+  plugins: [typography]
+};
 
-export default config
+export default config;
