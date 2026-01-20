@@ -5,23 +5,33 @@ export type FAQItem = {
 
 export const faqs: FAQItem[] = [
   {
-    question: 'Are Targon drop cloths reusable?',
+    question: 'What size are the dust sheets?',
     answer:
-      'Yes. Each line is designed for multiple jobs. After use, shake off debris and store dry. For best results, follow the care notes on your packaging.'
+      'Each sheet is extra large: 3.6m × 2.7m (12ft × 9ft). That’s big enough for sofas, beds, or a full floor area in smaller rooms.'
   },
   {
-    question: 'What are they made of?',
+    question: 'Which pack should I choose?',
     answer:
-      'Our core material is a recycled cotton blend combined with recycled plastic fibers for added strength — the goal is durability without unnecessary bulk.'
+      'Core (1 Pack) covers 108 sq ft. Basic (3 Pack) covers 324 sq ft. Essential (6 Pack) covers 648 sq ft — it’s the one we recommend for most homes. Deluxe (12 Pack) covers 1296 sq ft for multi‑room jobs.'
+  },
+  {
+    question: 'Are these made from recycled plastic?',
+    answer:
+      'Our 6 Pack uses recycled plastic and is globally certified (GRS). For full details, check the product listing on Amazon.'
+  },
+  {
+    question: 'Are they waterproof?',
+    answer:
+      'They are designed to protect against dust, paint splatter, and light spills. For heavy spills or prolonged pooling, use heavy-duty sheeting and wipe up promptly.'
   },
   {
     question: 'Where do you sell?',
     answer:
-      'Amazon is our primary retail channel. If you are a distributor or need bulk purchasing, contact us and we’ll point you to the best option.'
+      'We sell primarily on Amazon. Our website focuses on product clarity and support — checkout happens on Amazon for fast shipping and easy returns.'
   },
   {
-    question: 'Do you offer warranties or replacements?',
+    question: 'Something arrived damaged — what do I do?',
     answer:
-      'If something arrives damaged or defective, contact us with your order details and we’ll make it right. Warranty terms may vary by product line and retailer.'
+      'Email support@targonglobal.com with your Amazon order number and a photo of the issue. We’ll help you sort it quickly.'
   }
 ];
