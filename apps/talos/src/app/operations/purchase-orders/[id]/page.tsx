@@ -362,7 +362,7 @@ const STAGE_DOCUMENTS: Record<
   Array<{ id: string; label: string }>
 > = {
   ISSUED: [{ id: 'proforma_invoice', label: 'Signed PI / Proforma Invoice' }],
-  MANUFACTURING: [],
+  MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
   OCEAN: [
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
     { id: 'bill_of_lading', label: 'Bill of Lading' },
