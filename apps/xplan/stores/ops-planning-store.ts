@@ -27,12 +27,6 @@ export interface EditBatch {
 
 interface OpsPlanningState {
   // ---------------------------------------------------------------------------
-  // Selection State
-  // ---------------------------------------------------------------------------
-  activeOrderId: string | null;
-  activeBatchId: string | null;
-
-  // ---------------------------------------------------------------------------
   // Display Modes (persisted)
   // ---------------------------------------------------------------------------
   profitDisplayMode: ProfitDisplayMode;
@@ -51,13 +45,6 @@ interface OpsPlanningState {
   // ---------------------------------------------------------------------------
   isCreateOrderOpen: boolean;
   isImportOrderOpen: boolean;
-
-  // ---------------------------------------------------------------------------
-  // Selection Actions
-  // ---------------------------------------------------------------------------
-  setActiveOrder: (id: string | null) => void;
-  setActiveBatch: (id: string | null) => void;
-  clearSelection: () => void;
 
   // ---------------------------------------------------------------------------
   // Display Mode Actions
@@ -98,8 +85,6 @@ export const useOpsPlanningStore = create<OpsPlanningState>()(
         // ---------------------------------------------------------------------
         // Initial State
         // ---------------------------------------------------------------------
-        activeOrderId: null,
-        activeBatchId: null,
         profitDisplayMode: 'unit',
         tariffInputMode: 'cost',
         stageMode: 'weeks',
@@ -108,17 +93,6 @@ export const useOpsPlanningStore = create<OpsPlanningState>()(
         maxHistory: 50,
         isCreateOrderOpen: false,
         isImportOrderOpen: false,
-
-        // ---------------------------------------------------------------------
-        // Selection Actions
-        // ---------------------------------------------------------------------
-        setActiveOrder: (id) =>
-          set({ activeOrderId: id, activeBatchId: null }, false, 'setActiveOrder'),
-
-        setActiveBatch: (id) => set({ activeBatchId: id }, false, 'setActiveBatch'),
-
-        clearSelection: () =>
-          set({ activeOrderId: null, activeBatchId: null }, false, 'clearSelection'),
 
         // ---------------------------------------------------------------------
         // Display Mode Actions
@@ -252,8 +226,6 @@ export const useOpsPlanningStore = create<OpsPlanningState>()(
 // Selector Hooks (for performance optimization)
 // ============================================================================
 
-export const useActiveOrderId = () => useOpsPlanningStore((s) => s.activeOrderId);
-export const useActiveBatchId = () => useOpsPlanningStore((s) => s.activeBatchId);
 export const useProfitDisplayMode = () => useOpsPlanningStore((s) => s.profitDisplayMode);
 export const useTariffInputMode = () => useOpsPlanningStore((s) => s.tariffInputMode);
 export const useStageMode = () => useOpsPlanningStore((s) => s.stageMode);
