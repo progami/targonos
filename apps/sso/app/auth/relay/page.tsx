@@ -1,10 +1,10 @@
 "use client"
 
-import { Suspense as ReactSuspense, useEffect, type ReactNode } from 'react'
+import { Suspense as ReactSuspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-// Type assertion to fix React 19 / Next.js type compatibility issue
-const Suspense = ReactSuspense as React.ComponentType<{ fallback: ReactNode; children: ReactNode }>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Suspense = ReactSuspense as any
 
 function AuthRelayContent() {
   const searchParams = useSearchParams()
