@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/auth-wrapper'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
 import { getInventory, getCatalogItem } from '@/lib/amazon/client'
-import { calculateSizeTier } from '@/lib/amazon/fees'
+import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import { formatDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import type { Session } from 'next-auth'
@@ -231,6 +231,7 @@ async function syncInventory(session: Session) {
 
 async function syncProducts(session: Session) {
   try {
+    const tenantCode = await getCurrentTenantCode()
     const prisma = await getTenantPrisma()
     // Get all SKUs with ASINs
     const skus = await prisma.sku.findMany({
@@ -275,7 +276,7 @@ async function syncProducts(session: Session) {
           const unitWeightKg = parseCatalogItemPackageWeightKg(attributes)
           const computedTier =
             unitTriplet && unitWeightKg !== null
-              ? calculateSizeTier(unitTriplet.side1Cm, unitTriplet.side2Cm, unitTriplet.side3Cm, unitWeightKg)
+              ? calculateSizeTierForTenant(tenantCode, unitTriplet.side1Cm, unitTriplet.side2Cm, unitTriplet.side3Cm, unitWeightKg)
               : null
 
           const batchUpdates: Record<string, unknown> = {}
