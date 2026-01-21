@@ -189,4 +189,5 @@ export const FallbackIcon = (
 )
 
 /** Get icon for an app by ID */
-export const getAppIcon = (appId: string): ReactNode => APP_ICONS[appId] ?? FallbackIcon
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getAppIcon = (appId: string): any => APP_ICONS[appId] ?? FallbackIcon
