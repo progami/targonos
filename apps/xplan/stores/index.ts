@@ -1,7 +1,5 @@
 export {
   useOpsPlanningStore,
-  useActiveOrderId,
-  useActiveBatchId,
   useProfitDisplayMode,
   useTariffInputMode,
   useStageMode,
