@@ -160,6 +160,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
   ISSUED: ['proforma_invoice'],
+  MANUFACTURING: ['box_artwork'],
   OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
   WAREHOUSE: ['movement_note', 'custom_declaration'],
 }
