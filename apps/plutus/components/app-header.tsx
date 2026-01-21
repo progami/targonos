@@ -25,7 +25,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-slate-900/70 border-b border-slate-200/50 dark:border-white/5">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* Logo */}
+        {/* App branding - LEFT */}
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-teal-500 to-brand-teal-600 dark:from-brand-cyan dark:to-brand-teal-500">
             <LogoIcon className="h-4 w-4 text-white" />
@@ -33,10 +33,15 @@ export function AppHeader() {
           <span className="text-lg font-semibold text-slate-900 dark:text-white">Plutus</span>
         </Link>
 
-        {/* QBO Status */}
-        <Suspense fallback={<QboStatusFallback />}>
-          <QboStatusIndicator />
-        </Suspense>
+        {/* Targon branding - RIGHT */}
+        <div className="flex items-center gap-3">
+          <Suspense fallback={<QboStatusFallback />}>
+            <QboStatusIndicator />
+          </Suspense>
+          <svg viewBox="0 0 128 128" width="24" height="24" aria-label="Targon" className="shrink-0">
+            <rect x="0" y="0" width="128" height="128" rx="21" fill="#00C2B9" />
+          </svg>
+        </div>
       </div>
     </header>
   );

@@ -403,7 +403,16 @@ export function WorkbookLayout({
               className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
               role="banner"
             >
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+                {/* App branding - LEFT */}
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
+                    <span className="text-base font-bold text-white">x</span>
+                  </div>
+                  <h1 className="hidden sm:block text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
+                    xplan
+                  </h1>
+                </div>
                 <div className="min-w-0 overflow-hidden">
                   <SheetTabs
                     sheets={sheetTabs}
@@ -431,15 +440,10 @@ export function WorkbookLayout({
                   {/* Theme toggle */}
                   <ThemeToggle />
 
-                   {/* xplan branding */}
-                   <div className="flex items-center gap-2">
-                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
-                       <span className="text-base font-bold text-white">x</span>
-                     </div>
-                     <h1 className="text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
-                       xplan
-                     </h1>
-                   </div>
+                  {/* Targon branding - RIGHT */}
+                  <svg viewBox="0 0 128 128" width="24" height="24" aria-label="Targon" className="shrink-0">
+                    <rect x="0" y="0" width="128" height="128" rx="21" fill="#00C2B9" />
+                  </svg>
 
                 </div>
               </div>

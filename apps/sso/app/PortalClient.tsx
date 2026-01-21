@@ -112,6 +112,10 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
             >
               Sign out
             </button>
+            {/* Targon branding - RIGHT */}
+            <svg viewBox="0 0 128 128" width="24" height="24" aria-label="Targon" style={{ flexShrink: 0 }}>
+              <rect x="0" y="0" width="128" height="128" rx="21" fill="#00C2B9" />
+            </svg>
           </div>
         </header>
       </div>
