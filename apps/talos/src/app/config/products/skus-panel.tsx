@@ -13,11 +13,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import {
-  calculateFbaFulfillmentFee2026NonPeakExcludingApparel,
-  calculateSizeTier,
-  getReferralFeePercent2026,
+  calculateFbaFeeForTenant,
+  calculateSizeTierForTenant,
+  getReferralFeePercentForTenant,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
+import { useSession } from '@/hooks/usePortalSession'
+import type { TenantCode } from '@/lib/tenant/constants'
 import { usePageState } from '@/lib/store/page-state'
 import { ChevronDown, ChevronRight, ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 import { SkuBatchesPanel } from './sku-batches-modal'
@@ -274,45 +276,8 @@ function resolveAmazonListingPriceForFeeCalculation(sku: SkuRow | null): Listing
     return { listingPrice: explicitListingPrice, source: 'EXACT' }
   }
 
-  const latestBatch = sku.batches && sku.batches.length > 0 ? sku.batches[0] : null
-  if (!latestBatch) return null
-
-  const amazonFee = parseFiniteNumber(latestBatch.amazonFbaFulfillmentFee)
-  const amazonSizeTier = typeof latestBatch.amazonSizeTier === 'string' ? latestBatch.amazonSizeTier.trim() : ''
-  const unitWeightKg = parseFiniteNumber(latestBatch.amazonReferenceWeightKg)
-
-  const side1Cm = parseFiniteNumber(latestBatch.amazonItemPackageSide1Cm)
-  const side2Cm = parseFiniteNumber(latestBatch.amazonItemPackageSide2Cm)
-  const side3Cm = parseFiniteNumber(latestBatch.amazonItemPackageSide3Cm)
-
-  if (amazonFee === null) return null
-  if (!amazonSizeTier) return null
-  if (unitWeightKg === null) return null
-  if (side1Cm === null || side2Cm === null || side3Cm === null) return null
-
-  const normalizedAmazonFee = Number(amazonFee.toFixed(2))
-
-  const candidates = [
-    { listingPrice: 9.99 },
-    { listingPrice: 10 },
-    { listingPrice: 51 },
-  ]
-
-  for (const candidate of candidates) {
-    const computed = calculateFbaFulfillmentFee2026NonPeakExcludingApparel({
-      side1Cm,
-      side2Cm,
-      side3Cm,
-      unitWeightKg,
-      listingPrice: candidate.listingPrice,
-      sizeTier: amazonSizeTier,
-    })
-    if (computed === null) continue
-    if (Number(computed.toFixed(2)) === normalizedAmazonFee) {
-      return { listingPrice: candidate.listingPrice, source: 'BAND' }
-    }
-  }
-
+  // If no explicit listing price, return null
+  // Price band inference was US-specific; for UK, we need an explicit price
   return null
 }
 
@@ -326,7 +291,8 @@ type ReferenceFeesAutofill = {
 function computeReferenceFeesAutofill(
   sku: SkuRow | null,
   category: string,
-  sizeTier: string
+  sizeTier: string,
+  tenantCode: TenantCode
 ): ReferenceFeesAutofill {
   const categoryTrimmed = category.trim()
   const normalizedCategory = categoryTrimmed ? normalizeReferralCategory2026(categoryTrimmed) : ''
@@ -335,7 +301,7 @@ function computeReferenceFeesAutofill(
 
   const referralFeePercent =
     listingPriceResolution !== null && listingPriceResolution.source === 'EXACT' && normalizedCategory
-      ? getReferralFeePercent2026(normalizedCategory, listingPriceResolution.listingPrice)
+      ? getReferralFeePercentForTenant(tenantCode, normalizedCategory, listingPriceResolution.listingPrice)
       : null
 
   let computedSizeTier: string | null = null
@@ -353,20 +319,21 @@ function computeReferenceFeesAutofill(
 
   if (computedSizeTier === null) {
     if (side1Cm !== null && side2Cm !== null && side3Cm !== null && unitWeightKg !== null) {
-      computedSizeTier = calculateSizeTier(side1Cm, side2Cm, side3Cm, unitWeightKg)
+      computedSizeTier = calculateSizeTierForTenant(tenantCode, side1Cm, side2Cm, side3Cm, unitWeightKg)
     }
   }
 
   let fbaFulfillmentFee: number | null = null
   if (listingPriceResolution !== null && computedSizeTier !== null) {
     if (side1Cm !== null && side2Cm !== null && side3Cm !== null && unitWeightKg !== null) {
-      fbaFulfillmentFee = calculateFbaFulfillmentFee2026NonPeakExcludingApparel({
+      fbaFulfillmentFee = calculateFbaFeeForTenant(tenantCode, {
         side1Cm,
         side2Cm,
         side3Cm,
         unitWeightKg,
         listingPrice: listingPriceResolution.listingPrice,
         sizeTier: computedSizeTier,
+        category: normalizedCategory,
       })
     }
   }
@@ -386,6 +353,8 @@ interface SkusPanelProps {
 }
 
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
+  const { data: session } = useSession()
+  const tenantCode: TenantCode = session?.user?.region ?? 'US'
   const pageState = usePageState(PAGE_KEY)
   const [skus, setSkus] = useState<SkuRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -405,7 +374,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [externalEditOpened, setExternalEditOpened] = useState(false)
 
   const autoFillReferenceFees = useCallback(() => {
-    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier)
+    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier, tenantCode)
 
     setFormState(prev => {
       const next: SkuFormState = { ...prev }
@@ -434,13 +403,13 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       if (!didUpdate) return prev
       return next
     })
-  }, [editingSku, formState.category, formState.sizeTier])
+  }, [editingSku, formState.category, formState.sizeTier, tenantCode])
 
   const handleReferenceCategoryChange = useCallback(
     (nextCategory: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, category: nextCategory }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier)
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode)
 
         if (computed.normalizedCategory && computed.normalizedCategory !== next.category) {
           next.category = computed.normalizedCategory
@@ -465,14 +434,14 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return next
       })
     },
-    [editingSku]
+    [editingSku, tenantCode]
   )
 
   const handleReferenceSizeTierChange = useCallback(
     (nextSizeTier: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, sizeTier: nextSizeTier }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier)
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode)
 
         if (computed.computedSizeTier && computed.computedSizeTier !== next.sizeTier.trim()) {
           next.sizeTier = computed.computedSizeTier
@@ -485,7 +454,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return next
       })
     },
-    [editingSku]
+    [editingSku, tenantCode]
   )
 
   // Handle external modal open trigger

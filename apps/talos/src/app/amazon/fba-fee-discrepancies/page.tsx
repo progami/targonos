@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
-import { calculateSizeTier } from '@/lib/amazon/fees'
+import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
+import type { TenantCode } from '@/lib/tenant/constants'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { usePageState } from '@/lib/store/page-state'
 
@@ -221,7 +222,7 @@ function formatWeightLb(weightLb: number | null, decimals: number): string {
   return `${formatNumber(weightLb, decimals)} lb`
 }
 
-function computeComparison(row: ApiSkuRow): Comparison {
+function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
   const referenceTriplet = resolveDimensionTripletCm({
     side1Cm: row.referenceItemPackageSide1Cm,
     side2Cm: row.referenceItemPackageSide2Cm,
@@ -231,7 +232,8 @@ function computeComparison(row: ApiSkuRow): Comparison {
   const referenceWeightKg = parseDecimalNumber(row.referenceItemPackageWeightKg)
   const referenceSizeTier =
     referenceTriplet && referenceWeightKg !== null
-      ? calculateSizeTier(
+      ? calculateSizeTierForTenant(
+          tenantCode,
           referenceTriplet.side1Cm,
           referenceTriplet.side2Cm,
           referenceTriplet.side3Cm,
@@ -327,6 +329,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const pageState = usePageState(PAGE_KEY)
+  const tenantCode: TenantCode = session?.user?.region ?? 'US'
 
   const [loading, setLoading] = useState(false)
   const [skus, setSkus] = useState<ApiSkuRow[]>([])
@@ -393,9 +396,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   const computedRows = useMemo(() => {
     return skus.map(sku => ({
       sku,
-      comparison: computeComparison(sku),
+      comparison: computeComparison(sku, tenantCode),
     }))
-  }, [skus])
+  }, [skus, tenantCode])
 
   const filteredRows = useMemo(() => {
     if (statusFilter === 'ALL') return computedRows

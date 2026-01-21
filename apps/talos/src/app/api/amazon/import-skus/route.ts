@@ -11,10 +11,10 @@ import {
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import {
-  getReferralFeePercent2026,
   normalizeReferralCategory2026,
   parseAmazonProductFees,
-  calculateSizeTier,
+  calculateSizeTierForTenant,
+  getReferralFeePercentForTenant,
 } from '@/lib/amazon/fees'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
@@ -647,7 +647,8 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       )
     }
 
-    const calculatedSizeTier = calculateSizeTier(
+    const calculatedSizeTier = calculateSizeTierForTenant(
+      tenantCode,
       unitTriplet?.side1Cm ?? null,
       unitTriplet?.side2Cm ?? null,
       unitTriplet?.side3Cm ?? null,
@@ -667,7 +668,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       amazonListingPrice = roundToTwoDecimals(fetchedListingPrice)
 
       if (amazonCategory !== null) {
-        amazonReferralFeePercent = getReferralFeePercent2026(amazonCategory, fetchedListingPrice)
+        amazonReferralFeePercent = getReferralFeePercentForTenant(tenantCode, amazonCategory, fetchedListingPrice)
       }
 
       const fees = await getProductFees(asin, fetchedListingPrice, tenantCode)
