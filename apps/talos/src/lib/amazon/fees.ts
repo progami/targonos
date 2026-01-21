@@ -1,4 +1,5 @@
 import type { TenantCode } from '@/lib/tenant/constants'
+import * as ukFees from './fees-uk'
 
 type AmazonMoney = {
   Amount?: unknown
@@ -516,3 +517,70 @@ export function parseAmazonProductFees(response: unknown): AmazonProductFeesPars
     feeBreakdown,
   }
 }
+
+// =============================================================================
+// Tenant-Aware Wrapper Functions
+// =============================================================================
+
+/**
+ * Calculate FBA size tier based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function calculateSizeTierForTenant(
+  tenantCode: TenantCode,
+  side1Cm: number | null,
+  side2Cm: number | null,
+  side3Cm: number | null,
+  weightKg: number | null
+): string | null {
+  if (tenantCode === 'UK') {
+    return ukFees.calculateUKSizeTier(side1Cm, side2Cm, side3Cm, weightKg)
+  }
+  return calculateSizeTier(side1Cm, side2Cm, side3Cm, weightKg)
+}
+
+/**
+ * Calculate FBA fulfillment fee based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function calculateFbaFeeForTenant(
+  tenantCode: TenantCode,
+  input: {
+    side1Cm: number
+    side2Cm: number
+    side3Cm: number
+    unitWeightKg: number
+    listingPrice: number
+    sizeTier: string
+    category?: string
+  }
+): number | null {
+  if (tenantCode === 'UK') {
+    return ukFees.calculateUKFbaFulfillmentFee(input)
+  }
+  return calculateFbaFulfillmentFee2026NonPeakExcludingApparel(input)
+}
+
+/**
+ * Get referral fee percentage based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function getReferralFeePercentForTenant(
+  tenantCode: TenantCode,
+  category: string,
+  listingPrice: number
+): number | null {
+  if (tenantCode === 'UK') {
+    return ukFees.getUKReferralFeePercent2026(category, listingPrice)
+  }
+  return getReferralFeePercent2026(category, listingPrice)
+}
+
+// Re-export UK fee tables for fee tables page
+export {
+  UK_LOW_PRICE_FBA_TABLE_2026,
+  UK_STANDARD_FBA_TABLE_2026,
+  UK_STANDARD_FBA_OVERSIZE_TABLE_2026,
+  UK_SIZE_TIER_DEFINITIONS_2026,
+  isUKLowPriceEligible,
+} from './fees-uk'
