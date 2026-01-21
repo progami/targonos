@@ -112,16 +112,18 @@ function Sidebar({
   return (
     <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border bg-card px-6 pb-4">
       <div className="flex h-16 shrink-0 items-center justify-between">
+        {/* App branding - LEFT */}
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-md">
             <span className="text-sm font-bold text-primary-foreground">AT</span>
           </div>
           <span className="text-lg font-semibold text-foreground">Atlas</span>
         </Link>
+        {/* Targon branding - RIGHT */}
         <div className="flex items-center gap-2">
-          <div className="hidden md:block">
-            <NotificationBell />
-          </div>
+          <svg viewBox="0 0 128 128" width="24" height="24" aria-label="Targon" className="shrink-0">
+            <rect x="0" y="0" width="128" height="128" rx="21" fill="#00C2B9" />
+          </svg>
           {onClose && (
             <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
               <XIcon className="h-5 w-5 text-muted-foreground" />
@@ -225,7 +227,10 @@ function Header({ onMenuClick }: { onMenuClick: () => void }) {
         <MenuIcon className="h-6 w-6" />
       </Button>
       <div className="flex-1 text-base font-semibold text-foreground">{getCurrentPageName()}</div>
-      <NotificationBell />
+      {/* Targon branding - RIGHT */}
+      <svg viewBox="0 0 128 128" width="24" height="24" aria-label="Targon" className="shrink-0">
+        <rect x="0" y="0" width="128" height="128" rx="21" fill="#00C2B9" />
+      </svg>
     </div>
   );
 }
