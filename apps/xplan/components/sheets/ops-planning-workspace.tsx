@@ -43,6 +43,7 @@ import { formatDateDisplay, parseDate, toIsoDate } from '@/lib/utils/dates';
 import { withAppBasePath } from '@/lib/base-path';
 import { isRemovedPaymentCategory, REMOVED_PAYMENT_CATEGORY } from '@/lib/payments';
 import { useOpsPlanningStore } from '@/stores';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -910,11 +911,17 @@ export function OpsPlanningWorkspace({
   const [paymentRows, setPaymentRows] = useState<PurchasePaymentRow[]>(initialPayments);
   const [batchRows, setBatchRows] = useState<OpsBatchRow[]>(initialBatchRows);
 
-  // Zustand store for selection and modal state
-  const activeOrderId = useOpsPlanningStore((s) => s.activeOrderId);
-  const setActiveOrderId = useOpsPlanningStore((s) => s.setActiveOrder);
-  const activeBatchId = useOpsPlanningStore((s) => s.activeBatchId);
-  const setActiveBatchId = useOpsPlanningStore((s) => s.setActiveBatch);
+  // Selection state - persisted per strategy
+  const [activeOrderId, setActiveOrderId] = usePersistentState<string | null>(
+    `xplan:ops:active-order:${strategyId}`,
+    poTableRows[0]?.id ?? null,
+  );
+  const [activeBatchId, setActiveBatchId] = usePersistentState<string | null>(
+    `xplan:ops:active-batch:${strategyId}`,
+    null,
+  );
+
+  // Zustand store for modal state
   const isCreateOrderOpen = useOpsPlanningStore((s) => s.isCreateOrderOpen);
   const openCreateOrder = useOpsPlanningStore((s) => s.openCreateOrder);
   const closeCreateOrder = useOpsPlanningStore((s) => s.closeCreateOrder);
