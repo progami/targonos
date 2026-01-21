@@ -157,19 +157,24 @@ export const UK_LOW_PRICE_EXCLUDED_CATEGORIES = [
 /**
  * Check if a product is eligible for Low-Price FBA rates.
  * - £10 threshold: ALL categories
- * - £20 threshold: All categories EXCEPT those in UK_LOW_PRICE_EXCLUDED_CATEGORIES
+ * - £20 threshold: Only if category is known AND not in excluded list
  * Source: https://sell.amazon.co.uk/low-price-fba-rates
  */
 export function isUKLowPriceEligible(listingPrice: number, category?: string): boolean {
   if (!Number.isFinite(listingPrice) || listingPrice <= 0) return false
 
-  // Base threshold applies to all
+  // Base £10 threshold applies to all categories
   if (listingPrice <= UK_LOW_PRICE_THRESHOLD) return true
 
-  // Extended threshold for most categories
-  if (category && UK_LOW_PRICE_EXCLUDED_CATEGORIES.some(c => category.toLowerCase().includes(c.toLowerCase()))) {
-    return false
-  }
+  // For prices between £10-£20, only eligible if:
+  // 1. Category is known, AND
+  // 2. Category is NOT in the excluded list
+  if (!category) return false // Unknown category = conservative £10 threshold
+
+  const isExcluded = UK_LOW_PRICE_EXCLUDED_CATEGORIES.some(
+    excluded => category.toLowerCase().includes(excluded.toLowerCase())
+  )
+  if (isExcluded) return false
 
   return listingPrice <= UK_LOW_PRICE_THRESHOLD_EXTENDED
 }
