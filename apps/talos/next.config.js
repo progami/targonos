@@ -25,11 +25,6 @@ const nextConfig = {
   basePath,
   assetPrefix,
 
-  // Skip type checking during build (React 19 types compatibility issues)
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-
   // Fix for Next.js 15 module resolution and HMR issues
   transpilePackages: ['lucide-react'],
   
