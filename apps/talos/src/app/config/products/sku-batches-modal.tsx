@@ -582,9 +582,12 @@ function SkuBatchesManager({
                   <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Batch</th>
-                      <th className="px-3 py-2 text-left font-semibold">Description</th>
                       <th className="px-3 py-2 text-right font-semibold">Pack</th>
-                      <th className="px-3 py-2 text-right font-semibold">Units/Carton</th>
+                      <th className="px-3 py-2 text-right font-semibold">Units/Ctn</th>
+                      <th className="px-3 py-2 text-left font-semibold">Material</th>
+                      <th className="px-3 py-2 text-left font-semibold">Packaging</th>
+                      <th className="px-3 py-2 text-right font-semibold">Storage CPP</th>
+                      <th className="px-3 py-2 text-right font-semibold">Ship CPP</th>
                       <th className="px-3 py-2 text-right font-semibold">Carton Dims (cm)</th>
                       <th className="px-3 py-2 text-right font-semibold">Carton Wt (kg)</th>
                       <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -608,8 +611,6 @@ function SkuBatchesManager({
                       }
 
                       const batchCode = typeof batch.batchCode === 'string' ? batch.batchCode : '—'
-                      const batchDescription =
-                        typeof batch.description === 'string' ? batch.description : '—'
                       const canDelete = batches.length > 1
 
                       return (
@@ -623,14 +624,23 @@ function SkuBatchesManager({
                               {batchCode}
                             </button>
                           </td>
-                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                            {batchDescription}
-                          </td>
                           <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
                             {batch.packSize ?? '—'}
                           </td>
                           <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
                             {batch.unitsPerCarton ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            {batch.material ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            {batch.packagingType ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.storageCartonsPerPallet ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.shippingCartonsPerPallet ?? '—'}
                           </td>
                           <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
                             {formatTriplet(cartonTriplet)}
