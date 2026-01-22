@@ -25,6 +25,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 - Test via Chrome browser at `https://dev-targonos.targonglobal.com/<app>`
 - Do not test on localhost
 - **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
+- Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
 
 ## Git Workflow
 
@@ -33,6 +34,14 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
 
 Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
+
+### PR Titles
+
+PR titles must include:
+- the app scope (e.g. `fix(talos): ...`)
+- the agent tag: `[claude]`
+
+Example: `fix(talos): use presigned URL for PO document uploads [claude]`
 
 ### PR Workflow
 
@@ -61,4 +70,4 @@ When `dev` and `main` diverge with conflicts:
 
 ## Deployment & Caching
 
-Do **not** suggest "hard refresh" as a troubleshooting step. Instead, check the git deploy status - if deployment is complete and the problem is still unsolved, then check the root cause.
+Do **not** suggest "hard refresh" as a troubleshooting step. Instead, use the in-app version badge (bottom-right) to confirm the deployed version and wait for the deploy pipeline if the version hasn't updated yet. If deployment is complete and the problem is still unsolved, investigate the root cause.
