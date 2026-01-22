@@ -18,8 +18,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
-import { MeApi, TasksApi, EmployeesApi, type Employee, type Me } from '@/lib/api-client'
+import { TasksApi, EmployeesApi, type Employee } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 const CreateRequestSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -38,7 +39,7 @@ type CreateRequestModalProps = {
 
 export function CreateRequestModal({ open, onClose, onCreated }: CreateRequestModalProps) {
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(true)
 
@@ -60,8 +61,7 @@ export function CreateRequestModal({ open, onClose, onCreated }: CreateRequestMo
     async function loadEmployees() {
       try {
         setLoadingEmployees(true)
-        const [meData, data] = await Promise.all([MeApi.get(), EmployeesApi.listManageable()])
-        setMe(meData)
+        const [, data] = await Promise.all([ensureMe(), EmployeesApi.listManageable()])
         setEmployees(data.items || [])
       } catch (e) {
         console.error('Failed to load employees:', e)

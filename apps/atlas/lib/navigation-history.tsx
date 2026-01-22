@@ -1,19 +1,14 @@
 'use client'
 
-import { createContext, useContext, ReactNode, useCallback, useMemo } from 'react'
+import { useCallback, useLayoutEffect, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { create } from 'zustand'
 
 type NavigationHistoryContextType = {
   goBack: () => void
   canGoBack: boolean
   previousPath: string | null
 }
-
-const NavigationHistoryContext = createContext<NavigationHistoryContextType>({
-  goBack: () => {},
-  canGoBack: false,
-  previousPath: null,
-})
 
 /**
  * Contextual navigation defaults
@@ -121,30 +116,47 @@ function getDefaultBackPath(pathname: string): string | null {
   return '/work'
 }
 
+type NavigationHistoryStore = {
+  pathname: string
+  previousPath: string | null
+  canGoBack: boolean
+  setPathname: (pathname: string) => void
+}
+
+const useNavigationHistoryStore = create<NavigationHistoryStore>((set) => ({
+  pathname: '',
+  previousPath: null,
+  canGoBack: false,
+  setPathname: (pathname) => {
+    const previousPath = getDefaultBackPath(pathname)
+    set({ pathname, previousPath, canGoBack: previousPath !== null })
+  },
+}))
+
 export function NavigationHistoryProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
 
-  const previousPath = useMemo(() => getDefaultBackPath(pathname), [pathname])
-  const canGoBack = previousPath !== null
+  const setPathname = useNavigationHistoryStore((s) => s.setPathname)
+  useLayoutEffect(() => {
+    setPathname(pathname)
+  }, [pathname, setPathname])
 
-  const goBack = useCallback(() => {
-    const backPath = getDefaultBackPath(pathname)
-    if (backPath) {
-      router.push(backPath)
-    } else {
-      // Fallback to browser history if no default
-      window.history.back()
-    }
-  }, [pathname, router])
-
-  return (
-    <NavigationHistoryContext.Provider value={{ goBack, canGoBack, previousPath }}>
-      {children}
-    </NavigationHistoryContext.Provider>
-  )
+  return children
 }
 
 export function useNavigationHistory() {
-  return useContext(NavigationHistoryContext)
+  const router = useRouter()
+
+  const previousPath = useNavigationHistoryStore((s) => s.previousPath)
+  const canGoBack = useNavigationHistoryStore((s) => s.canGoBack)
+
+  const goBack = useCallback(() => {
+    if (previousPath) {
+      router.push(previousPath)
+      return
+    }
+    window.history.back()
+  }, [previousPath, router])
+
+  return { goBack, canGoBack, previousPath } satisfies NavigationHistoryContextType
 }

@@ -2,12 +2,11 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { DisciplinaryActionsApi, EmployeesApi, MeApi, type Employee, type Me } from '@/lib/api-client'
-import { ArrowLeftIcon, ExclamationTriangleIcon } from '@/components/ui/Icons'
+import { DisciplinaryActionsApi, EmployeesApi, type Employee } from '@/lib/api-client'
+import { ExclamationTriangleIcon } from '@/components/ui/Icons'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -17,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 import {
   DISCIPLINARY_ACTION_TYPE_OPTIONS,
   VALUE_BREACH_OPTIONS,
@@ -63,7 +64,7 @@ function AddViolationContent() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [authorizedReporters, setAuthorizedReporters] = useState<AuthorizedReporter[]>([])
   const [loadingReporters, setLoadingReporters] = useState(false)
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [loading, setLoading] = useState(true)
   const [selectedValues, setSelectedValues] = useState<string[]>([])
 
@@ -94,10 +95,9 @@ function AddViolationContent() {
       try {
         const [empRes, meData] = await Promise.all([
           EmployeesApi.list({ take: 200 }),
-          MeApi.get().catch(() => null),
+          ensureMe().catch(() => null),
         ])
         setEmployees(empRes.items.filter((e) => e.id !== meData?.id))
-        setMe(meData)
       } catch (e: any) {
         setError('root', { message: e.message })
       } finally {
@@ -165,83 +165,80 @@ function AddViolationContent() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <Card padding="lg">
-          <div className="animate-pulse space-y-4">
-            <div className="h-6 bg-muted rounded w-1/3" />
-            <div className="h-4 bg-muted rounded w-2/3" />
-            <div className="h-32 bg-muted rounded" />
-          </div>
-        </Card>
-      </div>
+      <>
+        <PageHeader
+          title="Record Violation"
+          description="Performance"
+          icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
+          backHref="/performance/violations"
+        />
+        <div className="max-w-2xl mx-auto">
+          <Card padding="lg">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-2/3" />
+              <div className="h-32 bg-muted rounded" />
+            </div>
+          </Card>
+        </div>
+      </>
     )
   }
 
   if (!canCreate) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <Card padding="lg">
-          <Alert variant="error">You do not have permission to create violations.</Alert>
-          <div className="mt-4">
-            <Button variant="secondary" href="/performance/violations">Back to Violations</Button>
-          </div>
-        </Card>
-      </div>
+      <>
+        <PageHeader
+          title="Record Violation"
+          description="Performance"
+          icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
+          backHref="/performance/violations"
+        />
+        <div className="max-w-2xl mx-auto">
+          <Card padding="lg">
+            <Alert variant="error">You do not have permission to create violations.</Alert>
+          </Card>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Back link */}
-      <Link
-        href="/performance/violations"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeftIcon className="h-4 w-4" />
-        Back to Violations
-      </Link>
+    <>
+      <PageHeader
+        title="Record Violation"
+        description="Performance"
+        icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
+        backHref="/performance/violations"
+      />
 
-      {/* Main card */}
-      <Card padding="lg">
-        {/* Header */}
-        <div className="flex items-start gap-3 pb-6 border-b border-border">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning-100">
-            <ExclamationTriangleIcon className="h-6 w-6 text-warning-600" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Record Violation</h1>
-            <p className="text-sm text-muted-foreground">
-              Document a workplace policy violation
-            </p>
-          </div>
-        </div>
+      <div className="max-w-2xl mx-auto">
+        <Card padding="lg">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {errors.root ? (
+              <Alert variant="error" onDismiss={() => setError('root', { message: '' })}>
+                {errors.root.message}
+              </Alert>
+            ) : null}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="py-6 space-y-6">
-          {errors.root && (
-            <Alert variant="error" onDismiss={() => setError('root', { message: '' })}>
-              {errors.root.message}
-            </Alert>
-          )}
-
-          {/* Employee & Type */}
-          <div>
-            <Label htmlFor="employeeId">Employee</Label>
-            <NativeSelect
-              {...register('employeeId')}
-              className={cn('mt-1.5', errors.employeeId && 'border-destructive')}
-            >
-              <option value="">Select employee...</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName} ({emp.department})
-                </option>
-              ))}
-            </NativeSelect>
-            {errors.employeeId && (
-              <p className="text-xs text-destructive mt-1">{errors.employeeId.message}</p>
-            )}
-          </div>
+            {/* Employee & Type */}
+            <div>
+              <Label htmlFor="employeeId">Employee</Label>
+              <NativeSelect
+                {...register('employeeId')}
+                className={cn('mt-1.5', errors.employeeId && 'border-destructive')}
+              >
+                <option value="">Select employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.department})
+                  </option>
+                ))}
+              </NativeSelect>
+              {errors.employeeId ? (
+                <p className="text-xs text-destructive mt-1">{errors.employeeId.message}</p>
+              ) : null}
+            </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div>
@@ -408,18 +405,19 @@ function AddViolationContent() {
             />
           </div>
 
-          {/* Actions */}
-          <div className="pt-6 border-t border-border flex justify-end gap-3">
-            <Button type="button" variant="secondary" href="/performance/violations">
-              Cancel
-            </Button>
-            <Button type="submit" loading={isSubmitting}>
-              Create Violation
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+            {/* Actions */}
+            <div className="pt-6 border-t border-border flex justify-end gap-3">
+              <Button type="button" variant="secondary" href="/performance/violations">
+                Cancel
+              </Button>
+              <Button type="submit" loading={isSubmitting}>
+                Create Violation
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    </>
   )
 }
 
@@ -427,15 +425,23 @@ export default function AddViolationPage() {
   return (
     <Suspense
       fallback={
-        <div className="max-w-2xl mx-auto">
-          <Card padding="lg">
-            <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-muted rounded w-1/3" />
-              <div className="h-4 bg-muted rounded w-2/3" />
-              <div className="h-32 bg-muted rounded" />
-            </div>
-          </Card>
-        </div>
+        <>
+          <PageHeader
+            title="Record Violation"
+            description="Performance"
+            icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
+            backHref="/performance/violations"
+          />
+          <div className="max-w-2xl mx-auto">
+            <Card padding="lg">
+              <div className="animate-pulse space-y-4">
+                <div className="h-6 bg-muted rounded w-1/3" />
+                <div className="h-4 bg-muted rounded w-2/3" />
+                <div className="h-32 bg-muted rounded" />
+              </div>
+            </Card>
+          </div>
+        </>
       }
     >
       <AddViolationContent />

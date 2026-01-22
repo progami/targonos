@@ -16,8 +16,9 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
 import { CheckCircleIcon } from '@/components/ui/Icons'
-import { MeApi, TasksApi, EmployeesApi, type Employee, type Me } from '@/lib/api-client'
+import { TasksApi, EmployeesApi, type Employee } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 type ChecklistTask = {
   title: string
@@ -57,7 +58,7 @@ export function OnboardingOffboardingModal({
   employee,
   workflowType,
 }: OnboardingOffboardingModalProps) {
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(true)
   const [ownerId, setOwnerId] = useState('')
@@ -87,8 +88,7 @@ export function OnboardingOffboardingModal({
     async function loadEmployees() {
       try {
         setLoadingEmployees(true)
-        const [meData, data] = await Promise.all([MeApi.get(), EmployeesApi.listManageable()])
-        setMe(meData)
+        const [meData, data] = await Promise.all([ensureMe(), EmployeesApi.listManageable()])
         setEmployees(data.items)
         // Default owner to current user
         setOwnerId(meData.id)

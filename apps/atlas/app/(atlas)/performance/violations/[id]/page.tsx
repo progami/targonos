@@ -8,10 +8,8 @@ import { z } from 'zod'
 import {
   ApiError,
   DisciplinaryActionsApi,
-  MeApi,
   getApiBase,
   type DisciplinaryAction,
-  type Me,
 } from '@/lib/api-client'
 import type { ActionId } from '@/lib/contracts/action-ids'
 import type { WorkflowRecordDTO } from '@/lib/contracts/workflow-record'
@@ -47,6 +45,7 @@ import {
   VIOLATION_TYPE_LABELS,
   VIOLATION_TYPE_OPTIONS,
 } from '@/lib/domain/disciplinary/constants'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 const severityOptions = [
   { value: 'MINOR', label: 'Minor' },
@@ -127,7 +126,7 @@ export default function ViolationWorkflowPage() {
 
   const [dto, setDto] = useState<WorkflowRecordDTO | null>(null)
   const [record, setRecord] = useState<DisciplinaryAction | null>(null)
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,15 +166,14 @@ export default function ViolationWorkflowPage() {
     setErrorDetails(null)
 
     try {
-      const [workflow, raw, meData] = await Promise.all([
+      const [workflow, raw] = await Promise.all([
         DisciplinaryActionsApi.getWorkflowRecord(id),
         DisciplinaryActionsApi.get(id),
-        MeApi.get().catch(() => null),
+        ensureMe().catch(() => null),
       ])
 
       setDto(workflow)
       setRecord(raw)
-      setMe(meData)
       setSelectedValues(raw.valuesBreached ?? [])
 
       // Initialize form
@@ -202,7 +200,6 @@ export default function ViolationWorkflowPage() {
       setErrorDetails(null)
       setDto(null)
       setRecord(null)
-      setMe(null)
     } finally {
       setLoading(false)
     }
