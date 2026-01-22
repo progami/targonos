@@ -106,6 +106,8 @@ function renderPurchaseOrderHtml(params: {
     totalCost: number | null
   }>
 }): string {
+  const logoSrc = '/talos/brand/logo.svg'
+
   // Calculate totals
   let grandTotal = 0
   for (const line of params.lines) {
@@ -213,20 +215,9 @@ function renderPurchaseOrderHtml(params: {
     }
 
     .logo {
-      font-size: 32px;
-      font-weight: 700;
-      color: #00C2B9;
-      letter-spacing: -0.5px;
-    }
-
-    .logo::after {
-      content: '';
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      background: #0f172a;
-      margin-left: 4px;
-      vertical-align: middle;
+      display: block;
+      height: 32px;
+      width: auto;
     }
 
     .company-address {
@@ -549,7 +540,7 @@ function renderPurchaseOrderHtml(params: {
     <div class="page-content">
       <div class="header">
         <div class="logo-section">
-          <div class="logo">TARGON</div>
+          <img class="logo" src="${logoSrc}" alt="Targon" />
           <div class="company-address">
             ${buyerAddressLines.slice(0, 2).join(', ')}<br>
             ${buyerAddressLines.slice(2).join(', ')}<br>
