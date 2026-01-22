@@ -142,6 +142,11 @@ export function MainNav() {
 
   return (
     <>
+      {/* Desktop Targon wordmark - TOP RIGHT */}
+      <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
+        <TargonWordmark className="shrink-0" />
+      </div>
+
       {/* Desktop Navigation - responsive for tablets */}
       <div className={cn(
         "hidden md:fixed md:inset-y-0 md:z-50 md:flex md:flex-col transition-all duration-300",
@@ -163,11 +168,6 @@ export function MainNav() {
                 </div>
                 <span className={cn("text-lg font-semibold text-slate-900 dark:text-slate-100 transition-all duration-300", isTabletCollapsed && "md:hidden lg:inline")}>Talos</span>
               </Link>
-            </div>
-
-            {/* Targon branding - RIGHT */}
-            <div className={cn("flex items-center transition-all duration-300", isTabletCollapsed && "md:hidden lg:flex")}>
-              <TargonWordmark className="shrink-0" />
             </div>
           </div>
 

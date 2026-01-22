@@ -137,15 +137,11 @@ function Sidebar({
           </div>
           <span className="text-lg font-semibold text-foreground">Atlas</span>
         </Link>
-        {/* Targon branding - RIGHT */}
-        <div className="flex items-center gap-2">
-          {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
-              <XIcon className="h-5 w-5 text-muted-foreground" />
-            </Button>
-          )}
-          <TargonWordmark className="shrink-0" />
-        </div>
+        {onClose && (
+          <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
+            <XIcon className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        )}
       </div>
 
       <nav className="flex flex-1 flex-col">
@@ -298,6 +294,11 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <RouteLoadingIndicator />
       </Suspense>
+
+      {/* Desktop Targon wordmark - TOP RIGHT */}
+      <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
+        <TargonWordmark className="shrink-0" />
+      </div>
 
       {/* Desktop Sidebar */}
       <div className="hidden md:fixed md:inset-y-0 md:z-50 md:flex md:w-64 md:flex-col">
