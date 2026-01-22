@@ -18,6 +18,7 @@ import {
   getReferralFeePercentForTenant,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
+import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { useSession } from '@/hooks/usePortalSession'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { usePageState } from '@/lib/store/page-state'
@@ -100,15 +101,6 @@ interface SkuBatchRow {
   packSize: number | null
   unitsPerCarton: number | null
   material: string | null
-  unitDimensionsCm: string | null
-  unitSide1Cm: number | string | null
-  unitSide2Cm: number | string | null
-  unitSide3Cm: number | string | null
-  unitWeightKg: number | string | null
-  amazonItemPackageDimensionsCm: string | null
-  amazonItemPackageSide1Cm: number | string | null
-  amazonItemPackageSide2Cm: number | string | null
-  amazonItemPackageSide3Cm: number | string | null
   amazonSizeTier: string | null
   amazonFbaFulfillmentFee: number | string | null
   amazonReferenceWeightKg: number | string | null
@@ -140,6 +132,12 @@ interface SkuRow {
   amazonReferralFeePercent?: number | string | null
   amazonFbaFulfillmentFee?: number | string | null
   amazonListingPrice?: number | string | null
+  amazonReferenceWeightKg: number | string | null
+  unitDimensionsCm: string | null
+  unitSide1Cm: number | string | null
+  unitSide2Cm: number | string | null
+  unitSide3Cm: number | string | null
+  unitWeightKg: number | string | null
   itemDimensionsCm?: string | null
   itemSide1Cm?: number | string | null
   itemSide2Cm?: number | string | null
@@ -310,26 +308,33 @@ function computeReferenceFeesAutofill(
     computedSizeTier = selectedSizeTier
   }
 
-  const latestBatch = sku?.batches && sku.batches.length > 0 ? sku.batches[0] : null
-
-  const side1Cm = parseFiniteNumber(latestBatch?.unitSide1Cm)
-  const side2Cm = parseFiniteNumber(latestBatch?.unitSide2Cm)
-  const side3Cm = parseFiniteNumber(latestBatch?.unitSide3Cm)
-  const unitWeightKg = parseFiniteNumber(latestBatch?.unitWeightKg)
+  const unitTriplet = resolveDimensionTripletCm({
+    side1Cm: sku?.unitSide1Cm,
+    side2Cm: sku?.unitSide2Cm,
+    side3Cm: sku?.unitSide3Cm,
+    legacy: sku?.unitDimensionsCm,
+  })
+  const unitWeightKg = parseFiniteNumber(sku?.unitWeightKg)
 
   if (computedSizeTier === null) {
-    if (side1Cm !== null && side2Cm !== null && side3Cm !== null && unitWeightKg !== null) {
-      computedSizeTier = calculateSizeTierForTenant(tenantCode, side1Cm, side2Cm, side3Cm, unitWeightKg)
+    if (unitTriplet && unitWeightKg !== null) {
+      computedSizeTier = calculateSizeTierForTenant(
+        tenantCode,
+        unitTriplet.side1Cm,
+        unitTriplet.side2Cm,
+        unitTriplet.side3Cm,
+        unitWeightKg
+      )
     }
   }
 
   let fbaFulfillmentFee: number | null = null
   if (listingPriceResolution !== null && computedSizeTier !== null) {
-    if (side1Cm !== null && side2Cm !== null && side3Cm !== null && unitWeightKg !== null) {
+    if (unitTriplet && unitWeightKg !== null) {
       fbaFulfillmentFee = calculateFbaFeeForTenant(tenantCode, {
-        side1Cm,
-        side2Cm,
-        side3Cm,
+        side1Cm: unitTriplet.side1Cm,
+        side2Cm: unitTriplet.side2Cm,
+        side3Cm: unitTriplet.side3Cm,
         unitWeightKg,
         listingPrice: listingPriceResolution.listingPrice,
         sizeTier: computedSizeTier,
@@ -941,8 +946,8 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                   id: sku.id,
                                   skuCode: sku.skuCode,
                                   description: sku.description,
-                                  unitDimensionsCm: null,
-                                  amazonReferenceWeightKg: null,
+                                  unitDimensionsCm: sku.unitDimensionsCm,
+                                  amazonReferenceWeightKg: sku.amazonReferenceWeightKg,
                                   itemDimensionsCm: sku.itemDimensionsCm ?? null,
                                   itemSide1Cm: sku.itemSide1Cm ?? null,
                                   itemSide2Cm: sku.itemSide2Cm ?? null,
@@ -1250,7 +1255,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
                           <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <p className="text-xs text-slate-500">
-                              Item package dimensions and weight are batch-level. Use “View Batches” to edit the latest batch.
+                              Item package dimensions and weight are SKU-level.
                             </p>
                           </div>
                         </div>
