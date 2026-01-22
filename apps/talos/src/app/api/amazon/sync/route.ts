@@ -279,13 +279,19 @@ async function syncProducts(session: Session) {
               ? calculateSizeTierForTenant(tenantCode, unitTriplet.side1Cm, unitTriplet.side2Cm, unitTriplet.side3Cm, unitWeightKg)
               : null
 
-          const batchUpdates: Record<string, unknown> = {}
+          // Add Amazon item package dimensions to SKU updates
           if (unitTriplet) {
-            batchUpdates.amazonItemPackageDimensionsCm = formatDimensionTripletCm(unitTriplet)
-            batchUpdates.amazonItemPackageSide1Cm = unitTriplet.side1Cm
-            batchUpdates.amazonItemPackageSide2Cm = unitTriplet.side2Cm
-            batchUpdates.amazonItemPackageSide3Cm = unitTriplet.side3Cm
+            updates.amazonItemPackageDimensionsCm = formatDimensionTripletCm(unitTriplet)
+            updates.amazonItemPackageSide1Cm = unitTriplet.side1Cm
+            updates.amazonItemPackageSide2Cm = unitTriplet.side2Cm
+            updates.amazonItemPackageSide3Cm = unitTriplet.side3Cm
           }
+          if (unitWeightKg !== null) {
+            updates.amazonReferenceWeightKg = unitWeightKg
+          }
+
+          // Update batch with Amazon fee/tier data only
+          const batchUpdates: Record<string, unknown> = {}
           if (unitWeightKg !== null) {
             batchUpdates.amazonReferenceWeightKg = unitWeightKg
           }
@@ -299,14 +305,12 @@ async function syncProducts(session: Session) {
               orderBy: { createdAt: 'desc' },
               select: { id: true },
             })
-            if (!latestBatch) {
-              throw new Error(`No active batch found for SKU: ${sku.skuCode}`)
+            if (latestBatch) {
+              await prisma.skuBatch.update({
+                where: { id: latestBatch.id },
+                data: batchUpdates,
+              })
             }
-
-            await prisma.skuBatch.update({
-              where: { id: latestBatch.id },
-              data: batchUpdates,
-            })
           }
 
           const itemTriplet = parseCatalogItemDimensions(attributes)
