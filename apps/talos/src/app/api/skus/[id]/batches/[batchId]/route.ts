@@ -21,27 +21,16 @@ const packagingTypeSchema = z.preprocess(
   z.enum(['BOX', 'POLYBAG']).nullable().optional()
 )
 
-type DimensionRefineShape = {
-  unitSide1Cm: z.ZodTypeAny
-  unitSide2Cm: z.ZodTypeAny
-  unitSide3Cm: z.ZodTypeAny
+type CartonDimensionRefineShape = {
   cartonSide1Cm: z.ZodTypeAny
   cartonSide2Cm: z.ZodTypeAny
   cartonSide3Cm: z.ZodTypeAny
 }
 
-const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema: z.ZodObject<T>) =>
+const refineCartonDimensions = <T extends z.ZodRawShape & CartonDimensionRefineShape>(
+  schema: z.ZodObject<T>
+) =>
   schema.superRefine((value, ctx) => {
-    const unitValues = [value.unitSide1Cm, value.unitSide2Cm, value.unitSide3Cm]
-    const unitAny = unitValues.some(part => part !== undefined && part !== null)
-    const unitAll = unitValues.every(part => part !== undefined && part !== null)
-    if (unitAny && !unitAll) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Item package dimensions require all three sides',
-      })
-    }
-
     const cartonValues = [value.cartonSide1Cm, value.cartonSide2Cm, value.cartonSide3Cm]
     const cartonAny = cartonValues.some(part => part !== undefined && part !== null)
     const cartonAll = cartonValues.every(part => part !== undefined && part !== null)
@@ -53,7 +42,7 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
     }
   })
 
-const updateSchema = refineDimensions(
+const updateSchema = refineCartonDimensions(
   z.object({
     batchCode: z.string().trim().min(1).max(64).optional(),
     description: z.string().trim().max(200).optional().nullable(),
@@ -68,11 +57,6 @@ const updateSchema = refineDimensions(
     amazonReferenceWeightKg: z.number().positive().optional().nullable(),
     storageCartonsPerPallet: z.number().int().positive().optional(),
     shippingCartonsPerPallet: z.number().int().positive().optional(),
-    unitDimensionsCm: z.string().trim().max(120).optional().nullable(),
-    unitSide1Cm: optionalDimensionValueSchema,
-    unitSide2Cm: optionalDimensionValueSchema,
-    unitSide3Cm: optionalDimensionValueSchema,
-    unitWeightKg: z.number().positive().optional(),
     cartonDimensionsCm: z.string().trim().max(120).optional().nullable(),
     cartonSide1Cm: optionalDimensionValueSchema,
     cartonSide2Cm: optionalDimensionValueSchema,
@@ -193,10 +177,6 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
     data.amazonReferenceWeightKg = parsed.data.amazonReferenceWeightKg ?? null
   }
 
-  if (parsed.data.unitWeightKg !== undefined) {
-    data.unitWeightKg = parsed.data.unitWeightKg
-  }
-
   if (parsed.data.cartonWeightKg !== undefined) {
     data.cartonWeightKg = parsed.data.cartonWeightKg ?? null
   }
@@ -207,35 +187,6 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
 
   if (parsed.data.shippingCartonsPerPallet !== undefined) {
     data.shippingCartonsPerPallet = parsed.data.shippingCartonsPerPallet
-  }
-
-  const unitTouched =
-    hasOwn('unitDimensionsCm') ||
-    hasOwn('unitSide1Cm') ||
-    hasOwn('unitSide2Cm') ||
-    hasOwn('unitSide3Cm')
-  if (unitTouched) {
-    const unitTriplet = resolveDimensionTripletCm({
-      side1Cm: parsed.data.unitSide1Cm,
-      side2Cm: parsed.data.unitSide2Cm,
-      side3Cm: parsed.data.unitSide3Cm,
-      legacy: parsed.data.unitDimensionsCm,
-    })
-
-    const unitInputProvided =
-      Boolean(parsed.data.unitDimensionsCm) ||
-      [parsed.data.unitSide1Cm, parsed.data.unitSide2Cm, parsed.data.unitSide3Cm].some(
-        value => value !== undefined && value !== null
-      )
-
-    if (unitInputProvided && !unitTriplet) {
-      return ApiResponses.badRequest('Item package dimensions must be a valid LxWxH triple')
-    }
-
-    data.unitDimensionsCm = unitTriplet ? formatDimensionTripletCm(unitTriplet) : null
-    data.unitSide1Cm = unitTriplet ? unitTriplet.side1Cm : null
-    data.unitSide2Cm = unitTriplet ? unitTriplet.side2Cm : null
-    data.unitSide3Cm = unitTriplet ? unitTriplet.side3Cm : null
   }
 
   const cartonTouched =
