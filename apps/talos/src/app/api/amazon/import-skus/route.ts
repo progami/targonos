@@ -754,6 +754,17 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           skuUpdateData.itemWeightKg = itemWeightKg
         }
 
+        // Add Amazon item package dimensions to SKU update
+        if (unitTriplet) {
+          skuUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
+          skuUpdateData.amazonItemPackageSide1Cm = unitTriplet.side1Cm
+          skuUpdateData.amazonItemPackageSide2Cm = unitTriplet.side2Cm
+          skuUpdateData.amazonItemPackageSide3Cm = unitTriplet.side3Cm
+        }
+        if (unitWeightKg !== null) {
+          skuUpdateData.amazonReferenceWeightKg = unitWeightKg
+        }
+
         // Update existing SKU with fresh Amazon data (only Amazon-sourced fields)
         await prisma.sku.update({
           where: { skuCode },
@@ -764,13 +775,8 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           throw new Error(`SKU not found during import: ${skuCode}`)
         }
 
+        // Update batch with Amazon fee data
         const batchUpdateData: Prisma.SkuBatchUpdateInput = {}
-        if (unitTriplet) {
-          batchUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
-          batchUpdateData.amazonItemPackageSide1Cm = unitTriplet.side1Cm
-          batchUpdateData.amazonItemPackageSide2Cm = unitTriplet.side2Cm
-          batchUpdateData.amazonItemPackageSide3Cm = unitTriplet.side3Cm
-        }
         if (unitWeightKg !== null) {
           batchUpdateData.amazonReferenceWeightKg = unitWeightKg
         }
@@ -787,14 +793,12 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
             orderBy: { createdAt: 'desc' },
             select: { id: true },
           })
-          if (!latestBatch) {
-            throw new Error(`No active batch found for SKU: ${skuCode}`)
+          if (latestBatch) {
+            await prisma.skuBatch.update({
+              where: { id: latestBatch.id },
+              data: batchUpdateData,
+            })
           }
-
-          await prisma.skuBatch.update({
-            where: { id: latestBatch.id },
-            data: batchUpdateData,
-          })
         }
 
         imported += 1
@@ -860,23 +864,12 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               packSize: DEFAULT_PACK_SIZE,
               unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
               material: null,
-              // Note: Batch item package dimensions are for packaging, not product dimensions
-              // Amazon catalog gives product dimensions, not packaging - leave null
-              unitDimensionsCm: null,
-              unitSide1Cm: null,
-              unitSide2Cm: null,
-              unitSide3Cm: null,
-              unitWeightKg: null,
               cartonDimensionsCm: null,
               cartonSide1Cm: null,
               cartonSide2Cm: null,
               cartonSide3Cm: null,
               cartonWeightKg: null,
               packagingType: null,
-              amazonItemPackageDimensionsCm: unitDimensionsCm,
-              amazonItemPackageSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
-              amazonItemPackageSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
-              amazonItemPackageSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
               amazonSizeTier,
               amazonFbaFulfillmentFee,
               amazonReferenceWeightKg: unitWeightKg,
