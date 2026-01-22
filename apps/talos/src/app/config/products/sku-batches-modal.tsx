@@ -533,12 +533,7 @@ function SkuBatchesManager({
     <>
       <div className="w-full overflow-hidden rounded-lg border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex items-start justify-between border-b px-6 py-4">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
-            <p className="text-xs text-muted-foreground">
-              {sku.skuCode} — {sku.description}
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
           {onRequestClose ? (
             <Button variant="ghost" onClick={handleClose}>
               <X className="h-4 w-4" />
@@ -591,6 +586,7 @@ function SkuBatchesManager({
                       <th className="px-3 py-2 text-right font-semibold">Pack</th>
                       <th className="px-3 py-2 text-right font-semibold">Units/Carton</th>
                       <th className="px-3 py-2 text-right font-semibold">Carton Dims (cm)</th>
+                      <th className="px-3 py-2 text-right font-semibold">Carton Wt (kg)</th>
                       <th className="px-3 py-2 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -638,6 +634,9 @@ function SkuBatchesManager({
                           </td>
                           <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
                             {formatTriplet(cartonTriplet)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.cartonWeightKg != null ? formatNumber(Number(batch.cartonWeightKg), 2) : '—'}
                           </td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
                             <Button
