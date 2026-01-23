@@ -143,6 +143,7 @@ html.tg-home {
 
 html.tg-home ::-webkit-scrollbar {
   width: 0px;
+  height: 0px;
   background: transparent;
 }
 
