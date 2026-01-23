@@ -206,6 +206,26 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
+  for (const update of parsed.data.updates) {
+    const values = update.values;
+    if ('quantity' in values) {
+      const incoming = values.quantity;
+      if (incoming === null || incoming === undefined || incoming.trim() === '') {
+        return NextResponse.json({ error: 'quantity is required' }, { status: 400 });
+      }
+      const parsedQuantity = parseNumber(incoming);
+      if (parsedQuantity == null || parsedQuantity < 0) {
+        return NextResponse.json({ error: 'quantity must be a non-negative number' }, { status: 400 });
+      }
+    }
+    if ('productId' in values) {
+      const incoming = values.productId;
+      if (incoming === null || incoming === undefined || incoming.trim() === '') {
+        return NextResponse.json({ error: 'productId is required' }, { status: 400 });
+      }
+    }
+  }
+
   const existingRows = await delegate.findMany({
     where: { id: { in: parsed.data.updates.map(({ id }) => id) } },
     select: { id: true, purchaseOrderId: true },
@@ -262,12 +282,16 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
       if (!(field in values)) continue;
       const incoming = values[field];
       if (incoming == null || incoming === '') {
+        if (field === 'quantity' || field === 'productId') {
+          continue;
+        }
         data[field] = null;
         continue;
       }
       if (field === 'quantity') {
         const parsedQuantity = parseNumber(incoming);
-        data[field] = parsedQuantity != null ? Math.max(0, Math.round(parsedQuantity)) : null;
+        if (parsedQuantity == null) continue;
+        data[field] = Math.max(0, Math.round(parsedQuantity));
       } else if (percentFields[field]) {
         const parsedNumber = parseNumber(incoming);
         if (parsedNumber == null) {

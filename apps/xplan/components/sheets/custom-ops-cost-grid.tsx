@@ -173,6 +173,8 @@ function validateNumeric(value: string): boolean {
   return !Number.isNaN(parsed);
 }
 
+const NON_CLEARABLE_FIELDS = new Set<keyof OpsBatchRow>(['quantity']);
+
 type ColumnDef = {
   key: keyof OpsBatchRow;
   header: string;
@@ -609,6 +611,15 @@ export function CustomOpsCostGrid({
 
       let finalValue = overrideValue ?? editValue;
 
+      if (colKey === 'quantity') {
+        const trimmed = finalValue.trim();
+        if (!trimmed) {
+          toast.error('Quantity is required');
+          cancelEditing();
+          return;
+        }
+      }
+
       // Validate and normalize based on column type
       if (column.type === 'numeric') {
         if (!validateNumeric(finalValue)) {
@@ -618,6 +629,14 @@ export function CustomOpsCostGrid({
         }
         const precision = column.precision ?? NUMERIC_PRECISION[colKey as NumericField] ?? 2;
         finalValue = normalizeCurrency(finalValue, precision);
+        if (colKey === 'quantity') {
+          const numericValue = sanitizeNumeric(finalValue);
+          if (!Number.isFinite(numericValue) || numericValue < 0) {
+            toast.error('Quantity must be a non-negative number');
+            cancelEditing();
+            return;
+          }
+        }
       } else if (column.type === 'percent') {
         if (!validateNumeric(finalValue)) {
           toast.error('Invalid percentage');
@@ -981,6 +1000,7 @@ export function CustomOpsCostGrid({
         if (column.type === 'dropdown') continue;
 
         const colKey = column.key;
+        if (NON_CLEARABLE_FIELDS.has(colKey)) continue;
         const currentValue = (updatedRow[colKey] ?? '') as string;
         if (currentValue === '') continue;
 
@@ -1072,6 +1092,10 @@ export function CustomOpsCostGrid({
 
           const rawValue = matrix[r]![c] ?? '';
           let finalValue = rawValue;
+          if (NON_CLEARABLE_FIELDS.has(column.key) && finalValue.trim() === '') {
+            skipped += 1;
+            continue;
+          }
 
           if (column.type === 'numeric') {
             if (!validateNumeric(finalValue)) {
