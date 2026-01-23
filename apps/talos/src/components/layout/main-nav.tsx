@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
 import {
@@ -31,10 +32,18 @@ const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 function TargonWordmark({ className }: { className?: string }) {
   return (
     <div className={className}>
-      <img src={`${assetBasePath}/brand/logo.svg`} alt="Targon" className="h-6 w-auto dark:hidden" />
-      <img
+      <Image
+        src={`${assetBasePath}/brand/logo.svg`}
+        alt="Targon"
+        width={92}
+        height={24}
+        className="h-6 w-auto dark:hidden"
+      />
+      <Image
         src={`${assetBasePath}/brand/logo-inverted.svg`}
         alt="Targon"
+        width={92}
+        height={24}
         className="hidden h-6 w-auto dark:block"
       />
     </div>
@@ -90,7 +99,7 @@ export function MainNav() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isTabletCollapsed, setIsTabletCollapsed] = useState(false)
+  const [isTabletCollapsed, _setIsTabletCollapsed] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
 
   // Load collapsed sections from localStorage on mount
