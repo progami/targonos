@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/page-header';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -218,6 +219,9 @@ export default function SettlementDetailPage() {
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState(initialTab === 'analysis' ? 'analysis' : initialTab === 'history' ? 'history' : 'sales');
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
   const [auditFile, setAuditFile] = useState<File | null>(null);
   const [auditAnalyze, setAuditAnalyze] = useState<AuditAnalyzeResponse | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<string>('');
@@ -375,47 +379,49 @@ export default function SettlementDetailPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/settlements">Back</Link>
-              </Button>
-              <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Settlement Details</h1>
-            </div>
-            {settlement && (
-              <div className="mt-3 text-sm text-slate-600 dark:text-slate-300 space-y-1">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between gap-3">
+          <Button asChild variant="ghost" size="sm" className="-ml-2">
+            <Link href="/settlements">Back to Settlements</Link>
+          </Button>
+        </div>
+
+        <PageHeader
+          className="mt-4"
+          title="Settlement Details"
+          kicker={settlement ? settlement.marketplace.label : 'Link My Books'}
+          description={
+            settlement ? (
+              <div className="space-y-1">
                 <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{settlement.docNumber}</div>
                 <div>
-                  {settlement.marketplace.label} • {formatPeriod(settlement.periodStart, settlement.periodEnd)}
+                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} • Posted{' '}
+                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US')}
                 </div>
               </div>
-            )}
-          </div>
-
-          {settlement && (
-            <div className="flex flex-col items-end gap-2 flex-shrink-0">
-              <div className="flex gap-2">
-                <StatusPill status={settlement.lmbStatus} />
-                <PlutusPill status={settlement.plutusStatus} />
+            ) : (
+              'Loads the QBO journal entry for this settlement and shows Plutus processing status.'
+            )
+          }
+          actions={
+            settlement ? (
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill status={settlement.lmbStatus} />
+                  <PlutusPill status={settlement.plutusStatus} />
+                </div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">
+                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
+                </div>
+                {data?.processing && (
+                  <Button variant="outline" size="sm" onClick={() => void handleRollback()} disabled={isRollingBack}>
+                    {isRollingBack ? 'Rolling back…' : 'Rollback'}
+                  </Button>
+                )}
               </div>
-              <div className="text-sm font-medium text-slate-900 dark:text-white">
-                {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
-              </div>
-              {data?.processing && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleRollback()}
-                  disabled={isRollingBack}
-                >
-                  {isRollingBack ? 'Rolling back…' : 'Rollback'}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+            ) : null
+          }
+        />
 
         {actionError && (
           <div className="mb-4 text-sm text-danger-700 dark:text-danger-400">
@@ -435,7 +441,14 @@ export default function SettlementDetailPage() {
               </div>
 
               <TabsContent value="sales" className="p-4">
-                {isLoading && <div className="text-sm text-slate-500">Loading settlement…</div>}
+                {isLoading && (
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                )}
                 {!isLoading && error && (
                   <div className="text-sm text-danger-700 dark:text-danger-400">
                     {error instanceof Error ? error.message : String(error)}
@@ -543,25 +556,78 @@ export default function SettlementDetailPage() {
 
               <TabsContent value="analysis" className="p-4">
                 <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Audit Data</div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400">
-                        Upload the LMB Audit Data file (CSV or ZIP) for this settlement.
+                  <Card className="border-slate-200/70 dark:border-white/10">
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">Audit Data</div>
+                          <div className="text-sm text-slate-500 dark:text-slate-400">
+                            Upload the LMB Audit Data file (CSV or ZIP) for this settlement.
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv,.zip"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              void handleAuditSelected(file);
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const el = fileInputRef.current;
+                              if (!el) return;
+                              el.click();
+                            }}
+                          >
+                            Choose file
+                          </Button>
+                          {auditFile && (
+                            <Badge variant="secondary" className="max-w-[16rem] truncate" title={auditFile.name}>
+                              {auditFile.name}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="w-64">
-                      <Input
-                        type="file"
-                        accept=".csv,.zip"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
+
+                      <div
+                        className={[
+                          'rounded-xl border border-dashed p-5 transition-colors',
+                          isDraggingFile
+                            ? 'border-brand-teal-400 bg-brand-teal-50/70 dark:bg-brand-cyan/10'
+                            : 'border-slate-200 bg-white dark:border-white/10 dark:bg-white/5',
+                        ].join(' ')}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingFile(true);
+                        }}
+                        onDragLeave={() => setIsDraggingFile(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingFile(false);
+                          const file = e.dataTransfer.files?.[0];
                           if (!file) return;
                           void handleAuditSelected(file);
                         }}
-                      />
-                    </div>
-                  </div>
+                      >
+                        <div className="flex flex-col gap-1">
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">
+                            Drop the file here
+                          </div>
+                          <div className="text-sm text-slate-500 dark:text-slate-400">
+                            Or use “Choose file”. Once uploaded, Plutus will detect invoice groups and compute a preview.
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
                   {analysisError && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">

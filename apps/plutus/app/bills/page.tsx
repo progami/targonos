@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/page-header';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
@@ -182,18 +184,17 @@ export default function BillsPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Bills</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Setup tooling for PO memo rules and bill parsing compliance.
-            </p>
-          </div>
-          <Button asChild variant="outline">
-            <Link href="/setup">Back to Setup</Link>
-          </Button>
-        </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <PageHeader
+          title="Bills"
+          kicker="Inventory"
+          description="Audit QBO bills for PO memo + manufacturing line compliance so Plutus can build cost basis."
+          actions={
+            <Button asChild variant="outline">
+              <Link href="/setup">Setup</Link>
+            </Button>
+          }
+        />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'guide' | 'scanner')}>
           <TabsList>
@@ -300,46 +301,44 @@ export default function BillsPage() {
 
               <Card className="p-0 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 dark:bg-white/5">
-                      <tr className="text-left">
-                        <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Date</th>
-                        <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Vendor</th>
-                        <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Memo</th>
-                        <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
-                        <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Vendor</TableHead>
+                        <TableHead>Memo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {rows.map(({ bill, compliance }) => (
-                        <tr key={bill.id} className="bg-white dark:bg-slate-900">
-                          <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-200">
-                            {bill.date}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{bill.vendor}</td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                        <TableRow key={bill.id}>
+                          <TableCell className="whitespace-nowrap">{bill.date}</TableCell>
+                          <TableCell>{bill.vendor}</TableCell>
+                          <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                             {bill.memo === '' ? '(empty)' : bill.memo}
-                          </td>
-                          <td className="px-4 py-3">
+                          </TableCell>
+                          <TableCell>
                             <StatusPill status={compliance} />
-                          </td>
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
+                          </TableCell>
+                          <TableCell className="text-slate-700 dark:text-slate-200">
                             {new Intl.NumberFormat('en-US', {
                               style: 'currency',
                               currency: 'USD',
                             }).format(bill.amount)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
                       {rows.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-10 text-center text-slate-500 dark:text-slate-400">
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
                             {isCheckingConnection || billsQuery.isFetching ? 'Loading…' : 'No bills found for this range.'}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
 
                 <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-white/5">
