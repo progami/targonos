@@ -122,6 +122,7 @@ export function computeProfitAndLoss(
     const salesRows = salesByWeek.get(weekNumber) ?? [];
     const override = overridesByWeek.get(weekNumber);
     const isPastWeek = weekNumber < currentWeekNumber;
+    const isPastOrCurrentWeek = weekNumber <= currentWeekNumber;
 
     let weekDate: Date | null = null;
     if (override?.weekDate) {
@@ -137,8 +138,8 @@ export function computeProfitAndLoss(
         const actualKey = `${row.productId}-${row.weekNumber}`;
         const actual = actualFinancialsIndex.get(actualKey);
 
-        // If this is a past week AND we have actual financials, use them
-        if (isPastWeek && row.hasActualData && actual) {
+        // If this is a past or current week AND we have actual financials, use them
+        if (isPastOrCurrentWeek && row.hasActualData && actual) {
           const units = row.actualSales ?? row.finalSales;
           acc.units += units;
           acc.revenue += actual.actualRevenue ?? 0;

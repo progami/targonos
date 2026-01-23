@@ -42,9 +42,10 @@ type WeeklyRow = {
   netCash: string;
   cashBalance: string;
   hasActualData?: string;
+  isCurrentWeek?: string;
 };
 
-type DisplayColumnKey = Exclude<keyof WeeklyRow, 'hasActualData'>;
+type DisplayColumnKey = Exclude<keyof WeeklyRow, 'hasActualData' | 'isCurrentWeek'>;
 
 type UpdatePayload = {
   weekNumber: number;
@@ -1053,12 +1054,15 @@ export function CashFlowGrid({ strategyId, weekly }: CashFlowGridProps) {
                           }}
                           className="h-8 w-full min-w-0 rounded-none border-0 bg-transparent p-0 text-right text-sm font-medium shadow-none focus:bg-background focus:outline-none"
                         />
-                      ) : config.key === 'weekLabel' ? (
-                        <span className="flex items-center gap-1">
-                          {displayValue}
-                          <RealWeekIndicator hasActualData={row.original.hasActualData === 'true'} />
-                        </span>
-                      ) : (
+                    ) : config.key === 'weekLabel' ? (
+                      <span className="flex items-center gap-1">
+                        {displayValue}
+                        <RealWeekIndicator
+                          hasActualData={row.original.hasActualData === 'true'}
+                          isIncompleteWeek={row.original.isCurrentWeek === 'true'}
+                        />
+                      </span>
+                    ) : (
                         <span
                           className={cn(
                             'block min-w-0 truncate tabular-nums',
