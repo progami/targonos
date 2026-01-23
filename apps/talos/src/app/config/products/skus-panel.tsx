@@ -18,7 +18,7 @@ import {
   getReferralFeePercentForTenant,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
-import { resolveDimensionTripletCm, type DimensionTriplet } from '@/lib/sku-dimensions'
+import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { useSession } from '@/hooks/usePortalSession'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { usePageState } from '@/lib/store/page-state'
@@ -310,21 +310,6 @@ function parseFiniteNumber(value: number | string | null | undefined): number | 
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
-}
-
-function parsePositiveNumber(value: string): number | null {
-  const parsed = parseFiniteNumber(value)
-  if (parsed === null) return null
-  if (parsed <= 0) return null
-  return parsed
-}
-
-function tripletDiffers(left: DimensionTriplet, right: DimensionTriplet, tolerance: number): boolean {
-  return (
-    Math.abs(left.side1Cm - right.side1Cm) > tolerance ||
-    Math.abs(left.side2Cm - right.side2Cm) > tolerance ||
-    Math.abs(left.side3Cm - right.side3Cm) > tolerance
-  )
 }
 
 type ListingPriceResolution =
@@ -948,56 +933,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     }
   }
 
-  const referenceItemPackageTriplet = resolveDimensionTripletCm({
-    side1Cm: parsePositiveNumber(formState.unitSide1Cm),
-    side2Cm: parsePositiveNumber(formState.unitSide2Cm),
-    side3Cm: parsePositiveNumber(formState.unitSide3Cm),
-  })
-  const amazonItemPackageTriplet = resolveDimensionTripletCm({
-    side1Cm: parsePositiveNumber(formState.amazonItemPackageSide1Cm),
-    side2Cm: parsePositiveNumber(formState.amazonItemPackageSide2Cm),
-    side3Cm: parsePositiveNumber(formState.amazonItemPackageSide3Cm),
-  })
-  const referenceItemPackageWeightKg = parsePositiveNumber(formState.unitWeightKg)
-  const amazonItemPackageWeightKg = parsePositiveNumber(formState.amazonItemPackageWeightKg)
-
-  const itemPackageDimensionsMismatch =
-    referenceItemPackageTriplet !== null && amazonItemPackageTriplet !== null
-      ? tripletDiffers(referenceItemPackageTriplet, amazonItemPackageTriplet, 0.01)
-      : false
-  const itemPackageWeightMismatch =
-    referenceItemPackageWeightKg !== null && amazonItemPackageWeightKg !== null
-      ? Math.abs(referenceItemPackageWeightKg - amazonItemPackageWeightKg) > 0.001
-      : false
-  const hasItemPackageMismatch = itemPackageDimensionsMismatch || itemPackageWeightMismatch
-
-  const referenceItemTriplet = resolveDimensionTripletCm({
-    side1Cm: parsePositiveNumber(formState.itemSide1Cm),
-    side2Cm: parsePositiveNumber(formState.itemSide2Cm),
-    side3Cm: parsePositiveNumber(formState.itemSide3Cm),
-  })
-  const amazonItemTriplet = resolveDimensionTripletCm({
-    side1Cm: parsePositiveNumber(formState.amazonItemSide1Cm),
-    side2Cm: parsePositiveNumber(formState.amazonItemSide2Cm),
-    side3Cm: parsePositiveNumber(formState.amazonItemSide3Cm),
-  })
-  const referenceItemWeightKg = parsePositiveNumber(formState.itemWeightKg)
-  const amazonItemWeightKg = parsePositiveNumber(formState.amazonItemWeightKg)
-
-  const itemDimensionsMismatch =
-    referenceItemTriplet !== null && amazonItemTriplet !== null
-      ? tripletDiffers(referenceItemTriplet, amazonItemTriplet, 0.01)
-      : false
-  const itemWeightMismatch =
-    referenceItemWeightKg !== null && amazonItemWeightKg !== null
-      ? Math.abs(referenceItemWeightKg - amazonItemWeightKg) > 0.001
-      : false
-  const hasItemMismatch = itemDimensionsMismatch || itemWeightMismatch
-
-  const sizeTierMismatch = formState.sizeTier.trim() && formState.amazonSizeTier.trim()
-    ? formState.sizeTier.trim() !== formState.amazonSizeTier.trim()
-    : false
-
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
@@ -1091,7 +1026,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             type="button"
                             onClick={toggleExpand}
                             className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                            title={isExpanded ? 'Collapse batches' : 'Expand batches'}
+                            aria-label={isExpanded ? 'Collapse batches' : 'Expand batches'}
                           >
                             {isExpanded ? (
                               <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -1278,32 +1213,26 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                       >
                         Amazon
                       </TabsTrigger>
-	                    </TabsList>
+                    </TabsList>
 
-	                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
-	                      <div className="flex items-start justify-between gap-3 mb-3">
-		                        <div>
-		                          <h4 className="text-sm font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
-		                            Amazon Fees
-		                            <Link
-		                              href="/amazon/fba-fee-tables"
-		                              target="_blank"
-		                              className="text-slate-400 hover:text-cyan-600 transition-colors"
-		                              title="View fee tables"
-		                            >
-		                              <ExternalLink className="h-3.5 w-3.5" />
-		                            </Link>
-		                          </h4>
-	                          <p className="text-xs text-slate-500">
-	                            {modalTab === 'reference'
-	                              ? 'Team reference values (editable).'
-	                              : 'Imported from Amazon (read-only).'}
-	                          </p>
-		                        </div>
-		                      </div>
-		                      {modalTab === 'reference' ? (
-		                        <div className="space-y-4">
-		                          <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
+                            Amazon Fees
+                            <Link
+                              href="/amazon/fba-fee-tables"
+                              target="_blank"
+                              className="text-slate-400 hover:text-cyan-600 transition-colors"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                          </h4>
+                        </div>
+                      </div>
+                      {modalTab === 'reference' ? (
+                        <div className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-2">
                                 <div className="md:col-span-2 pt-2">
                                   <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                     Dimensions
@@ -1368,14 +1297,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                   />
                                 </div>
 
-                                {hasItemPackageMismatch ? (
-                                  <div className="md:col-span-2">
-                                    <p className="text-xs text-amber-700">
-                                      Item package dimensions/weight differ from Amazon.
-                                    </p>
-                                  </div>
-                                ) : null}
-
                                 <div className="space-y-1">
                                   <Label>Item dimensions (cm)</Label>
                                   <div className="grid grid-cols-3 gap-2">
@@ -1433,87 +1354,73 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                   />
                                 </div>
 
-                                {hasItemMismatch ? (
-                                  <div className="md:col-span-2">
-                                    <p className="text-xs text-amber-700">
-                                      Item dimensions/weight differ from Amazon.
-                                    </p>
-                                  </div>
-                                ) : null}
-
                                 <div className="md:col-span-2 pt-4 border-t border-slate-200 dark:border-slate-700">
                                   <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                     Fees
                                   </h5>
                                 </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="category">Category</Label>
+                                  <select
+                                    id="category"
+                                    value={formState.category}
+                                    onChange={event => handleReferenceCategoryChange(event.target.value)}
+                                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                  >
+                                    <option value="">Select category</option>
+                                    {AMAZON_REFERRAL_CATEGORIES_2026.map(category => (
+                                      <option key={category} value={category}>
+                                        {formatReferralCategoryLabel(category)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="subcategory">Subcategory</Label>
+                                  <Input
+                                    id="subcategory"
+                                    value={formState.subcategory}
+                                    onChange={event =>
+                                      setFormState(prev => ({ ...prev, subcategory: event.target.value }))
+                                    }
+                                    placeholder="Optional"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="sizeTier">Size Tier</Label>
+                                  <select
+                                    id="sizeTier"
+                                    value={formState.sizeTier}
+                                    onChange={event => handleReferenceSizeTierChange(event.target.value)}
+                                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                  >
+                                    <option value="">Select size tier</option>
+                                    {AMAZON_SIZE_TIER_OPTIONS.map(sizeTier => (
+                                      <option key={sizeTier} value={sizeTier}>
+                                        {sizeTier}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
 
-	                            <div className="space-y-1">
-                              <Label htmlFor="category">Category</Label>
-	                              <select
-	                                id="category"
-	                                value={formState.category}
-	                                onChange={event => handleReferenceCategoryChange(event.target.value)}
-	                                className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-	                              >
-                                <option value="">Select category</option>
-                                {AMAZON_REFERRAL_CATEGORIES_2026.map(category => (
-                                  <option key={category} value={category}>
-                                    {formatReferralCategoryLabel(category)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="subcategory">Subcategory</Label>
-                              <Input
-                                id="subcategory"
-                                value={formState.subcategory}
-                                onChange={event =>
-                                  setFormState(prev => ({ ...prev, subcategory: event.target.value }))
-                                }
-                                placeholder="Optional"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="sizeTier">Size Tier</Label>
-	                              <select
-	                                id="sizeTier"
-	                                value={formState.sizeTier}
-	                                onChange={event => handleReferenceSizeTierChange(event.target.value)}
-	                                className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-	                              >
-                                <option value="">Select size tier</option>
-                                {AMAZON_SIZE_TIER_OPTIONS.map(sizeTier => (
-                                  <option key={sizeTier} value={sizeTier}>
-                                    {sizeTier}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {sizeTierMismatch ? (
-                              <div className="md:col-span-2">
-                                <p className="text-xs text-amber-700">Reference size tier differs from Amazon.</p>
-                              </div>
-                            ) : null}
-                            <div className="space-y-1">
-                              <Label htmlFor="referralFeePercent">Referral Fee (%)</Label>
-                              <Input
-                                id="referralFeePercent"
-                                type="number"
-                                step="0.01"
-                                min={0}
-                                max={100}
-                                value={formState.referralFeePercent}
-                                onChange={event =>
-                                  setFormState(prev => ({
-                                    ...prev,
-                                    referralFeePercent: event.target.value,
-                                  }))
-                                }
-                                placeholder="e.g. 15"
-                              />
-                            </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="referralFeePercent">Referral Fee (%)</Label>
+                                  <Input
+                                    id="referralFeePercent"
+                                    type="number"
+                                    step="0.01"
+                                    min={0}
+                                    max={100}
+                                    value={formState.referralFeePercent}
+                                    onChange={event =>
+                                      setFormState(prev => ({
+                                        ...prev,
+                                        referralFeePercent: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="e.g. 15"
+                                  />
+                                </div>
                             <div className="space-y-1">
                               <Label htmlFor="fbaFulfillmentFee">FBA Fulfillment Fee</Label>
                               <Input
@@ -1531,12 +1438,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 placeholder="e.g. 3.22"
                               />
                             </div>
-                          </div>
-
-                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                            <p className="text-xs text-slate-500">
-                              Reference values are editable. Amazon values are shown in the Amazon tab.
-                            </p>
                           </div>
                         </div>
                       ) : (
@@ -1666,12 +1567,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 placeholder="—"
                               />
                             </div>
-                          </div>
-
-                          <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                            <p className="text-xs text-slate-500">
-                              Amazon values are imported from Amazon and are read-only.
-                            </p>
                           </div>
                         </div>
                       )}
