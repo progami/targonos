@@ -4,7 +4,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip } from '@/components/ui/tooltip';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { PageHeader } from '@/components/page-header';
 import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -52,14 +59,6 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-function ArrowLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-    </svg>
-  );
-}
-
 function PlusIcon({ className }: { className?: string }) {
   return (
     <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -81,19 +80,6 @@ function InfoIcon({ className }: { className?: string }) {
     <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
-  );
-}
-
-// Tooltip component
-function Tooltip({ children, content }: { children: React.ReactNode; content: string }) {
-  return (
-    <span className="relative group">
-      {children}
-      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-slate-900 dark:bg-slate-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-        {content}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-700" />
-      </span>
-    </span>
   );
 }
 
@@ -149,15 +135,15 @@ function Sidebar({
   ];
 
   return (
-    <nav className="w-48 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 p-4">
+    <nav className="w-full md:w-56 flex-shrink-0 border-b border-slate-200/70 dark:border-white/10 md:border-b-0 md:border-r p-4">
       <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Setup</h2>
-      <ul className="space-y-1">
+      <ul className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
         {items.map((item) => (
           <li key={item.id}>
             <button
               onClick={() => onSectionChange(item.id)}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors',
+                'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors whitespace-nowrap',
                 section === item.id
                   ? 'bg-brand-teal-50 dark:bg-brand-teal-900/20 text-brand-teal-700 dark:text-brand-teal-300 font-medium'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -211,59 +197,80 @@ function BrandsSection({
       </div>
 
       {brands.length > 0 && (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-slate-50 dark:bg-slate-800/50">
-              <tr>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Brand Name</th>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Marketplace</th>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Currency</th>
-                <th className="w-12"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {brands.map((brand, i) => (
-                <tr key={i} className="bg-white dark:bg-slate-900">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-white">{brand.name}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                    {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{brand.currency}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => removeBrand(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                      <XIcon className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Card className="border-slate-200/70 dark:border-white/10">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Brand</TableHead>
+                    <TableHead>Marketplace</TableHead>
+                    <TableHead>Currency</TableHead>
+                    <TableHead className="w-12 text-right"> </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {brands.map((brand, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{brand.name}</TableCell>
+                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                        {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">{brand.currency}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => removeBrand(i)} aria-label={`Remove brand ${brand.name}`}>
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addBrand()}
-          placeholder="Brand name..."
-          className="flex-1 px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30"
-        />
-        <select
-          value={newMarketplace}
-          onChange={(e) => setNewMarketplace(e.target.value)}
-          className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-        >
-          {MARKETPLACES.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-        <Button onClick={addBrand} disabled={!newName.trim()} className="bg-brand-teal-500 hover:bg-brand-teal-600 text-white">
-          <PlusIcon className="w-4 h-4 mr-1" />
-          Add
-        </Button>
-      </div>
+      <Card className="border-slate-200/70 dark:border-white/10">
+        <CardContent className="p-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr,240px,auto] sm:items-end">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Brand name
+              </div>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => (e.key === 'Enter' ? addBrand() : undefined)}
+                placeholder="US-Dust Sheets"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Marketplace
+              </div>
+              <Select value={newMarketplace} onValueChange={setNewMarketplace}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select marketplace…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MARKETPLACES.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={addBrand} disabled={!newName.trim()}>
+                <PlusIcon className="h-4 w-4" />
+                Add Brand
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -288,40 +295,40 @@ function AccountRow({
   const selected = accounts.find((a) => a.id === accountId);
 
   return (
-    <tr className="bg-white dark:bg-slate-900">
-      <td className="px-4 py-2.5 text-sm text-slate-900 dark:text-white">
-        <span className="flex items-center gap-1.5">
-          {label}
+    <TableRow>
+      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">
+        <div className="flex items-center gap-1.5">
+          <span>{label}</span>
           {tip && (
-            <Tooltip content={tip}>
-              <InfoIcon className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+            <Tooltip content={tip} className="inline-flex">
+              <InfoIcon className="h-3.5 w-3.5 text-slate-400" />
             </Tooltip>
           )}
-        </span>
-      </td>
-      <td className="px-4 py-2.5">
-        <select
-          value={accountId}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            'w-full px-3 py-1.5 text-sm rounded border bg-white dark:bg-slate-800 transition-colors',
-            selected
-              ? 'border-brand-teal-300 dark:border-brand-teal-700 text-slate-900 dark:text-white'
-              : 'border-slate-200 dark:border-slate-700 text-slate-400'
-          )}
-        >
-          <option value="">Select parent account...</option>
-          {filtered.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.fullyQualifiedName}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td className="px-4 py-2.5 w-12">
+        </div>
+      </TableCell>
+      <TableCell>
+        <Select value={accountId} onValueChange={onChange}>
+          <SelectTrigger
+            className={cn(
+              'bg-white dark:bg-white/5',
+              selected ? 'border-brand-teal-300 dark:border-brand-teal-700' : undefined,
+            )}
+          >
+            <SelectValue placeholder="Select parent account…" />
+          </SelectTrigger>
+          <SelectContent>
+            {filtered.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.fullyQualifiedName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell className="w-12 text-right">
         {selected && <CheckIcon className="h-4 w-4 text-green-500" />}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -409,31 +416,45 @@ function AccountsSection({
   }
 
   const renderAccountGroup = (title: string, description: string, accountList: typeof INVENTORY_ACCOUNTS) => (
-    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-      <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">{title}</h3>
-          <Tooltip content={description}>
-            <InfoIcon className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-          </Tooltip>
+    <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              {title}
+            </div>
+            <Tooltip content={description} className="inline-flex">
+              <InfoIcon className="h-3.5 w-3.5 text-slate-400" />
+            </Tooltip>
+          </div>
         </div>
-      </div>
-      <table className="w-full">
-        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-          {accountList.map((acc) => (
-            <AccountRow
-              key={acc.key}
-              label={acc.label}
-              accountId={accountMappings[acc.key] ? accountMappings[acc.key] : ''}
-              accounts={accounts}
-              onChange={(id) => updateAccount(acc.key, id)}
-              type={acc.type}
-              tip={acc.tip}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category</TableHead>
+                <TableHead>QBO parent account</TableHead>
+                <TableHead className="w-12 text-right"> </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {accountList.map((acc) => (
+                <AccountRow
+                  key={acc.key}
+                  label={acc.label}
+                  accountId={accountMappings[acc.key] ? accountMappings[acc.key] : ''}
+                  accounts={accounts}
+                  onChange={(id) => updateAccount(acc.key, id)}
+                  type={acc.type}
+                  tip={acc.tip}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 
   return (
@@ -444,6 +465,22 @@ function AccountsSection({
           Select your existing QBO <span className="font-medium text-slate-600 dark:text-slate-300">parent accounts</span>. Plutus will create brand sub-accounts under each (e.g., &quot;Manufacturing - US-Dust Sheets&quot;).
         </p>
       </div>
+
+      <Card className="border-slate-200/70 dark:border-white/10">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
+              <InfoIcon className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">Prerequisite</div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Run the Link My Books Accounts &amp; Taxes wizard first so the base Amazon accounts exist in QBO. Then map those parent accounts here.
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4">
         {renderAccountGroup('Inventory Asset', 'Select parent accounts where Plutus creates brand sub-accounts (e.g., "Inv Manufacturing - US-Dust Sheets")', INVENTORY_ACCOUNTS)}
@@ -460,9 +497,9 @@ function AccountsSection({
       <Button
         onClick={createAccounts}
         disabled={!allMapped || creating}
-        className="w-full bg-brand-teal-500 hover:bg-brand-teal-600 text-white disabled:opacity-50"
+        className="w-full"
       >
-        {creating ? 'Creating...' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+        {creating ? 'Creating…' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
       </Button>
     </div>
   );
@@ -478,7 +515,7 @@ function SkusSection({
   onSkusChange: (skus: Sku[]) => void;
   brands: Brand[];
 }) {
-  const [showModal, setShowModal] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newSku, setNewSku] = useState({ sku: '', productName: '', brand: '', asin: '' });
 
   const addSku = () => {
@@ -486,7 +523,7 @@ function SkusSection({
     if (skus.some((s) => s.sku === newSku.sku.trim())) return;
     onSkusChange([...skus, { ...newSku, sku: newSku.sku.trim() }]);
     setNewSku({ sku: '', productName: '', brand: '', asin: '' });
-    setShowModal(false);
+    setIsDialogOpen(false);
   };
 
   const removeSku = (index: number) => {
@@ -510,115 +547,129 @@ function SkusSection({
             Add product SKUs and assign them to brands. Costs come from bills.
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)} className="bg-brand-teal-500 hover:bg-brand-teal-600 text-white">
+        <Button onClick={() => setIsDialogOpen(true)}>
           <PlusIcon className="w-4 h-4 mr-1" />
           Add SKU
         </Button>
       </div>
 
-      {skus.length > 0 ? (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-slate-50 dark:bg-slate-800/50">
-              <tr>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">SKU</th>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Product Name</th>
-                <th className="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-4 py-3">Brand</th>
-                <th className="w-12"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {skus.map((sku, i) => (
-                <tr key={i} className="bg-white dark:bg-slate-900">
-                  <td className="px-4 py-3 text-sm font-mono text-slate-900 dark:text-white">{sku.sku}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.productName ? sku.productName : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.brand}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => removeSku(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
-                      <XIcon className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-8 text-center">
-          <p className="text-sm text-slate-500 dark:text-slate-400">No SKUs added yet</p>
-        </div>
-      )}
+      <Card className="border-slate-200/70 dark:border-white/10">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Product name</TableHead>
+                  <TableHead>Brand</TableHead>
+                  <TableHead className="w-12 text-right"> </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {skus.map((sku, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-sm text-slate-900 dark:text-white">{sku.sku}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                      {sku.productName ? sku.productName : '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-300">{sku.brand}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => removeSku(i)} aria-label={`Remove SKU ${sku.sku}`}>
+                        <XIcon className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {skus.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No SKUs added yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <p className="text-sm text-slate-500 dark:text-slate-400">Total: {skus.length} SKU{skus.length !== 1 ? 's' : ''}</p>
 
-      {/* Add SKU Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Add SKU</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                <XIcon className="w-5 h-5" />
-              </button>
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setNewSku({ sku: '', productName: '', brand: '', asin: '' });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add SKU</DialogTitle>
+            <DialogDescription>Map each SKU to a brand so Plutus can build brand-level COGS.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                SKU
+              </div>
+              <Input
+                value={newSku.sku}
+                onChange={(e) => setNewSku({ ...newSku, sku: e.target.value })}
+                placeholder="CS-007"
+              />
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">SKU *</label>
-                <input
-                  type="text"
-                  value={newSku.sku}
-                  onChange={(e) => setNewSku({ ...newSku, sku: e.target.value })}
-                  placeholder="CS-007"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Product name
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Product Name</label>
-                <input
-                  type="text"
-                  value={newSku.productName}
-                  onChange={(e) => setNewSku({ ...newSku, productName: e.target.value })}
-                  placeholder="6 Pack Drop Cloth 12x9ft"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
+              <Input
+                value={newSku.productName}
+                onChange={(e) => setNewSku({ ...newSku, productName: e.target.value })}
+                placeholder="6 Pack Drop Cloth 12x9ft"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Brand
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Brand *</label>
-                <select
-                  value={newSku.brand}
-                  onChange={(e) => setNewSku({ ...newSku, brand: e.target.value })}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                >
-                  <option value="">Select brand...</option>
+              <Select value={newSku.brand} onValueChange={(value) => setNewSku({ ...newSku, brand: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select brand…" />
+                </SelectTrigger>
+                <SelectContent>
                   {brands.map((b) => (
-                    <option key={b.name} value={b.name}>{b.name}</option>
+                    <SelectItem key={b.name} value={b.name}>
+                      {b.name}
+                    </SelectItem>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ASIN (optional)</label>
-                <input
-                  type="text"
-                  value={newSku.asin}
-                  onChange={(e) => setNewSku({ ...newSku, asin: e.target.value })}
-                  placeholder="B08XYZ123"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="outline" className="flex-1">Cancel</Button>
-              <Button
-                onClick={addSku}
-                disabled={!newSku.sku.trim() || !newSku.brand}
-                className="flex-1 bg-brand-teal-500 hover:bg-brand-teal-600 text-white"
-              >
-                Save
-              </Button>
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                ASIN (optional)
+              </div>
+              <Input
+                value={newSku.asin}
+                onChange={(e) => setNewSku({ ...newSku, asin: e.target.value })}
+                placeholder="B08XYZ123"
+              />
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={addSku} disabled={!newSku.sku.trim() || !newSku.brand}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -626,7 +677,7 @@ function SkusSection({
 // Status Bar
 function StatusBar({ brands, mappedAccounts, totalAccounts, skus }: { brands: number; mappedAccounts: number; totalAccounts: number; skus: number }) {
   return (
-    <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-6 py-3">
+    <div className="border-t border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] px-6 py-3">
       <div className="flex items-center gap-6 text-sm">
         <span className={cn('flex items-center gap-1.5', brands > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-500')}>
           <span className={cn('w-2 h-2 rounded-full', brands > 0 ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600')} />
@@ -804,9 +855,22 @@ export default function SetupPage() {
   // Show loading while checking connection or loading setup
   if (isCheckingConnection || isLoadingSetup) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-slate-500">Loading...</div>
-      </div>
+      <main className="flex-1">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <PageHeader
+            title="Setup"
+            kicker="Plutus"
+            description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
+          />
+          <div className="mt-6">
+            <Card className="border-slate-200/70 dark:border-white/10">
+              <CardContent className="p-6">
+                <div className="text-sm text-slate-500">Loading setup…</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
     );
   }
 
@@ -816,67 +880,63 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-4">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
-          >
-            <ArrowLeftIcon className="w-4 h-4" />
-          </Link>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Setup</h1>
-        </div>
-      </header>
-
-      {/* Main content */}
-      <div className="flex flex-1">
-        <Sidebar
-          section={state.section}
-          onSectionChange={(s) => saveState({ section: s })}
-          brandsComplete={state.brands.length > 0}
-          accountsComplete={state.accountsCreated}
-          skusComplete={state.skus.length > 0}
+    <main className="flex-1">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <PageHeader
+          title="Setup"
+          kicker="Plutus"
+          description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
+          actions={
+            <>
+              <Button asChild variant="outline">
+                <Link href="/settlements">Settlements</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/bills">Bills</Link>
+              </Button>
+            </>
+          }
         />
 
-        <main className="flex-1 p-6 overflow-auto">
-          <div className="max-w-4xl">
-            {state.section === 'brands' && (
-              <BrandsSection
-                brands={state.brands}
-                onBrandsChange={saveBrands}
+        <Card className="mt-6 overflow-hidden border-slate-200/70 dark:border-white/10">
+          <CardContent className="p-0">
+            <div className="flex flex-col md:flex-row">
+              <Sidebar
+                section={state.section}
+                onSectionChange={(s) => saveState({ section: s })}
+                brandsComplete={state.brands.length > 0}
+                accountsComplete={state.accountsCreated}
+                skusComplete={state.skus.length > 0}
               />
-            )}
-            {state.section === 'accounts' && (
-              <AccountsSection
-                accounts={accounts}
-                accountMappings={state.accountMappings}
-                onAccountMappingsChange={saveAccountMappings}
-                brands={state.brands}
-                onAccountsCreated={markAccountsCreated}
-                accountsCreated={state.accountsCreated}
-                isLoadingAccounts={isLoadingAccounts}
-              />
-            )}
-            {state.section === 'skus' && (
-              <SkusSection
-                skus={state.skus}
-                onSkusChange={saveSkus}
-                brands={state.brands}
-              />
-            )}
-          </div>
-        </main>
-      </div>
 
-      {/* Status bar */}
-      <StatusBar
-        brands={state.brands.length}
-        mappedAccounts={mappedCount}
-        totalAccounts={ALL_ACCOUNTS.length}
-        skus={state.skus.length}
-      />
-    </div>
+              <div className="flex-1 p-6">
+                <div className="max-w-4xl">
+                  {state.section === 'brands' && <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />}
+                  {state.section === 'accounts' && (
+                    <AccountsSection
+                      accounts={accounts}
+                      accountMappings={state.accountMappings}
+                      onAccountMappingsChange={saveAccountMappings}
+                      brands={state.brands}
+                      onAccountsCreated={markAccountsCreated}
+                      accountsCreated={state.accountsCreated}
+                      isLoadingAccounts={isLoadingAccounts}
+                    />
+                  )}
+                  {state.section === 'skus' && <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+
+          <StatusBar
+            brands={state.brands.length}
+            mappedAccounts={mappedCount}
+            totalAccounts={ALL_ACCOUNTS.length}
+            skus={state.skus.length}
+          />
+        </Card>
+      </div>
+    </main>
   );
 }
