@@ -71,6 +71,7 @@ type SalesRow = {
   arrivalDetail?: string;
   arrivalNote?: string;
   hasActualData?: string;
+  isCurrentWeek?: string;
   [key: string]: string | undefined;
 };
 
@@ -562,7 +563,10 @@ export function SalesPlanningGrid({
         cell: (info) => (
           <span className="flex items-center gap-1">
             {info.getValue()}
-            <RealWeekIndicator hasActualData={info.row.original.hasActualData === 'true'} />
+            <RealWeekIndicator
+              hasActualData={info.row.original.hasActualData === 'true'}
+              isIncompleteWeek={info.row.original.isCurrentWeek === 'true'}
+            />
           </span>
         ),
         meta: { sticky: true, stickyOffset: 0, width: 80, kind: 'pinned' },
@@ -2426,6 +2430,7 @@ export function SalesPlanningGrid({
                         {column.id === 'weekLabel' ? (
                           <RealWeekIndicator
                             hasActualData={isWeekCellWithActualData}
+                            isIncompleteWeek={row.original.isCurrentWeek === 'true'}
                             className="shrink-0"
                           />
                         ) : null}

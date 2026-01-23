@@ -114,9 +114,10 @@ type WeeklyRow = {
   netProfit: string;
   netMargin: string;
   hasActualData?: string;
+  isCurrentWeek?: string;
 };
 
-type DisplayColumnKey = Exclude<keyof WeeklyRow, 'hasActualData'>;
+type DisplayColumnKey = Exclude<keyof WeeklyRow, 'hasActualData' | 'isCurrentWeek'>;
 
 type UpdatePayload = {
   weekNumber: number;
@@ -1161,7 +1162,10 @@ export function ProfitAndLossGrid({ strategyId, weekly }: ProfitAndLossGridProps
                     ) : config.key === 'weekLabel' ? (
                       <span className="flex items-center gap-1">
                         {displayValue}
-                        <RealWeekIndicator hasActualData={row.original.hasActualData === 'true'} />
+                        <RealWeekIndicator
+                          hasActualData={row.original.hasActualData === 'true'}
+                          isIncompleteWeek={row.original.isCurrentWeek === 'true'}
+                        />
                       </span>
                     ) : (
                       <span

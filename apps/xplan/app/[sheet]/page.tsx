@@ -131,6 +131,8 @@ type SalesRow = {
   weekLabel: string;
   weekDate: string;
   arrivalNote?: string;
+  hasActualData?: string;
+  isCurrentWeek?: string;
   [key: string]: string | undefined;
 };
 
@@ -1535,6 +1537,7 @@ function getSalesPlanningView(
   financialData: FinancialData,
   planning: PlanningCalendar,
   activeSegment: YearSegment | null,
+  asOfDate: Date,
 ) {
   const context = financialData.operations;
   const productList = [...context.productInputs].sort((a, b) =>
@@ -1734,6 +1737,8 @@ function getSalesPlanningView(
     }
   }
 
+  const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
+
   const segmentForWeek = (weekNumber: number): YearSegment | null => {
     if (!planning.yearSegments.length) return null;
     return (
@@ -1757,6 +1762,8 @@ function getSalesPlanningView(
       weekLabel,
       weekDate: calendarDate ? formatDate(calendarDate) : '',
       hasActualData: weeksWithActualData.has(weekNumber) ? 'true' : undefined,
+      isCurrentWeek:
+        currentWeekNumber != null && weekNumber === currentWeekNumber ? 'true' : undefined,
     };
 
     const inboundSummary: InboundSummary = new Map();
@@ -1918,8 +1925,10 @@ function formatInboundSummary(summary: InboundSummary): { display: string; note:
 
 function getProfitAndLossView(
   financialData: FinancialData,
+  planning: PlanningCalendar,
   activeSegment: YearSegment | null,
   activeYear: number | null,
+  asOfDate: Date,
 ) {
   const { weekly, monthly, quarterly } = financialData.profit;
   const filteredWeekly = weekly.filter((entry) => isWeekInSegment(entry.weekNumber, activeSegment));
@@ -1934,6 +1943,8 @@ function getProfitAndLossView(
       weeksWithActualData.add(entry.weekNumber);
     }
   }
+
+  const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
 
   return {
     weekly: filteredWeekly.map((entry) => ({
@@ -1955,6 +1966,8 @@ function getProfitAndLossView(
       netProfit: formatNumeric(entry.netProfit),
       netMargin: formatPercentDecimal(entry.revenue === 0 ? 0 : entry.netProfit / entry.revenue),
       hasActualData: weeksWithActualData.has(entry.weekNumber) ? 'true' : undefined,
+      isCurrentWeek:
+        currentWeekNumber != null && entry.weekNumber === currentWeekNumber ? 'true' : undefined,
     })),
     monthlySummary: monthlySummary.map((entry) => ({
       periodLabel: entry.periodLabel,
@@ -1981,8 +1994,10 @@ function getProfitAndLossView(
 
 function getCashFlowView(
   financialData: FinancialData,
+  planning: PlanningCalendar,
   activeSegment: YearSegment | null,
   _activeYear: number | null,
+  asOfDate: Date,
 ) {
   const { weekly } = financialData.cash;
   const filteredWeekly = weekly.filter((entry) => isWeekInSegment(entry.weekNumber, activeSegment));
@@ -1995,6 +2010,8 @@ function getCashFlowView(
       weeksWithActualData.add(entry.weekNumber);
     }
   }
+
+  const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
 
   return {
     weekly: filteredWeekly.map((entry) => ({
@@ -2010,6 +2027,8 @@ function getCashFlowView(
       netCash: formatNumeric(entry.netCash),
       cashBalance: formatNumeric(entry.cashBalance),
       hasActualData: weeksWithActualData.has(entry.weekNumber) ? 'true' : undefined,
+      isCurrentWeek:
+        currentWeekNumber != null && entry.weekNumber === currentWeekNumber ? 'true' : undefined,
     })),
   };
 }
@@ -2397,7 +2416,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getSalesPlanningView(data, planningCalendar, activeSegment);
+      const view = getSalesPlanningView(data, planningCalendar, activeSegment, reportAsOfDate);
       controls.push(
         <SalesPlanningFocusControl key="sales-focus" productOptions={view.productOptions} />,
       );
@@ -2453,7 +2472,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getProfitAndLossView(data, activeSegment, activeYear);
+      const view = getProfitAndLossView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
       controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
       wrapLayout = (node) => (
         <ProfitAndLossFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
@@ -2568,7 +2587,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getCashFlowView(data, activeSegment, activeYear);
+      const view = getCashFlowView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
       tabularContent = <CashFlowGrid strategyId={activeStrategyId} weekly={view.weekly} />;
 
       const cashSegmentStart = activeSegment?.startWeekNumber ?? null;
