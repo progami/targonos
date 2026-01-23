@@ -295,6 +295,7 @@ export function computeSalesPlan(
       const hasActualDataFlag = week?.hasActualData ?? (actualSales != null);
 
       const isPastWeek = weekNumber < currentWeekNumber;
+      const isPastOrCurrentWeek = weekNumber <= currentWeekNumber;
       let computedFinalSales: number;
       let finalSalesSource: SalesWeekDerived['finalSalesSource'];
 
@@ -369,7 +370,7 @@ export function computeSalesPlan(
         stockEnd,
         stockWeeks,
         batchAllocations: allocations.length > 0 ? allocations : undefined,
-        hasActualData: isPastWeek && hasActualDataFlag,
+        hasActualData: isPastOrCurrentWeek && hasActualDataFlag,
       });
     }
   }
