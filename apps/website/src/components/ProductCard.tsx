@@ -14,7 +14,7 @@ export function ProductCard({ product }: { product: Product }) {
           src={product.image.src}
           alt={product.image.alt}
           fill
-          className="object-contain p-6 transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.02]"
+          className="object-contain p-6 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.02] group-hover:brightness-[1.02]"
           sizes="(min-width: 768px) 650px, 100vw"
         />
       </div>
