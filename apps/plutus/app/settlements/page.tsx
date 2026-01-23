@@ -1,15 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageHeader } from '@/components/page-header';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 
@@ -47,6 +48,14 @@ type SettlementsResponse = {
 };
 
 type ConnectionStatus = { connected: boolean };
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+    </svg>
+  );
+}
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -120,11 +129,23 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   return res.json();
 }
 
-async function fetchSettlements(page: number, search: string): Promise<SettlementsResponse> {
+async function fetchSettlements({
+  page,
+  search,
+  startDate,
+  endDate,
+}: {
+  page: number;
+  search: string;
+  startDate: string | null;
+  endDate: string | null;
+}): Promise<SettlementsResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('pageSize', '25');
   if (search.trim() !== '') params.set('search', search.trim());
+  if (startDate !== null && startDate.trim() !== '') params.set('startDate', startDate.trim());
+  if (endDate !== null && endDate.trim() !== '') params.set('endDate', endDate.trim());
 
   const res = await fetch(`${basePath}/api/plutus/settlements?${params.toString()}`);
   if (!res.ok) {
@@ -135,18 +156,32 @@ async function fetchSettlements(page: number, search: string): Promise<Settlemen
 }
 
 export default function SettlementsPage() {
+  const queryClient = useQueryClient();
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
     queryFn: fetchConnectionStatus,
+    staleTime: 30 * 1000,
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search],
-    queryFn: () => fetchSettlements(page, search),
+    queryKey: ['plutus-settlements', page, search, startDate, endDate],
+    queryFn: () => fetchSettlements({ page, search, startDate, endDate }),
     enabled: connection !== undefined && connection.connected === true,
+    staleTime: 15 * 1000,
   });
 
   const settlements = useMemo(() => {
@@ -161,172 +196,213 @@ export default function SettlementsPage() {
   return (
     <main className="flex-1">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Settlements</h1>
-            <div className="hidden sm:block w-72">
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
-            </div>
-          </div>
-          <Button asChild variant="outline">
-            <Link href="/setup">Setup</Link>
-          </Button>
-        </div>
+        <PageHeader
+          title="Settlements"
+          kicker="Link My Books"
+          description="Plutus polls QuickBooks for LMB-posted settlement journal entries and tracks which ones you’ve processed."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+                }}
+              >
+                Refresh
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/setup">Setup</Link>
+              </Button>
+            </>
+          }
+        />
 
-        <div className="sm:hidden mb-4">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
-        </div>
+        <div className="mt-6 grid gap-4">
+          <Card className="border-slate-200/70 dark:border-white/10">
+            <CardContent className="p-4">
+              <div className="grid gap-3 md:grid-cols-[1.4fr,0.55fr,0.55fr,auto] md:items-end">
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Search
+                  </div>
+                  <div className="relative">
+                    <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      placeholder="Doc number, memo…"
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
 
-        <Card className="border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-0">
-            <div className="p-4 border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <Select value="all" onValueChange={() => undefined}>
-                  <SelectTrigger className="bg-white dark:bg-slate-900">
-                    <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Period: All</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Start date
+                  </div>
+                  <Input
+                    type="date"
+                    value={startDate === null ? '' : startDate}
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      setStartDate(value === '' ? null : value);
+                      setPage(1);
+                    }}
+                  />
+                </div>
 
-                <Select value="all" onValueChange={() => undefined}>
-                  <SelectTrigger className="bg-white dark:bg-slate-900">
-                    <SelectValue placeholder="Settlement Total" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Settlement Total: All</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    End date
+                  </div>
+                  <Input
+                    type="date"
+                    value={endDate === null ? '' : endDate}
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      setEndDate(value === '' ? null : value);
+                      setPage(1);
+                    }}
+                  />
+                </div>
 
-                <Select value="posted" onValueChange={() => undefined}>
-                  <SelectTrigger className="bg-white dark:bg-slate-900">
-                    <SelectValue placeholder="Settlement Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="posted">Settlement Status: Posted</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button variant="outline" className="bg-white dark:bg-slate-900">
-                  Filter
-                </Button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-white dark:bg-slate-900">
-                    <TableHead className="w-10">
-                      <input type="checkbox" aria-label="Select all settlements" />
-                    </TableHead>
-                    <TableHead>Marketplace</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Settlement Total</TableHead>
-                    <TableHead>Settlement Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                        Loading settlements…
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  {!isLoading && error && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
-                        {error instanceof Error ? error.message : String(error)}
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  {!isLoading && !error && settlements.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                        No settlements found in QBO.
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  {!isLoading &&
-                    !error &&
-                    settlements.map((s) => (
-                      <TableRow key={s.id} className="bg-white dark:bg-slate-900">
-                        <TableCell className="align-top">
-                          <input type="checkbox" aria-label={`Select settlement ${s.docNumber}`} />
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-white/10 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
-                              {s.marketplace.region}
-                            </span>
-                            <span className="text-sm font-medium text-slate-900 dark:text-white">{s.marketplace.label}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono">
-                            {s.docNumber}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-slate-700 dark:text-slate-200">
-                          {formatPeriod(s.periodStart, s.periodEnd)}
-                        </TableCell>
-                        <TableCell className="align-top text-sm font-medium text-slate-900 dark:text-white">
-                          {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="flex flex-col gap-2">
-                            <StatusPill status={s.lmbStatus} />
-                            <PlutusPill status={s.plutusStatus} />
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" className="h-9 px-3">
-                                <ActionButton />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link href={`/settlements/${s.id}`}>View</Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/settlements/${s.id}?tab=analysis`}>Upload Audit</Link>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {data && data.pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Page {data.pagination.page} of {data.pagination.totalPages}
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                    Prev
-                  </Button>
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    disabled={page >= data.pagination.totalPages}
-                    onClick={() => setPage(page + 1)}
+                    onClick={() => {
+                      setSearchInput('');
+                      setStartDate(null);
+                      setEndDate(null);
+                      setPage(1);
+                    }}
+                    disabled={searchInput.trim() === '' && startDate === null && endDate === null}
                   >
-                    Next
+                    Clear
                   </Button>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/70 dark:border-white/10">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Marketplace</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Settlement Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading && (
+                      <>
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell colSpan={5} className="py-4">
+                              <Skeleton className="h-10 w-full" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    )}
+
+                    {!isLoading && error && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                          {error instanceof Error ? error.message : String(error)}
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {!isLoading && !error && settlements.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                          No settlements found in QBO for this filter.
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {!isLoading &&
+                      !error &&
+                      settlements.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="align-top">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                                {s.marketplace.region}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                                  {s.marketplace.label}
+                                </div>
+                                <div className="mt-0.5 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
+                                  {s.docNumber}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top text-sm">
+                            <div className="text-slate-700 dark:text-slate-200">
+                              {formatPeriod(s.periodStart, s.periodEnd)}
+                            </div>
+                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US')}
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top text-sm font-medium text-slate-900 dark:text-white">
+                            {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <div className="flex flex-wrap gap-2">
+                              <StatusPill status={s.lmbStatus} />
+                              <PlutusPill status={s.plutusStatus} />
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="h-9 px-3">
+                                  <ActionButton />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/settlements/${s.id}`}>View</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/settlements/${s.id}?tab=analysis`}>Upload Audit</Link>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {data && data.pagination.totalPages > 1 && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Page {data.pagination.page} of {data.pagination.totalPages} • {data.pagination.totalCount} settlements
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                      Prev
+                    </Button>
+                    <Button variant="outline" disabled={page >= data.pagination.totalPages} onClick={() => setPage(page + 1)}>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </main>
   );
