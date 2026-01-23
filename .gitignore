@@ -35,6 +35,10 @@ logs/
 **/logs-dev/
 *.log
 
+# Local temp artifacts
+tmp/
+apps/website/public/images/amazon/uk/6pk-light-lifestyle-strong.webp
+
 # Playwright
 playwright-report/
 test-results/
