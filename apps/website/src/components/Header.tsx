@@ -61,12 +61,12 @@ export function Header() {
       <Container className="flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tightish">
           <Image
-            src="/brand/logo.svg"
+            src={onHome ? '/brand/logo-inverted.svg' : '/brand/logo.svg'}
             alt={`${site.name} logo`}
             width={140}
             height={28}
             priority
-            className={cn('h-7 w-auto', onHome ? 'brightness-0 invert' : null)}
+            className="h-7 w-auto"
           />
           <span className="sr-only">{site.name}</span>
         </Link>
