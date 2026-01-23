@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useLayoutEffect, type ReactNode } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { create } from 'zustand';
 
 type NavigationHistory = {
@@ -39,21 +39,18 @@ function getDefaultBackPath(pathname: string): string | null {
 
 type NavigationHistoryStore = {
   pathname: string;
-  search: string;
   historyIndex: number;
   fallbackPath: string | null;
-  setLocation: (pathname: string, search: string, historyIndex: number) => void;
+  setLocation: (pathname: string, historyIndex: number) => void;
 };
 
 const useNavigationHistoryStore = create<NavigationHistoryStore>((set) => ({
   pathname: '',
-  search: '',
   historyIndex: 0,
   fallbackPath: null,
-  setLocation: (pathname, search, historyIndex) => {
+  setLocation: (pathname, historyIndex) => {
     set({
       pathname,
-      search,
       historyIndex,
       fallbackPath: getDefaultBackPath(pathname),
     });
@@ -62,8 +59,6 @@ const useNavigationHistoryStore = create<NavigationHistoryStore>((set) => ({
 
 export function NavigationHistoryProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const search = searchParams.toString();
 
   const setLocation = useNavigationHistoryStore((s) => s.setLocation);
   useLayoutEffect(() => {
@@ -71,8 +66,8 @@ export function NavigationHistoryProvider({ children }: { children: ReactNode })
     const rawIdx = state ? state.idx : undefined;
     const historyIndex = typeof rawIdx === 'number' ? rawIdx : 0;
 
-    setLocation(pathname, search, historyIndex);
-  }, [pathname, search, setLocation]);
+    setLocation(pathname, historyIndex);
+  }, [pathname, setLocation]);
 
   return children;
 }
@@ -100,4 +95,3 @@ export function useNavigationHistory(): NavigationHistory {
 
   return { goBack, canGoBack };
 }
-
