@@ -301,6 +301,7 @@ export default function ContractorsPage() {
         title="Contractors"
         description="Contractor information and management"
         icon={<BriefcaseIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button onClick={openCreateModal} icon={<PlusIcon className="h-4 w-4" />}>
             Add Contractor

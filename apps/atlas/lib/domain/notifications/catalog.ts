@@ -143,7 +143,7 @@ function deriveDeepLink(input: NotificationCatalogInput): string | null {
   if (input.link) return input.link
 
   if (input.relatedType && input.relatedId) {
-    if (input.relatedType === 'CASE') return '/work'
+    if (input.relatedType === 'CASE') return '/hub'
 
     const map: Record<string, string> = {
       POLICY: '/policies',

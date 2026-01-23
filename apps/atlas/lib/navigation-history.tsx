@@ -24,7 +24,7 @@ function getDefaultBackPath(pathname: string): string | null {
   const path = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname
 
   // Home routes - no back
-  if (path === '/' || path === '' || path === '/work' || path === '/hub') {
+  if (path === '/' || path === '' || path === '/hub') {
     return null
   }
 
@@ -104,6 +104,14 @@ function getDefaultBackPath(pathname: string): string | null {
     return '/resources'
   }
 
+  // Section roots without an index route
+  if (/^\/performance\/[^/]+$/.test(path)) {
+    return '/hub'
+  }
+  if (/^\/admin\/[^/]+$/.test(path)) {
+    return '/hub'
+  }
+
   // Generic fallback: go to parent path or dashboard
   const segments = path.split('/').filter(Boolean)
   if (segments.length > 1) {
@@ -112,8 +120,8 @@ function getDefaultBackPath(pathname: string): string | null {
     return '/' + segments.join('/')
   }
 
-  // Top-level pages go to work queue
-  return '/work'
+  // Top-level pages go to hub
+  return '/hub'
 }
 
 type NavigationHistoryStore = {

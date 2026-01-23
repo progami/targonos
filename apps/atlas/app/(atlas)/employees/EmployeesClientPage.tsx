@@ -104,6 +104,7 @@ export function EmployeesClientPage() {
         title="Employees"
         description="Click on a row to view employee profile."
         icon={<UsersIcon className="h-6 w-6 text-white" />}
+        showBack
       />
 
       <div className="space-y-6">

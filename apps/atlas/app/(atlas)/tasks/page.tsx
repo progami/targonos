@@ -129,6 +129,7 @@ export default function TasksPage() {
         title="Task List"
         description="Track tasks created for you and by you"
         icon={<CheckCircleIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button href="/tasks/add" icon={<PlusIcon className="h-4 w-4" />}>
             Add Task
@@ -147,7 +148,7 @@ export default function TasksPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">
-                Work Queue is your inbox. Task List is the full list of tasks.
+                My Hub is your inbox. Task List is the full list of tasks.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -178,8 +179,8 @@ export default function TasksPage() {
                 </div>
               ) : null}
 
-              <Button href="/work" variant="secondary">
-                Work Queue
+              <Button href="/hub" variant="secondary">
+                My Hub
               </Button>
             </div>
           </div>

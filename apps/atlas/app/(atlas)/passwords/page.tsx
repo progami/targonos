@@ -308,6 +308,7 @@ export default function PasswordsPage() {
         title="Passwords"
         description="Shared passwords and credentials"
         icon={<LockClosedIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button onClick={openCreateModal} icon={<PlusIcon className="h-4 w-4" />}>
             Add Password

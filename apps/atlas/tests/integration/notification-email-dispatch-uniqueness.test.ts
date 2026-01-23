@@ -29,7 +29,7 @@ test(
         type: 'SYSTEM',
         title: 'Integration test notification',
         message: 'Notification created for integration test',
-        link: '/work',
+        link: '/hub',
         employeeId: employee.id,
         relatedType: 'SYSTEM',
         relatedId: `integration:${suffix}`,
@@ -53,4 +53,3 @@ test(
     )
   }
 )
-
