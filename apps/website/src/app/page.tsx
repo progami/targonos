@@ -9,6 +9,7 @@ import { HomeRuntime } from '@/components/HomeRuntime';
 import { site } from '@/content/site';
 import { products } from '@/content/products';
 import { ProductFeatureCard } from '@/components/ProductFeatureCard';
+import { HorizontalCarousel } from '@/components/HorizontalCarousel';
 
 export default function HomePage() {
   return (
@@ -318,21 +319,15 @@ export default function HomePage() {
 
               <div className="md:col-span-7">
                 <Reveal variant="media" delay={140}>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-gradient-to-r from-black to-transparent" />
-                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-gradient-to-l from-black to-transparent" />
-
-                    <div className="flex gap-6 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory">
-                      {products.map((product) => (
-                        <div key={product.slug} className="shrink-0 snap-start">
-                          <ProductFeatureCard
-                            product={product}
-                            className="motion-safe:hover:scale-[1.01]"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <HorizontalCarousel
+                    scrollerClassName="flex gap-6 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory cursor-grab active:cursor-grabbing"
+                  >
+                    {products.map((product) => (
+                      <div key={product.slug} className="shrink-0 snap-start">
+                        <ProductFeatureCard product={product} className="motion-safe:hover:scale-[1.01]" />
+                      </div>
+                    ))}
+                  </HorizontalCarousel>
                 </Reveal>
               </div>
             </div>
