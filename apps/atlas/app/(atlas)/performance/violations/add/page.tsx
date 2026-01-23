@@ -170,7 +170,7 @@ function AddViolationContent() {
           title="Record Violation"
           description="Performance"
           icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
-          backHref="/performance/violations"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -192,7 +192,7 @@ function AddViolationContent() {
           title="Record Violation"
           description="Performance"
           icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
-          backHref="/performance/violations"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -209,7 +209,7 @@ function AddViolationContent() {
         title="Record Violation"
         description="Performance"
         icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
-        backHref="/performance/violations"
+        showBack
       />
 
       <div className="max-w-2xl mx-auto">
@@ -430,7 +430,7 @@ export default function AddViolationPage() {
             title="Record Violation"
             description="Performance"
             icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
-            backHref="/performance/violations"
+            showBack
           />
           <div className="max-w-2xl mx-auto">
             <Card padding="lg">

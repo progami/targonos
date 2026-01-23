@@ -106,7 +106,7 @@ export default function LeaveWorkflowPage() {
   }
 
   return (
-    <WorkflowRecordLayout data={dto} onAction={onAction} backHref="/leave">
+    <WorkflowRecordLayout data={dto} onAction={onAction}>
       {/* Inline feedback messages */}
       {error && (
         <div className="mb-6 flex items-start gap-2 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">

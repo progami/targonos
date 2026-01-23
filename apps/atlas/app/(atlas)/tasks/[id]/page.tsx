@@ -242,7 +242,7 @@ export default function TaskDetailPage() {
           title="Task"
           description="Work"
           icon={<CheckCircleIcon className="h-6 w-6 text-white" />}
-          backHref="/tasks"
+          showBack
         />
         <Card padding="lg">
           <div className="animate-pulse space-y-4">
@@ -261,7 +261,7 @@ export default function TaskDetailPage() {
           title="Task"
           description="Work"
           icon={<CheckCircleIcon className="h-6 w-6 text-white" />}
-          backHref="/tasks"
+          showBack
         />
         <Card padding="lg">
           <p className="text-sm text-muted-foreground">Task not found.</p>
@@ -276,7 +276,7 @@ export default function TaskDetailPage() {
         title={task.title}
         description="Work"
         icon={<CheckCircleIcon className="h-6 w-6 text-white" />}
-        backHref="/tasks"
+        showBack
         actions={
           <div className="flex gap-2">
             <Button
