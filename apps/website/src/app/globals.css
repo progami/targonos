@@ -34,7 +34,8 @@ body {
 }
 
 ::selection {
-  background: rgb(var(--accent) / 0.25);
+  background: rgb(var(--accent) / 0.35);
+  color: rgb(var(--ink));
 }
 
 /* Better defaults for links */
@@ -53,6 +54,10 @@ a {
     background: rgba(11, 39, 63, 0.18);
     border-radius: 9999px;
     border: 2px solid rgba(245, 245, 245, 1);
+    transition: background 0.2s ease;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(11, 39, 63, 0.32);
   }
   ::-webkit-scrollbar-track {
     background: rgba(245, 245, 245, 1);

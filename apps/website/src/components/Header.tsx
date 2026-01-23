@@ -79,10 +79,11 @@ export function Header() {
                 key={l.href}
                 href={l.href}
                 className={cn(
-                  onHome
-                    ? 'text-sm font-semibold text-white/70 transition hover:text-white'
-                    : 'text-sm font-semibold text-muted transition hover:text-ink',
-                  active ? (onHome ? 'text-white' : 'text-ink') : null
+                  'relative text-sm font-semibold transition',
+                  onHome ? 'text-white/70 hover:text-white' : 'text-muted hover:text-ink',
+                  'after:absolute after:-bottom-1 after:left-0 after:h-[2px] after:w-0 after:transition-all after:duration-300 hover:after:w-full',
+                  onHome ? 'after:bg-white/80' : 'after:bg-accent',
+                  active && (onHome ? 'text-white after:w-full' : 'text-ink after:w-full')
                 )}
               >
                 {l.label}
@@ -133,9 +134,10 @@ export function Header() {
       {mobileOpen ? (
         <div
           className={cn(
+            'md:hidden motion-safe:animate-slide-down-fade',
             onHome
-              ? 'border-t border-white/10 bg-black/85 backdrop-blur md:hidden'
-              : 'border-t border-border bg-bg/95 backdrop-blur md:hidden'
+              ? 'border-t border-white/10 bg-black/85 backdrop-blur'
+              : 'border-t border-border bg-bg/95 backdrop-blur'
           )}
         >
           <Container className="py-4">
