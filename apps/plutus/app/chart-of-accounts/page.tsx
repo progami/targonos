@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
+import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useChartOfAccountsStore } from '@/lib/store/chart-of-accounts';
 import { cn } from '@/lib/utils';
 
 interface Account {
@@ -23,8 +24,6 @@ interface Account {
   isFirstInGroup?: boolean;
   source: 'lmb' | 'qbo';
 }
-
-type SourceFilter = 'all' | 'qbo' | 'lmb';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -48,14 +47,6 @@ async function fetchAccounts(): Promise<{ accounts: Account[]; total: number }> 
     throw new Error(message);
   }
   return res.json();
-}
-
-function ArrowLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-    </svg>
-  );
 }
 
 function RefreshIcon({ className }: { className?: string }) {
@@ -208,11 +199,21 @@ function ColumnFilterDropdown({
 }
 
 export default function ChartOfAccountsPage() {
-  const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
-  const [selectedDetailTypes, setSelectedDetailTypes] = useState<Set<string>>(new Set());
-  const [selectedCurrencies, setSelectedCurrencies] = useState<Set<string>>(new Set());
+  const search = useChartOfAccountsStore((s) => s.search);
+  const sourceFilter = useChartOfAccountsStore((s) => s.sourceFilter);
+  const selectedTypesRaw = useChartOfAccountsStore((s) => s.selectedTypes);
+  const selectedDetailTypesRaw = useChartOfAccountsStore((s) => s.selectedDetailTypes);
+  const selectedCurrenciesRaw = useChartOfAccountsStore((s) => s.selectedCurrencies);
+  const setSearch = useChartOfAccountsStore((s) => s.setSearch);
+  const setSourceFilter = useChartOfAccountsStore((s) => s.setSourceFilter);
+  const setSelectedTypesRaw = useChartOfAccountsStore((s) => s.setSelectedTypes);
+  const setSelectedDetailTypesRaw = useChartOfAccountsStore((s) => s.setSelectedDetailTypes);
+  const setSelectedCurrenciesRaw = useChartOfAccountsStore((s) => s.setSelectedCurrencies);
+  const clearFilters = useChartOfAccountsStore((s) => s.clearFilters);
+
+  const selectedTypes = useMemo(() => new Set(selectedTypesRaw), [selectedTypesRaw]);
+  const selectedDetailTypes = useMemo(() => new Set(selectedDetailTypesRaw), [selectedDetailTypesRaw]);
+  const selectedCurrencies = useMemo(() => new Set(selectedCurrenciesRaw), [selectedCurrenciesRaw]);
   const queryClient = useQueryClient();
 
   const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
@@ -281,11 +282,7 @@ export default function ChartOfAccountsPage() {
   const activeFiltersCount = (selectedTypes.size > 0 ? 1 : 0) + (selectedDetailTypes.size > 0 ? 1 : 0) + (selectedCurrencies.size > 0 ? 1 : 0);
 
   const clearAllFilters = () => {
-    setSourceFilter('all');
-    setSelectedTypes(new Set());
-    setSelectedDetailTypes(new Set());
-    setSelectedCurrencies(new Set());
-    setSearch('');
+    clearFilters();
   };
 
   // Show not connected screen once we know connection status is false
@@ -318,13 +315,7 @@ export default function ChartOfAccountsPage() {
         {/* Header */}
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-              Back
-            </Link>
+            <BackButton />
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Chart of Accounts</h1>
           </div>
           <Button onClick={handleRefresh} variant="outline" size="sm">
@@ -455,7 +446,7 @@ export default function ChartOfAccountsPage() {
                     label="Type"
                     options={accountTypes}
                     selectedValues={selectedTypes}
-                    onSelectionChange={setSelectedTypes}
+                    onSelectionChange={(values) => setSelectedTypesRaw(Array.from(values))}
                     isActive={selectedTypes.size > 0}
                   />
                 </div>
@@ -464,7 +455,7 @@ export default function ChartOfAccountsPage() {
                     label="Detail Type"
                     options={detailTypes}
                     selectedValues={selectedDetailTypes}
-                    onSelectionChange={setSelectedDetailTypes}
+                    onSelectionChange={(values) => setSelectedDetailTypesRaw(Array.from(values))}
                     isActive={selectedDetailTypes.size > 0}
                   />
                 </div>
@@ -473,7 +464,7 @@ export default function ChartOfAccountsPage() {
                     label="Currency"
                     options={currencies}
                     selectedValues={selectedCurrencies}
-                    onSelectionChange={setSelectedCurrencies}
+                    onSelectionChange={(values) => setSelectedCurrenciesRaw(Array.from(values))}
                     isActive={selectedCurrencies.size > 0}
                   />
                 </div>

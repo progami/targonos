@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -857,7 +858,11 @@ export default function SetupPage() {
     return (
       <main className="flex-1">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between gap-3">
+            <BackButton />
+          </div>
           <PageHeader
+            className="mt-4"
             title="Setup"
             kicker="Plutus"
             description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
@@ -882,7 +887,11 @@ export default function SetupPage() {
   return (
     <main className="flex-1">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between gap-3">
+          <BackButton />
+        </div>
         <PageHeader
+          className="mt-4"
           title="Setup"
           kicker="Plutus"
           description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."

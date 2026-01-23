@@ -1,18 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SplitButton } from '@/components/ui/split-button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useSettlementsListStore } from '@/lib/store/settlements';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -108,22 +110,23 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   return <Badge variant="outline">Plutus: Pending</Badge>;
 }
 
-function ActionButton() {
+function SettlementActionButton({ settlementId }: { settlementId: string }) {
+  const router = useRouter();
+
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wide">Action</span>
-      <ChevronDownIcon className="h-4 w-4" />
-    </span>
+    <SplitButton
+      onClick={() => router.push(`/settlements/${settlementId}`)}
+      dropdownItems={[
+        { label: 'View', onClick: () => router.push(`/settlements/${settlementId}`) },
+        { label: 'Upload Audit', onClick: () => router.push(`/settlements/${settlementId}?tab=analysis`) },
+      ]}
+    >
+      Action
+    </SplitButton>
   );
 }
 
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-    </svg>
-  );
-}
+
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
@@ -158,11 +161,17 @@ async function fetchSettlements({
 
 export default function SettlementsPage() {
   const queryClient = useQueryClient();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const searchInput = useSettlementsListStore((s) => s.searchInput);
+  const search = useSettlementsListStore((s) => s.search);
+  const page = useSettlementsListStore((s) => s.page);
+  const startDate = useSettlementsListStore((s) => s.startDate);
+  const endDate = useSettlementsListStore((s) => s.endDate);
+  const setSearchInput = useSettlementsListStore((s) => s.setSearchInput);
+  const setSearch = useSettlementsListStore((s) => s.setSearch);
+  const setPage = useSettlementsListStore((s) => s.setPage);
+  const setStartDate = useSettlementsListStore((s) => s.setStartDate);
+  const setEndDate = useSettlementsListStore((s) => s.setEndDate);
+  const clear = useSettlementsListStore((s) => s.clear);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -170,7 +179,10 @@ export default function SettlementsPage() {
       setPage(1);
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [searchInput]);
+  }, [searchInput, setPage, setSearch]);
+
+  const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
+  const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -179,8 +191,8 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, startDate, endDate],
-    queryFn: () => fetchSettlements({ page, search, startDate, endDate }),
+    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate],
+    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 15 * 1000,
   });
@@ -200,7 +212,8 @@ export default function SettlementsPage() {
         <PageHeader
           title="Settlements"
           kicker="Link My Books"
-          description="Plutus polls QuickBooks for LMB-posted settlement journal entries and tracks which ones you’ve processed."
+          variant="accent"
+          description="Plutus polls QuickBooks for LMB-posted settlement journal entries and tracks which ones you've processed."
           actions={
             <>
               <Button
@@ -223,7 +236,7 @@ export default function SettlementsPage() {
             <CardContent className="p-4">
               <div className="grid gap-3 md:grid-cols-[1.4fr,0.55fr,0.55fr,auto] md:items-end">
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
                     Search
                   </div>
                   <div className="relative">
@@ -238,30 +251,30 @@ export default function SettlementsPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
                     Start date
                   </div>
                   <Input
                     type="date"
-                    value={startDate === null ? '' : startDate}
+                    value={startDate}
                     onChange={(e) => {
                       const value = e.target.value.trim();
-                      setStartDate(value === '' ? null : value);
+                      setStartDate(value);
                       setPage(1);
                     }}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
                     End date
                   </div>
                   <Input
                     type="date"
-                    value={endDate === null ? '' : endDate}
+                    value={endDate}
                     onChange={(e) => {
                       const value = e.target.value.trim();
-                      setEndDate(value === '' ? null : value);
+                      setEndDate(value);
                       setPage(1);
                     }}
                   />
@@ -271,12 +284,9 @@ export default function SettlementsPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setSearchInput('');
-                      setStartDate(null);
-                      setEndDate(null);
-                      setPage(1);
+                      clear();
                     }}
-                    disabled={searchInput.trim() === '' && startDate === null && endDate === null}
+                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
                   >
                     Clear
                   </Button>
@@ -365,21 +375,7 @@ export default function SettlementsPage() {
                             <PlutusPill status={s.plutusStatus} />
                           </TableCell>
                           <TableCell className="align-top text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-9 px-3">
-                                  <ActionButton />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/settlements/${s.id}`}>View</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/settlements/${s.id}?tab=analysis`}>Upload Audit</Link>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <SettlementActionButton settlementId={s.id} />
                           </TableCell>
                         </TableRow>
                       ))}

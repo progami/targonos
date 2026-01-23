@@ -411,6 +411,9 @@ importers:
       zod:
         specifier: ^3.24.4
         version: 3.25.76
+      zustand:
+        specifier: ^5.0.9
+        version: 5.0.9(@types/react@19.0.8)(immer@11.0.1)(react@19.2.1)(use-sync-external-store@1.6.0(react@19.2.1))
     devDependencies:
       '@types/node':
         specifier: ^24.3.0
@@ -16482,6 +16485,13 @@ snapshots:
       readable-stream: 3.6.2
 
   zod@3.25.76: {}
+
+  zustand@5.0.9(@types/react@19.0.8)(immer@11.0.1)(react@19.2.1)(use-sync-external-store@1.6.0(react@19.2.1)):
+    optionalDependencies:
+      '@types/react': 19.0.8
+      immer: 11.0.1
+      react: 19.2.1
+      use-sync-external-store: 1.6.0(react@19.2.1)
 
   zustand@5.0.9(@types/react@19.1.10)(immer@11.0.1)(react@19.2.1)(use-sync-external-store@1.6.0(react@19.2.1)):
     optionalDependencies:

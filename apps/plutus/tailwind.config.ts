@@ -11,8 +11,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', 'DM Sans', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'Instrument Serif', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', 'Outfit', 'system-ui', 'sans-serif'],
+        display: ['var(--font-sans)', 'Outfit', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Monaco', 'Consolas', 'monospace'],
       },
       colors: {

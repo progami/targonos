@@ -8,7 +8,7 @@
     "dev:turbo": "next dev --turbo",
     "dev:port": "PORT=3001 next dev",
     "dev:logged": "node server.js",
-    "build": "next build",
+    "build": "pnpm db:generate && next build",
     "build:prod": "NODE_ENV=production npm run clean && npm run build && npm run post-build",
     "build:analyze": "ANALYZE=true next build",
     "clean": "rm -rf .next out dist",
