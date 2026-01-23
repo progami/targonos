@@ -1266,57 +1266,18 @@ export default function PurchaseOrderDetailPage() {
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
       try {
-        // Step 1: Request presigned URL for direct S3 upload
-        const presignedResponse = await fetchWithCSRF(
-          `/api/purchase-orders/${orderId}/documents/presigned-url`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: file.name,
-              fileType: file.type,
-              fileSize: file.size,
-              stage,
-              documentType,
-            }),
-          }
-        )
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('stage', stage)
+        formData.append('documentType', documentType)
 
-        if (!presignedResponse.ok) {
-          const payload = await presignedResponse.json().catch(() => null)
-          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
-          throw new Error(errorMessage ?? `Failed to get upload URL (HTTP ${presignedResponse.status})`)
-        }
-
-        const { uploadUrl, s3Key } = await presignedResponse.json()
-
-        // Step 2: Upload file directly to S3 (bypasses Next.js body size limits)
-        const s3Response = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-
-        if (!s3Response.ok) {
-          throw new Error(`Failed to upload to storage (HTTP ${s3Response.status})`)
-        }
-
-        // Step 3: Register the uploaded document with the backend
-        const completeResponse = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
+        const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stage,
-            documentType,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            s3Key,
-          }),
+          body: formData,
         })
 
-        if (!completeResponse.ok) {
-          const payload = await completeResponse.json().catch(() => null)
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
           const errorMessage = typeof payload?.error === 'string' ? payload.error : null
           const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
           if (errorMessage && detailsMessage) {
@@ -1324,7 +1285,7 @@ export default function PurchaseOrderDetailPage() {
           } else if (errorMessage) {
             toast.error(errorMessage)
           } else {
-            toast.error(`Failed to register document (HTTP ${completeResponse.status})`)
+            toast.error(`Failed to upload document (HTTP ${response.status})`)
           }
           return
         }
