@@ -13,10 +13,18 @@ This project includes a mix of **placeholder lifestyle imagery** (Unsplash) and 
 
 Downloaded from public Amazon listing imagery (served via `m.media-amazon.com`) for layout prototyping:
 
-- `public/images/amazon/fit-coverage.jpg`
-- `public/images/amazon/pick-protection.jpg`
-- `public/images/amazon/lifestyle-compare.jpg`
-- `public/images/amazon/aplus-4.jpg`
+- `public/images/amazon/fit-coverage.webp`
+- `public/images/amazon/pick-protection.webp`
+- `public/images/amazon/lifestyle-compare.webp`
+- `public/images/amazon/aplus-4.webp`
+- `public/images/amazon/applications.webp`
+- `public/images/amazon/general-projects.webp`
+- `public/images/amazon/multi-room-projects.webp`
+- `public/images/amazon/light-durability.webp`
+- `public/images/amazon/standard-durability.webp`
+- `public/images/amazon/strong-vs-light.webp`
+- `public/images/amazon/sustainable-process.webp`
+- `public/images/amazon/sustainable-efficiency.webp`
 
 Derived pack images used across the site:
 
