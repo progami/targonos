@@ -754,6 +754,17 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           skuUpdateData.itemWeightKg = itemWeightKg
         }
 
+        // Always store Amazon item dimensions + weight (unpackaged) for comparison.
+        if (itemTriplet) {
+          skuUpdateData.amazonItemDimensionsCm = itemDimensionsCm
+          skuUpdateData.amazonItemSide1Cm = itemTriplet.side1Cm
+          skuUpdateData.amazonItemSide2Cm = itemTriplet.side2Cm
+          skuUpdateData.amazonItemSide3Cm = itemTriplet.side3Cm
+        }
+        if (itemWeightKg !== null) {
+          skuUpdateData.amazonItemWeightKg = itemWeightKg
+        }
+
         // Add Amazon item package dimensions to SKU update
         if (unitTriplet) {
           skuUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
@@ -843,6 +854,11 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               itemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
               itemSide3Cm: itemTriplet ? itemTriplet.side3Cm : null,
               itemWeightKg,
+              amazonItemDimensionsCm: itemDimensionsCm,
+              amazonItemSide1Cm: itemTriplet ? itemTriplet.side1Cm : null,
+              amazonItemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
+              amazonItemSide3Cm: itemTriplet ? itemTriplet.side3Cm : null,
+              amazonItemWeightKg: itemWeightKg,
               unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
               cartonDimensionsCm: null,
               cartonSide1Cm: null,

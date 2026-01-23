@@ -18,7 +18,7 @@ import {
   getReferralFeePercentForTenant,
   normalizeReferralCategory2026,
 } from '@/lib/amazon/fees'
-import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { resolveDimensionTripletCm, type DimensionTriplet } from '@/lib/sku-dimensions'
 import { useSession } from '@/hooks/usePortalSession'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { usePageState } from '@/lib/store/page-state'
@@ -133,6 +133,15 @@ interface SkuRow {
   amazonFbaFulfillmentFee?: number | string | null
   amazonListingPrice?: number | string | null
   amazonReferenceWeightKg: number | string | null
+  amazonItemPackageDimensionsCm: string | null
+  amazonItemPackageSide1Cm: number | string | null
+  amazonItemPackageSide2Cm: number | string | null
+  amazonItemPackageSide3Cm: number | string | null
+  amazonItemDimensionsCm: string | null
+  amazonItemSide1Cm: number | string | null
+  amazonItemSide2Cm: number | string | null
+  amazonItemSide3Cm: number | string | null
+  amazonItemWeightKg: number | string | null
   unitDimensionsCm: string | null
   unitSide1Cm: number | string | null
   unitSide2Cm: number | string | null
@@ -169,23 +178,53 @@ interface SkuFormState {
   amazonSizeTier: string
   amazonReferralFeePercent: string
   amazonFbaFulfillmentFee: string
+  unitSide1Cm: string
+  unitSide2Cm: string
+  unitSide3Cm: string
+  unitWeightKg: string
+  amazonItemPackageSide1Cm: string
+  amazonItemPackageSide2Cm: string
+  amazonItemPackageSide3Cm: string
+  amazonItemPackageWeightKg: string
   itemSide1Cm: string
   itemSide2Cm: string
   itemSide3Cm: string
   itemWeightKg: string
+  amazonItemSide1Cm: string
+  amazonItemSide2Cm: string
+  amazonItemSide3Cm: string
+  amazonItemWeightKg: string
   defaultSupplierId: string
   secondarySupplierId: string
   initialBatch: {
     batchCode: string
     packSize: string
     unitsPerCarton: string
-    unitWeightKg: string
     packagingType: string
   }
 }
 
 function buildFormState(sku?: SkuRow | null): SkuFormState {
   const latestBatch = sku?.batches && sku.batches.length > 0 ? sku.batches[0] : null
+
+  const unitTriplet = resolveDimensionTripletCm({
+    side1Cm: sku?.unitSide1Cm,
+    side2Cm: sku?.unitSide2Cm,
+    side3Cm: sku?.unitSide3Cm,
+    legacy: sku?.unitDimensionsCm,
+  })
+  const amazonItemPackageTriplet = resolveDimensionTripletCm({
+    side1Cm: sku?.amazonItemPackageSide1Cm,
+    side2Cm: sku?.amazonItemPackageSide2Cm,
+    side3Cm: sku?.amazonItemPackageSide3Cm,
+    legacy: sku?.amazonItemPackageDimensionsCm,
+  })
+  const amazonItemTriplet = resolveDimensionTripletCm({
+    side1Cm: sku?.amazonItemSide1Cm,
+    side2Cm: sku?.amazonItemSide2Cm,
+    side3Cm: sku?.amazonItemSide3Cm,
+    legacy: sku?.amazonItemDimensionsCm,
+  })
 
   // Parse item dimensions from individual values or legacy combined string
   let side1 = ''
@@ -234,17 +273,28 @@ function buildFormState(sku?: SkuRow | null): SkuFormState {
     amazonSizeTier: latestBatch?.amazonSizeTier ?? '',
     amazonReferralFeePercent: sku?.amazonReferralFeePercent?.toString?.() ?? '',
     amazonFbaFulfillmentFee: latestBatch?.amazonFbaFulfillmentFee?.toString?.() ?? '',
+    unitSide1Cm: unitTriplet ? String(unitTriplet.side1Cm) : '',
+    unitSide2Cm: unitTriplet ? String(unitTriplet.side2Cm) : '',
+    unitSide3Cm: unitTriplet ? String(unitTriplet.side3Cm) : '',
+    unitWeightKg: sku?.unitWeightKg?.toString?.() ?? '',
+    amazonItemPackageSide1Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side1Cm) : '',
+    amazonItemPackageSide2Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side2Cm) : '',
+    amazonItemPackageSide3Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side3Cm) : '',
+    amazonItemPackageWeightKg: sku?.amazonReferenceWeightKg?.toString?.() ?? '',
     itemSide1Cm: side1,
     itemSide2Cm: side2,
     itemSide3Cm: side3,
     itemWeightKg: sku?.itemWeightKg?.toString?.() ?? '',
+    amazonItemSide1Cm: amazonItemTriplet ? String(amazonItemTriplet.side1Cm) : '',
+    amazonItemSide2Cm: amazonItemTriplet ? String(amazonItemTriplet.side2Cm) : '',
+    amazonItemSide3Cm: amazonItemTriplet ? String(amazonItemTriplet.side3Cm) : '',
+    amazonItemWeightKg: sku?.amazonItemWeightKg?.toString?.() ?? '',
     defaultSupplierId: sku?.defaultSupplierId ?? '',
     secondarySupplierId: sku?.secondarySupplierId ?? '',
     initialBatch: {
       batchCode: '',
       packSize: '1',
       unitsPerCarton: '1',
-      unitWeightKg: '',
       packagingType: '',
     },
   }
@@ -260,6 +310,21 @@ function parseFiniteNumber(value: number | string | null | undefined): number | 
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
+}
+
+function parsePositiveNumber(value: string): number | null {
+  const parsed = parseFiniteNumber(value)
+  if (parsed === null) return null
+  if (parsed <= 0) return null
+  return parsed
+}
+
+function tripletDiffers(left: DimensionTriplet, right: DimensionTriplet, tolerance: number): boolean {
+  return (
+    Math.abs(left.side1Cm - right.side1Cm) > tolerance ||
+    Math.abs(left.side2Cm - right.side2Cm) > tolerance ||
+    Math.abs(left.side3Cm - right.side3Cm) > tolerance
+  )
 }
 
 type ListingPriceResolution =
@@ -286,11 +351,19 @@ type ReferenceFeesAutofill = {
   fbaFulfillmentFee: number | null
 }
 
+type ReferencePackageInput = {
+  side1Cm: string
+  side2Cm: string
+  side3Cm: string
+  weightKg: string
+}
+
 function computeReferenceFeesAutofill(
   sku: SkuRow | null,
   category: string,
   sizeTier: string,
-  tenantCode: TenantCode
+  tenantCode: TenantCode,
+  referencePackage: ReferencePackageInput
 ): ReferenceFeesAutofill {
   const categoryTrimmed = category.trim()
   const normalizedCategory = categoryTrimmed ? normalizeReferralCategory2026(categoryTrimmed) : ''
@@ -309,12 +382,12 @@ function computeReferenceFeesAutofill(
   }
 
   const unitTriplet = resolveDimensionTripletCm({
-    side1Cm: sku?.unitSide1Cm,
-    side2Cm: sku?.unitSide2Cm,
-    side3Cm: sku?.unitSide3Cm,
-    legacy: sku?.unitDimensionsCm,
+    side1Cm: parseFiniteNumber(referencePackage.side1Cm),
+    side2Cm: parseFiniteNumber(referencePackage.side2Cm),
+    side3Cm: parseFiniteNumber(referencePackage.side3Cm),
   })
-  const unitWeightKg = parseFiniteNumber(sku?.unitWeightKg)
+  const parsedUnitWeightKg = parseFiniteNumber(referencePackage.weightKg)
+  const unitWeightKg = parsedUnitWeightKg !== null && parsedUnitWeightKg > 0 ? parsedUnitWeightKg : null
 
   if (computedSizeTier === null) {
     if (unitTriplet && unitWeightKg !== null) {
@@ -379,7 +452,12 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [externalEditOpened, setExternalEditOpened] = useState(false)
 
   const autoFillReferenceFees = useCallback(() => {
-    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier, tenantCode)
+    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier, tenantCode, {
+      side1Cm: formState.unitSide1Cm,
+      side2Cm: formState.unitSide2Cm,
+      side3Cm: formState.unitSide3Cm,
+      weightKg: formState.unitWeightKg,
+    })
 
     setFormState(prev => {
       const next: SkuFormState = { ...prev }
@@ -408,13 +486,27 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       if (!didUpdate) return prev
       return next
     })
-  }, [editingSku, formState.category, formState.sizeTier, tenantCode])
+  }, [
+    editingSku,
+    formState.category,
+    formState.sizeTier,
+    formState.unitSide1Cm,
+    formState.unitSide2Cm,
+    formState.unitSide3Cm,
+    formState.unitWeightKg,
+    tenantCode,
+  ])
 
   const handleReferenceCategoryChange = useCallback(
     (nextCategory: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, category: nextCategory }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode)
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, {
+          side1Cm: next.unitSide1Cm,
+          side2Cm: next.unitSide2Cm,
+          side3Cm: next.unitSide3Cm,
+          weightKg: next.unitWeightKg,
+        })
 
         if (computed.normalizedCategory && computed.normalizedCategory !== next.category) {
           next.category = computed.normalizedCategory
@@ -446,7 +538,12 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     (nextSizeTier: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, sizeTier: nextSizeTier }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode)
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, {
+          side1Cm: next.unitSide1Cm,
+          side2Cm: next.unitSide2Cm,
+          side3Cm: next.unitSide3Cm,
+          weightKg: next.unitWeightKg,
+        })
 
         if (computed.computedSizeTier && computed.computedSizeTier !== next.sizeTier.trim()) {
           next.sizeTier = computed.computedSizeTier
@@ -623,6 +720,55 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       return
     }
 
+    const isCreating = !editingSku
+
+    // Parse item package dimension fields
+    const unitSide1Raw = formState.unitSide1Cm.trim()
+    const unitSide2Raw = formState.unitSide2Cm.trim()
+    const unitSide3Raw = formState.unitSide3Cm.trim()
+    const unitWeightRaw = formState.unitWeightKg.trim()
+
+    let unitSide1Cm: number | null = null
+    let unitSide2Cm: number | null = null
+    let unitSide3Cm: number | null = null
+
+    const hasAnyPackageDimension = unitSide1Raw || unitSide2Raw || unitSide3Raw
+    if (hasAnyPackageDimension) {
+      if (!unitSide1Raw || !unitSide2Raw || !unitSide3Raw) {
+        toast.error('Item package dimensions require length, width, and height')
+        return
+      }
+
+      unitSide1Cm = Number.parseFloat(unitSide1Raw)
+      unitSide2Cm = Number.parseFloat(unitSide2Raw)
+      unitSide3Cm = Number.parseFloat(unitSide3Raw)
+
+      if (!Number.isFinite(unitSide1Cm) || unitSide1Cm <= 0) {
+        toast.error('Item package length must be a positive number')
+        return
+      }
+      if (!Number.isFinite(unitSide2Cm) || unitSide2Cm <= 0) {
+        toast.error('Item package width must be a positive number')
+        return
+      }
+      if (!Number.isFinite(unitSide3Cm) || unitSide3Cm <= 0) {
+        toast.error('Item package height must be a positive number')
+        return
+      }
+    }
+
+    let unitWeightKg: number | null = null
+    if (unitWeightRaw) {
+      unitWeightKg = Number.parseFloat(unitWeightRaw)
+      if (!Number.isFinite(unitWeightKg) || unitWeightKg <= 0) {
+        toast.error('Item package weight (kg) must be a positive number')
+        return
+      }
+    } else if (isCreating) {
+      toast.error('Item package weight (kg) is required')
+      return
+    }
+
     // Parse item dimension fields
     const side1Raw = formState.itemSide1Cm.trim()
     const side2Raw = formState.itemSide2Cm.trim()
@@ -693,7 +839,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       }
     }
 
-    const isCreating = !editingSku
     let initialBatchPayload: Record<string, unknown> | null = null
 
     if (isCreating) {
@@ -715,17 +860,10 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return
       }
 
-      const unitWeightKg = Number.parseFloat(formState.initialBatch.unitWeightKg)
-      if (!Number.isFinite(unitWeightKg) || unitWeightKg <= 0) {
-        toast.error('Item package weight (kg) must be a positive number')
-        return
-      }
-
       initialBatchPayload = {
         batchCode,
         packSize,
         unitsPerCarton,
-        unitWeightKg,
         packagingType: formState.initialBatch.packagingType ? formState.initialBatch.packagingType : null,
       }
     }
@@ -746,6 +884,10 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         sizeTier: sizeTierValue,
         referralFeePercent,
         fbaFulfillmentFee,
+        unitSide1Cm,
+        unitSide2Cm,
+        unitSide3Cm,
+        unitWeightKg,
         itemSide1Cm,
         itemSide2Cm,
         itemSide3Cm,
@@ -805,6 +947,56 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       setConfirmDelete(null)
     }
   }
+
+  const referenceItemPackageTriplet = resolveDimensionTripletCm({
+    side1Cm: parsePositiveNumber(formState.unitSide1Cm),
+    side2Cm: parsePositiveNumber(formState.unitSide2Cm),
+    side3Cm: parsePositiveNumber(formState.unitSide3Cm),
+  })
+  const amazonItemPackageTriplet = resolveDimensionTripletCm({
+    side1Cm: parsePositiveNumber(formState.amazonItemPackageSide1Cm),
+    side2Cm: parsePositiveNumber(formState.amazonItemPackageSide2Cm),
+    side3Cm: parsePositiveNumber(formState.amazonItemPackageSide3Cm),
+  })
+  const referenceItemPackageWeightKg = parsePositiveNumber(formState.unitWeightKg)
+  const amazonItemPackageWeightKg = parsePositiveNumber(formState.amazonItemPackageWeightKg)
+
+  const itemPackageDimensionsMismatch =
+    referenceItemPackageTriplet !== null && amazonItemPackageTriplet !== null
+      ? tripletDiffers(referenceItemPackageTriplet, amazonItemPackageTriplet, 0.01)
+      : false
+  const itemPackageWeightMismatch =
+    referenceItemPackageWeightKg !== null && amazonItemPackageWeightKg !== null
+      ? Math.abs(referenceItemPackageWeightKg - amazonItemPackageWeightKg) > 0.001
+      : false
+  const hasItemPackageMismatch = itemPackageDimensionsMismatch || itemPackageWeightMismatch
+
+  const referenceItemTriplet = resolveDimensionTripletCm({
+    side1Cm: parsePositiveNumber(formState.itemSide1Cm),
+    side2Cm: parsePositiveNumber(formState.itemSide2Cm),
+    side3Cm: parsePositiveNumber(formState.itemSide3Cm),
+  })
+  const amazonItemTriplet = resolveDimensionTripletCm({
+    side1Cm: parsePositiveNumber(formState.amazonItemSide1Cm),
+    side2Cm: parsePositiveNumber(formState.amazonItemSide2Cm),
+    side3Cm: parsePositiveNumber(formState.amazonItemSide3Cm),
+  })
+  const referenceItemWeightKg = parsePositiveNumber(formState.itemWeightKg)
+  const amazonItemWeightKg = parsePositiveNumber(formState.amazonItemWeightKg)
+
+  const itemDimensionsMismatch =
+    referenceItemTriplet !== null && amazonItemTriplet !== null
+      ? tripletDiffers(referenceItemTriplet, amazonItemTriplet, 0.01)
+      : false
+  const itemWeightMismatch =
+    referenceItemWeightKg !== null && amazonItemWeightKg !== null
+      ? Math.abs(referenceItemWeightKg - amazonItemWeightKg) > 0.001
+      : false
+  const hasItemMismatch = itemDimensionsMismatch || itemWeightMismatch
+
+  const sizeTierMismatch = formState.sizeTier.trim() && formState.amazonSizeTier.trim()
+    ? formState.sizeTier.trim() !== formState.amazonSizeTier.trim()
+    : false
 
   return (
     <div className="space-y-6">
@@ -1068,67 +1260,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                   </select>
                 </div>
 
-                <div className="md:col-span-2 pt-4 border-t">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label>Item Dimensions (cm)</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Input
-                          id="itemSide1Cm"
-                          type="number"
-                          step="0.01"
-                          min={0.01}
-                          value={formState.itemSide1Cm}
-                          onChange={event =>
-                            setFormState(prev => ({ ...prev, itemSide1Cm: event.target.value }))
-                          }
-                          placeholder="L"
-                          inputMode="decimal"
-                        />
-                        <Input
-                          id="itemSide2Cm"
-                          type="number"
-                          step="0.01"
-                          min={0.01}
-                          value={formState.itemSide2Cm}
-                          onChange={event =>
-                            setFormState(prev => ({ ...prev, itemSide2Cm: event.target.value }))
-                          }
-                          placeholder="W"
-                          inputMode="decimal"
-                        />
-                        <Input
-                          id="itemSide3Cm"
-                          type="number"
-                          step="0.01"
-                          min={0.01}
-                          value={formState.itemSide3Cm}
-                          onChange={event =>
-                            setFormState(prev => ({ ...prev, itemSide3Cm: event.target.value }))
-                          }
-                          placeholder="H"
-                          inputMode="decimal"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="itemWeightKg">Item weight (kg)</Label>
-                      <Input
-                        id="itemWeightKg"
-                        type="number"
-                        step="0.001"
-                        min={0.001}
-                        value={formState.itemWeightKg}
-                        onChange={event =>
-                          setFormState(prev => ({ ...prev, itemWeightKg: event.target.value }))
-                        }
-                        placeholder="e.g. 0.29"
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Amazon Fees Section */}
                 <div className="md:col-span-2 pt-4 border-t">
                   <Tabs>
@@ -1173,6 +1304,149 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 		                      {modalTab === 'reference' ? (
 		                        <div className="space-y-4">
 		                          <div className="grid gap-3 md:grid-cols-2">
+                                <div className="md:col-span-2 pt-2">
+                                  <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Dimensions
+                                  </h5>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label>Item package dimensions (cm)</Label>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <Input
+                                      id="unitSide1Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.unitSide1Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, unitSide1Cm: event.target.value }))
+                                      }
+                                      placeholder="L"
+                                      inputMode="decimal"
+                                    />
+                                    <Input
+                                      id="unitSide2Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.unitSide2Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, unitSide2Cm: event.target.value }))
+                                      }
+                                      placeholder="W"
+                                      inputMode="decimal"
+                                    />
+                                    <Input
+                                      id="unitSide3Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.unitSide3Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, unitSide3Cm: event.target.value }))
+                                      }
+                                      placeholder="H"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label htmlFor="unitWeightKg">Item package weight (kg)</Label>
+                                  <Input
+                                    id="unitWeightKg"
+                                    type="number"
+                                    step="0.001"
+                                    min={0.001}
+                                    value={formState.unitWeightKg}
+                                    onChange={event =>
+                                      setFormState(prev => ({ ...prev, unitWeightKg: event.target.value }))
+                                    }
+                                    placeholder="e.g. 0.29"
+                                    required={!editingSku}
+                                  />
+                                </div>
+
+                                {hasItemPackageMismatch ? (
+                                  <div className="md:col-span-2">
+                                    <p className="text-xs text-amber-700">
+                                      Item package dimensions/weight differ from Amazon.
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                <div className="space-y-1">
+                                  <Label>Item dimensions (cm)</Label>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <Input
+                                      id="itemSide1Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.itemSide1Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, itemSide1Cm: event.target.value }))
+                                      }
+                                      placeholder="L"
+                                      inputMode="decimal"
+                                    />
+                                    <Input
+                                      id="itemSide2Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.itemSide2Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, itemSide2Cm: event.target.value }))
+                                      }
+                                      placeholder="W"
+                                      inputMode="decimal"
+                                    />
+                                    <Input
+                                      id="itemSide3Cm"
+                                      type="number"
+                                      step="0.01"
+                                      min={0.01}
+                                      value={formState.itemSide3Cm}
+                                      onChange={event =>
+                                        setFormState(prev => ({ ...prev, itemSide3Cm: event.target.value }))
+                                      }
+                                      placeholder="H"
+                                      inputMode="decimal"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label htmlFor="itemWeightKg">Item weight (kg)</Label>
+                                  <Input
+                                    id="itemWeightKg"
+                                    type="number"
+                                    step="0.001"
+                                    min={0.001}
+                                    value={formState.itemWeightKg}
+                                    onChange={event =>
+                                      setFormState(prev => ({ ...prev, itemWeightKg: event.target.value }))
+                                    }
+                                    placeholder="e.g. 0.29"
+                                  />
+                                </div>
+
+                                {hasItemMismatch ? (
+                                  <div className="md:col-span-2">
+                                    <p className="text-xs text-amber-700">
+                                      Item dimensions/weight differ from Amazon.
+                                    </p>
+                                  </div>
+                                ) : null}
+
+                                <div className="md:col-span-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                  <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Fees
+                                  </h5>
+                                </div>
+
 	                            <div className="space-y-1">
                               <Label htmlFor="category">Category</Label>
 	                              <select
@@ -1216,6 +1490,12 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 ))}
                               </select>
                             </div>
+
+                            {sizeTierMismatch ? (
+                              <div className="md:col-span-2">
+                                <p className="text-xs text-amber-700">Reference size tier differs from Amazon.</p>
+                              </div>
+                            ) : null}
                             <div className="space-y-1">
                               <Label htmlFor="referralFeePercent">Referral Fee (%)</Label>
                               <Input
@@ -1255,13 +1535,92 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
                           <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <p className="text-xs text-slate-500">
-                              Item package dimensions and weight are SKU-level.
+                              Reference values are editable. Amazon values are shown in the Amazon tab.
                             </p>
                           </div>
                         </div>
                       ) : (
                         <div className="space-y-4">
                           <div className="grid gap-3 md:grid-cols-2">
+                            <div className="md:col-span-2 pt-2">
+                              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Dimensions
+                              </h5>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label>Item package dimensions (cm)</Label>
+                              <div className="grid grid-cols-3 gap-2">
+                                <Input
+                                  value={formState.amazonItemPackageSide1Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                                <Input
+                                  value={formState.amazonItemPackageSide2Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                                <Input
+                                  value={formState.amazonItemPackageSide3Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label>Item package weight (kg)</Label>
+                              <Input
+                                value={formState.amazonItemPackageWeightKg}
+                                disabled
+                                className="bg-slate-100 text-slate-500"
+                                placeholder="—"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label>Item dimensions (cm)</Label>
+                              <div className="grid grid-cols-3 gap-2">
+                                <Input
+                                  value={formState.amazonItemSide1Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                                <Input
+                                  value={formState.amazonItemSide2Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                                <Input
+                                  value={formState.amazonItemSide3Cm}
+                                  disabled
+                                  className="bg-slate-100 text-slate-500"
+                                  placeholder="—"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label>Item weight (kg)</Label>
+                              <Input
+                                value={formState.amazonItemWeightKg}
+                                disabled
+                                className="bg-slate-100 text-slate-500"
+                                placeholder="—"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Fees
+                              </h5>
+                            </div>
                             <div className="space-y-1">
                               <Label>Category</Label>
                               <Input
@@ -1311,7 +1670,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
                           <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <p className="text-xs text-slate-500">
-                              Item package dimensions and weight are batch-level. Use “View Batches” to view the latest batch.
+                              Amazon values are imported from Amazon and are read-only.
                             </p>
                           </div>
                         </div>
@@ -1325,7 +1684,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     <div className="md:col-span-2 pt-2">
                       <h3 className="text-sm font-semibold text-slate-900">Initial Batch</h3>
                       <p className="mt-1 text-xs text-slate-500">
-                        Required. Defines pack size, units/carton, and unit weight.
+                        Required. Defines pack size and units/carton.
                       </p>
                     </div>
 
@@ -1396,27 +1755,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             initialBatch: {
                               ...prev.initialBatch,
                               unitsPerCarton: event.target.value,
-                            },
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor="initialUnitWeightKg">Unit Weight (kg)</Label>
-                      <Input
-                        id="initialUnitWeightKg"
-                        type="number"
-                        min={0.001}
-                        step={0.001}
-                        value={formState.initialBatch.unitWeightKg}
-                        onChange={event =>
-                          setFormState(prev => ({
-                            ...prev,
-                            initialBatch: {
-                              ...prev.initialBatch,
-                              unitWeightKg: event.target.value,
                             },
                           }))
                         }

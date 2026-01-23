@@ -244,6 +244,7 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
 
 const createSkuSchema = refineDimensions(
   skuSchemaBase.extend({
+    unitWeightKg: z.number().positive(),
     initialBatch: z.object({
       batchCode: z.string().trim().min(1).max(64),
       description: z
@@ -272,7 +273,6 @@ const createSkuSchema = refineDimensions(
           const sanitized = sanitizeForDisplay(val)
           return sanitized ? sanitized : null
         }),
-      unitWeightKg: z.number().positive(),
       packagingType: packagingTypeSchema,
       storageCartonsPerPallet: z.number().int().positive().default(DEFAULT_CARTONS_PER_PALLET),
       shippingCartonsPerPallet: z.number().int().positive().default(DEFAULT_CARTONS_PER_PALLET),
@@ -401,6 +401,21 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     return ApiResponses.badRequest('Item dimensions must be a valid LxWxH triple')
   }
 
+  const unitTriplet = resolveDimensionTripletCm({
+    side1Cm: validatedData.unitSide1Cm,
+    side2Cm: validatedData.unitSide2Cm,
+    side3Cm: validatedData.unitSide3Cm,
+    legacy: validatedData.unitDimensionsCm,
+  })
+  const unitInputProvided =
+    Boolean(validatedData.unitDimensionsCm) ||
+    [validatedData.unitSide1Cm, validatedData.unitSide2Cm, validatedData.unitSide3Cm].some(
+      value => value !== undefined && value !== null
+    )
+  if (unitInputProvided && !unitTriplet) {
+    return ApiResponses.badRequest('Item package dimensions must be a valid LxWxH triple')
+  }
+
   const sku = await prisma.$transaction(async tx => {
     const created = await tx.sku.create({
       data: {
@@ -415,20 +430,17 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         amazonSizeTier: validatedData.amazonSizeTier ?? null,
         amazonReferralFeePercent: validatedData.amazonReferralFeePercent ?? null,
         amazonFbaFulfillmentFee: validatedData.amazonFbaFulfillmentFee ?? null,
-        amazonReferenceWeightKg:
-          validatedData.amazonReferenceWeightKg === undefined
-            ? validatedData.initialBatch.unitWeightKg
-            : validatedData.amazonReferenceWeightKg,
+        amazonReferenceWeightKg: null,
         description: validatedData.description,
         packSize: validatedData.initialBatch.packSize,
         defaultSupplierId: validatedData.defaultSupplierId ?? null,
         secondarySupplierId: validatedData.secondarySupplierId ?? null,
         material: validatedData.initialBatch.material ?? null,
-        unitDimensionsCm: null,
-        unitSide1Cm: null,
-        unitSide2Cm: null,
-        unitSide3Cm: null,
-        unitWeightKg: validatedData.initialBatch.unitWeightKg,
+        unitDimensionsCm: unitTriplet ? formatDimensionTripletCm(unitTriplet) : null,
+        unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
+        unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
+        unitSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
+        unitWeightKg: validatedData.unitWeightKg,
         itemDimensionsCm: itemTriplet ? formatDimensionTripletCm(itemTriplet) : null,
         itemSide1Cm: itemTriplet ? itemTriplet.side1Cm : null,
         itemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
@@ -461,7 +473,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         packagingType: validatedData.initialBatch.packagingType ?? null,
         amazonSizeTier: null,
         amazonFbaFulfillmentFee: null,
-        amazonReferenceWeightKg: validatedData.initialBatch.unitWeightKg,
+        amazonReferenceWeightKg: null,
         storageCartonsPerPallet: validatedData.initialBatch.storageCartonsPerPallet,
         shippingCartonsPerPallet: validatedData.initialBatch.shippingCartonsPerPallet,
         isActive: true,
