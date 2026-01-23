@@ -1,6 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -16,7 +15,7 @@ export function Reveal({
   once = true,
   threshold = 0.18
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
   /**
    * - fade-up: subtle lift (default)

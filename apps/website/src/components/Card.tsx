@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function Card({
@@ -6,7 +5,7 @@ export function Card({
   children
 }: {
   className?: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <div

@@ -1,4 +1,3 @@
-import type { ButtonHTMLAttributes } from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cn } from '@/lib/utils';
 
@@ -31,7 +30,7 @@ export function Button({
   variant = 'primary',
   size = 'md',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   asChild?: boolean;
   variant?: Variant;
   size?: Size;

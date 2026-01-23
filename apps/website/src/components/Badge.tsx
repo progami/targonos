@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const variants = {
@@ -11,7 +10,7 @@ export function Badge({
   className,
   variant = 'default'
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
   variant?: keyof typeof variants;
 }) {
