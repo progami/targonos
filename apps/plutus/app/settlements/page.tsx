@@ -34,7 +34,7 @@ type SettlementRow = {
   periodEnd: string | null;
   settlementTotal: number | null;
   lmbStatus: 'Posted';
-  plutusStatus: 'Pending' | 'Processed' | 'Blocked';
+  plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
 };
 
 type SettlementsResponse = {
@@ -103,6 +103,7 @@ function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
   if (status === 'Blocked') return <Badge variant="destructive">Plutus: Blocked</Badge>;
   return <Badge variant="outline">Plutus: Pending</Badge>;
 }
@@ -293,7 +294,8 @@ export default function SettlementsPage() {
                       <TableHead>Marketplace</TableHead>
                       <TableHead>Period</TableHead>
                       <TableHead>Settlement Total</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>LMB</TableHead>
+                      <TableHead>Plutus</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -302,7 +304,7 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={5} className="py-4">
+                            <TableCell colSpan={6} className="py-4">
                               <Skeleton className="h-10 w-full" />
                             </TableCell>
                           </TableRow>
@@ -312,7 +314,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -320,7 +322,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && !error && settlements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                           No settlements found in QBO for this filter.
                         </TableCell>
                       </TableRow>
@@ -357,10 +359,10 @@ export default function SettlementsPage() {
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
                           </TableCell>
                           <TableCell className="align-top">
-                            <div className="flex flex-wrap gap-2">
-                              <StatusPill status={s.lmbStatus} />
-                              <PlutusPill status={s.plutusStatus} />
-                            </div>
+                            <StatusPill status={s.lmbStatus} />
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <PlutusPill status={s.plutusStatus} />
                           </TableCell>
                           <TableCell className="align-top text-right">
                             <DropdownMenu>

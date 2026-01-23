@@ -36,7 +36,7 @@ type SettlementDetailResponse = {
     periodEnd: string | null;
     settlementTotal: number | null;
     lmbStatus: 'Posted';
-    plutusStatus: 'Pending' | 'Processed';
+    plutusStatus: 'Pending' | 'Processed' | 'RolledBack';
     lines: Array<{
       id?: string;
       description: string;
@@ -55,6 +55,19 @@ type SettlementDetailResponse = {
     processingHash: string;
     sourceFilename: string;
     uploadedAt: string;
+    qboCogsJournalEntryId: string;
+    qboPnlReclassJournalEntryId: string;
+    orderSalesCount: number;
+    orderReturnsCount: number;
+  };
+  rollback: null | {
+    id: string;
+    marketplace: string;
+    invoiceId: string;
+    processingHash: string;
+    sourceFilename: string;
+    processedAt: string;
+    rolledBackAt: string;
     qboCogsJournalEntryId: string;
     qboPnlReclassJournalEntryId: string;
     orderSalesCount: number;
@@ -144,6 +157,7 @@ function StatusPill({ status }: { status: SettlementDetailResponse['settlement']
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
   if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
   return <Badge variant="outline">Plutus: Pending</Badge>;
 }
 
@@ -318,6 +332,15 @@ export default function SettlementDetailPage() {
     setIsPosting(true);
     setAnalysisError(null);
     try {
+      const latest = await queryClient.fetchQuery({
+        queryKey: ['plutus-settlement', settlementId],
+        queryFn: () => fetchSettlement(settlementId),
+      });
+      if (latest.settlement.plutusStatus === 'Processed') {
+        setTab('history');
+        return;
+      }
+
       const result = await processSettlement(settlementId, file, selectedInvoice);
       if (!result.ok) {
         setPreview(result.data);
@@ -335,10 +358,21 @@ export default function SettlementDetailPage() {
   }
 
   async function handleRollback() {
-    const processing = data?.processing;
-    if (!processing) return;
-
     setActionError(null);
+
+    let latest: SettlementDetailResponse;
+    try {
+      latest = await queryClient.fetchQuery({
+        queryKey: ['plutus-settlement', settlementId],
+        queryFn: () => fetchSettlement(settlementId),
+      });
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+
+    const processing = latest.processing;
+    if (!processing) return;
 
     const confirmed = window.confirm(
       [
@@ -505,8 +539,28 @@ export default function SettlementDetailPage() {
               <TabsContent value="history" className="p-4">
                 {settlement && (
                   <div className="space-y-4">
-                    {!data?.processing && (
+                    {!data?.processing && !data?.rollback && (
                       <div className="text-sm text-slate-500 dark:text-slate-400">Plutus has not processed this settlement yet.</div>
+                    )}
+
+                    {data?.rollback && (
+                      <Card className="border-slate-200/70 dark:border-white/10">
+                        <CardContent className="p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-slate-900 dark:text-white">Rolled back</div>
+                            <Badge variant="secondary">{new Date(data.rollback.rolledBackAt).toLocaleString('en-US')}</Badge>
+                          </div>
+                          <div className="text-sm text-slate-700 dark:text-slate-200">
+                            Invoice: <span className="font-mono">{data.rollback.invoiceId}</span>
+                          </div>
+                          <div className="text-sm text-slate-700 dark:text-slate-200">
+                            COGS JE ID: <span className="font-mono">{data.rollback.qboCogsJournalEntryId}</span>
+                          </div>
+                          <div className="text-sm text-slate-700 dark:text-slate-200">
+                            P&amp;L Reclass JE ID: <span className="font-mono">{data.rollback.qboPnlReclassJournalEntryId}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
                     )}
 
                     {data?.processing && (
