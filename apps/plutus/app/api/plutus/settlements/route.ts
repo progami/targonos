@@ -26,7 +26,7 @@ type SettlementRow = {
   periodEnd: string | null;
   settlementTotal: number | null;
   lmbStatus: 'Posted';
-  plutusStatus: 'Pending' | 'Processed' | 'Blocked';
+  plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
 };
 
 type LmbDocMeta = {
@@ -251,6 +251,12 @@ export async function GET(req: NextRequest) {
     });
     const processedSet = new Set(processed.map((p) => p.qboSettlementJournalEntryId));
 
+    const rolledBack = await db.settlementRollback.findMany({
+      where: { qboSettlementJournalEntryId: { in: journalEntries.map((je) => je.Id) } },
+      select: { qboSettlementJournalEntryId: true },
+    });
+    const rolledBackSet = new Set(rolledBack.map((r) => r.qboSettlementJournalEntryId));
+
     const rows: SettlementRow[] = journalEntries.map((je) => {
       if (!je.DocNumber) {
         throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
@@ -258,6 +264,13 @@ export async function GET(req: NextRequest) {
 
       const normalized = normalizeLmbDocNumber(je.DocNumber);
       const meta = parseSettlementPeriod(normalized);
+
+      let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';
+      if (processedSet.has(je.Id)) {
+        plutusStatus = 'Processed';
+      } else if (rolledBackSet.has(je.Id)) {
+        plutusStatus = 'RolledBack';
+      }
 
       return {
         id: je.Id,
@@ -269,7 +282,7 @@ export async function GET(req: NextRequest) {
         periodEnd: meta.periodEnd,
         settlementTotal: computeSettlementTotal(je, accountsById),
         lmbStatus: 'Posted',
-        plutusStatus: processedSet.has(je.Id) ? 'Processed' : 'Pending',
+        plutusStatus,
       };
     });
 
