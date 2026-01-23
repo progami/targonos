@@ -36,12 +36,19 @@ export async function POST(request: NextRequest) {
       await tx.sku.deleteMany();
 
       for (const sku of skus) {
+        const productNameRaw = sku.productName;
+        const productName =
+          productNameRaw === undefined || productNameRaw.trim() === '' ? null : productNameRaw;
+
+        const asinRaw = sku.asin;
+        const asin = asinRaw === undefined || asinRaw.trim() === '' ? null : asinRaw;
+
         await tx.sku.create({
           data: {
             sku: sku.sku,
-            productName: sku.productName || null,
+            productName,
             brandId: brandMap.get(sku.brand)!,
-            asin: sku.asin || null,
+            asin,
           },
         });
       }

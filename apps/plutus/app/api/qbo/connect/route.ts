@@ -27,7 +27,16 @@ export async function GET() {
     return NextResponse.redirect(authUrl);
   } catch (error) {
     logger.error('Failed to initiate QBO connection', error);
-    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
-    return NextResponse.redirect(new URL(`${basePath}?error=connect_failed`, process.env.BASE_URL || 'http://localhost:3012'));
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+    if (basePath === undefined) {
+      throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+    }
+
+    const baseUrl = process.env.BASE_URL;
+    if (baseUrl === undefined) {
+      throw new Error('BASE_URL is required');
+    }
+
+    return NextResponse.redirect(new URL(`${basePath}?error=connect_failed`, baseUrl));
   }
 }

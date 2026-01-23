@@ -37,18 +37,21 @@ export async function POST(request: NextRequest) {
     const existing = await db.setupConfig.findFirst();
 
     if (existing) {
+      const nextAccountsCreated =
+        accountsCreated === undefined ? existing.accountsCreated : accountsCreated;
+
       await db.setupConfig.update({
         where: { id: existing.id },
         data: {
           ...accountMappings,
-          accountsCreated: accountsCreated ?? existing.accountsCreated,
+          accountsCreated: nextAccountsCreated,
         },
       });
     } else {
       await db.setupConfig.create({
         data: {
           ...accountMappings,
-          accountsCreated: accountsCreated ?? false,
+          accountsCreated: accountsCreated === undefined ? false : accountsCreated,
         },
       });
     }

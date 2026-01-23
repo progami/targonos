@@ -11,6 +11,9 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (basePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 type ComplianceStatus = 'compliant' | 'partial' | 'non-compliant';
 

@@ -52,7 +52,7 @@ export async function GET() {
             amazonPromotions: config.amazonPromotions,
           }
         : {},
-      accountsCreated: config?.accountsCreated ?? false,
+      accountsCreated: config ? config.accountsCreated : false,
     });
   } catch (error) {
     console.error('Failed to fetch setup:', error);

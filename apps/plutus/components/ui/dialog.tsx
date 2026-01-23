@@ -6,6 +6,8 @@ import { X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+const CloseIcon = X as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
 const Dialog = DialogPrimitive.Root;
 
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -46,7 +48,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/50 disabled:pointer-events-none dark:text-slate-500 dark:hover:bg-white/10 dark:hover:text-white">
-        <X className="h-4 w-4" aria-hidden />
+        <CloseIcon className="h-4 w-4" aria-hidden />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>

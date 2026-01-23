@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (basePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 const STORAGE_KEY = 'plutus-setup-v5'; // Bump version for DB-backed state
 
@@ -363,7 +366,10 @@ function AccountsSection({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create accounts');
+      if (!res.ok) {
+        const message = data.error ? data.error : 'Failed to create accounts';
+        throw new Error(message);
+      }
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -418,7 +424,7 @@ function AccountsSection({
             <AccountRow
               key={acc.key}
               label={acc.label}
-              accountId={accountMappings[acc.key] || ''}
+              accountId={accountMappings[acc.key] ? accountMappings[acc.key] : ''}
               accounts={accounts}
               onChange={(id) => updateAccount(acc.key, id)}
               type={acc.type}
@@ -525,7 +531,7 @@ function SkusSection({
               {skus.map((sku, i) => (
                 <tr key={i} className="bg-white dark:bg-slate-900">
                   <td className="px-4 py-3 text-sm font-mono text-slate-900 dark:text-white">{sku.sku}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.productName || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.productName ? sku.productName : '—'}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{sku.brand}</td>
                   <td className="px-4 py-3">
                     <button onClick={() => removeSku(i)} className="p-1 text-slate-400 hover:text-red-500 transition-colors">
@@ -673,7 +679,12 @@ export default function SetupPage() {
       setState((prev) => ({
         ...prev,
         brands: setupData.brands.map((b) => ({ name: b.name, marketplace: b.marketplace, currency: b.currency })),
-        skus: setupData.skus.map((s) => ({ sku: s.sku, productName: s.productName || '', brand: s.brand, asin: s.asin || undefined })),
+        skus: setupData.skus.map((s) => ({
+          sku: s.sku,
+          productName: s.productName ? s.productName : '',
+          brand: s.brand,
+          asin: s.asin ? s.asin : undefined,
+        })),
         accountMappings: Object.fromEntries(Object.entries(setupData.accountMappings).filter(([, v]) => v != null)) as Record<string, string>,
         accountsCreated: setupData.accountsCreated,
       }));
@@ -787,7 +798,7 @@ export default function SetupPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const accounts = useMemo(() => accountsData?.accounts || [], [accountsData]);
+  const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
 
   // Show loading while checking connection or loading setup

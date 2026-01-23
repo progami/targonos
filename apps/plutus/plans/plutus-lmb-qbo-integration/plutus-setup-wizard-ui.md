@@ -4,7 +4,7 @@
 
 The Setup page guides users through prerequisites before Plutus can process COGS. Uses a sidebar navigation pattern with focused, non-scrolling sections.
 
-**Prerequisite:** User must complete LMB Accounts & Taxes Wizard BEFORE starting Plutus setup. LMB creates accounts in QBO for revenue, fees, etc.
+**Prerequisite:** Complete the LMB Accounts & Taxes Wizard before finishing the **Accounts** section (parent account mapping + sub-account creation). Brands/SKUs can be configured first.
 
 ---
 
@@ -214,12 +214,10 @@ Once connected, show the setup page with sidebar navigation.
 
 ### Sub-Account Naming Convention
 
-When creating sub-accounts, Plutus uses this pattern:
-- **Inventory Asset:** `Inv {Component} - {BrandName}` (e.g., "Inv Manufacturing - US-Dust Sheets")
-- **COGS:** `{Component} - {BrandName}` (e.g., "Manufacturing - US-Dust Sheets")
-- **Revenue/Fees:** `{Parent Name} - {BrandName}` (e.g., "Amazon Sales - US-Dust Sheets")
+Plutus creates QBO **sub-accounts** under each selected parent account.
 
-The "Inv" prefix on Inventory Asset accounts prevents name collision with COGS accounts.
+- Sub-account **Name** follows: `{Label} - {BrandName}` (e.g., `Amazon Sales - US-Dust Sheets`)
+- QBO **FullyQualifiedName** displays the path with colons (e.g., `Amazon Sales:Amazon Sales - US-Dust Sheets`)
 
 ### Sub-Account Creation Summary
 
@@ -362,10 +360,13 @@ States:
 
 ## Data Persistence
 
-Setup state is saved to localStorage with key `plutus-setup-v4`:
+Setup data is persisted in Postgres via Prisma (`Brand`, `Sku`, `SetupConfig`) and fetched via `/api/setup`.
+
+localStorage is used as a client-side backup for UI state with key `plutus-setup-v5`:
 
 ```typescript
 type SetupState = {
+  section: 'brands' | 'accounts' | 'skus';
   brands: Array<{ name: string; marketplace: string; currency: string }>;
   accountMappings: Record<string, string>;  // key → QBO account ID
   accountsCreated: boolean;
@@ -380,13 +381,8 @@ type SetupState = {
 ### Route Structure
 
 ```
-/setup                  → Redirects to /setup/brands
-/setup/brands           → Brands section
-/setup/accounts         → Account Mapping section
-/setup/skus             → SKUs section
+/setup                  → Single route with sidebar sections
 ```
-
-Or use a single `/setup` route with query param: `/setup?section=brands`
 
 ### Component Structure
 
@@ -418,6 +414,6 @@ The following items from the original 9-step wizard are NOT part of the setup UI
 | Step 1: Connect QuickBooks | NotConnectedScreen pattern (automatic) |
 | Step 2: Verify LMB Setup | Mentioned in prerequisites / help docs |
 | Step 6: LMB Product Groups | Help documentation |
-| Step 7: Bill Entry Guidelines | Help documentation |
+| Step 7: Bill Entry Guidelines | Bills page (`/bills`) |
 | Step 8: Historical Catch-Up | Future feature / separate workflow |
 | Step 9: Review & Complete | Status bar shows completion state |
