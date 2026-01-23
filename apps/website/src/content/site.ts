@@ -2,7 +2,7 @@ export const site = {
   name: 'Targon Global',
   domain: 'targonglobal.com',
   description:
-    'Extra-large dust sheets built for clean decorating. Checkout stays on Amazon.',
+    'AI-driven manufacturing & design. Home of Caelum Star.',
   contactEmail: 'support@targonglobal.com',
 
   // Primary retail link (requested: 6-pack is the main focus).
