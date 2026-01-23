@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (basePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 function QboLogo({ className }: { className?: string }) {
   return (

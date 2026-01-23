@@ -2,18 +2,19 @@
 
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
+import { cn } from '@/lib/utils';
 
-const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (assetBasePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 function TargonWordmark({ className }: { className?: string }) {
   return (
     <div className={className}>
-      <img
-        src={`${assetBasePath}/brand/logo.svg`}
-        alt="Targon"
-        className="h-6 w-auto dark:hidden"
-      />
+      <img src={`${assetBasePath}/brand/logo.svg`} alt="Targon" className="h-6 w-auto dark:hidden" />
       <img
         src={`${assetBasePath}/brand/logo-inverted.svg`}
         alt="Targon"
@@ -40,26 +41,56 @@ function QboStatusFallback() {
   );
 }
 
+const NAV_ITEMS = [
+  { href: '/settlements', label: 'Settlements' },
+  { href: '/setup', label: 'Accounts & Taxes' },
+  { href: '/bills', label: 'Inventory' },
+  { href: '/chart-of-accounts', label: 'Accounts' },
+] as const;
+
 export function AppHeader() {
+  const pathname = usePathname();
+
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-slate-900/70 border-b border-slate-200/50 dark:border-white/5">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* App branding - LEFT */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-teal-500 to-brand-teal-600 dark:from-brand-cyan dark:to-brand-teal-500">
-            <LogoIcon className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-lg font-semibold text-slate-900 dark:text-white">Plutus</span>
-        </Link>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-6">
+        <div className="flex items-center gap-8 min-w-0">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-teal-500 to-brand-teal-600 dark:from-brand-cyan dark:to-brand-teal-500">
+              <LogoIcon className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-lg font-semibold text-slate-900 dark:text-white">Plutus</span>
+          </Link>
 
-        {/* Targon branding - RIGHT */}
-	        <div className="flex items-center gap-3">
-	          <Suspense fallback={<QboStatusFallback />}>
-	            <QboStatusIndicator />
-	          </Suspense>
-	          <TargonWordmark className="shrink-0" />
-	        </div>
-	      </div>
-	    </header>
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            {NAV_ITEMS.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'transition-colors',
+                    isActive
+                      ? 'text-brand-teal-700 dark:text-brand-cyan font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Suspense fallback={<QboStatusFallback />}>
+            <QboStatusIndicator />
+          </Suspense>
+          <TargonWordmark className="hidden sm:block shrink-0" />
+        </div>
+      </div>
+    </header>
   );
 }

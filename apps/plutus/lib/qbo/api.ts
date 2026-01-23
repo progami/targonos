@@ -521,6 +521,39 @@ export async function fetchBills(
 }
 
 /**
+ * Fetch a single JournalEntry by ID
+ */
+export async function fetchJournalEntryById(
+  connection: QboConnection,
+  journalEntryId: string,
+): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/journalentry/${journalEntryId}`;
+
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch journal entry', {
+      journalEntryId,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to fetch journal entry: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { JournalEntry: QboJournalEntry };
+  return { journalEntry: data.JournalEntry, updatedConnection };
+}
+
+/**
  * Fetch a single Purchase by ID
  */
 export async function fetchPurchaseById(
