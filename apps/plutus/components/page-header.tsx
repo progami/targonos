@@ -10,14 +10,23 @@ type PageHeaderProps = {
   description?: ReactNode;
   actions?: ReactNode;
   className?: string;
+  /** Use 'accent' for LMB-style orange/coral titles */
+  variant?: 'default' | 'accent';
 };
 
-export function PageHeader({ title, kicker, description, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, kicker, description, actions, className, variant = 'default' }: PageHeaderProps) {
   return (
     <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between', className)}>
       <div className="min-w-0">
         {kicker && <div className="text-section-header">{kicker}</div>}
-        <h1 className="mt-1 font-display text-3xl leading-none tracking-tight text-slate-900 dark:text-white">
+        <h1
+          className={cn(
+            'mt-1 font-display text-3xl leading-none tracking-tight',
+            variant === 'accent'
+              ? 'text-accent-500'
+              : 'text-slate-900 dark:text-white',
+          )}
+        >
           {title}
         </h1>
         {description && <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{description}</div>}
