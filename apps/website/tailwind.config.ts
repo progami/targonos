@@ -35,11 +35,16 @@ const config: Config = {
         'accordion-up': {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' }
+        },
+        'slide-down-fade': {
+          from: { opacity: '0', transform: 'translateY(-8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
         }
       },
       animation: {
         'accordion-down': 'accordion-down 200ms ease-out',
-        'accordion-up': 'accordion-up 200ms ease-out'
+        'accordion-up': 'accordion-up 200ms ease-out',
+        'slide-down-fade': 'slide-down-fade 200ms ease-out'
       },
       typography: {
         DEFAULT: {
