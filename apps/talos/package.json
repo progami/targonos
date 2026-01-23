@@ -38,6 +38,8 @@
     "db:migrate:sku-amazon-reference-weight": "tsx scripts/migrations/add-sku-amazon-reference-weight.ts",
     "db:migrate:sku-amazon-listing-price": "tsx scripts/migrations/add-sku-amazon-listing-price.ts",
     "db:migrate:sku-amazon-categories": "tsx scripts/migrations/add-sku-amazon-category-columns.ts",
+    "db:migrate:sku-subcategory": "tsx scripts/migrations/add-sku-subcategory.ts",
+    "db:migrate:sku-amazon-item-dimensions": "tsx scripts/migrations/add-sku-amazon-item-dimensions.ts",
     "db:migrate:sku-reference-fee-columns": "tsx scripts/migrations/add-sku-reference-fee-columns.ts",
     "db:migrate:normalize-amazon-referral-fee-percent-2026": "tsx scripts/migrations/normalize-amazon-referral-fee-percent-2026.ts",
     "db:migrate:supplier-defaults": "tsx scripts/migrations/add-supplier-default-columns.ts",

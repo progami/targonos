@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-83QMOjZt/qHa6NxCqJynM9rvwZlLfuV4dqFQ7Bdyffc=
+
 importers:
 
   .:
@@ -14440,6 +14442,8 @@ snapshots:
     dependencies:
       '@next/env': 16.0.8
       '@swc/helpers': 0.5.15
+      '@types/react': 19.1.10
+      '@types/react-dom': 19.1.6(@types/react@19.1.10)
       caniuse-lite: 1.0.30001760
       postcss: 8.4.31
       react: 19.2.1
