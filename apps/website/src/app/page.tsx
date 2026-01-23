@@ -1,146 +1,212 @@
-import Link from 'next/link';
 import Image from 'next/image';
-
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 
 import { Container } from '@/components/Container';
-import { ProductFeatureCard } from '@/components/ProductFeatureCard';
-import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { Card } from '@/components/Card';
 import { Reveal } from '@/components/Reveal';
-import { products } from '@/content/products';
+import { HomeRuntime } from '@/components/HomeRuntime';
 import { site } from '@/content/site';
-import { cn } from '@/lib/utils';
-
-function WideImage({
-  src,
-  alt,
-  className
-}: {
-  src: string;
-  alt: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
-        // Our EBC wide creatives are 1464x600.
-        'aspect-[61/25]',
-        className
-      )}
-    >
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        sizes="(max-width: 1024px) 100vw, 1920px"
-        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.02]"
-      />
-    </div>
-  );
-}
-
-function SquareImage({
-  src,
-  alt,
-  className
-}: {
-  src: string;
-  alt: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
-        'aspect-square',
-        className
-      )}
-    >
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 900px"
-        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.03]"
-      />
-    </div>
-  );
-}
 
 export default function HomePage() {
-  const primary = products.find((p) => p.primary) ?? products[0];
-  const highlightChips = primary.highlights.slice(0, 3);
-
   return (
-    <main>
+    <div>
+      <HomeRuntime />
+
       {/* HERO */}
-      <section className="pt-10 md:pt-16">
-        <Container>
-          <div className="grid items-center gap-10 lg:grid-cols-12">
-            <div className="lg:col-span-5">
-              <Reveal delay={0}>
-                <Badge variant="subtle">Caelum Star</Badge>
-              </Reveal>
+      <section className="tg-snap" id="top">
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 scale-105 bg-cover bg-center"
+            style={{ backgroundImage: "url('/images/home/hero-robot.webp')" }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/20 to-black/85" />
+        </div>
 
-              <Reveal delay={80}>
-                <h1 className="mt-4 text-balance text-5xl font-semibold tracking-tight md:text-6xl">
-                  Extra-large dust sheets.
-                </h1>
-              </Reveal>
+        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+          <h1 className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] select-none text-[15vw] font-black leading-none tracking-tighter text-white/15 blur-[2px] md:text-[12vw]">
+            TARGON
+          </h1>
 
-              <Reveal delay={160}>
-                <p className="mt-4 max-w-xl text-pretty text-lg text-muted">
-                  Cover more. Clean up less.
+          <Reveal>
+            <h2 className="text-7xl font-black tracking-tighter text-white drop-shadow-2xl md:text-8xl lg:text-9xl">
+              TARGON.
+            </h2>
+          </Reveal>
+
+          <Reveal delay={120}>
+            <p className="mt-4 inline-flex items-center rounded-pill border border-white/10 bg-black/30 px-6 py-2 text-base font-light uppercase tracking-[0.2em] text-accent backdrop-blur-sm md:text-lg lg:text-xl">
+              AI‑Driven Manufacturing &amp; Design
+            </p>
+          </Reveal>
+
+          <Reveal delay={220}>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <Button asChild variant="accent" size="lg">
+                <Link href="/caelum-star">
+                  Explore products <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+              >
+                <Link href="/about">About</Link>
+              </Button>
+            </div>
+          </Reveal>
+        </Container>
+
+        <div className="absolute bottom-10 left-0 right-0 z-10 flex flex-col items-center gap-3 motion-safe:animate-pulse">
+          <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-white/50">
+            Explore
+          </span>
+          <span className="text-2xl text-white/50" aria-hidden>
+            ↓
+          </span>
+        </div>
+      </section>
+
+      {/* PURPOSE */}
+      <section className="tg-snap bg-ink" id="purpose">
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: "url('/images/home/purpose-laptop.webp')" }}
+          />
+          <div className="absolute inset-0 bg-ink/70 mix-blend-multiply" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/80" />
+        </div>
+
+        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+          <Reveal>
+            <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
+              Targon’s purpose
+            </div>
+          </Reveal>
+          <Reveal delay={120}>
+            <h2 className="mt-6 text-6xl font-semibold leading-[0.9] tracking-tighter text-white md:text-8xl lg:text-9xl">
+              Dissolving
+              <br />
+              Complexity.
+            </h2>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* MISSION */}
+      <section className="tg-snap bg-black" id="mission">
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-45 grayscale"
+            style={{ backgroundImage: "url('/images/home/mission-abstract.webp')" }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-ink/40 to-black" />
+        </div>
+
+        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+          <Reveal>
+            <div className="inline-flex items-center gap-3 border-b border-white/10 pb-4 text-xs font-bold uppercase tracking-[0.5em] text-white/50">
+              Mission
+            </div>
+          </Reveal>
+          <Reveal delay={120}>
+            <p className="mt-12 max-w-5xl text-pretty text-3xl font-light leading-tight tracking-wide text-white/90 md:text-5xl lg:text-6xl">
+              Simplify complexities by innovatively and efficiently using{' '}
+              <span className="font-normal text-accent">intelligent business processes.</span>
+            </p>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* VISION */}
+      <section className="tg-snap" id="vision">
+        <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: "url('/images/home/vision-earth.webp')" }}
+          />
+          <div className="absolute inset-0 bg-black/45" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70" />
+        </div>
+
+        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+          <Reveal>
+            <span className="inline-flex items-center rounded-pill border border-white/20 bg-black/20 px-6 py-2 text-xs font-bold uppercase tracking-[0.3em] text-white backdrop-blur-md">
+              Vision
+            </span>
+          </Reveal>
+          <Reveal delay={120}>
+            <h2 className="mt-10 text-5xl font-bold leading-none tracking-tight text-white md:text-7xl lg:text-8xl">
+              Empowering you with
+              <br />
+              <span className="font-light text-accent/90">simplicity and efficiency.</span>
+            </h2>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* PRODUCTS */}
+      <section className="tg-snap bg-black" id="products">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
+          <div className="absolute -left-24 top-24 h-[520px] w-[520px] rounded-full bg-accent/20 blur-3xl" />
+          <div className="absolute -right-24 bottom-24 h-[520px] w-[520px] rounded-full bg-ink/30 blur-3xl" />
+        </div>
+
+        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6">
+          <div className="grid w-full max-w-6xl items-center gap-10 md:grid-cols-12">
+            <div className="text-center md:col-span-6 md:text-left">
+              <Reveal>
+                <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
+                  Products
+                </div>
+              </Reveal>
+              <Reveal delay={120}>
+                <h2 className="mt-6 text-balance text-5xl font-semibold tracking-tight text-white md:text-6xl">
+                  {site.productBrandName}.
+                </h2>
+              </Reveal>
+              <Reveal delay={200}>
+                <p className="mt-4 max-w-xl text-pretty text-base text-white/70 md:text-lg">
+                  Extra‑large dust sheets built for clean decorating. Clear pack options. Checkout stays on
+                  Amazon.
                 </p>
               </Reveal>
-
-              <Reveal delay={240}>
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <Button asChild size="lg">
-                    <Link href={`/products/${primary.slug}`}>Learn more</Link>
-                  </Button>
+              <Reveal delay={280}>
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
                   <Button asChild variant="accent" size="lg">
-                    <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
+                    <Link href="/caelum-star">
+                      View {site.productBrandName} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="lg"
+                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
                       Buy on Amazon
-                      <ExternalLink className="ml-2 h-4 w-4" />
                     </a>
                   </Button>
                 </div>
               </Reveal>
-
-              <Reveal delay={320}>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {highlightChips.map((h) => (
-                    <span
-                      key={h}
-                      className="rounded-full border bg-white/70 px-3 py-1 text-xs font-medium text-slate-800"
-                    >
-                      {h}
-                    </span>
-                  ))}
-                </div>
-              </Reveal>
-
-              <Reveal delay={400}>
-                <p className="mt-6 text-sm text-muted">
-                  Checkout stays on Amazon. This site is built for product details.
-                </p>
-              </Reveal>
             </div>
 
-            <div className="lg:col-span-7">
-              <Reveal variant="zoom" delay={140} className="h-full">
-                <div className="relative mx-auto max-w-[680px]">
+            <div className="md:col-span-6">
+              <Reveal variant="zoom" delay={140}>
+                <div className="relative mx-auto max-w-[520px]">
+                  <div className="absolute -inset-8 rounded-[32px] bg-gradient-to-tr from-accent/20 via-white/5 to-transparent blur-2xl" />
                   <Image
-                    src={primary.image.src}
-                    alt={primary.image.alt}
+                    src="/images/products/dust-essential-6pk.webp"
+                    alt="Caelum Star extra-large dust sheets"
                     width={1200}
                     height={1200}
-                    priority
-                    className="h-auto w-full drop-shadow-2xl"
+                    className="relative h-auto w-full drop-shadow-2xl"
+                    priority={false}
                   />
                 </div>
               </Reveal>
@@ -149,195 +215,115 @@ export default function HomePage() {
         </Container>
       </section>
 
-      {/* APPLE-LIKE: BIG VISUAL SECTIONS */}
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal>
-            <div className="text-center">
-              <h2 className="text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-                Pick your protection.
-              </h2>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-                <Button asChild size="lg">
-                  <Link href="/products">Explore packs</Link>
-                </Button>
-                <Button asChild variant="ghost" size="lg">
-                  <Link href="/where-to-buy">
-                    Where to buy <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal variant="media" delay={120}>
-            <div className="mt-8">
-              <WideImage
-                src="/images/amazon/pick-protection.jpg"
-                alt="Pick your protection — Caelum Star dust sheet packs"
-              />
-            </div>
-          </Reveal>
-        </Container>
-      </section>
-
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal>
-            <div className="text-center">
-              <h2 className="text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-                Find your perfect fit.
-              </h2>
-            </div>
-          </Reveal>
-
-          <Reveal variant="media" delay={120}>
-            <div className="mt-8">
-              <WideImage
-                src="/images/amazon/fit-coverage.jpg"
-                alt="Find your perfect fit — coverage comparison"
-              />
-            </div>
-          </Reveal>
-        </Container>
-      </section>
-
-      {/* 2-UP GRID (like Apple tiles) */}
-      <section className="py-10 md:py-14">
-        <Container>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Reveal variant="media" delay={0}>
-              <SquareImage
-                src="/images/amazon/general-projects.jpg"
-                alt="Ideal for general projects — 6 pack essentials"
-              />
+      {/* VALUES */}
+      <section className="tg-snap tg-values bg-black" id="values">
+        <div className="absolute left-0 right-0 top-0 z-20 flex items-start justify-between p-6 md:p-10">
+          <div>
+            <Reveal>
+              <h2 className="text-xs font-bold uppercase tracking-[0.3em] text-accent">Core values</h2>
             </Reveal>
-            <Reveal variant="media" delay={120}>
-              <SquareImage
-                src="/images/amazon/multi-room-projects.jpg"
-                alt="Ideal for multi-room projects — 12 pack deluxe"
-              />
+            <Reveal delay={100}>
+              <div className="mt-3 h-0.5 w-16 bg-accent/50" />
             </Reveal>
           </div>
-        </Container>
-      </section>
+          <div className="hidden items-center gap-2 opacity-30 md:flex">
+            <span className="text-xl text-white" aria-hidden>
+              ∞
+            </span>
+          </div>
+        </div>
 
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal variant="media">
-            <WideImage
-              src="/images/amazon/applications.jpg"
-              alt="Applications — moving, painting, renovating"
+        <div className="tg-value-row">
+          <div
+            className="tg-value-panel group"
+            tabIndex={0}
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <div
+              className="tg-value-bg"
+              style={{ backgroundImage: "url('/images/home/value-efficiency.webp')" }}
             />
-          </Reveal>
-        </Container>
-      </section>
-
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal variant="media">
-            <WideImage
-              src="/images/amazon/strong-vs-light.jpg"
-              alt="Strong vs light durability comparison"
-            />
-          </Reveal>
-        </Container>
-      </section>
-
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal variant="media">
-            <WideImage
-              src="/images/amazon/aplus-4.jpg"
-              alt="One sheet, multiple benefits"
-            />
-          </Reveal>
-        </Container>
-      </section>
-
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal variant="media">
-            <WideImage
-              src="/images/amazon/sustainable-process.jpg"
-              alt="Sustainable efficiency process"
-            />
-          </Reveal>
-        </Container>
-      </section>
-
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal variant="media">
-            <WideImage
-              src="/images/amazon/sustainable-efficiency.jpg"
-              alt="Sustainable efficiency — 55% recycled plastic"
-            />
-          </Reveal>
-        </Container>
-      </section>
-
-      {/* PRODUCTS */}
-      <section className="py-10 md:py-14">
-        <Container>
-          <Reveal>
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <h2 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
-                  Explore packs.
-                </h2>
-                <p className="mt-2 text-sm text-muted">
-                  Start with the 6 pack. Scale up when you need it.
+            <div className="tg-value-scrim" />
+            <div className="tg-value-content">
+              <h3 className="tg-value-title">Efficiency</h3>
+              <div className="tg-value-desc">
+                <div className="h-px w-12 bg-accent/70" />
+                <p className="mt-4">
+                  Optimizing every intelligent process for maximum, streamlined output.
                 </p>
               </div>
-              <Button asChild variant="ghost" className="hidden md:inline-flex">
-                <Link href="/products">
-                  View all <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
             </div>
-          </Reveal>
+          </div>
 
-          <Reveal variant="media" delay={120}>
-            <div className="mt-8 flex gap-6 overflow-x-auto pb-2">
-              {products.map((product) => (
-                <ProductFeatureCard key={product.slug} product={product} />
-              ))}
-            </div>
-          </Reveal>
-        </Container>
-      </section>
-
-      {/* SUPPORT */}
-      <section className="pb-16">
-        <Container>
-          <Reveal variant="media">
-            <Card className="p-6 md:p-10">
-              <div className="grid gap-8 md:grid-cols-12 md:items-center">
-                <div className="md:col-span-8">
-                  <h3 className="text-balance text-2xl font-semibold tracking-tight md:text-3xl">
-                    Need help choosing the right pack?
-                  </h3>
-                  <p className="mt-3 text-sm text-muted">
-                    Email{' '}
-                    <a className="underline" href={`mailto:${site.contactEmail}`}>
-                      {site.contactEmail}
-                    </a>
-                    .
-                  </p>
-                </div>
-                <div className="md:col-span-4 md:flex md:justify-end">
-                  <Button asChild size="lg">
-                    <Link href="/where-to-buy">
-                      Buy on Amazon <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
-                </div>
+          <div
+            className="tg-value-panel group"
+            tabIndex={0}
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <div
+              className="tg-value-bg"
+              style={{ backgroundImage: "url('/images/home/value-simplicity.webp')" }}
+            />
+            <div className="tg-value-scrim" />
+            <div className="tg-value-content">
+              <h3 className="tg-value-title">Simplicity</h3>
+              <div className="tg-value-desc">
+                <div className="h-px w-12 bg-accent/70" />
+                <p className="mt-4">Clarity in thought. Purity in execution. Removing the unnecessary.</p>
               </div>
-            </Card>
-          </Reveal>
-        </Container>
+            </div>
+          </div>
+
+          <div
+            className="tg-value-panel group"
+            tabIndex={0}
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <div
+              className="tg-value-bg"
+              style={{ backgroundImage: "url('/images/home/value-curiosity.webp')" }}
+            />
+            <div className="tg-value-scrim" />
+            <div className="tg-value-content">
+              <h3 className="tg-value-title">Curiosity</h3>
+              <div className="tg-value-desc">
+                <div className="h-px w-12 bg-accent/70" />
+                <p className="mt-4">Constantly seeking better answers in the unknown.</p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="tg-value-panel tg-value-panel--last group"
+            tabIndex={0}
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <div
+              className="tg-value-bg"
+              style={{ backgroundImage: "url('/images/home/value-innovation.webp')" }}
+            />
+
+            <div className="tg-innovation-overlay">
+              <div className="tg-innovation-glow" />
+              <div className="tg-ring h-48 w-48 md:h-80 md:w-80" />
+              <div className="tg-ring tg-ring--reverse h-36 w-36 md:h-64 md:w-64" />
+              <div className="tg-ring tg-ring--core h-24 w-24 md:h-40 md:w-40" />
+              <div className="h-12 w-12 rounded-full bg-accent blur-md motion-safe:animate-pulse" />
+            </div>
+
+            <div className="tg-value-scrim" />
+            <div className="tg-value-content">
+              <h3 className="tg-value-title text-accent">Innovation</h3>
+              <div className="tg-value-desc">
+                <div className="h-px w-12 bg-accent/80" />
+                <p className="mt-4 text-white/85">
+                  Redefining boundaries with high‑end architectural logic. The future is built here.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
-    </main>
+    </div>
   );
 }

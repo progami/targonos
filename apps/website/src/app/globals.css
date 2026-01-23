@@ -118,3 +118,252 @@ a {
     transition: none;
   }
 }
+
+/*
+  Home page (Targon Global)
+  ------------------------
+  Scoped via the `.tg-home` class toggled by a tiny client component.
+*/
+
+html.tg-home {
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.tg-home {
+    scroll-snap-type: none;
+  }
+}
+
+html.tg-home ::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+body.tg-home {
+  background: #000;
+  color: #fff;
+}
+
+body.tg-home {
+  overflow-x: hidden;
+}
+
+body.tg-home footer {
+  margin-top: 0;
+  min-height: 50svh;
+  display: flex;
+  align-items: flex-end;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.tg-snap {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100svh;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-snap {
+    scroll-snap-stop: normal;
+  }
+}
+
+/*
+  Values panels (hover reveal + flex expansion)
+*/
+
+body.tg-home .tg-values {
+  min-height: 100svh;
+}
+
+body.tg-home .tg-value-row {
+  height: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  body.tg-home .tg-value-row {
+    flex-direction: row;
+  }
+}
+
+body.tg-home .tg-value-panel {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 25vh;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  transition: flex-grow 700ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@media (min-width: 1024px) {
+  body.tg-home .tg-value-panel {
+    min-height: 100%;
+    border-bottom: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.10);
+  }
+
+  body.tg-home .tg-value-panel:hover,
+  body.tg-home .tg-value-panel:focus-within {
+    flex-grow: 1.75;
+  }
+}
+
+body.tg-home .tg-value-panel--last {
+  border-bottom: 0;
+  border-right: 0;
+}
+
+body.tg-home .tg-value-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: grayscale(1) brightness(0.75);
+  transform: scale(1.02);
+  transition:
+    transform 1000ms ease-out,
+    filter 700ms ease-out;
+}
+
+body.tg-home .tg-value-panel:hover .tg-value-bg,
+body.tg-home .tg-value-panel:focus-within .tg-value-bg {
+  transform: scale(1.10);
+  filter: grayscale(0.2) brightness(1);
+}
+
+body.tg-home .tg-value-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.55), rgba(0,0,0,0.10));
+  opacity: 0.92;
+  transition: opacity 500ms ease;
+}
+
+body.tg-home .tg-value-panel:hover .tg-value-scrim,
+body.tg-home .tg-value-panel:focus-within .tg-value-scrim {
+  opacity: 0.80;
+}
+
+body.tg-home .tg-value-content {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 2rem;
+  transform: translateY(0);
+  transition: transform 500ms ease;
+}
+
+@media (min-width: 768px) {
+  body.tg-home .tg-value-content {
+    padding: 3rem;
+  }
+}
+
+body.tg-home .tg-value-title {
+  font-size: clamp(2.4rem, 5vw, 4.25rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  text-transform: uppercase;
+  line-height: 0.95;
+  color: rgba(245, 245, 245, 0.96);
+  transform-origin: left;
+  transition:
+    color 500ms ease,
+    text-shadow 500ms ease,
+    transform 500ms ease;
+}
+
+body.tg-home .tg-value-panel:hover .tg-value-title,
+body.tg-home .tg-value-panel:focus-within .tg-value-title {
+  color: #fff;
+  text-shadow: 0 0 26px rgba(0, 194, 185, 0.55);
+  transform: translateY(-2px);
+}
+
+body.tg-home .tg-value-desc {
+  max-width: 32rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition:
+    opacity 500ms ease,
+    max-height 500ms ease,
+    margin-top 500ms ease;
+}
+
+body.tg-home .tg-value-panel:hover .tg-value-desc,
+body.tg-home .tg-value-panel:focus-within .tg-value-desc {
+  opacity: 1;
+  max-height: 12rem;
+  margin-top: 1rem;
+}
+
+/*
+  Innovation accent rings (hover only, motion-safe)
+*/
+
+body.tg-home .tg-innovation-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0.82;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+body.tg-home .tg-innovation-glow {
+  position: absolute;
+  width: min(52vw, 620px);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  background: radial-gradient(circle at center, rgba(0, 194, 185, 0.35), transparent 62%);
+  filter: blur(48px);
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+
+body.tg-home .tg-value-panel:hover .tg-innovation-glow,
+body.tg-home .tg-value-panel:focus-within .tg-innovation-glow {
+  opacity: 1;
+}
+
+body.tg-home .tg-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 194, 185, 0.30);
+  animation: tg-spin 22s linear infinite;
+}
+
+body.tg-home .tg-ring--reverse {
+  border-style: dashed;
+  animation-direction: reverse;
+  animation-duration: 28s;
+}
+
+body.tg-home .tg-ring--core {
+  border-top-width: 2px;
+  box-shadow: 0 0 18px rgba(0, 194, 185, 0.55);
+  animation-duration: 18s;
+}
+
+@keyframes tg-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
