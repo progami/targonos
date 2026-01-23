@@ -25,5 +25,15 @@
     "playwright": "^1.57.0",
     "turbo": "^2.6.1",
     "typescript": "5.9.2"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "next@16.0.8": {
+        "dependencies": {
+          "@types/react": "19.1.10",
+          "@types/react-dom": "19.1.6"
+        }
+      }
+    }
   }
 }
