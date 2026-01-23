@@ -26,7 +26,10 @@ interface Account {
 
 type SourceFilter = 'all' | 'qbo' | 'lmb';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (basePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 interface ConnectionStatus {
   connected: boolean;
@@ -41,7 +44,8 @@ async function fetchAccounts(): Promise<{ accounts: Account[]; total: number }> 
   const res = await fetch(`${basePath}/api/qbo/accounts`);
   if (!res.ok) {
     const data = await res.json();
-    throw new Error(data.error || 'Failed to fetch accounts');
+    const message = data.error ? data.error : 'Failed to fetch accounts';
+    throw new Error(message);
   }
   return res.json();
 }
@@ -487,14 +491,14 @@ export default function ChartOfAccountsPage() {
                   >
                     {/* Code */}
                     <div className="col-span-1 flex items-center text-slate-600 dark:text-slate-400 text-sm font-mono">
-                      {account.acctNum || '—'}
+                      {account.acctNum ? account.acctNum : '—'}
                     </div>
 
                     {/* Name */}
                     <div
                       className="col-span-3 flex items-center gap-2 min-w-0"
                       style={{ paddingLeft: `${account.depth * 16}px` }}
-                      title={account.fullyQualifiedName || account.name}
+                      title={account.fullyQualifiedName ? account.fullyQualifiedName : account.name}
                     >
                       {account.isSubAccount && (
                         <span className="text-slate-400 dark:text-slate-500 text-xs flex-shrink-0">
@@ -520,7 +524,7 @@ export default function ChartOfAccountsPage() {
 
                     {/* Detail Type */}
                     <div className="col-span-3 flex items-center text-slate-600 dark:text-slate-400 text-sm truncate">
-                      {account.subType || '—'}
+                      {account.subType ? account.subType : '—'}
                     </div>
 
                     {/* Currency */}

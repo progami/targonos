@@ -15,8 +15,13 @@ const CallbackSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-  const baseUrl = process.env.BASE_URL ?? req.nextUrl.origin;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+  if (basePath === undefined) {
+    throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+  }
+
+  const baseUrlFromEnv = process.env.BASE_URL;
+  const baseUrl = baseUrlFromEnv === undefined ? req.nextUrl.origin : baseUrlFromEnv;
 
   try {
     const cookieStore = await cookies();

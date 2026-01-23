@@ -1,11 +1,22 @@
 import type { NextConfig } from 'next'
 import { createRequire } from 'module'
 
-const appBasePath = process.env.BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH || '/plutus'
+const basePathFromEnv = process.env.BASE_PATH
+const publicBasePathFromEnv = process.env.NEXT_PUBLIC_BASE_PATH
+
+let appBasePath: string
+if (basePathFromEnv !== undefined && basePathFromEnv !== '') {
+  appBasePath = basePathFromEnv
+} else if (publicBasePathFromEnv !== undefined && publicBasePathFromEnv !== '') {
+  appBasePath = publicBasePathFromEnv
+} else {
+  appBasePath = '/plutus'
+}
 
 const require = createRequire(import.meta.url)
 const { version } = require('./package.json') as { version: string }
-const resolvedVersion = process.env.NEXT_PUBLIC_VERSION || version
+const publicVersion = process.env.NEXT_PUBLIC_VERSION
+const resolvedVersion = publicVersion !== undefined && publicVersion !== '' ? publicVersion : version
 
 const nextConfig: NextConfig = {
   basePath: appBasePath,

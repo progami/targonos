@@ -22,9 +22,15 @@ Hybrid accounting system for Amazon FBA business using Link My Books (LMB) + Plu
 
 ## Prerequisites
 
-**⚠️ CRITICAL: Complete LMB Accounts & Taxes Wizard BEFORE starting Plutus setup.**
+**⚠️ REQUIRED BEFORE ACCOUNT MAPPING:** Complete the LMB Accounts & Taxes Wizard before you finish the Plutus **Accounts** step (parent account mapping + sub-account creation).
 
-LMB creates the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc).
+You can start Plutus setup first (Brands + SKUs). But Plutus can’t create the brand sub-accounts until LMB has created the base Amazon parent accounts in QBO (Sales/Refunds/Fees/etc).
+
+Recommended order (minimizes back-and-forth):
+1. Plutus: add Brands + SKUs (brand-level foundation)
+2. LMB: Accounts & Taxes → Setup Wizard (do all 3 steps) for EACH connection (US + UK)
+3. Plutus: map QBO parent accounts by ID and create brand sub-accounts
+4. LMB: configure Product Groups so Sales/Refunds post into those brand sub-accounts; set UNASSIGNED as default; test one settlement
 
 Important behavior discovered during implementation:
 - LMB Product Groups split **sales/refunds** by Product Group (brand).
@@ -32,33 +38,29 @@ Important behavior discovered during implementation:
 
 Therefore:
 - Plutus creates brand sub-accounts under the Sales/Refunds parents so LMB can post revenue/refunds by brand.
-- Plutus allocates fees by brand after a settlement is posted (using LMB Audit Data) and posts a reclass Journal Entry in QBO.
+- Plutus allocates non-sales **P&L** by brand after a settlement is posted (using LMB Audit Data) and posts a reclass Journal Entry in QBO.
 
 **Important:** account *names* vary between companies (and can be renamed), so Plutus does not assume literal names like "Amazon Sales". During setup, Plutus asks you to select the correct QBO parent accounts by ID.
-
-1. Go to LMB → Accounts & Taxes → Setup Wizard
-2. Complete all 3 steps (Map transactions, Bank accounts, Tax rates)
-3. Do this for EACH LMB connection (US and UK)
 
 **Related Document:** See `plutus-setup-wizard-ui.md` for the Plutus Setup Wizard UI design, which automates much of the account creation and configuration.
 
 ---
 
-## Current Status (2026-01-18)
+## Current Status (2026-01-23)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Appendix A (Optional QBO Cleanup) | ✅ COMPLETE (Manual) | Optional migration step: run a one-off script to deactivate legacy duplicate Amazon accounts in QBO. Not part of the app UI. |
 | Phase 1 (QBO Accounts) | ✅ COMPLETE | Setup Wizard includes Parent Account Mapping (by QBO account ID) and creates all required brand sub-accounts. |
-| Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API: Plutus provides deep links + checklist UX; user completes in LMB for BOTH connections. |
-| Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in Setup Wizard and in the persistent Bills tooling. |
-| Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Persistent Bill Guide + Bill Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
-| Phase 5 (Plutus Dev) | ❌ NOT STARTED | Build the core app (ledger/settlement engine) |
-| Phase 6 (Workflows) | ❌ NOT STARTED | Settlement + Returns + Reconciliation |
-| Phase 7 (Testing) | ❌ NOT STARTED | Unit + Integration + Parallel run |
+| Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API. User completes LMB setup manually for BOTH connections (US + UK). |
+| Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in the Bills tooling (Bill Guide + Compliance Scanner). |
+| Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Bill Guide + Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
+| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). |
+| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation deferred. |
+| Phase 7 (Testing) | 🚧 IN PROGRESS | CI checks for changed workspaces (lint/type-check/build). |
 | Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
 
-**Next Action:** Start Phase 5 (core Plutus engine) once setup-only phases are stable in production.
+**Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.
 
 ---
 
@@ -88,7 +90,7 @@ Settlement Report                    Manual Inventory Count
 |--------|-------------|--------------|
 | LMB | Settlement Report | Revenue + refunds (split by brand via Product Groups). Fees are not reliably split by brand. |
 | Plutus | LMB Audit Data CSV (manual upload) | COGS (by brand, by component) |
-| Plutus | LMB Audit Data CSV (manual upload) | Fee reclass JE (allocate fees by brand after LMB posts) |
+| Plutus | LMB Audit Data CSV (manual upload) | P&L reclass JE (allocate non-sales P&L by brand after LMB posts) |
 | Plutus | Amazon Seller Central (manual count) | Reconciliation adjustments |
 | Plutus | QBO Bills | Landed cost extraction |
 
@@ -287,13 +289,22 @@ Fields:
 - `Invoice`: LMB Invoice ID from CSV
 - `Hash`: First 10 chars of processingHash
 
-#### 8. No QBO Polling for LMB Settlements
-Plutus does NOT poll QBO to detect LMB postings. The user is responsible for:
-1. Checking LMB for settlements ready to post
-2. Downloading Audit Data CSV from LMB
-3. Uploading CSV to Plutus
+#### 8. Settlement Status via QBO (No LMB API)
+Plutus does NOT use an LMB API. To “xerox” the LMB settlements UX and clearly show what’s been posted, Plutus **polls QBO** to discover LMB-posted settlements and infer their status.
 
-This keeps the architecture simple and avoids issues with LMB posting Journal Entries vs Invoices.
+What Plutus can know (from QBO):
+- Settlement exists in QBO → treat as **LMB Posted**
+- Settlement missing/voided in QBO → treat as **Not Posted / Rolled Back**
+
+What Plutus cannot know (without user input):
+- LMB Audit Data CSV contents (units/SKUs/fees breakdown) → user must still download from LMB and upload to Plutus
+
+User workflow:
+1. Plutus Settlements list shows LMB-posted settlements (pulled from QBO by identifier)
+2. User downloads Audit Data CSV from LMB for that settlement
+3. User uploads CSV to Plutus to calculate COGS + fee allocations and post Plutus JEs
+
+This keeps the system LMB-API-free while still enabling an LMB-like UI and reliable “posted vs not posted” settlement status.
 
 #### 9. Opening Snapshot (for Catch-Up Mode)
 "No arbitrary opening balances" does NOT mean "no opening position." For catch-up mode:
@@ -780,7 +791,7 @@ Even reprocessing leaves a trail of what happened and why.
 **Note:** The Plutus Setup Wizard automates Phase 1. It creates ALL brand sub-accounts:
 - **Inventory Asset + COGS** (Plutus posts to these)
 - **Revenue sub-accounts** (LMB Product Groups post sales/refunds to these)
-- **Fee sub-accounts** (Plutus posts fee reclass JEs to these after LMB posts the settlement)
+- **P&L sub-accounts** (Plutus posts P&L reclass JEs to these after LMB posts the settlement)
 
 The account names below are **suggestions** - users can customize names during setup. See `plutus-setup-wizard-ui.md` for the UI flow.
 
@@ -822,7 +833,7 @@ Because account names vary between companies, Plutus does not assume literal nam
 **Note:** The Plutus Setup Wizard automates Phase 1. It creates ALL brand sub-accounts:
 - **Inventory Asset + COGS** (Plutus posts to these)
 - **Revenue sub-accounts** (LMB Product Groups post sales/refunds to these)
-- **Fee sub-accounts** (Plutus posts fee reclass JEs to these after LMB posts the settlement)
+- **P&L sub-accounts** (Plutus posts P&L reclass JEs to these after LMB posts the settlement)
 
 The account names below are **suggestions** - users can customize names during setup. See `plutus-setup-wizard-ui.md` for the UI flow.
 
@@ -901,7 +912,7 @@ Posting behavior:
 
 Posting behavior:
 - LMB posts fees to the **parent** fee accounts.
-- Plutus posts a **fee reclass Journal Entry** after settlement posting to allocate fees into these brand sub-accounts.
+- Plutus posts a **P&L reclass Journal Entry** after settlement posting to allocate non-sales P&L into these brand sub-accounts.
 
 | # | Account Name | Parent Account | Account Type | Detail Type | Status |
 |---|--------------|----------------|--------------|-------------|--------|
@@ -1247,7 +1258,7 @@ Go to LMB → Inventory → Product Groups
 
 # PHASE 3: BILL ENTRY SETUP (PO Linking via Memo)
 
-**Note:** Setup Wizard Step 7 introduces this policy, but it should not be treated as the daily workflow.
+**Note:** This policy is enforced via the Bills tooling (Bill Guide + Compliance Scanner). The Setup page should not be treated as the daily workflow.
 
 For migrations/backfills (e.g. entering 200 historical bills), Plutus should provide a persistent Bill Entry Guide and a QBO-driven Bill Compliance Scanner so users can bulk-audit existing bills (date range) and fix issues without re-running the wizard.
 
@@ -1276,7 +1287,7 @@ PO: PO-2026-001
 
 # PHASE 4: BILL ENTRY SOP
 
-**Operationalization requirement:** This SOP must be supported by tooling (templates + validation). Users should not have to revisit the Setup Wizard each time a bill arrives.
+**Operationalization requirement:** This SOP must be supported by tooling (templates + validation). Users should not have to revisit the Setup page each time a bill arrives.
 
 Planned tooling (pre-core):
 - Bill Entry Guide page (copyable memo/description patterns)
@@ -2022,59 +2033,52 @@ async function getBillsByPO(poNumber: string): Promise<Bill[]> {
 
 ## Step 5.4: API Routes
 
+**V1 (trimmed):** treat “settlement processing” as the only posting workflow surface.
+- No standalone `/cogs` routes (preview/post happens from a Settlement)
+- Reconciliation routes deferred until after settlements are stable
+
+**Already implemented (Phases 1–4 + prototype):**
 ```
 /app/api/
-├── auth/
-│   └── qbo/callback/route.ts    # QBO OAuth callback
+├── qbo/                 # OAuth, accounts, bills, purchases, journal-entries
+├── setup/               # Brands, SKUs, account mappings
+└── plutus/              # Audit file analyzer + fee allocation prototype
+```
+
+**Planned v1 core (Phase 5/6):**
+```
+/app/api/
 ├── audit-data/
 │   ├── route.ts                 # POST upload CSV, GET list imports
 │   ├── validate/route.ts        # POST validate CSV before import
 │   └── [id]/route.ts            # GET single import, DELETE
-├── settlements/
-│   ├── route.ts                 # GET list, POST process
-│   └── [id]/route.ts            # GET single, POST reprocess
-├── cogs/
-│   ├── route.ts                 # POST calculate and post
-│   └── preview/route.ts         # POST preview without posting
-├── reconciliation/
-│   ├── route.ts                 # GET list, POST run
-│   └── [id]/route.ts            # GET single, POST adjust
-├── bills/
-│   ├── route.ts                 # GET list from QBO
-│   └── parse/route.ts           # POST parse bills for PO
-├── skus/
-│   ├── route.ts                 # CRUD operations
-│   └── costs/route.ts           # GET/POST landed costs
-└── accounts/
-    ├── route.ts                 # GET list from QBO
-    └── sync/route.ts            # POST sync from QBO
+└── settlements/
+    ├── route.ts                 # GET list, POST process
+    └── [id]/route.ts            # GET single, POST reprocess/void
 ```
 
 ## Step 5.5: UI Pages
 
+**V1 (LMB-like, trimmed):** keep the workflow surface small and mirror LMB’s “settlement list → settlement detail” UX.
 ```
 /app/
 ├── page.tsx                     # Dashboard
-├── settlements/
-│   ├── page.tsx                 # Settlement list
-│   └── [id]/page.tsx            # Settlement detail
-├── cogs/
-│   └── page.tsx                 # COGS posting interface
-├── reconciliation/
-│   ├── page.tsx                 # Reconciliation list
-│   └── [id]/page.tsx            # Reconciliation detail
-├── inventory/
-│   ├── page.tsx                 # Inventory overview
-│   └── costs/page.tsx           # Landed costs management
-├── skus/
-│   └── page.tsx                 # SKU management
-├── bills/
-│   └── page.tsx                 # Bill parsing interface
-└── settings/
-    ├── page.tsx                 # Settings overview
-    ├── qbo/page.tsx             # QBO connection
-    └── amazon/page.tsx          # Amazon connection
+├── setup/page.tsx               # Brands + Accounts + SKUs
+├── bills/page.tsx               # Bill Guide + Compliance Scanner
+└── settlements/
+    ├── page.tsx                 # Settlement list (shows processed/unprocessed)
+    └── [id]/page.tsx            # Settlement detail: upload audit CSV, preview, post JEs, status
 ```
+
+**Optional utilities (non-core):**
+- Chart of accounts viewer
+- SOP tooling for QBO purchase fields (Reference/Memo)
+
+**Deferred (don’t build until settlements are stable):**
+- Reconciliation UI
+- Inventory overview UI
+- Standalone COGS posting page
+- Settings sub-pages (beyond “connect QBO”)
 
 ---
 
@@ -2462,7 +2466,7 @@ Memo: "Returns reversal - Jan 2026"
 | Check | Expected Result |
 |-------|-----------------|
 | LMB posts to brand accounts | Sales/Refunds split by brand (Product Groups) |
-| Plutus posts fee reclass journal | Fees split by brand (after LMB posts settlement) |
+| Plutus posts P&L reclass journal | Non-sales P&L split by brand (after LMB posts settlement) |
 | Plutus posts COGS journal | COGS split by brand + component |
 | P&L by brand (Amazon ops) | Adds up to 100% of Amazon ops P&L* |
 | Inventory Asset balance | Matches expected on-hand value |

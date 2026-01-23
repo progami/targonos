@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import type { QboConnectionStatus } from '@/lib/qbo/types';
 import { cn } from '@/lib/utils';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/plutus';
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (basePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 async function fetchQboStatus(): Promise<QboConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
@@ -57,7 +60,8 @@ export function QboStatusIndicator() {
         token_exchange_failed: 'Failed to connect. Please try again.',
         connect_failed: 'Failed to initiate connection.',
       };
-      toast.error(errorMessages[error] ?? 'Connection failed');
+      const message = errorMessages[error];
+      toast.error(message === undefined ? 'Connection failed' : message);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [searchParams, queryClient]);
