@@ -409,6 +409,7 @@ function LeavePageContent() {
           title="Leave"
           description="Request and manage leave"
           icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
+          showBack
         />
         <div className="animate-pulse h-64 bg-muted/50 rounded-lg" />
       </>
@@ -422,6 +423,7 @@ function LeavePageContent() {
           title="Leave"
           description="Request and manage leave"
           icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
+          showBack
         />
         <div className="flex flex-col items-center justify-center h-64">
           <Alert variant="error" className="max-w-md mb-4">
@@ -442,6 +444,7 @@ function LeavePageContent() {
           title="Leave"
           description="Request and manage leave"
           icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
+          showBack
         />
         <Card padding="lg">
           <Alert variant="error" className="mb-4">
@@ -461,6 +464,7 @@ function LeavePageContent() {
         title="Leave"
         description="Request and manage leave"
         icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button
             href="/leave/request"
@@ -513,6 +517,7 @@ function LeavePageSkeleton() {
         title="Leave"
         description="Request and manage leave"
         icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
+        showBack
       />
       <div className="animate-pulse h-64 bg-muted/50 rounded-lg" />
     </>

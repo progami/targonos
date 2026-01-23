@@ -58,6 +58,8 @@ type ListPageHeaderProps = {
   description?: string
   icon?: React.ReactNode
   action?: React.ReactNode
+  showBack?: boolean
+  backHref?: string
 }
 
 export function ListPageHeader({
@@ -65,11 +67,17 @@ export function ListPageHeader({
   description,
   icon,
   action,
+  showBack = false,
+  backHref,
 }: ListPageHeaderProps) {
+  const { canGoBack } = useNavigationHistory()
+  const hasBackNavigation = backHref ? true : showBack && canGoBack
+
   return (
     <header className="mb-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
+          {hasBackNavigation ? <BackButton href={backHref} /> : null}
           {icon && (
             <div className="p-2.5 rounded-xl bg-primary shadow-md">
               {icon}

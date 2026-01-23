@@ -181,6 +181,7 @@ export default function PoliciesPage() {
         title="Policies"
         description="Manage company policies and guidelines"
         icon={<DocumentIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           canManagePolicies ? (
             <Button href="/policies/add" icon={<PlusIcon className="h-4 w-4" />}>

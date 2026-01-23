@@ -231,7 +231,7 @@ function Header({ onMenuClick }: { onMenuClick: () => void }) {
         }
       }
     }
-    return 'Work Queue';
+    return 'My Hub';
   };
 
   return (
