@@ -7,7 +7,6 @@ import {
   EmployeeFilesApi,
   EmployeesApi,
   LeavesApi,
-  MeApi,
   PerformanceReviewsApi,
   UploadsApi,
   type DisciplinaryAction,
@@ -17,6 +16,7 @@ import {
   type LeaveRequest,
   type PerformanceReview,
 } from '@/lib/api-client'
+import { ensureMe } from '@/lib/store/me'
 import {
   CalendarDaysIcon,
   ClipboardDocumentCheckIcon,
@@ -170,7 +170,7 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         const [emp, perms, meRes] = await Promise.all([
           EmployeesApi.get(id),
           EmployeesApi.getPermissions(id),
-          MeApi.get(),
+          ensureMe(),
         ])
         if (cancelled) return
 

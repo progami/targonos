@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, Suspense, useCallback, useEffect, useState } from 'react';
+import { ReactNode, Suspense, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   HomeIcon,
@@ -21,10 +21,11 @@ import {
 } from '@/components/ui/Icons';
 import { Button } from '@/components/ui/button';
 import { NavigationHistoryProvider } from '@/lib/navigation-history';
-import { MeApi } from '@/lib/api-client';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { RouteLoadingIndicator } from '@/components/ui/RouteLoadingIndicator';
 import { cn } from '@/lib/utils';
+import { useMeStore } from '@/lib/store/me';
+import { useUIStore } from '@/lib/store/ui';
 
 interface NavItem {
   name: string;
@@ -246,9 +247,15 @@ function Header({ onMenuClick }: { onMenuClick: () => void }) {
 }
 
 export default function ATLASLayout({ children }: { children: ReactNode }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [isHR, setIsHR] = useState(false);
+  const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
+  const openMobileMenu = useUIStore((s) => s.openMobileMenu);
+  const closeMobileMenu = useUIStore((s) => s.closeMobileMenu);
+
+  const me = useMeStore((s) => s.me);
+  const refreshMe = useMeStore((s) => s.refresh);
+  const isSuperAdmin = Boolean(me?.isSuperAdmin);
+  const isHR = Boolean(me?.isHR);
+
   const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
   const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL || undefined;
   const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
@@ -260,18 +267,16 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
 
   const pathname = usePathname();
   useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
+    closeMobileMenu();
+  }, [closeMobileMenu, pathname]);
 
   const fetchUserPermissions = useCallback(async () => {
     try {
-      const me = await MeApi.get();
-      setIsSuperAdmin(Boolean(me.isSuperAdmin));
-      setIsHR(Boolean(me.isHR));
+      await refreshMe();
     } catch {
       // Ignore errors, default to non-admin
     }
-  }, []);
+  }, [refreshMe]);
 
   // Fetch current user permissions for navigation; refresh when roles change.
   useEffect(() => {
@@ -308,14 +313,14 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
       {/* Mobile Nav */}
       <MobileNav
         isOpen={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
+        onClose={closeMobileMenu}
         isSuperAdmin={isSuperAdmin}
         isHR={isHR}
       />
 
       {/* Main Content */}
       <div className="md:pl-64 min-h-screen flex flex-col bg-background">
-        <Header onMenuClick={() => setMobileMenuOpen(true)} />
+        <Header onMenuClick={openMobileMenu} />
 
         <main className="flex-1">
           <div

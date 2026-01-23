@@ -1,12 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/BackButton';
 import { WorkflowTimeline } from '@/components/workflow/WorkflowTimeline';
-import { ArrowLeftIcon } from '@/components/ui/Icons';
 import {
   ActionInputModal,
   actionNeedsInput,
@@ -173,9 +172,7 @@ export function WorkflowRecordLayout({
           {access.noAccessReason ?? "You don't have access to this record."}
         </p>
         <div className="mt-4">
-          <Link href={backHref} className="text-sm text-accent hover:underline">
-            Back
-          </Link>
+          <BackButton href={backHref} />
         </div>
       </Card>
     );
@@ -186,15 +183,9 @@ export function WorkflowRecordLayout({
       <div className="sticky top-0 z-30 bg-card border-b border-border">
         <div className="py-4">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <Link
-                href={backHref}
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeftIcon className="h-4 w-4" />
-                Back
-              </Link>
-              <div className="mt-2">
+            <div className="min-w-0 flex items-start gap-4">
+              <BackButton href={backHref} className="shrink-0" />
+              <div className="min-w-0">
                 <h1 className="text-xl font-semibold text-foreground truncate">
                   {toDisplayText(identity.title, 'Record')}
                 </h1>
@@ -203,16 +194,16 @@ export function WorkflowRecordLayout({
                   {subject.employeeId ? ` • ${toDisplayText(subject.employeeId, '')}` : ''}
                   {subject.subtitle ? ` • ${toDisplayText(subject.subtitle, '')}` : ''}
                 </p>
+                {headerBadges.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {headerBadges.map((b) => (
+                      <Badge key={`${b.label}-${b.tone}`} variant={toneToBadgeVariant(b.tone)}>
+                        {b.label}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              {headerBadges.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {headerBadges.map((b) => (
-                    <Badge key={`${b.label}-${b.tone}`} variant={toneToBadgeVariant(b.tone)}>
-                      {b.label}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
             </div>
 
             <div className="shrink-0 flex flex-col items-end gap-2">

@@ -7,9 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   ApiError,
-  MeApi,
   PerformanceReviewsApi,
-  type Me,
   type PerformanceReview,
 } from '@/lib/api-client'
 import type { ActionId } from '@/lib/contracts/action-ids'
@@ -33,6 +31,7 @@ import {
 } from '@/lib/review-period'
 import { UpdatePerformanceReviewSchema } from '@/lib/validations'
 import { RatingDisplayRow, RatingInputRow } from '@/components/performance/reviews/RatingRows'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 type FormData = z.infer<typeof UpdatePerformanceReviewSchema>
 
@@ -68,7 +67,7 @@ export default function PerformanceReviewPage() {
 
   const [dto, setDto] = useState<WorkflowRecordDTO | null>(null)
   const [review, setReview] = useState<PerformanceReview | null>(null)
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<string[] | null>(null)
@@ -119,14 +118,13 @@ export default function PerformanceReviewPage() {
     setErrorDetails(null)
 
     try {
-      const [workflow, raw, meData] = await Promise.all([
+      const [workflow, raw] = await Promise.all([
         PerformanceReviewsApi.getWorkflowRecord(id),
         PerformanceReviewsApi.get(id),
-        MeApi.get().catch(() => null),
+        ensureMe().catch(() => null),
       ])
       setDto(workflow)
       setReview(raw)
-      setMe(meData)
 
       // Initialize form with review data
       const inferredPeriod = inferReviewPeriodParts(raw.reviewPeriod)

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColumnDef } from '@tanstack/react-table'
-import { MeApi, TasksApi, type Me, type Task } from '@/lib/api-client'
+import { TasksApi, type Task } from '@/lib/api-client'
 import { CheckCircleIcon, PlusIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ import { DataTable } from '@/components/ui/DataTable'
 import { ResultsCount } from '@/components/ui/table'
 import { TableEmptyContent } from '@/components/ui/EmptyState'
 import { StatusBadge } from '@/components/ui/badge'
+import { useMeStore } from '@/lib/store/me'
+import { usePageState } from '@/lib/store/page-state'
 
 const CATEGORY_LABELS: Record<string, string> = {
   GENERAL: 'General',
@@ -31,30 +33,15 @@ function formatDate(dateStr: string | null | undefined) {
 
 export default function TasksPage() {
   const router = useRouter()
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [items, setItems] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const { custom, setCustom } = usePageState('/tasks')
+  const scope = custom?.scope === 'all' ? 'all' : 'mine'
+  const setScope = useCallback((next: 'mine' | 'all') => setCustom('scope', next), [setCustom])
 
   const canSeeAllTasks = Boolean(me?.isHR || me?.isSuperAdmin)
-
-  useEffect(() => {
-    let cancelled = false
-    MeApi.get()
-      .then((data) => {
-        if (cancelled) return
-        setMe(data)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setMe(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (!canSeeAllTasks && scope === 'all') {

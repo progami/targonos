@@ -1,8 +1,6 @@
 'use client'
 
-import Link from 'next/link'
-import { ArrowLeftIcon } from './Icons'
-import { Button } from './button'
+import { BackButton } from '@/components/ui/BackButton'
 import { useNavigationHistory } from '@/lib/navigation-history'
 
 type PageHeaderProps = {
@@ -22,27 +20,17 @@ export function PageHeader({
   showBack = false,
   backHref,
 }: PageHeaderProps) {
-  const { goBack, canGoBack } = useNavigationHistory()
+  const { canGoBack } = useNavigationHistory()
 
   // Prefer explicit backHref, fallback to history-based goBack
-  const hasBackNavigation = backHref || (showBack && canGoBack)
+  const hasBackNavigation = backHref ? true : showBack && canGoBack
 
   return (
     <header className="mb-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           {hasBackNavigation && (
-            backHref ? (
-              <Link href={backHref}>
-                <Button variant="outline" size="icon" className="h-11 w-11">
-                  <ArrowLeftIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-              </Link>
-            ) : (
-              <Button variant="outline" size="icon" onClick={goBack} className="h-11 w-11">
-                <ArrowLeftIcon className="h-5 w-5 text-muted-foreground" />
-              </Button>
-            )
+            <BackButton href={backHref} />
           )}
           {icon && (
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-md">

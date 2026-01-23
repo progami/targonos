@@ -3,25 +3,41 @@
 import { useCallback, useEffect, useState } from 'react'
 import { WorkItemsApi } from '@/lib/api-client'
 import { Alert } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { InboxDashboard } from '@/components/inbox'
 import { CreateRequestModal } from '@/components/inbox/CreateRequestModal'
 import type { WorkItemsResponse, WorkItemDTO, CompletedWorkItemsResponse } from '@/lib/contracts/work-items'
 import type { ActionId } from '@/lib/contracts/action-ids'
 import { executeAction } from '@/lib/actions/execute-action'
+import { usePageStateStore } from '@/lib/store/page-state'
 
 export type InboxTab = 'pending' | 'completed'
 
 export default function WorkQueuePage() {
-  const [activeTab, setActiveTab] = useState<InboxTab>('pending')
+  const storedTab = usePageStateStore((s) => s.pages['/work']?.activeTab)
+  const activeTab: InboxTab = storedTab === 'completed' ? 'completed' : 'pending'
+  const setActiveTab = usePageStateStore((s) => s.setActiveTab)
+
+  const custom = usePageStateStore((s) => s.pages['/work']?.custom)
+  const selectedId = typeof custom?.selectedId === 'string' ? custom.selectedId : null
+  const completedSelectedId =
+    typeof custom?.completedSelectedId === 'string' ? custom.completedSelectedId : null
+  const setCustom = usePageStateStore((s) => s.setCustom)
+
   const [data, setData] = useState<WorkItemsResponse | null>(null)
   const [completedData, setCompletedData] = useState<CompletedWorkItemsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [completedLoading, setCompletedLoading] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [completedSelectedId, setCompletedSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [createModalOpen, setCreateModalOpen] = useState(false)
+
+  const updateSelectedId = useCallback(
+    (nextId: string | null) => setCustom('/work', 'selectedId', nextId),
+    [setCustom]
+  )
+  const updateCompletedSelectedId = useCallback(
+    (nextId: string | null) => setCustom('/work', 'completedSelectedId', nextId),
+    [setCustom]
+  )
 
   const loadPending = useCallback(async (options?: { force?: boolean }) => {
     try {
@@ -30,10 +46,15 @@ export default function WorkQueuePage() {
       setError(null)
       const next = await WorkItemsApi.list({ force })
       setData(next)
-      setSelectedId((prev) => {
-        if (prev && next.items.some((i) => i.id === prev)) return prev
-        return next.items[0]?.id ?? null
-      })
+      const current = usePageStateStore.getState().pages['/work']?.custom
+      const prev = typeof current?.selectedId === 'string' ? current.selectedId : null
+      if (prev && next.items.some((i) => i.id === prev)) {
+        updateSelectedId(prev)
+      } else if (next.items.length > 0) {
+        updateSelectedId(next.items[0].id)
+      } else {
+        updateSelectedId(null)
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load work items'
       console.error('Failed to load work items', e)
@@ -42,7 +63,7 @@ export default function WorkQueuePage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [updateSelectedId])
 
   const loadCompleted = useCallback(async (options?: { force?: boolean }) => {
     try {
@@ -51,10 +72,15 @@ export default function WorkQueuePage() {
       setError(null)
       const next = await WorkItemsApi.listCompleted({ force })
       setCompletedData(next)
-      setCompletedSelectedId((prev) => {
-        if (prev && next.items.some((i) => i.id === prev)) return prev
-        return next.items[0]?.id ?? null
-      })
+      const current = usePageStateStore.getState().pages['/work']?.custom
+      const prev = typeof current?.completedSelectedId === 'string' ? current.completedSelectedId : null
+      if (prev && next.items.some((i) => i.id === prev)) {
+        updateCompletedSelectedId(prev)
+      } else if (next.items.length > 0) {
+        updateCompletedSelectedId(next.items[0].id)
+      } else {
+        updateCompletedSelectedId(null)
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load completed items'
       console.error('Failed to load completed items', e)
@@ -63,7 +89,7 @@ export default function WorkQueuePage() {
     } finally {
       setCompletedLoading(false)
     }
-  }, [])
+  }, [updateCompletedSelectedId])
 
   useEffect(() => {
     loadPending()
@@ -77,9 +103,9 @@ export default function WorkQueuePage() {
   }, [activeTab, loadCompleted])
 
   const handleTabChange = useCallback((tab: InboxTab) => {
-    setActiveTab(tab)
+    setActiveTab('/work', tab)
     setError(null)
-  }, [])
+  }, [setActiveTab])
 
   const handleAction = useCallback(async (actionId: ActionId, item: WorkItemDTO) => {
     setError(null)
@@ -123,7 +149,7 @@ export default function WorkQueuePage() {
           completedLoading={completedLoading}
           error={null}
           selectedId={activeTab === 'pending' ? selectedId : completedSelectedId}
-          onSelect={activeTab === 'pending' ? setSelectedId : setCompletedSelectedId}
+          onSelect={activeTab === 'pending' ? updateSelectedId : updateCompletedSelectedId}
           onAction={handleAction}
           onNewRequest={() => setCreateModalOpen(true)}
         />
