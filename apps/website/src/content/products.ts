@@ -39,7 +39,7 @@ export type Product = {
     src: string;
     alt: string;
   };
-  gallery: { src: string; alt: string }[];
+  gallery: { src: string; alt: string; variant: 'wide' | 'square' }[];
 
   /**
    * Primary purchase link.
@@ -117,12 +117,17 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-essential-6pk.webp', alt: 'CS 6 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
-      { src: '/images/amazon/general-projects.jpg', alt: 'Ideal for general projects: coverage and thickness' },
-      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
-      { src: '/images/amazon/sustainable-process.jpg', alt: 'Sustainable efficiency: recycled plastic into protective sheets' },
-      { src: '/images/amazon/sustainable-efficiency.jpg', alt: '55% recycled plastic and eco-kind packaging' }
+      {
+        src: '/images/amazon/uk/6pk-light-lifestyle.webp',
+        alt: 'Essential coverage — perfect for standard projects (6 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/general-projects.webp', alt: 'Ideal for general projects: coverage and thickness', variant: 'square' },
+      { src: '/images/amazon/fit-coverage.webp', alt: 'Find your perfect fit: pack-to-coverage comparison', variant: 'wide' },
+      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
+      { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' },
+      { src: '/images/amazon/sustainable-process.webp', alt: 'Sustainable efficiency: recycled plastic into protective sheets', variant: 'wide' },
+      { src: '/images/amazon/sustainable-efficiency.webp', alt: '55% recycled plastic and eco-kind packaging', variant: 'square' }
     ],
     amazonUrl: AMAZON_US_6PK
   },
@@ -149,9 +154,16 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
-      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' }
+      {
+        src: '/images/amazon/uk/3pk-standard-lifestyle.webp',
+        alt: 'Basic coverage — perfect for small projects (3 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/uk/3pk-standard-hero.webp', alt: '3 pack coverage and thickness', variant: 'square' },
+      { src: '/images/amazon/standard-durability.webp', alt: 'Standard durability: universal protection', variant: 'square' },
+      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
+      { src: '/images/amazon/fit-coverage.webp', alt: 'Find your perfect fit: pack-to-coverage comparison', variant: 'wide' },
+      { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' }
     ],
     amazonUrl: AMAZON_US_3PK
   },
@@ -178,9 +190,15 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
-      { src: '/images/amazon/strong-vs-light.jpg', alt: 'Strong vs light durability comparison' },
-      { src: '/images/amazon/aplus-4.jpg', alt: 'One sheet, multiple benefits' }
+      {
+        src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
+        alt: 'Core coverage — perfect for spot projects (1 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/uk/1pk-strong-hero.webp', alt: '1 pack coverage and thickness', variant: 'square' },
+      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
+      { src: '/images/amazon/strong-vs-light.webp', alt: 'Strong vs light durability comparison', variant: 'wide' },
+      { src: '/images/amazon/aplus-4.webp', alt: 'One sheet, multiple benefits', variant: 'wide' }
     ],
     amazonUrl: AMAZON_US_1PK
   },
@@ -207,10 +225,15 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-deluxe-12pk.webp', alt: 'CS 12 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
-      { src: '/images/amazon/multi-room-projects.jpg', alt: 'Ideal for multi-room projects: deluxe coverage' },
-      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
-      { src: '/images/amazon/light-durability.jpg', alt: 'Light durability: universal protection' }
+      {
+        src: '/images/amazon/uk/12pk-light-lifestyle.webp',
+        alt: 'Deluxe coverage — perfect for multi-room projects (12 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/multi-room-projects.webp', alt: 'Ideal for multi-room projects: deluxe coverage', variant: 'square' },
+      { src: '/images/amazon/light-durability.webp', alt: 'Light durability: universal protection', variant: 'square' },
+      { src: '/images/amazon/fit-coverage.webp', alt: 'Find your perfect fit: pack-to-coverage comparison', variant: 'wide' },
+      { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' }
     ],
     amazonUrl: AMAZON_US_12PK
   }
