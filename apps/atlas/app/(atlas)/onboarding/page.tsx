@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { EmployeesApi, TasksApi, type Employee } from '@/lib/api-client'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ClipboardDocumentCheckIcon } from '@/components/ui/Icons'
 import { Label } from '@/components/ui/label'
+import { ListPageHeader } from '@/components/ui/PageHeader'
 import { NativeSelect } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { ensureMe, useMeStore } from '@/lib/store/me'
@@ -176,7 +178,7 @@ function WorkflowCard({
       {createdCount !== null ? (
         <Alert variant="success" className="mt-4" onDismiss={() => setCreatedCount(null)}>
           Created {createdCount} tasks.{' '}
-          <Link href="/hub" className="underline font-medium">View in Inbox</Link>
+          <Link href="/hub" className="underline font-medium">View in My Hub</Link>
         </Alert>
       ) : null}
     </div>
@@ -247,8 +249,10 @@ export default function OnboardingPage() {
 
     const employee = employees.find(e => e.id === employeeId)
     const name = employee ? `${employee.firstName} ${employee.lastName}` : 'Employee'
-    const dueDate = targetDate.trim() || null
-    const assignedToId = ownerId.trim() || null
+    const trimmedTargetDate = targetDate.trim()
+    const trimmedOwnerId = ownerId.trim()
+    const dueDate = trimmedTargetDate ? trimmedTargetDate : null
+    const assignedToId = trimmedOwnerId ? trimmedOwnerId : null
 
     let count = 0
     for (const t of templates) {
@@ -267,24 +271,30 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <LoadingSkeleton />
-      </div>
+      <>
+        <ListPageHeader
+          title="Onboarding & Offboarding"
+          description="Generate task checklists for employee transitions"
+          icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
+          showBack
+        />
+        <div className="p-6">
+          <LoadingSkeleton />
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Onboarding & Offboarding</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Generate task checklists for employee transitions
-          </p>
-        </div>
-      </div>
+    <>
+      <ListPageHeader
+        title="Onboarding & Offboarding"
+        description="Generate task checklists for employee transitions"
+        icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
+        showBack
+      />
 
+      <div className="space-y-6">
       {error ? (
         <Alert variant="error" onDismiss={() => setError(null)}>
           {error}
@@ -314,6 +324,7 @@ export default function OnboardingPage() {
           onCreate={(empId, ownerId, date) => createTasks('offboarding', empId, ownerId, date)}
         />
       </div>
-    </div>
+      </div>
+    </>
   )
 }

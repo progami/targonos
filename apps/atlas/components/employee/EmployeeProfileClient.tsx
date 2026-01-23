@@ -386,7 +386,12 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
   if (loading && !employee) {
     return (
       <>
-        <ListPageHeader title={headerTitle} description="Loading…" icon={<UsersIcon className="h-6 w-6 text-white" />} />
+        <ListPageHeader
+          title={headerTitle}
+          description="Loading…"
+          icon={<UsersIcon className="h-6 w-6 text-white" />}
+          showBack
+        />
         <Card padding="lg">
           <p className="text-sm text-muted-foreground">Loading…</p>
         </Card>
@@ -397,7 +402,12 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
   if (!employee) {
     return (
       <>
-        <ListPageHeader title={headerTitle} description="Not found" icon={<UsersIcon className="h-6 w-6 text-white" />} />
+        <ListPageHeader
+          title={headerTitle}
+          description="Not found"
+          icon={<UsersIcon className="h-6 w-6 text-white" />}
+          showBack
+        />
         {error ? (
           <Alert variant="error" className="mb-6" onDismiss={() => setError(null)}>
             {error}
@@ -406,8 +416,8 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         <Card padding="lg">
           <p className="text-sm text-muted-foreground">Employee not found.</p>
           <div className="mt-4">
-            <Button href="/work" variant="secondary">
-              Back to Work Queue
+            <Button href="/hub" variant="secondary">
+              Back to My Hub
             </Button>
           </div>
         </Card>
@@ -427,6 +437,7 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         title={headerTitle}
         description={headerDescription}
         icon={<UsersIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <div className="flex flex-wrap gap-2">
             {isHROrAbove && !isSelf ? (

@@ -229,6 +229,7 @@ export default function PerformanceReviewsPage() {
         title="Reviews"
         description="Track employee performance evaluations"
         icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button href="/performance/reviews/add" icon={<PlusIcon className="h-4 w-4" />}>
             New Review

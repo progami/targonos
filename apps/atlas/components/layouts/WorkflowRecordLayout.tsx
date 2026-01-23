@@ -68,7 +68,7 @@ function actionVariantToButtonVariant(
 }
 
 export function WorkflowRecordLayout({
-  backHref = '/work',
+  backHref = '/hub',
   data,
   onAction,
   headerActions,
