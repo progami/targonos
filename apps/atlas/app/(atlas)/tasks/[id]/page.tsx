@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { EmployeesApi, MeApi, TasksApi, type Employee, type Me, type Task } from '@/lib/api-client';
+import { EmployeesApi, TasksApi, type Employee, type Task } from '@/lib/api-client';
 import { CheckCircleIcon, TrashIcon } from '@/components/ui/Icons';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { FormField, FormSection, SelectField, TextareaField } from '@/components/ui/FormField';
 import { StatusBadge } from '@/components/ui/badge';
+import { ensureMe, useMeStore } from '@/lib/store/me';
 
 const TaskFormSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -54,7 +55,7 @@ export default function TaskDetailPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [task, setTask] = useState<Task | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
+  const me = useMeStore((s) => s.me);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -141,9 +142,8 @@ export default function TaskDetailPage() {
       }
       try {
         setLoading(true);
-        const [taskData, meData] = await Promise.all([TasksApi.get(id), MeApi.get()]);
+        const [taskData, meData] = await Promise.all([TasksApi.get(id), ensureMe()]);
         setTask(taskData);
-        setMe(meData);
 
         // Reset form with loaded data
         reset({

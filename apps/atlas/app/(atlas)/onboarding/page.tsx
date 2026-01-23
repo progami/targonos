@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { EmployeesApi, MeApi, TasksApi, type Employee, type Me } from '@/lib/api-client'
+import { EmployeesApi, TasksApi, type Employee } from '@/lib/api-client'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 type EmployeeOption = { value: string; label: string }
 
@@ -183,7 +184,7 @@ function WorkflowCard({
 }
 
 export default function OnboardingPage() {
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -213,9 +214,8 @@ export default function OnboardingPage() {
     async function load() {
       try {
         setLoading(true)
-        const meData = await MeApi.get()
+        const meData = await ensureMe()
         if (cancelled) return
-        setMe(meData)
 
         if (!meData.isHR && !meData.isSuperAdmin) {
           setEmployees([])

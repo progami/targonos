@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColumnDef } from '@tanstack/react-table'
-import { MeApi, PoliciesAdminApi, PoliciesApi, type Policy } from '@/lib/api-client'
+import { PoliciesAdminApi, PoliciesApi, type Policy } from '@/lib/api-client'
 import { DocumentIcon, PlusIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ import { StatusBadge } from '@/components/ui/badge'
 import { DataTable, type FilterOption } from '@/components/ui/DataTable'
 import { ResultsCount } from '@/components/ui/table'
 import { TableEmptyContent } from '@/components/ui/EmptyState'
+import { useMeStore } from '@/lib/store/me'
+import { usePageState } from '@/lib/store/page-state'
 import {
   POLICY_CATEGORY_LABELS,
   POLICY_REGION_LABELS,
@@ -32,10 +34,14 @@ const STATUS_FILTER_OPTIONS: FilterOption[] = POLICY_STATUS_OPTIONS.map((o) => (
 export default function PoliciesPage() {
   const router = useRouter()
   const [items, setItems] = useState<Policy[]>([])
-  const [filters, setFilters] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [canManagePolicies, setCanManagePolicies] = useState(false)
   const didConsolidateConduct = useRef(false)
+
+  const me = useMeStore((s) => s.me)
+  const canManagePolicies = Boolean(me?.isSuperAdmin || me?.isHR)
+
+  const { filters, setFilters } = usePageState('/policies')
+  const activeFilters = filters ? filters : {}
 
   const load = useCallback(async () => {
     try {
@@ -50,28 +56,20 @@ export default function PoliciesPage() {
     }
   }, [])
 
-  // Single effect that handles permissions check, consolidation, and data loading
   useEffect(() => {
-    async function init() {
-      try {
-        const me = await MeApi.get()
-        const canManage = Boolean(me.isSuperAdmin || me.isHR)
-        setCanManagePolicies(canManage)
-
-        // Consolidate conduct policies if admin (only once)
-        if (canManage && !didConsolidateConduct.current) {
-          didConsolidateConduct.current = true
-          await PoliciesAdminApi.consolidateConductCompanyWide().catch(() => null)
-        }
-      } catch {
-        setCanManagePolicies(false)
-      }
-
-      // Load policies once after permission check
-      await load()
-    }
-    init()
+    load()
   }, [load])
+
+  useEffect(() => {
+    if (!canManagePolicies) return
+    if (didConsolidateConduct.current) return
+
+    didConsolidateConduct.current = true
+    async function consolidate() {
+      await PoliciesAdminApi.consolidateConductCompanyWide().catch(() => null)
+    }
+    consolidate()
+  }, [canManagePolicies])
 
   // Get unique categories from items
   const categoryOptions = useMemo<FilterOption[]>(() => {
@@ -85,12 +83,12 @@ export default function PoliciesPage() {
   // Apply client-side filters
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (filters.region && item.region !== filters.region) return false
-      if (filters.status && item.status !== filters.status) return false
-      if (filters.category && item.category !== filters.category) return false
+      if (activeFilters.region && item.region !== activeFilters.region) return false
+      if (activeFilters.status && item.status !== activeFilters.status) return false
+      if (activeFilters.category && item.category !== activeFilters.category) return false
       return true
     })
-  }, [items, filters])
+  }, [activeFilters, items])
 
   const columns = useMemo<ColumnDef<Policy>[]>(
     () => [
@@ -206,7 +204,7 @@ export default function PoliciesPage() {
           loading={loading}
           skeletonRows={5}
           onRowClick={handleRowClick}
-          filters={filters}
+          filters={activeFilters}
           onFilterChange={setFilters}
           addRow={canManagePolicies ? { label: 'Add Policy', onClick: () => router.push('/policies/add') } : undefined}
           emptyState={
