@@ -371,7 +371,7 @@ export default function PerformanceReviewPage() {
   }
 
   return (
-    <WorkflowRecordLayout data={layoutDto ?? dto} onAction={onAction} backHref="/performance/reviews">
+    <WorkflowRecordLayout data={layoutDto ?? dto} onAction={onAction}>
         {/* Content - Edit mode or View mode */}
         {canEditMeta ? (
           /* Edit Mode */

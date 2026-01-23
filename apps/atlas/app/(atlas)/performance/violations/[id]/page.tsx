@@ -493,7 +493,6 @@ export default function ViolationWorkflowPage() {
       <WorkflowRecordLayout
         data={layoutDto ?? dto}
         onAction={onAction}
-        backHref="/performance/violations"
         headerActions={
           canEdit && !isEditing ? (
             <Button

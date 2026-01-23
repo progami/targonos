@@ -295,60 +295,62 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
   }, [fetchUserPermissions]);
 
   return (
-    <NavigationHistoryProvider>
-      <Suspense fallback={null}>
-        <RouteLoadingIndicator />
-      </Suspense>
+    <Suspense fallback={null}>
+      <NavigationHistoryProvider>
+        <Suspense fallback={null}>
+          <RouteLoadingIndicator />
+        </Suspense>
 
-      {/* Desktop Targon wordmark - TOP RIGHT */}
-      <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
-        <TargonWordmark className="shrink-0" />
-      </div>
+        {/* Desktop Targon wordmark - TOP RIGHT */}
+        <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
+          <TargonWordmark className="shrink-0" />
+        </div>
 
-      {/* Desktop Sidebar */}
-      <div className="hidden md:fixed md:inset-y-0 md:z-50 md:flex md:w-64 md:flex-col">
-        <Sidebar isSuperAdmin={isSuperAdmin} isHR={isHR} />
-      </div>
+        {/* Desktop Sidebar */}
+        <div className="hidden md:fixed md:inset-y-0 md:z-50 md:flex md:w-64 md:flex-col">
+          <Sidebar isSuperAdmin={isSuperAdmin} isHR={isHR} />
+        </div>
 
-      {/* Mobile Nav */}
-      <MobileNav
-        isOpen={mobileMenuOpen}
-        onClose={closeMobileMenu}
-        isSuperAdmin={isSuperAdmin}
-        isHR={isHR}
-      />
+        {/* Mobile Nav */}
+        <MobileNav
+          isOpen={mobileMenuOpen}
+          onClose={closeMobileMenu}
+          isSuperAdmin={isSuperAdmin}
+          isHR={isHR}
+        />
 
-      {/* Main Content */}
-      <div className="md:pl-64 min-h-screen flex flex-col bg-background">
-        <Header onMenuClick={openMobileMenu} />
+        {/* Main Content */}
+        <div className="md:pl-64 min-h-screen flex flex-col bg-background">
+          <Header onMenuClick={openMobileMenu} />
 
-        <main className="flex-1">
-          <div
-            key={pathname}
-            className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300"
-          >
-            {children}
-          </div>
-        </main>
+          <main className="flex-1">
+            <div
+              key={pathname}
+              className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300"
+            >
+              {children}
+            </div>
+          </main>
 
-        <footer className="border-t border-border bg-card mt-auto">
-          <div className="px-4 sm:px-6 lg:px-8 py-4">
-            <p className="text-xs text-muted-foreground text-center">
-              Atlas{' '}
-              <a
-                href={versionHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground transition-colors"
-              >
-                v{version}
-              </a>
-            </p>
-          </div>
-        </footer>
-      </div>
+          <footer className="border-t border-border bg-card mt-auto">
+            <div className="px-4 sm:px-6 lg:px-8 py-4">
+              <p className="text-xs text-muted-foreground text-center">
+                Atlas{' '}
+                <a
+                  href={versionHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground transition-colors"
+                >
+                  v{version}
+                </a>
+              </p>
+            </div>
+          </footer>
+        </div>
 
-      <CommandPalette />
-    </NavigationHistoryProvider>
+        <CommandPalette />
+      </NavigationHistoryProvider>
+    </Suspense>
   );
 }
