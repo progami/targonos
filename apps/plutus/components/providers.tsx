@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { NavigationHistoryProvider } from '@/lib/navigation-history';
 
 type ProvidersProps = {
   children?:
@@ -46,7 +47,7 @@ export function Providers({ children }: ProvidersProps) {
     <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={100}>
-          {children}
+          <NavigationHistoryProvider>{children}</NavigationHistoryProvider>
           <ThemedToaster />
         </TooltipProvider>
       </QueryClientProvider>
