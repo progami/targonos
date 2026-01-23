@@ -96,6 +96,19 @@ export default function CaelumStarPage() {
                 </div>
               </Reveal>
 
+              <Reveal delay={40}>
+                <div className="mt-5">
+                  <Image
+                    src="/brand/cs/logo-on-light.webp"
+                    alt="CS Caelum Star"
+                    width={520}
+                    height={120}
+                    className="h-auto w-[280px] max-w-full opacity-90 md:w-[320px]"
+                    priority={false}
+                  />
+                </div>
+              </Reveal>
+
               <Reveal delay={80}>
                 <h1 className="mt-4 text-balance text-5xl font-semibold tracking-tight md:text-6xl">
                   Extra‑large dust sheets.
@@ -184,7 +197,7 @@ export default function CaelumStarPage() {
           <Reveal variant="media" delay={120}>
             <div className="mt-8">
               <WideImage
-                src="/images/amazon/pick-protection.jpg"
+                src="/images/amazon/pick-protection.webp"
                 alt="Pick your protection — Caelum Star dust sheet packs"
               />
             </div>
@@ -205,7 +218,7 @@ export default function CaelumStarPage() {
           <Reveal variant="media" delay={120}>
             <div className="mt-8">
               <WideImage
-                src="/images/amazon/fit-coverage.jpg"
+                src="/images/amazon/fit-coverage.webp"
                 alt="Find your perfect fit — coverage comparison"
               />
             </div>
@@ -219,13 +232,13 @@ export default function CaelumStarPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Reveal variant="media" delay={0}>
               <SquareImage
-                src="/images/amazon/general-projects.jpg"
+                src="/images/amazon/general-projects.webp"
                 alt="Ideal for general projects — 6 pack essentials"
               />
             </Reveal>
             <Reveal variant="media" delay={120}>
               <SquareImage
-                src="/images/amazon/multi-room-projects.jpg"
+                src="/images/amazon/multi-room-projects.webp"
                 alt="Ideal for multi-room projects — 12 pack deluxe"
               />
             </Reveal>
@@ -237,7 +250,7 @@ export default function CaelumStarPage() {
         <Container>
           <Reveal variant="media">
             <WideImage
-              src="/images/amazon/applications.jpg"
+              src="/images/amazon/applications.webp"
               alt="Applications — moving, painting, renovating"
             />
           </Reveal>
@@ -248,7 +261,7 @@ export default function CaelumStarPage() {
         <Container>
           <Reveal variant="media">
             <WideImage
-              src="/images/amazon/strong-vs-light.jpg"
+              src="/images/amazon/strong-vs-light.webp"
               alt="Strong vs light durability comparison"
             />
           </Reveal>
@@ -258,7 +271,7 @@ export default function CaelumStarPage() {
       <section className="py-10 md:py-14">
         <Container>
           <Reveal variant="media">
-            <WideImage src="/images/amazon/aplus-4.jpg" alt="One sheet, multiple benefits" />
+            <WideImage src="/images/amazon/aplus-4.webp" alt="One sheet, multiple benefits" />
           </Reveal>
         </Container>
       </section>
@@ -267,7 +280,7 @@ export default function CaelumStarPage() {
         <Container>
           <Reveal variant="media">
             <WideImage
-              src="/images/amazon/sustainable-process.jpg"
+              src="/images/amazon/sustainable-process.webp"
               alt="Sustainable efficiency process"
             />
           </Reveal>
@@ -278,7 +291,7 @@ export default function CaelumStarPage() {
         <Container>
           <Reveal variant="media">
             <WideImage
-              src="/images/amazon/sustainable-efficiency.jpg"
+              src="/images/amazon/sustainable-efficiency.webp"
               alt="Sustainable efficiency — 55% recycled plastic"
             />
           </Reveal>

@@ -194,7 +194,7 @@ export default function PolicyDetailPage() {
           title="Policy"
           description="Company Policies"
           icon={<DocumentIcon className="h-6 w-6 text-white" />}
-          backHref="/policies"
+          showBack
         />
         <div className="max-w-3xl mx-auto space-y-6">
           <Card padding="lg">
@@ -221,7 +221,7 @@ export default function PolicyDetailPage() {
           title="Policy"
           description="Company Policies"
           icon={<DocumentIcon className="h-6 w-6 text-white" />}
-          backHref="/policies"
+          showBack
         />
         <div className="max-w-3xl mx-auto space-y-6">
           <Card padding="lg">
@@ -239,7 +239,7 @@ export default function PolicyDetailPage() {
         title="Policy"
         description="Company Policies"
         icon={<DocumentIcon className="h-6 w-6 text-white" />}
-        backHref="/policies"
+        showBack
       />
 
       <div className="max-w-3xl mx-auto space-y-6">

@@ -11,6 +11,7 @@ import { Badge } from '@/components/Badge';
 import { Reveal } from '@/components/Reveal';
 import { getProductBySlug, getProductSlugs, products } from '@/content/products';
 import { site } from '@/content/site';
+import { cn } from '@/lib/utils';
 
 type PageProps = {
   params: { slug: string };
@@ -51,7 +52,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   const p = getProductBySlug(params.slug);
   if (!p) return notFound();
 
-  const primary = products.find((x) => x.primary);
+  const primary = products.find((x) => x.primary)!;
 
   return (
     <div>
@@ -107,7 +108,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {p.amazonAltLabel ?? 'Amazon'}
+                      {p.amazonAltLabel}
                     </a>
                     .
                   </div>
@@ -191,34 +192,58 @@ export default function ProductDetailPage({ params }: PageProps) {
         </Container>
       </section>
 
-      {/* Image-led sections */}
+      {/* Gallery */}
       <section className="mt-12">
-        <div className="mx-auto max-w-[1680px] px-4 sm:px-6">
-          <Reveal variant="media">
-            <Card className="overflow-hidden">
-              <div className="relative aspect-[16/9] bg-black">
-                <Image
-                  src={p.gallery?.[0]?.src ?? '/images/amazon/lifestyle-compare.jpg'}
-                  alt={p.gallery?.[0]?.alt ?? 'Dust sheets in use'}
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/25 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
-                    Made for decorating
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tightish text-white md:text-4xl">
-                    Paint with confidence.
-                  </div>
-                  <div className="mt-2 max-w-2xl text-sm text-white/80">
-                    Floors, furniture, and doorways covered in minutes.
-                  </div>
-                </div>
+        <Container>
+          <Reveal>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tightish text-ink md:text-3xl">
+                  Built for real projects.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm text-muted">
+                  Coverage, durability, and use cases — shown with the exact pack visuals customers see
+                  on marketplaces.
+                </p>
               </div>
-            </Card>
+              <Button asChild variant="outline">
+                <Link href="/products">Compare packs</Link>
+              </Button>
+            </div>
           </Reveal>
-        </div>
+
+          <div className="mt-8 grid gap-6 md:grid-cols-12">
+            {p.gallery.map((img, i) => (
+              <Reveal key={img.src} variant="media" delay={i * 80}>
+                <Card
+                  className={cn(
+                    'group overflow-hidden',
+                    img.variant === 'wide' ? 'md:col-span-12' : 'md:col-span-6'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'relative bg-white',
+                      img.variant === 'wide' ? 'aspect-[61/25]' : 'aspect-square'
+                    )}
+                  >
+                    <Image
+                      src={img.src}
+                      alt={img.alt}
+                      fill
+                      sizes={
+                        img.variant === 'wide'
+                          ? '(max-width: 768px) 100vw, 1440px'
+                          : '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 820px'
+                      }
+                      className="object-contain transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.01]"
+                    />
+                  </div>
+                </Card>
+              </Reveal>
+            ))}
+          </div>
+        </Container>
       </section>
 
       {/* Highlights + specs */}
@@ -288,7 +313,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="relative md:col-span-7">
                   <div className="relative aspect-[970/600] bg-black">
                     <Image
-                      src="/images/amazon/fit-coverage.jpg"
+                      src="/images/amazon/fit-coverage.webp"
                       alt="Find your perfect fit"
                       fill
                       className="object-cover"
@@ -299,27 +324,21 @@ export default function ProductDetailPage({ params }: PageProps) {
                   <div className="p-6">
                     <div className="text-sm font-semibold text-ink">Recommended</div>
                     <p className="mt-2 text-sm text-muted">
-                      {primary ? (
-                        <>
-                          Start with the <span className="font-semibold text-ink">{primary.name}</span>.
-                          It’s the pack most customers choose.
-                        </>
-                      ) : (
-                        'Start with the 6 Pack. It’s the pack most customers choose.'
-                      )}
+                      Start with the <span className="font-semibold text-ink">{primary.name}</span>. It’s
+                      the pack most customers choose.
                     </p>
                     <div className="mt-5 flex flex-wrap gap-3">
                       <Button asChild variant="outline" size="sm">
                         <Link href="/products">See all packs</Link>
                       </Button>
                       <Button asChild variant="accent" size="sm">
-                        <a href={primary?.amazonUrl ?? site.amazonStoreUrl} target="_blank" rel="noreferrer">
+                        <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
                           Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
                         </a>
                       </Button>
                     </div>
 
-                    {primary?.amazonAltUrl ? (
+                    {primary.amazonAltUrl ? (
                       <div className="mt-3 text-xs text-muted">
                         Prefer{' '}
                         <a
@@ -328,7 +347,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          {primary.amazonAltLabel ?? 'another region'}
+                          {primary.amazonAltLabel}
                         </a>
                         ?
                       </div>

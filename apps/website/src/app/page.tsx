@@ -29,8 +29,15 @@ export default function HomePage() {
           </h1>
 
           <Reveal>
-            <h2 className="text-7xl font-black tracking-tighter text-white drop-shadow-2xl md:text-8xl lg:text-9xl">
-              TARGON.
+            <h2 className="mx-auto w-[min(560px,90vw)]">
+              <Image
+                src="/brand/logo-inverted.svg"
+                alt={`${site.name} logo`}
+                width={2048}
+                height={537}
+                priority
+                className="h-auto w-full drop-shadow-2xl"
+              />
             </h2>
           </Reveal>
 

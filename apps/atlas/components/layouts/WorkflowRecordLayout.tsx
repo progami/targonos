@@ -68,7 +68,7 @@ function actionVariantToButtonVariant(
 }
 
 export function WorkflowRecordLayout({
-  backHref = '/hub',
+  backHref,
   data,
   onAction,
   headerActions,
@@ -78,7 +78,7 @@ export function WorkflowRecordLayout({
   const [actionLoading, setActionLoading] = useState(false);
 
   const safeData = (data ?? {}) as Partial<WorkflowRecordDTO>;
-  const identity = safeData.identity ?? { title: 'Record', recordId: '', href: backHref };
+  const identity = safeData.identity ?? { title: 'Record', recordId: '', href: '/hub' };
   const subject = safeData.subject ?? { displayName: '—' };
   const workflow = safeData.workflow ?? {
     currentStageId: 'unknown',
@@ -172,7 +172,7 @@ export function WorkflowRecordLayout({
           {access.noAccessReason ?? "You don't have access to this record."}
         </p>
         <div className="mt-4">
-          <BackButton href={backHref} />
+          {backHref ? <BackButton href={backHref} /> : <BackButton />}
         </div>
       </Card>
     );
@@ -184,7 +184,11 @@ export function WorkflowRecordLayout({
         <div className="py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex items-start gap-4">
-              <BackButton href={backHref} className="shrink-0" />
+              {backHref ? (
+                <BackButton href={backHref} className="shrink-0" />
+              ) : (
+                <BackButton className="shrink-0" />
+              )}
               <div className="min-w-0">
                 <h1 className="text-xl font-semibold text-foreground truncate">
                   {toDisplayText(identity.title, 'Record')}

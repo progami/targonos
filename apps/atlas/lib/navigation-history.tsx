@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useLayoutEffect, type ReactNode } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { create } from 'zustand'
 
 type NavigationHistoryContextType = {
   goBack: () => void
   canGoBack: boolean
-  previousPath: string | null
+  previousPath: string | null // Fallback when there's no browser history
 }
 
 /**
@@ -26,6 +26,12 @@ function getDefaultBackPath(pathname: string): string | null {
   // Home routes - no back
   if (path === '/' || path === '' || path === '/hub') {
     return null
+  }
+
+  // Leave routes
+  if (/^\/leaves\/[^/]+$/.test(path)) {
+    // /leaves/[id] -> /leave
+    return '/leave'
   }
 
   // Employee routes
@@ -126,28 +132,35 @@ function getDefaultBackPath(pathname: string): string | null {
 
 type NavigationHistoryStore = {
   pathname: string
+  search: string
+  historyIndex: number
   previousPath: string | null
-  canGoBack: boolean
-  setPathname: (pathname: string) => void
+  setLocation: (pathname: string, search: string, historyIndex: number) => void
 }
 
 const useNavigationHistoryStore = create<NavigationHistoryStore>((set) => ({
   pathname: '',
+  search: '',
+  historyIndex: 0,
   previousPath: null,
-  canGoBack: false,
-  setPathname: (pathname) => {
+  setLocation: (pathname, search, historyIndex) => {
     const previousPath = getDefaultBackPath(pathname)
-    set({ pathname, previousPath, canGoBack: previousPath !== null })
+    set({ pathname, search, historyIndex, previousPath })
   },
 }))
 
 export function NavigationHistoryProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const search = searchParams.toString()
 
-  const setPathname = useNavigationHistoryStore((s) => s.setPathname)
+  const setLocation = useNavigationHistoryStore((s) => s.setLocation)
   useLayoutEffect(() => {
-    setPathname(pathname)
-  }, [pathname, setPathname])
+    const state = window.history.state as { idx?: unknown } | null
+    const rawIdx = state ? state.idx : undefined
+    const historyIndex = typeof rawIdx === 'number' ? rawIdx : 0
+    setLocation(pathname, search, historyIndex)
+  }, [pathname, search, setLocation])
 
   return children
 }
@@ -156,15 +169,22 @@ export function useNavigationHistory() {
   const router = useRouter()
 
   const previousPath = useNavigationHistoryStore((s) => s.previousPath)
-  const canGoBack = useNavigationHistoryStore((s) => s.canGoBack)
+  const historyIndex = useNavigationHistoryStore((s) => s.historyIndex)
+  const canGoBack = historyIndex > 0 ? true : previousPath !== null
 
   const goBack = useCallback(() => {
-    if (previousPath) {
+    if (historyIndex > 0) {
+      router.back()
+      return
+    }
+
+    if (previousPath !== null) {
       router.push(previousPath)
       return
     }
-    window.history.back()
-  }, [previousPath, router])
+
+    router.back()
+  }, [historyIndex, previousPath, router])
 
   return { goBack, canGoBack, previousPath } satisfies NavigationHistoryContextType
 }
