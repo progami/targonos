@@ -172,6 +172,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/plutus"
     pm2_name="${PM2_PREFIX}-plutus"
     prisma_cmd=""
+    migrate_cmd="pnpm --filter $workspace db:push"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)
@@ -530,6 +531,9 @@ if [[ -n "$migrate_cmd" ]]; then
         if any_changed "apps/talos/prisma/schema.prisma" || any_changed_under "apps/talos/scripts/migrations/"; then
           run_migrations="true"
         fi
+        ;;
+      plutus)
+        run_migrations="true"
         ;;
       xplan)
         if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then
