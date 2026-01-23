@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -205,7 +205,14 @@ function SignedAmount({
   return <span className="font-medium">{formatMoney(signed, currency)}</span>;
 }
 
-export default function SettlementDetailPage({ params }: { params: { id: string } }) {
+export default function SettlementDetailPage() {
+  const routeParams = useParams();
+  const rawId = routeParams.id;
+  if (typeof rawId !== 'string') {
+    throw new Error('Settlement id param is required');
+  }
+  const settlementId = rawId;
+
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const initialTab = searchParams.get('tab');
@@ -229,8 +236,8 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlement', params.id],
-    queryFn: () => fetchSettlement(params.id),
+    queryKey: ['plutus-settlement', settlementId],
+    queryFn: () => fetchSettlement(settlementId),
     enabled: connection?.connected === true,
     staleTime: 30 * 1000,
   });
@@ -269,7 +276,7 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
         if (!only) throw new Error('No invoice found');
         setSelectedInvoice(only.invoice);
         setIsPreviewLoading(true);
-        const nextPreview = await fetchPreview(params.id, file, only.invoice);
+        const nextPreview = await fetchPreview(settlementId, file, only.invoice);
         setPreview(nextPreview);
         setIsPreviewLoading(false);
       }
@@ -290,7 +297,7 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
 
     setIsPreviewLoading(true);
     try {
-      const nextPreview = await fetchPreview(params.id, file, invoiceId);
+      const nextPreview = await fetchPreview(settlementId, file, invoiceId);
       setPreview(nextPreview);
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : String(e));
@@ -307,13 +314,13 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
     setIsPosting(true);
     setAnalysisError(null);
     try {
-      const result = await processSettlement(params.id, file, selectedInvoice);
+      const result = await processSettlement(settlementId, file, selectedInvoice);
       if (!result.ok) {
         setPreview(result.data);
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement', params.id] });
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement', settlementId] });
       await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
       setTab('history');
     } catch (e) {
@@ -345,7 +352,7 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
 
     setIsRollingBack(true);
     try {
-      const res = await fetch(`${basePath}/api/plutus/settlements/${params.id}`, {
+      const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'rollback' }),
@@ -356,7 +363,7 @@ export default function SettlementDetailPage({ params }: { params: { id: string 
         throw new Error(payload.error);
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement', params.id] });
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement', settlementId] });
       await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
       setTab('analysis');
     } catch (e) {
