@@ -94,8 +94,7 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    // Intentionally not hard-coded (Amazon pricing changes).
-    price: undefined,
+    price: '$8.99',
     tagline: 'Essential coverage for standard projects.',
     description: 'Extra‑large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
@@ -137,6 +136,7 @@ export const products: Product[] = [
     packLabel: '3 PK',
     thicknessLabel: 'Standard',
     coverageLabel: '324 sq ft',
+    price: '$15.99',
     tagline: 'Basic coverage for single‑room work.',
     description: 'Extra‑large dust sheets built for standard decorating use.',
     longDescription: [
@@ -173,6 +173,7 @@ export const products: Product[] = [
     packLabel: '1 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '108 sq ft',
+    price: '$6.99',
     tagline: 'Core coverage for spot projects.',
     description: 'One extra‑large sheet with strong durability for quick jobs.',
     longDescription: [
@@ -208,6 +209,7 @@ export const products: Product[] = [
     packLabel: '12 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1296 sq ft',
+    price: '$12.99',
     tagline: 'Deluxe coverage for multi‑room renovations.',
     description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
