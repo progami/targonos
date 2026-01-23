@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Sans, Instrument_Serif } from 'next/font/google';
+import { Outfit } from 'next/font/google';
 import './globals.css';
 import { clsx } from 'clsx';
 
@@ -11,17 +11,10 @@ if (appBasePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-const dmSans = DM_Sans({
+const outfit = Outfit({
   subsets: ['latin'],
   variable: '--font-sans',
   weight: ['400', '500', '600', '700'],
-});
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ['latin'],
-  variable: '--font-display',
-  weight: ['400'],
-  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -60,8 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={clsx(
           'min-h-screen flex flex-col bg-gradient-subtle font-sans antialiased',
-          dmSans.variable,
-          instrumentSerif.variable,
+          outfit.variable,
         )}
       >
         <Providers>
