@@ -105,6 +105,34 @@ model SettlementProcessing {
   @@index([marketplace])
 }
 
+/// SettlementRollback tracks manual rollbacks of processed settlements.
+/// We keep these rows even though the SettlementProcessing row is deleted so the UI can show
+/// "rolled back" status and keep a simple audit trail.
+model SettlementRollback {
+  id String @id @default(cuid())
+
+  marketplace                String
+  qboSettlementJournalEntryId String
+  lmbDocNumber               String
+  lmbPostedDate              DateTime
+
+  invoiceId      String
+  processingHash String
+  sourceFilename String
+  processedAt    DateTime
+
+  qboCogsJournalEntryId       String
+  qboPnlReclassJournalEntryId String
+
+  orderSalesCount   Int
+  orderReturnsCount Int
+
+  rolledBackAt DateTime @default(now())
+
+  @@index([qboSettlementJournalEntryId])
+  @@index([marketplace])
+}
+
 /// OrderSale stores per-order, per-SKU COGS results for refund matching across periods.
 model OrderSale {
   id String @id @default(cuid())

@@ -66,6 +66,13 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       include: { orderSales: true, orderReturns: true },
     });
 
+    const rollback = await db.settlementRollback.findFirst({
+      where: { qboSettlementJournalEntryId: settlementId },
+      orderBy: { rolledBackAt: 'desc' },
+    });
+
+    const plutusStatus = processing ? 'Processed' : rollback ? 'RolledBack' : 'Pending';
+
     return NextResponse.json({
       settlement: {
         id: je.Id,
@@ -77,7 +84,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         periodEnd: meta.periodEnd,
         settlementTotal,
         lmbStatus: 'Posted',
-        plutusStatus: processing ? 'Processed' : 'Pending',
+        plutusStatus,
         lines: je.Line.map((line) => {
           const accountId = line.JournalEntryLineDetail.AccountRef.value;
           const account = accountsById.get(accountId);
@@ -106,6 +113,21 @@ export async function GET(_req: NextRequest, context: RouteContext) {
             qboPnlReclassJournalEntryId: processing.qboPnlReclassJournalEntryId,
             orderSalesCount: processing.orderSales.length,
             orderReturnsCount: processing.orderReturns.length,
+          }
+        : null,
+      rollback: rollback
+        ? {
+            id: rollback.id,
+            marketplace: rollback.marketplace,
+            invoiceId: rollback.invoiceId,
+            processingHash: rollback.processingHash,
+            sourceFilename: rollback.sourceFilename,
+            processedAt: rollback.processedAt,
+            rolledBackAt: rollback.rolledBackAt,
+            qboCogsJournalEntryId: rollback.qboCogsJournalEntryId,
+            qboPnlReclassJournalEntryId: rollback.qboPnlReclassJournalEntryId,
+            orderSalesCount: rollback.orderSalesCount,
+            orderReturnsCount: rollback.orderReturnsCount,
           }
         : null,
     });
@@ -138,12 +160,41 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const existing = await db.settlementProcessing.findUnique({
       where: { qboSettlementJournalEntryId: settlementId },
-      select: { qboSettlementJournalEntryId: true },
+      select: {
+        marketplace: true,
+        qboSettlementJournalEntryId: true,
+        lmbDocNumber: true,
+        lmbPostedDate: true,
+        invoiceId: true,
+        processingHash: true,
+        sourceFilename: true,
+        uploadedAt: true,
+        qboCogsJournalEntryId: true,
+        qboPnlReclassJournalEntryId: true,
+        _count: { select: { orderSales: true, orderReturns: true } },
+      },
     });
 
     if (!existing) {
       return NextResponse.json({ error: 'Settlement not processed' }, { status: 404 });
     }
+
+    await db.settlementRollback.create({
+      data: {
+        marketplace: existing.marketplace,
+        qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
+        lmbDocNumber: existing.lmbDocNumber,
+        lmbPostedDate: existing.lmbPostedDate,
+        invoiceId: existing.invoiceId,
+        processingHash: existing.processingHash,
+        sourceFilename: existing.sourceFilename,
+        processedAt: existing.uploadedAt,
+        qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
+        qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
+        orderSalesCount: existing._count.orderSales,
+        orderReturnsCount: existing._count.orderReturns,
+      },
+    });
 
     await db.settlementProcessing.delete({
       where: { qboSettlementJournalEntryId: settlementId },
