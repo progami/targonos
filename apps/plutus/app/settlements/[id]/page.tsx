@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
+import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageHeader } from '@/components/page-header';
@@ -415,9 +415,7 @@ export default function SettlementDetailPage() {
     <main className="flex-1">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between gap-3">
-          <Button asChild variant="ghost" size="sm" className="-ml-2">
-            <Link href="/settlements">Back to Settlements</Link>
-          </Button>
+          <BackButton />
         </div>
 
         <PageHeader

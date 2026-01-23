@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { PageHeader } from '@/components/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useBillsStore } from '@/lib/store/bills';
 import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -137,10 +139,15 @@ function StatusPill({ status }: { status: ComplianceStatus }) {
 }
 
 export default function BillsPage() {
-  const [tab, setTab] = useState<'guide' | 'scanner'>('guide');
-  const [page, setPage] = useState(1);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const tab = useBillsStore((s) => s.tab);
+  const page = useBillsStore((s) => s.page);
+  const startDate = useBillsStore((s) => s.startDate);
+  const endDate = useBillsStore((s) => s.endDate);
+  const setTab = useBillsStore((s) => s.setTab);
+  const setPage = useBillsStore((s) => s.setPage);
+  const setStartDate = useBillsStore((s) => s.setStartDate);
+  const setEndDate = useBillsStore((s) => s.setEndDate);
+  const clearDates = useBillsStore((s) => s.clearDates);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -185,7 +192,11 @@ export default function BillsPage() {
   return (
     <main className="flex-1">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between gap-3">
+          <BackButton />
+        </div>
         <PageHeader
+          className="mt-4"
           title="Bills"
           kicker="Inventory"
           description="Audit QBO bills for PO memo + manufacturing line compliance so Plutus can build cost basis."
@@ -244,21 +255,33 @@ export default function BillsPage() {
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                       Start date
                     </label>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setPage(1);
+                      }}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                       End date
                     </label>
-                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setPage(1);
+                      }}
+                    />
                   </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setStartDate('');
-                        setEndDate('');
-                        setPage(1);
+                        clearDates();
                       }}
                     >
                       Clear
@@ -344,7 +367,7 @@ export default function BillsPage() {
                 <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-white/5">
                   <Button
                     variant="outline"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    onClick={() => setPage(page > 1 ? page - 1 : 1)}
                     disabled={page === 1 || billsQuery.isFetching}
                   >
                     Prev
@@ -354,7 +377,7 @@ export default function BillsPage() {
                   </span>
                   <Button
                     variant="outline"
-                    onClick={() => setPage((p) => p + 1)}
+                    onClick={() => setPage(page + 1)}
                     disabled={
                       billsQuery.isFetching ||
                       (billsQuery.data?.pagination.totalPages ? page >= billsQuery.data.pagination.totalPages : true)
