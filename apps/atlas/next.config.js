@@ -12,6 +12,7 @@ const nextConfig = {
   assetPrefix: basePath,
   env: {
     NEXT_PUBLIC_VERSION: resolvedVersion,
+    NEXT_PUBLIC_BASE_PATH: basePath,
   },
   outputFileTracingRoot: path.join(__dirname, '../..'),
   trailingSlash: false,

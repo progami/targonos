@@ -160,6 +160,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
   ISSUED: ['proforma_invoice'],
+  MANUFACTURING: ['box_artwork'],
   OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
   WAREHOUSE: ['movement_note', 'custom_declaration'],
 }
@@ -1503,8 +1504,6 @@ export async function transitionPurchaseOrderStage(
           skuId: true,
           batchCode: true,
           unitsPerCarton: true,
-          unitDimensionsCm: true,
-          unitWeightKg: true,
           cartonDimensionsCm: true,
           cartonWeightKg: true,
           packagingType: true,
@@ -1586,8 +1585,8 @@ export async function transitionPurchaseOrderStage(
             warehouseAddress: warehouse.address,
             skuCode: sku.skuCode,
             skuDescription: line.skuDescription ?? sku.description,
-            unitDimensionsCm: batch.unitDimensionsCm ?? sku.unitDimensionsCm,
-            unitWeightKg: batch.unitWeightKg ?? sku.unitWeightKg,
+            unitDimensionsCm: sku.unitDimensionsCm,
+            unitWeightKg: sku.unitWeightKg,
             cartonDimensionsCm: batch.cartonDimensionsCm ?? sku.cartonDimensionsCm,
             cartonWeightKg: batch.cartonWeightKg ?? sku.cartonWeightKg,
             packagingType: batch.packagingType ?? sku.packagingType,

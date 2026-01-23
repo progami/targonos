@@ -362,7 +362,7 @@ const STAGE_DOCUMENTS: Record<
   Array<{ id: string; label: string }>
 > = {
   ISSUED: [{ id: 'proforma_invoice', label: 'Signed PI / Proforma Invoice' }],
-  MANUFACTURING: [],
+  MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
   OCEAN: [
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
     { id: 'bill_of_lading', label: 'Bill of Lading' },
@@ -1271,13 +1271,13 @@ export default function PurchaseOrderDetailPage() {
         formData.append('stage', stage)
         formData.append('documentType', documentType)
 
-        const completeResponse = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
+        const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
           body: formData,
         })
 
-        if (!completeResponse.ok) {
-          const payload = await completeResponse.json().catch(() => null)
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
           const errorMessage = typeof payload?.error === 'string' ? payload.error : null
           const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
           if (errorMessage && detailsMessage) {
@@ -1285,7 +1285,7 @@ export default function PurchaseOrderDetailPage() {
           } else if (errorMessage) {
             toast.error(errorMessage)
           } else {
-            toast.error(`Failed to upload document (HTTP ${completeResponse.status})`)
+            toast.error(`Failed to upload document (HTTP ${response.status})`)
           }
           return
         }
@@ -1293,8 +1293,8 @@ export default function PurchaseOrderDetailPage() {
         await refreshDocuments()
         void refreshAuditLogs()
         toast.success('Document uploaded')
-      } catch {
-        toast.error('Failed to upload document')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to upload document')
       } finally {
         setUploadingDoc(prev => ({ ...prev, [key]: false }))
         input.value = ''

@@ -280,6 +280,7 @@ export default function OrganogramPage() {
         title="Organization Chart"
         description="View company structure by person or department"
         icon={<OrgChartIcon className="h-6 w-6 text-white" />}
+        showBack
       />
 
       <Suspense

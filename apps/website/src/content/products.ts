@@ -47,6 +47,12 @@ export type Product = {
   amazonUrl: string;
 
   /**
+   * Optional secondary purchase link (e.g. another Amazon region).
+   */
+  amazonAltUrl?: string;
+  amazonAltLabel?: string;
+
+  /**
    * Display price (copied from Amazon at time of update). Prices can change.
    */
   price?: string;
@@ -64,14 +70,16 @@ export type Product = {
   thicknessLabel: string;
 };
 
-// Direct Amazon links provided by the brand.
-// 6-pack is the primary (UK listing).
-const AMAZON_UK_6PK = 'https://www.amazon.co.uk/Caelum-Star-Plastic-Sheets-Decorating/dp/B09HXC3NL8?th=1';
+// Direct Amazon links provided by the brand (kept verbatim).
+// NOTE: Some Amazon regions hide prices unless signed in.
+// We show the latest price we *can* verify and otherwise say “See Amazon”.
 
-// Other pack links (placeholders where region/price may vary).
-const AMAZON_1PK = 'https://www.amazon.com/dp/B0FLKJ7WWM?th=1';
-const AMAZON_3PK = 'https://www.amazon.com/dp/B0CR1GSBQ9?th=1';
-const AMAZON_12PK = 'https://www.amazon.com/dp/B0FP66CWQ6?th=1';
+// User-provided Amazon links (clean URLs).
+// Verified ASIN mapping: 1PK=B0FLKJ7WWM, 3PK=B0CR1GSBQ9, 6PK=B09HXC3NL8, 12PK=B0FP66CWQ6
+const AMAZON_US_1PK = 'https://www.amazon.com/dp/B0FLKJ7WWM?th=1';
+const AMAZON_US_3PK = 'https://www.amazon.com/dp/B0CR1GSBQ9?th=1';
+const AMAZON_US_6PK = 'https://www.amazon.com/dp/B09HXC3NL8?th=1';
+const AMAZON_US_12PK = 'https://www.amazon.com/dp/B0FP66CWQ6?th=1';
 
 /**
  * Product set:
@@ -86,17 +94,16 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    // Price copied from the Amazon UK product summary at time of update.
-    // Prices can change.
-    price: '£5.82',
-    tagline: 'Essential coverage.',
-    description: 'Extra‑large plastic dust sheets for decorating and protection.',
+    // Intentionally not hard-coded (Amazon pricing changes).
+    price: undefined,
+    tagline: 'Essential coverage for standard projects.',
+    description: 'Extra‑large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
-      'Big coverage per sheet. Fast prep for floors, furniture, and doorways.',
-      'Light durability (intended for light use).',
-      'Made with recycled plastic and globally certified.'
+      'Paint with confidence. Cover floors, furniture, and doorways fast.',
+      'Light durability, intended for light use.',
+      '55% recycled plastic, globally certified.'
     ],
-    highlights: ['12ft × 9ft per sheet', '55% recycled plastic (GRS certified)', 'LDPE plastic sheeting'],
+    highlights: ['12ft × 9ft per sheet', 'Light durability', '55% recycled plastic (GRS)'],
     specs: [
       { label: 'Pack', value: '6 sheets' },
       { label: 'Total coverage', value: '648 sq ft (≈60 m²)' },
@@ -110,36 +117,43 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-essential-6pk.webp', alt: 'CS 6 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/aplus-4.jpg', alt: 'Dust sheet benefits: waterproof, coverage, recyclability, dust & debris' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets in use for decorating and furniture protection' },
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Coverage comparison across pack sizes' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/general-projects.jpg', alt: 'Ideal for general projects: coverage and thickness' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
+      { src: '/images/amazon/sustainable-process.jpg', alt: 'Sustainable efficiency: recycled plastic into protective sheets' },
+      { src: '/images/amazon/sustainable-efficiency.jpg', alt: '55% recycled plastic and eco-kind packaging' }
     ],
-    amazonUrl: AMAZON_UK_6PK
+    amazonUrl: AMAZON_US_6PK
   },
   {
     slug: '3pk-standard',
     name: '3 Pack',
     packLabel: '3 PK',
-    thicknessLabel: 'Strong',
+    thicknessLabel: 'Standard',
     coverageLabel: '324 sq ft',
-    tagline: 'Basic coverage.',
-    description: 'Extra‑large dust sheets with strong durability for everyday jobs.',
-    longDescription: ['A flexible middle ground: more sheets, strong durability, easy storage.'],
-    highlights: ['12ft × 9ft per sheet', 'Strong durability', '324 sq ft total coverage'],
+    tagline: 'Basic coverage for single‑room work.',
+    description: 'Extra‑large dust sheets built for standard decorating use.',
+    longDescription: [
+      'Basic coverage for single‑room renovations.',
+      'Standard durability, intended for standard use.',
+      '55% recycled plastic, globally certified.'
+    ],
+    highlights: ['12ft × 9ft per sheet', 'Standard durability', '55% recycled plastic (GRS)'],
     specs: [
       { label: 'Pack', value: '3 sheets' },
       { label: 'Total coverage', value: '324 sq ft (≈30 m²)' },
       { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft) each' },
-      { label: 'Durability', value: 'Strong' },
+      { label: 'Durability', value: 'Standard' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
     image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pack size comparison: strong vs light durability' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets used during decorating prep' },
-      { src: '/images/unsplash/painting-setup.webp', alt: 'Painting setup with ladder and tools' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' }
     ],
-    amazonUrl: AMAZON_3PK
+    amazonUrl: AMAZON_US_3PK
   },
   {
     slug: '1pk-strong',
@@ -147,10 +161,14 @@ export const products: Product[] = [
     packLabel: '1 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '108 sq ft',
-    tagline: 'Core coverage.',
-    description: 'One extra‑large sheet. Strong durability. Quick protection.',
-    longDescription: ['Perfect for quick jobs, spot coverage, and keeping a spare in the van.'],
-    highlights: ['12ft × 9ft sheet', 'Strong durability', '108 sq ft coverage'],
+    tagline: 'Core coverage for spot projects.',
+    description: 'One extra‑large sheet with strong durability for quick jobs.',
+    longDescription: [
+      'Core coverage, ideal for spot projects.',
+      'Strong durability for reliable protection.',
+      '55% recycled plastic, globally certified.'
+    ],
+    highlights: ['12ft × 9ft sheet', 'Strong durability', '55% recycled plastic (GRS)'],
     specs: [
       { label: 'Pack', value: '1 sheet' },
       { label: 'Coverage', value: '108 sq ft (≈10 m²)' },
@@ -160,11 +178,11 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/pick-protection.jpg', alt: 'Pack size comparison: strong vs light durability' },
-      { src: '/images/amazon/aplus-4.jpg', alt: 'Dust sheet benefits overview' },
-      { src: '/images/unsplash/plastic-texture.webp', alt: 'Close-up plastic sheet texture' }
+      { src: '/images/amazon/pick-protection.jpg', alt: 'Pick your protection: pack options at a glance' },
+      { src: '/images/amazon/strong-vs-light.jpg', alt: 'Strong vs light durability comparison' },
+      { src: '/images/amazon/aplus-4.jpg', alt: 'One sheet, multiple benefits' }
     ],
-    amazonUrl: AMAZON_1PK
+    amazonUrl: AMAZON_US_1PK
   },
   {
     slug: '12pk-light',
@@ -172,10 +190,14 @@ export const products: Product[] = [
     packLabel: '12 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1296 sq ft',
-    tagline: 'Deluxe coverage.',
-    description: 'More sheets for bigger rooms and multi‑room projects.',
-    longDescription: ['For renovations and repeat work: stock up and stay covered.'],
-    highlights: ['12ft × 9ft per sheet', 'Light durability', '1296 sq ft total coverage'],
+    tagline: 'Deluxe coverage for multi‑room renovations.',
+    description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
+    longDescription: [
+      'Deluxe coverage for multi‑room renovations.',
+      'Light durability, universal protection.',
+      '55% recycled plastic, globally certified.'
+    ],
+    highlights: ['12ft × 9ft per sheet', 'Light durability', '55% recycled plastic (GRS)'],
     specs: [
       { label: 'Pack', value: '12 sheets' },
       { label: 'Total coverage', value: '1296 sq ft (≈120 m²)' },
@@ -185,11 +207,12 @@ export const products: Product[] = [
     ],
     image: { src: '/images/products/dust-deluxe-12pk.webp', alt: 'CS 12 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
-      { src: '/images/amazon/fit-coverage.jpg', alt: 'Coverage comparison across pack sizes' },
-      { src: '/images/amazon/lifestyle-compare.jpg', alt: 'Dust sheets used for floor and furniture protection' },
-      { src: '/images/unsplash/renovation-room.webp', alt: 'Room prep for renovation' }
+      { src: '/images/amazon/fit-coverage.jpg', alt: 'Find your perfect fit: pack-to-coverage comparison' },
+      { src: '/images/amazon/multi-room-projects.jpg', alt: 'Ideal for multi-room projects: deluxe coverage' },
+      { src: '/images/amazon/applications.jpg', alt: 'Applications: moving, painting, renovating' },
+      { src: '/images/amazon/light-durability.jpg', alt: 'Light durability: universal protection' }
     ],
-    amazonUrl: AMAZON_12PK
+    amazonUrl: AMAZON_US_12PK
   }
 ];
 

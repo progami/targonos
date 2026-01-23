@@ -22,6 +22,24 @@ const NAV_ITEMS = [
 ] as const;
 
 const APP_VERSION = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+function TargonWordmark({ className }: { className?: string }) {
+  return (
+    <div className={className}>
+      <img
+        src={`${assetBasePath}/brand/logo.svg`}
+        alt="Targon"
+        className="h-6 w-auto dark:hidden"
+      />
+      <img
+        src={`${assetBasePath}/brand/logo-inverted.svg`}
+        alt="Targon"
+        className="hidden h-6 w-auto dark:block"
+      />
+    </div>
+  );
+}
 
 export function KairosShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -80,12 +98,12 @@ export function KairosShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          {/* Right side controls */}
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
+	          {/* Right side controls */}
+	          <div className="flex items-center gap-3">
+	            <ThemeToggle />
 
-            {/* Mobile Menu */}
-            <div className="md:hidden">
+	            {/* Mobile Menu */}
+	            <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -117,12 +135,13 @@ export function KairosShell({ children }: { children: React.ReactNode }) {
                   <div className="px-2 py-1.5">
                     <div className="text-xs text-muted-foreground">Kairos v{APP_VERSION}</div>
                   </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
-      </header>
+	                </DropdownMenuContent>
+	              </DropdownMenu>
+	            </div>
+	            <TargonWordmark className="shrink-0" />
+	          </div>
+	        </div>
+	      </header>
 
       {/* Main Content */}
       <main className="flex-1">

@@ -42,6 +42,7 @@ import {
 import { formatDateDisplay, parseDate, toIsoDate } from '@/lib/utils/dates';
 import { withAppBasePath } from '@/lib/base-path';
 import { isRemovedPaymentCategory, REMOVED_PAYMENT_CATEGORY } from '@/lib/payments';
+import { useOpsPlanningStore } from '@/stores';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { Input } from '@/components/ui/input';
 import {
@@ -57,12 +58,17 @@ import {
 
 const BATCH_NUMERIC_PRECISION = {
   quantity: 0,
-  sellingPrice: 2,
+  sellingPrice: 3,
   manufacturingCost: 3,
   freightCost: 3,
   tariffCost: 3,
   fbaFee: 3,
   storagePerMonth: 3,
+  cartonSide1Cm: 2,
+  cartonSide2Cm: 2,
+  cartonSide3Cm: 2,
+  cartonWeightKg: 3,
+  unitsPerCarton: 0,
 } as const;
 
 const BATCH_PERCENT_PRECISION = {
@@ -832,6 +838,27 @@ export function OpsPlanningWorkspace({
         batch.overrideStoragePerMonth,
         BATCH_NUMERIC_PRECISION.storagePerMonth,
       ),
+      // Carton dimensions for CBM
+      cartonSide1Cm: formatNumericInput(
+        batch.cartonSide1Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide1Cm,
+      ),
+      cartonSide2Cm: formatNumericInput(
+        batch.cartonSide2Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide2Cm,
+      ),
+      cartonSide3Cm: formatNumericInput(
+        batch.cartonSide3Cm,
+        BATCH_NUMERIC_PRECISION.cartonSide3Cm,
+      ),
+      cartonWeightKg: formatNumericInput(
+        batch.cartonWeightKg,
+        BATCH_NUMERIC_PRECISION.cartonWeightKg,
+      ),
+      unitsPerCarton: formatNumericInput(
+        batch.unitsPerCarton,
+        BATCH_NUMERIC_PRECISION.unitsPerCarton,
+      ),
     }),
     [productNameIndex],
   );
@@ -883,6 +910,8 @@ export function OpsPlanningWorkspace({
   const [orders, setOrders] = useState<PurchaseOrderInput[]>(initialOrders);
   const [paymentRows, setPaymentRows] = useState<PurchasePaymentRow[]>(initialPayments);
   const [batchRows, setBatchRows] = useState<OpsBatchRow[]>(initialBatchRows);
+
+  // Selection state - persisted per strategy
   const [activeOrderId, setActiveOrderId] = usePersistentState<string | null>(
     `xplan:ops:active-order:${strategyId}`,
     poTableRows[0]?.id ?? null,
@@ -891,9 +920,16 @@ export function OpsPlanningWorkspace({
     `xplan:ops:active-batch:${strategyId}`,
     null,
   );
-  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
+
+  // Zustand store for modal state
+  const isCreateOrderOpen = useOpsPlanningStore((s) => s.isCreateOrderOpen);
+  const openCreateOrder = useOpsPlanningStore((s) => s.openCreateOrder);
+  const closeCreateOrder = useOpsPlanningStore((s) => s.closeCreateOrder);
+  const isImportOrderOpen = useOpsPlanningStore((s) => s.isImportOrderOpen);
+  const openImportOrder = useOpsPlanningStore((s) => s.openImportOrder);
+  const closeImportOrder = useOpsPlanningStore((s) => s.closeImportOrder);
+
   const [newOrderCode, setNewOrderCode] = useState('');
-  const [isImportOrderOpen, setIsImportOrderOpen] = useState(false);
   const [talosReference, setTalosReference] = useState('');
   const [talosOrderCode, setTalosOrderCode] = useState('');
   const [talosOrdersQuery, setTalosOrdersQuery] = useState('');
@@ -1362,6 +1398,11 @@ export function OpsPlanningWorkspace({
           fbaFee: '',
           referralRate: '',
           storagePerMonth: '',
+          cartonSide1Cm: '',
+          cartonSide2Cm: '',
+          cartonSide3Cm: '',
+          cartonWeightKg: '',
+          unitsPerCarton: '',
         };
         setBatchRows((previous) => {
           const next = [...previous, nextRow];
@@ -1388,6 +1429,11 @@ export function OpsPlanningWorkspace({
                 overrideFbaFee: null,
                 overrideReferralRate: null,
                 overrideStoragePerMonth: null,
+                cartonSide1Cm: null,
+                cartonSide2Cm: null,
+                cartonSide3Cm: null,
+                cartonWeightKg: null,
+                unitsPerCarton: null,
               } satisfies BatchTableRowInput,
             ];
             return {
@@ -1817,7 +1863,7 @@ export function OpsPlanningWorkspace({
         if (createdId) {
           setActiveOrderId(createdId);
         }
-        setIsCreateOrderOpen(false);
+        closeCreateOrder();
         setNewOrderCode('');
         toast.success('Purchase order created');
         router.refresh();
@@ -1826,7 +1872,7 @@ export function OpsPlanningWorkspace({
         toast.error(error instanceof Error ? error.message : 'Unable to create purchase order');
       }
     });
-  }, [strategyId, newOrderCode, productOptions, router, setActiveOrderId, startTransition]);
+  }, [strategyId, newOrderCode, productOptions, router, setActiveOrderId, closeCreateOrder, startTransition]);
 
   const handleImportFromTalos = useCallback(() => {
     const reference = talosReference.trim();
@@ -1865,7 +1911,7 @@ export function OpsPlanningWorkspace({
           setActiveOrderId(createdId);
         }
 
-        setIsImportOrderOpen(false);
+        closeImportOrder();
         setTalosReference('');
         setTalosOrderCode('');
         setTalosOrdersQuery('');
@@ -1883,6 +1929,7 @@ export function OpsPlanningWorkspace({
     isTalosImporting,
     router,
     setActiveOrderId,
+    closeImportOrder,
     startTransition,
 	    strategyId,
 	    talosOrderCode,
@@ -1913,8 +1960,8 @@ export function OpsPlanningWorkspace({
             scrollKey={`ops-planning:po:${strategyId}`}
             onSelectOrder={(orderId) => setActiveOrderId(orderId)}
             onRowsChange={handleInputRowsChange}
-            onCreateOrder={() => setIsCreateOrderOpen(true)}
-            onImportFromTalos={() => setIsImportOrderOpen(true)}
+            onCreateOrder={openCreateOrder}
+            onImportFromTalos={openImportOrder}
             onDuplicateOrder={handleDuplicateOrder}
             onDeleteOrder={handleDeleteOrder}
             disableCreate={isPending || productOptions.length === 0}
@@ -1927,7 +1974,8 @@ export function OpsPlanningWorkspace({
 	            open={isImportOrderOpen}
 	            onOpenChange={(nextOpen) => {
 	              if (isTalosImporting) return;
-	              setIsImportOrderOpen(nextOpen);
+	              if (nextOpen) openImportOrder();
+	              else closeImportOrder();
 	              if (!nextOpen) {
 	                setTalosImportError(null);
 	                setTalosReference('');
@@ -2190,7 +2238,7 @@ export function OpsPlanningWorkspace({
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsCreateOrderOpen(false)}
+                    onClick={closeCreateOrder}
                     className="rounded-lg border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
                   >
                     Cancel

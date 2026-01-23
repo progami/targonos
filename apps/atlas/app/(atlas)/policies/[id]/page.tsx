@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { MeApi, PoliciesApi, type Policy } from '@/lib/api-client'
+import { PoliciesApi, type Policy } from '@/lib/api-client'
 import { Card, CardDivider } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -17,8 +16,10 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/select'
-import { ArrowLeftIcon, DocumentIcon, PencilIcon, XIcon } from '@/components/ui/Icons'
+import { DocumentIcon, PencilIcon, XIcon } from '@/components/ui/Icons'
 import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 import {
   POLICY_CATEGORY_OPTIONS,
   POLICY_REGION_OPTIONS,
@@ -67,7 +68,7 @@ export default function PolicyDetailPage() {
   const id = params.id as string
 
   const [policy, setPolicy] = useState<Policy | null>(null)
-  const [me, setMe] = useState<{ isHR: boolean; isSuperAdmin: boolean } | null>(null)
+  const me = useMeStore((s) => s.me)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -98,12 +99,11 @@ export default function PolicyDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [policyData, meData] = await Promise.all([
+      const [policyData] = await Promise.all([
         PoliciesApi.get(id),
-        MeApi.get().catch(() => null),
+        ensureMe().catch(() => null),
       ])
       setPolicy(policyData)
-      setMe(meData ? { isHR: Boolean(meData.isHR), isSuperAdmin: Boolean(meData.isSuperAdmin) } : null)
 
       // Initialize form
       const versions = getNextVersions(policyData.version)
@@ -189,58 +189,60 @@ export default function PolicyDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <Link
-          href="/policies"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to Policies
-        </Link>
-        <Card padding="lg">
-          <div className="animate-pulse space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-muted" />
-              <div className="space-y-2 flex-1">
-                <div className="h-5 bg-muted rounded w-1/3" />
-                <div className="h-4 bg-muted rounded w-1/4" />
+      <>
+        <PageHeader
+          title="Policy"
+          description="Company Policies"
+          icon={<DocumentIcon className="h-6 w-6 text-white" />}
+          backHref="/policies"
+        />
+        <div className="max-w-3xl mx-auto space-y-6">
+          <Card padding="lg">
+            <div className="animate-pulse space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-muted" />
+                <div className="space-y-2 flex-1">
+                  <div className="h-5 bg-muted rounded w-1/3" />
+                  <div className="h-4 bg-muted rounded w-1/4" />
+                </div>
               </div>
+              <div className="h-32 bg-muted rounded" />
             </div>
-            <div className="h-32 bg-muted rounded" />
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
+      </>
     )
   }
 
   if (!policy) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <Link
-          href="/policies"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to Policies
-        </Link>
-        <Card padding="lg">
-          <p className="text-sm font-medium text-foreground">Policy not found</p>
-          <p className="text-sm text-muted-foreground mt-1">{error}</p>
-        </Card>
-      </div>
+      <>
+        <PageHeader
+          title="Policy"
+          description="Company Policies"
+          icon={<DocumentIcon className="h-6 w-6 text-white" />}
+          backHref="/policies"
+        />
+        <div className="max-w-3xl mx-auto space-y-6">
+          <Card padding="lg">
+            <p className="text-sm font-medium text-foreground">Policy not found</p>
+            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+          </Card>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Back link */}
-      <Link
-        href="/policies"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeftIcon className="h-4 w-4" />
-        Back to Policies
-      </Link>
+    <>
+      <PageHeader
+        title="Policy"
+        description="Company Policies"
+        icon={<DocumentIcon className="h-6 w-6 text-white" />}
+        backHref="/policies"
+      />
+
+      <div className="max-w-3xl mx-auto space-y-6">
 
       {/* Alerts */}
       {error && (
@@ -511,6 +513,7 @@ export default function PolicyDetailPage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

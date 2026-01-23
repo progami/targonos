@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { MeApi, TasksApi, EmployeesApi, type Employee, type Me } from '@/lib/api-client'
+import { TasksApi, EmployeesApi, type Employee } from '@/lib/api-client'
 import { CheckCircleIcon } from '@/components/ui/Icons'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/card'
@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useNavigationHistory } from '@/lib/navigation-history'
+import { ensureMe, useMeStore } from '@/lib/store/me'
 
 const CreateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
@@ -38,7 +39,7 @@ export default function AddTaskPage() {
   const router = useRouter()
   const { goBack } = useNavigationHistory()
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(true)
 
@@ -57,8 +58,7 @@ export default function AddTaskPage() {
   useEffect(() => {
     async function loadEmployees() {
       try {
-        const [meData, data] = await Promise.all([MeApi.get(), EmployeesApi.listManageable()])
-        setMe(meData)
+        const [meData, data] = await Promise.all([ensureMe(), EmployeesApi.listManageable()])
         setEmployees(data.items || [])
         setValue('assignedToId', meData.id)
       } catch (e) {

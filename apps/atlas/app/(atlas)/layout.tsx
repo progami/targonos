@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, Suspense, useCallback, useEffect, useState } from 'react';
+import { ReactNode, Suspense, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   HomeIcon,
@@ -19,13 +19,13 @@ import {
   FolderIcon,
   BriefcaseIcon,
 } from '@/components/ui/Icons';
-import { NotificationBell } from '@/components/ui/NotificationBell';
 import { Button } from '@/components/ui/button';
 import { NavigationHistoryProvider } from '@/lib/navigation-history';
-import { MeApi } from '@/lib/api-client';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { RouteLoadingIndicator } from '@/components/ui/RouteLoadingIndicator';
 import { cn } from '@/lib/utils';
+import { useMeStore } from '@/lib/store/me';
+import { useUIStore } from '@/lib/store/ui';
 
 interface NavItem {
   name: string;
@@ -40,6 +40,25 @@ interface NavSection {
   items: NavItem[];
   requireSuperAdmin?: boolean;
   requireHR?: boolean;
+}
+
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+function TargonWordmark({ className }: { className?: string }) {
+  return (
+    <div className={className}>
+      <img
+        src={`${assetBasePath}/brand/logo.svg`}
+        alt="Targon"
+        className="h-6 w-auto dark:hidden"
+      />
+      <img
+        src={`${assetBasePath}/brand/logo-inverted.svg`}
+        alt="Targon"
+        className="hidden h-6 w-auto dark:block"
+      />
+    </div>
+  );
 }
 
 const navigation: NavSection[] = [
@@ -112,22 +131,18 @@ function Sidebar({
   return (
     <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border bg-card px-6 pb-4">
       <div className="flex h-16 shrink-0 items-center justify-between">
+        {/* App branding - LEFT */}
         <Link href="/" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-md">
             <span className="text-sm font-bold text-primary-foreground">AT</span>
           </div>
           <span className="text-lg font-semibold text-foreground">Atlas</span>
         </Link>
-        <div className="flex items-center gap-2">
-          <div className="hidden md:block">
-            <NotificationBell />
-          </div>
-          {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
-              <XIcon className="h-5 w-5 text-muted-foreground" />
-            </Button>
-          )}
-        </div>
+        {onClose && (
+          <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
+            <XIcon className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        )}
       </div>
 
       <nav className="flex flex-1 flex-col">
@@ -216,7 +231,7 @@ function Header({ onMenuClick }: { onMenuClick: () => void }) {
         }
       }
     }
-    return 'Work Queue';
+    return 'My Hub';
   };
 
   return (
@@ -225,15 +240,22 @@ function Header({ onMenuClick }: { onMenuClick: () => void }) {
         <MenuIcon className="h-6 w-6" />
       </Button>
       <div className="flex-1 text-base font-semibold text-foreground">{getCurrentPageName()}</div>
-      <NotificationBell />
+      {/* Targon branding - RIGHT */}
+      <TargonWordmark className="shrink-0" />
     </div>
   );
 }
 
 export default function ATLASLayout({ children }: { children: ReactNode }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [isHR, setIsHR] = useState(false);
+  const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
+  const openMobileMenu = useUIStore((s) => s.openMobileMenu);
+  const closeMobileMenu = useUIStore((s) => s.closeMobileMenu);
+
+  const me = useMeStore((s) => s.me);
+  const refreshMe = useMeStore((s) => s.refresh);
+  const isSuperAdmin = Boolean(me?.isSuperAdmin);
+  const isHR = Boolean(me?.isHR);
+
   const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
   const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL || undefined;
   const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
@@ -245,18 +267,16 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
 
   const pathname = usePathname();
   useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
+    closeMobileMenu();
+  }, [closeMobileMenu, pathname]);
 
   const fetchUserPermissions = useCallback(async () => {
     try {
-      const me = await MeApi.get();
-      setIsSuperAdmin(Boolean(me.isSuperAdmin));
-      setIsHR(Boolean(me.isHR));
+      await refreshMe();
     } catch {
       // Ignore errors, default to non-admin
     }
-  }, []);
+  }, [refreshMe]);
 
   // Fetch current user permissions for navigation; refresh when roles change.
   useEffect(() => {
@@ -280,6 +300,11 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
         <RouteLoadingIndicator />
       </Suspense>
 
+      {/* Desktop Targon wordmark - TOP RIGHT */}
+      <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
+        <TargonWordmark className="shrink-0" />
+      </div>
+
       {/* Desktop Sidebar */}
       <div className="hidden md:fixed md:inset-y-0 md:z-50 md:flex md:w-64 md:flex-col">
         <Sidebar isSuperAdmin={isSuperAdmin} isHR={isHR} />
@@ -288,14 +313,14 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
       {/* Mobile Nav */}
       <MobileNav
         isOpen={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
+        onClose={closeMobileMenu}
         isSuperAdmin={isSuperAdmin}
         isHR={isHR}
       />
 
       {/* Main Content */}
       <div className="md:pl-64 min-h-screen flex flex-col bg-background">
-        <Header onMenuClick={() => setMobileMenuOpen(true)} />
+        <Header onMenuClick={openMobileMenu} />
 
         <main className="flex-1">
           <div

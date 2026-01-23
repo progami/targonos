@@ -197,6 +197,7 @@ export default function AccessManagementPage() {
           title="Access Management"
           description="Manage system roles and permissions"
           icon={<LockClosedIcon className="h-6 w-6 text-white" />}
+          backHref="/hub"
         />
         <Card padding="lg">
           <div className="animate-pulse space-y-4">
@@ -214,6 +215,7 @@ export default function AccessManagementPage() {
         title="Access Management"
         description="Manage system roles and permissions"
         icon={<LockClosedIcon className="h-6 w-6 text-white" />}
+        backHref="/hub"
       />
 
       {error && (

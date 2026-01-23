@@ -24,6 +24,7 @@ const CATEGORY_ORDER = [
 const OTHER_CATEGORY = 'Other'
 
 const envAllowDevFlag = (process.env.NEXT_PUBLIC_ALLOW_DEV_APPS ?? process.env.ALLOW_DEV_APPS ?? '').trim().toLowerCase() === 'true'
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
 type PortalClientProps = {
   session: Session
@@ -112,6 +113,12 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
             >
               Sign out
             </button>
+            {/* Targon branding - RIGHT */}
+            <img
+              src={`${assetBasePath}/brand/logo-inverted.svg`}
+              alt="Targon"
+              style={{ height: 24, width: 'auto', flexShrink: 0 }}
+            />
           </div>
         </header>
       </div>

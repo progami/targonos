@@ -7,15 +7,13 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { usePageState } from '@/lib/store/page-state'
 import { Boxes, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { cn } from '@/lib/utils'
 import { coerceFiniteNumber, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
-
-type BatchModalTab = 'reference' | 'amazon'
 
 interface SkuSummary {
   id: string
@@ -38,20 +36,11 @@ interface BatchRow {
   unitsPerCarton: number | null
   material: string | null
   packagingType: string | null
-  amazonItemPackageDimensionsCm: string | null
-  amazonItemPackageSide1Cm: number | string | null
-  amazonItemPackageSide2Cm: number | string | null
-  amazonItemPackageSide3Cm: number | string | null
   amazonSizeTier: string | null
   amazonFbaFulfillmentFee: number | string | null
   amazonReferenceWeightKg: number | string | null
   storageCartonsPerPallet: number | null
   shippingCartonsPerPallet: number | null
-  unitDimensionsCm: string | null
-  unitSide1Cm: number | string | null
-  unitSide2Cm: number | string | null
-  unitSide3Cm: number | string | null
-  unitWeightKg: number | string | null
   cartonDimensionsCm: string | null
   cartonSide1Cm: number | string | null
   cartonSide2Cm: number | string | null
@@ -70,10 +59,6 @@ interface BatchFormState {
   packagingType: PackagingTypeOption
   storageCartonsPerPallet: string
   shippingCartonsPerPallet: string
-  unitLength: string
-  unitWidth: string
-  unitHeight: string
-  unitWeight: string
   cartonLength: string
   cartonWidth: string
   cartonHeight: string
@@ -83,10 +68,6 @@ interface BatchFormState {
 type UnitSystem = 'metric' | 'imperial'
 
 type BatchMeasurementState = {
-  unitSide1Cm: number | null
-  unitSide2Cm: number | null
-  unitSide3Cm: number | null
-  unitWeightKg: number | null
   cartonSide1Cm: number | null
   cartonSide2Cm: number | null
   cartonSide3Cm: number | null
@@ -120,12 +101,6 @@ function formatNumber(value: number, decimals: number): string {
 }
 
 function buildMeasurementState(batch?: BatchRow | null): BatchMeasurementState {
-  const unitTriplet = resolveDimensionTripletCm({
-    side1Cm: batch?.unitSide1Cm,
-    side2Cm: batch?.unitSide2Cm,
-    side3Cm: batch?.unitSide3Cm,
-    legacy: batch?.unitDimensionsCm,
-  })
   const cartonTriplet = resolveDimensionTripletCm({
     side1Cm: batch?.cartonSide1Cm,
     side2Cm: batch?.cartonSide2Cm,
@@ -134,10 +109,6 @@ function buildMeasurementState(batch?: BatchRow | null): BatchMeasurementState {
   })
 
   return {
-    unitSide1Cm: unitTriplet?.side1Cm ?? null,
-    unitSide2Cm: unitTriplet?.side2Cm ?? null,
-    unitSide3Cm: unitTriplet?.side3Cm ?? null,
-    unitWeightKg: coerceFiniteNumber(batch?.unitWeightKg),
     cartonSide1Cm: cartonTriplet?.side1Cm ?? null,
     cartonSide2Cm: cartonTriplet?.side2Cm ?? null,
     cartonSide3Cm: cartonTriplet?.side3Cm ?? null,
@@ -160,22 +131,8 @@ function formatWeightFromKg(valueKg: number | null, unitSystem: UnitSystem): str
 function formatMeasurementFields(
   measurements: BatchMeasurementState,
   unitSystem: UnitSystem
-): Pick<
-  BatchFormState,
-  | 'unitLength'
-  | 'unitWidth'
-  | 'unitHeight'
-  | 'unitWeight'
-  | 'cartonLength'
-  | 'cartonWidth'
-  | 'cartonHeight'
-  | 'cartonWeight'
-> {
+): Pick<BatchFormState, 'cartonLength' | 'cartonWidth' | 'cartonHeight' | 'cartonWeight'> {
   return {
-    unitLength: formatDimensionFromCm(measurements.unitSide1Cm, unitSystem),
-    unitWidth: formatDimensionFromCm(measurements.unitSide2Cm, unitSystem),
-    unitHeight: formatDimensionFromCm(measurements.unitSide3Cm, unitSystem),
-    unitWeight: formatWeightFromKg(measurements.unitWeightKg, unitSystem),
     cartonLength: formatDimensionFromCm(measurements.cartonSide1Cm, unitSystem),
     cartonWidth: formatDimensionFromCm(measurements.cartonSide2Cm, unitSystem),
     cartonHeight: formatDimensionFromCm(measurements.cartonSide3Cm, unitSystem),
@@ -284,8 +241,6 @@ function SkuBatchesManager({
   )
 
   const [confirmDelete, setConfirmDelete] = useState<BatchRow | null>(null)
-  const batchModalTab = (pageState.activeTab as BatchModalTab) ?? 'reference'
-  const setBatchModalTab = (tab: BatchModalTab) => pageState.setActiveTab(tab)
 
   useEffect(() => {
     try {
@@ -330,12 +285,6 @@ function SkuBatchesManager({
     })
   }, [batchSearch, batches])
 
-  const amazonReadonlyBatch = useMemo(() => {
-    if (editingBatch) return editingBatch
-    if (batches.length > 0) return batches[0]
-    return null
-  }, [batches, editingBatch])
-
   const fetchBatches = useCallback(async () => {
     try {
       setLoading(true)
@@ -368,7 +317,6 @@ function SkuBatchesManager({
     setMeasurements(nextMeasurements)
     const nextFormState = buildBatchFormState(null, unitSystem, nextMeasurements)
     setFormState(nextFormState)
-    setBatchModalTab('reference')
     setIsFormOpen(true)
   }
 
@@ -377,7 +325,6 @@ function SkuBatchesManager({
     setEditingBatch(batch)
     setMeasurements(nextMeasurements)
     setFormState(buildBatchFormState(batch, unitSystem, nextMeasurements))
-    setBatchModalTab('reference')
     setIsFormOpen(true)
   }
 
@@ -390,27 +337,17 @@ function SkuBatchesManager({
     setFormState(buildBatchFormState(null, unitSystem, nextMeasurements))
   }
 
-  type DimensionFieldKey =
-    | 'unitLength'
-    | 'unitWidth'
-    | 'unitHeight'
-    | 'cartonLength'
-    | 'cartonWidth'
-    | 'cartonHeight'
+  type DimensionFieldKey = 'cartonLength' | 'cartonWidth' | 'cartonHeight'
 
-  type WeightFieldKey = 'unitWeight' | 'cartonWeight'
+  type WeightFieldKey = 'cartonWeight'
 
   const dimensionFieldToMeasurementKey: Record<DimensionFieldKey, keyof BatchMeasurementState> = {
-    unitLength: 'unitSide1Cm',
-    unitWidth: 'unitSide2Cm',
-    unitHeight: 'unitSide3Cm',
     cartonLength: 'cartonSide1Cm',
     cartonWidth: 'cartonSide2Cm',
     cartonHeight: 'cartonSide3Cm',
   }
 
   const weightFieldToMeasurementKey: Record<WeightFieldKey, keyof BatchMeasurementState> = {
-    unitWeight: 'unitWeightKg',
     cartonWeight: 'cartonWeightKg',
   }
 
@@ -473,11 +410,6 @@ function SkuBatchesManager({
       return
     }
 
-    if (!parsePositiveNumber(formState.unitWeight)) {
-      toast.error('Unit weight is required and must be a positive number')
-      return
-    }
-
     const cartonWeightProvided = Boolean(formState.cartonWeight.trim())
     if (cartonWeightProvided && !parsePositiveNumber(formState.cartonWeight)) {
       toast.error('Carton weight must be a positive number')
@@ -505,15 +437,6 @@ function SkuBatchesManager({
 
     if (
       !validateDimensions(
-        { length: formState.unitLength, width: formState.unitWidth, height: formState.unitHeight },
-        'Unit'
-      )
-    ) {
-      return
-    }
-
-    if (
-      !validateDimensions(
         {
           length: formState.cartonLength,
           width: formState.cartonWidth,
@@ -533,12 +456,6 @@ function SkuBatchesManager({
       const roundWeightKg = (value: number | null): number | null =>
         value === null ? null : Number(value.toFixed(3))
 
-      const unitWeightKg = roundWeightKg(measurements.unitWeightKg)
-      if (unitWeightKg === null || unitWeightKg <= 0) {
-        toast.error('Unit weight is required and must be a positive number')
-        return
-      }
-
       const payload = {
         batchCode: formState.batchCode.trim(),
         description: formState.description.trim() ? formState.description.trim() : null,
@@ -548,10 +465,6 @@ function SkuBatchesManager({
         packagingType: formState.packagingType ? formState.packagingType : null,
         storageCartonsPerPallet,
         shippingCartonsPerPallet,
-        unitSide1Cm: roundDimensionCm(measurements.unitSide1Cm),
-        unitSide2Cm: roundDimensionCm(measurements.unitSide2Cm),
-        unitSide3Cm: roundDimensionCm(measurements.unitSide3Cm),
-        unitWeightKg,
         cartonSide1Cm: roundDimensionCm(measurements.cartonSide1Cm),
         cartonSide2Cm: roundDimensionCm(measurements.cartonSide2Cm),
         cartonSide3Cm: roundDimensionCm(measurements.cartonSide3Cm),
@@ -620,12 +533,7 @@ function SkuBatchesManager({
     <>
       <div className="w-full overflow-hidden rounded-lg border bg-white dark:bg-slate-800 shadow-soft">
         <div className="flex items-start justify-between border-b px-6 py-4">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
-            <p className="text-xs text-muted-foreground">
-              {sku.skuCode} — {sku.description}
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Batches</h2>
           {onRequestClose ? (
             <Button variant="ghost" onClick={handleClose}>
               <X className="h-4 w-4" />
@@ -674,22 +582,19 @@ function SkuBatchesManager({
                   <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Batch</th>
-                      <th className="px-3 py-2 text-left font-semibold">Description</th>
                       <th className="px-3 py-2 text-right font-semibold">Pack</th>
-                      <th className="px-3 py-2 text-right font-semibold">Units/Carton</th>
-                      <th className="px-3 py-2 text-right font-semibold">Item Dims (cm)</th>
+                      <th className="px-3 py-2 text-right font-semibold">Units/Ctn</th>
+                      <th className="px-3 py-2 text-left font-semibold">Material</th>
+                      <th className="px-3 py-2 text-left font-semibold">Packaging</th>
+                      <th className="px-3 py-2 text-right font-semibold">Storage CPP</th>
+                      <th className="px-3 py-2 text-right font-semibold">Ship CPP</th>
                       <th className="px-3 py-2 text-right font-semibold">Carton Dims (cm)</th>
+                      <th className="px-3 py-2 text-right font-semibold">Carton Wt (kg)</th>
                       <th className="px-3 py-2 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredBatches.map(batch => {
-                      const unitTriplet = resolveDimensionTripletCm({
-                        side1Cm: batch.unitSide1Cm,
-                        side2Cm: batch.unitSide2Cm,
-                        side3Cm: batch.unitSide3Cm,
-                        legacy: batch.unitDimensionsCm,
-                      })
                       const cartonTriplet = resolveDimensionTripletCm({
                         side1Cm: batch.cartonSide1Cm,
                         side2Cm: batch.cartonSide2Cm,
@@ -697,7 +602,7 @@ function SkuBatchesManager({
                         legacy: batch.cartonDimensionsCm,
                       })
 
-                      const formatTriplet = (triplet: typeof unitTriplet) => {
+                      const formatTriplet = (triplet: typeof cartonTriplet) => {
                         if (!triplet) return '—'
                         return `${formatNumber(triplet.side1Cm, 2)}×${formatNumber(
                           triplet.side2Cm,
@@ -706,48 +611,55 @@ function SkuBatchesManager({
                       }
 
                       const batchCode = typeof batch.batchCode === 'string' ? batch.batchCode : '—'
-                      const batchDescription =
-                        typeof batch.description === 'string' ? batch.description : '—'
                       const canDelete = batches.length > 1
 
-                                      return (
-                                        <tr key={batch.id} className="odd:bg-muted/20">
-                                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                                            <button
-                                              type="button"
-                                              onClick={() => openEdit(batch)}
-                                              className="text-left hover:text-primary hover:underline transition-colors"
-                                            >
-                                              {batchCode}
-                                            </button>
-                                          </td>
-                                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                            {batchDescription}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                                            {batch.packSize ?? '—'}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                                            {batch.unitsPerCarton ?? '—'}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                                            {formatTriplet(unitTriplet)}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                                            {formatTriplet(cartonTriplet)}
-                                          </td>
-                                          <td className="px-3 py-2 text-right whitespace-nowrap">
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => setConfirmDelete(batch)}
-                                              disabled={!canDelete}
-                                            >
-                                              <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                          </td>
-                                        </tr>
-                                      )
+                      return (
+                        <tr key={batch.id} className="odd:bg-muted/20">
+                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(batch)}
+                              className="text-left hover:text-primary hover:underline transition-colors"
+                            >
+                              {batchCode}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.packSize ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.unitsPerCarton ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            {batch.material ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            {batch.packagingType ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.storageCartonsPerPallet ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.shippingCartonsPerPallet ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {formatTriplet(cartonTriplet)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                            {batch.cartonWeightKg != null ? formatNumber(Number(batch.cartonWeightKg), 2) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setConfirmDelete(batch)}
+                              disabled={!canDelete}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      )
                     })}
                   </tbody>
                 </table>
@@ -923,129 +835,6 @@ function SkuBatchesManager({
                       <option value="BOX">Box</option>
                       <option value="POLYBAG">Polybag</option>
                     </select>
-                  </div>
-
-                  <div className="md:col-span-2 pt-4 border-t">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Item package dimensions</h3>
-                    <div className="rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-4">
-                      <Tabs>
-                        <TabsList className="w-full grid grid-cols-2 mb-4">
-                          <TabsTrigger
-                            type="button"
-                            onClick={() => setBatchModalTab('reference')}
-                            data-state={batchModalTab === 'reference' ? 'active' : 'inactive'}
-                          >
-                            Reference
-                          </TabsTrigger>
-                          <TabsTrigger
-                            type="button"
-                            onClick={() => setBatchModalTab('amazon')}
-                            data-state={batchModalTab === 'amazon' ? 'active' : 'inactive'}
-                          >
-                            Amazon
-                          </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent className={batchModalTab === 'reference' ? '' : 'hidden'}>
-                          <div className="space-y-4">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Team reference values (editable).
-                            </p>
-                            <div className="space-y-1">
-                              <Label>Dimensions ({unitSystem === 'metric' ? 'cm' : 'in'})</Label>
-                              <div className="grid grid-cols-3 gap-2">
-                                <Input
-                                  value={formState.unitLength}
-                                  onChange={event => handleDimensionChange('unitLength', event.target.value)}
-                                  placeholder="S1"
-                                  inputMode="decimal"
-                                />
-                                <Input
-                                  value={formState.unitWidth}
-                                  onChange={event => handleDimensionChange('unitWidth', event.target.value)}
-                                  placeholder="S2"
-                                  inputMode="decimal"
-                                />
-                                <Input
-                                  value={formState.unitHeight}
-                                  onChange={event => handleDimensionChange('unitHeight', event.target.value)}
-                                  placeholder="S3"
-                                  inputMode="decimal"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="unitWeight">
-                                Weight ({unitSystem === 'metric' ? 'kg' : 'lb'})
-                              </Label>
-                              <Input
-                                id="unitWeight"
-                                type="number"
-                                step="0.001"
-                                min={0.001}
-                                required
-                                value={formState.unitWeight}
-                                onChange={event => handleWeightChange('unitWeight', event.target.value)}
-                                placeholder="Required"
-                              />
-                            </div>
-                          </div>
-                        </TabsContent>
-
-                        <TabsContent className={batchModalTab === 'amazon' ? '' : 'hidden'}>
-                          <div className="space-y-4">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Imported from Amazon (read-only).
-                            </p>
-                            <div className="space-y-1">
-                              <Label>Dimensions (cm)</Label>
-                              <div className="grid grid-cols-3 gap-2">
-                                {(() => {
-                                  const side1 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide1Cm)
-                                  const side2 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide2Cm)
-                                  const side3 = coerceFiniteNumber(amazonReadonlyBatch?.amazonItemPackageSide3Cm)
-
-                                  return (
-                                    <>
-                                      <Input
-                                        value={side1 === null ? '' : formatNumber(side1, 2)}
-                                        disabled
-                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                                        placeholder="S1"
-                                      />
-                                      <Input
-                                        value={side2 === null ? '' : formatNumber(side2, 2)}
-                                        disabled
-                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                                        placeholder="S2"
-                                      />
-                                      <Input
-                                        value={side3 === null ? '' : formatNumber(side3, 2)}
-                                        disabled
-                                        className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                                        placeholder="S3"
-                                      />
-                                    </>
-                                  )
-                                })()}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label>Weight (kg)</Label>
-                              <Input
-                                value={(() => {
-                                  const weight = coerceFiniteNumber(amazonReadonlyBatch?.amazonReferenceWeightKg)
-                                  return weight === null ? '' : formatNumber(weight, 3)
-                                })()}
-                                disabled
-                                className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                                placeholder="—"
-                              />
-                            </div>
-                          </div>
-                        </TabsContent>
-                      </Tabs>
-                    </div>
                   </div>
 
                   <div className="md:col-span-2 pt-4 border-t">

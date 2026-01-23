@@ -11,10 +11,10 @@ import {
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import {
-  getReferralFeePercent2026,
   normalizeReferralCategory2026,
   parseAmazonProductFees,
-  calculateSizeTier,
+  calculateSizeTierForTenant,
+  getReferralFeePercentForTenant,
 } from '@/lib/amazon/fees'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
@@ -647,7 +647,8 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       )
     }
 
-    const calculatedSizeTier = calculateSizeTier(
+    const calculatedSizeTier = calculateSizeTierForTenant(
+      tenantCode,
       unitTriplet?.side1Cm ?? null,
       unitTriplet?.side2Cm ?? null,
       unitTriplet?.side3Cm ?? null,
@@ -667,7 +668,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       amazonListingPrice = roundToTwoDecimals(fetchedListingPrice)
 
       if (amazonCategory !== null) {
-        amazonReferralFeePercent = getReferralFeePercent2026(amazonCategory, fetchedListingPrice)
+        amazonReferralFeePercent = getReferralFeePercentForTenant(tenantCode, amazonCategory, fetchedListingPrice)
       }
 
       const fees = await getProductFees(asin, fetchedListingPrice, tenantCode)
@@ -753,6 +754,28 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           skuUpdateData.itemWeightKg = itemWeightKg
         }
 
+        // Always store Amazon item dimensions + weight (unpackaged) for comparison.
+        if (itemTriplet) {
+          skuUpdateData.amazonItemDimensionsCm = itemDimensionsCm
+          skuUpdateData.amazonItemSide1Cm = itemTriplet.side1Cm
+          skuUpdateData.amazonItemSide2Cm = itemTriplet.side2Cm
+          skuUpdateData.amazonItemSide3Cm = itemTriplet.side3Cm
+        }
+        if (itemWeightKg !== null) {
+          skuUpdateData.amazonItemWeightKg = itemWeightKg
+        }
+
+        // Add Amazon item package dimensions to SKU update
+        if (unitTriplet) {
+          skuUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
+          skuUpdateData.amazonItemPackageSide1Cm = unitTriplet.side1Cm
+          skuUpdateData.amazonItemPackageSide2Cm = unitTriplet.side2Cm
+          skuUpdateData.amazonItemPackageSide3Cm = unitTriplet.side3Cm
+        }
+        if (unitWeightKg !== null) {
+          skuUpdateData.amazonReferenceWeightKg = unitWeightKg
+        }
+
         // Update existing SKU with fresh Amazon data (only Amazon-sourced fields)
         await prisma.sku.update({
           where: { skuCode },
@@ -763,13 +786,8 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           throw new Error(`SKU not found during import: ${skuCode}`)
         }
 
+        // Update batch with Amazon fee data
         const batchUpdateData: Prisma.SkuBatchUpdateInput = {}
-        if (unitTriplet) {
-          batchUpdateData.amazonItemPackageDimensionsCm = unitDimensionsCm
-          batchUpdateData.amazonItemPackageSide1Cm = unitTriplet.side1Cm
-          batchUpdateData.amazonItemPackageSide2Cm = unitTriplet.side2Cm
-          batchUpdateData.amazonItemPackageSide3Cm = unitTriplet.side3Cm
-        }
         if (unitWeightKg !== null) {
           batchUpdateData.amazonReferenceWeightKg = unitWeightKg
         }
@@ -786,14 +804,12 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
             orderBy: { createdAt: 'desc' },
             select: { id: true },
           })
-          if (!latestBatch) {
-            throw new Error(`No active batch found for SKU: ${skuCode}`)
+          if (latestBatch) {
+            await prisma.skuBatch.update({
+              where: { id: latestBatch.id },
+              data: batchUpdateData,
+            })
           }
-
-          await prisma.skuBatch.update({
-            where: { id: latestBatch.id },
-            data: batchUpdateData,
-          })
         }
 
         imported += 1
@@ -838,6 +854,11 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               itemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
               itemSide3Cm: itemTriplet ? itemTriplet.side3Cm : null,
               itemWeightKg,
+              amazonItemDimensionsCm: itemDimensionsCm,
+              amazonItemSide1Cm: itemTriplet ? itemTriplet.side1Cm : null,
+              amazonItemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
+              amazonItemSide3Cm: itemTriplet ? itemTriplet.side3Cm : null,
+              amazonItemWeightKg: itemWeightKg,
               unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
               cartonDimensionsCm: null,
               cartonSide1Cm: null,
@@ -859,23 +880,12 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               packSize: DEFAULT_PACK_SIZE,
               unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
               material: null,
-              // Note: Batch item package dimensions are for packaging, not product dimensions
-              // Amazon catalog gives product dimensions, not packaging - leave null
-              unitDimensionsCm: null,
-              unitSide1Cm: null,
-              unitSide2Cm: null,
-              unitSide3Cm: null,
-              unitWeightKg: null,
               cartonDimensionsCm: null,
               cartonSide1Cm: null,
               cartonSide2Cm: null,
               cartonSide3Cm: null,
               cartonWeightKg: null,
               packagingType: null,
-              amazonItemPackageDimensionsCm: unitDimensionsCm,
-              amazonItemPackageSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
-              amazonItemPackageSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
-              amazonItemPackageSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
               amazonSizeTier,
               amazonFbaFulfillmentFee,
               amazonReferenceWeightKg: unitWeightKg,

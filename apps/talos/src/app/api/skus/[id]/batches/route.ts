@@ -21,27 +21,16 @@ const packagingTypeSchema = z.preprocess(
   z.enum(['BOX', 'POLYBAG']).nullable().optional()
 )
 
-type DimensionRefineShape = {
-  unitSide1Cm: z.ZodTypeAny
-  unitSide2Cm: z.ZodTypeAny
-  unitSide3Cm: z.ZodTypeAny
+type CartonDimensionRefineShape = {
   cartonSide1Cm: z.ZodTypeAny
   cartonSide2Cm: z.ZodTypeAny
   cartonSide3Cm: z.ZodTypeAny
 }
 
-const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema: z.ZodObject<T>) =>
+const refineCartonDimensions = <T extends z.ZodRawShape & CartonDimensionRefineShape>(
+  schema: z.ZodObject<T>
+) =>
   schema.superRefine((value, ctx) => {
-    const unitValues = [value.unitSide1Cm, value.unitSide2Cm, value.unitSide3Cm]
-    const unitAny = unitValues.some(part => part !== undefined && part !== null)
-    const unitAll = unitValues.every(part => part !== undefined && part !== null)
-    if (unitAny && !unitAll) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Item package dimensions require all three sides',
-      })
-    }
-
     const cartonValues = [value.cartonSide1Cm, value.cartonSide2Cm, value.cartonSide3Cm]
     const cartonAny = cartonValues.some(part => part !== undefined && part !== null)
     const cartonAll = cartonValues.every(part => part !== undefined && part !== null)
@@ -53,7 +42,7 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
     }
   })
 
-const createBatchSchema = refineDimensions(
+const createBatchSchema = refineCartonDimensions(
   z.object({
     batchCode: z.string().trim().min(1).max(64),
     description: z.string().trim().max(200).optional().nullable(),
@@ -68,11 +57,6 @@ const createBatchSchema = refineDimensions(
     amazonReferenceWeightKg: z.number().positive().optional().nullable(),
     storageCartonsPerPallet: z.number().int().positive(),
     shippingCartonsPerPallet: z.number().int().positive(),
-    unitDimensionsCm: z.string().trim().max(120).optional().nullable(),
-    unitSide1Cm: optionalDimensionValueSchema,
-    unitSide2Cm: optionalDimensionValueSchema,
-    unitSide3Cm: optionalDimensionValueSchema,
-    unitWeightKg: z.number().positive(),
     cartonDimensionsCm: z.string().trim().max(120).optional().nullable(),
     cartonSide1Cm: optionalDimensionValueSchema,
     cartonSide2Cm: optionalDimensionValueSchema,
@@ -129,7 +113,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
   const sku = await prisma.sku.findUnique({
     where: { id: skuId },
-    select: { id: true },
+    select: { id: true, unitWeightKg: true },
   })
 
   if (!sku) {
@@ -156,12 +140,6 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     return ApiResponses.validationError({ expiryDate: 'Invalid expiry date' })
   }
 
-  const unitTriplet = resolveDimensionTripletCm({
-    side1Cm: payload.unitSide1Cm,
-    side2Cm: payload.unitSide2Cm,
-    side3Cm: payload.unitSide3Cm,
-    legacy: payload.unitDimensionsCm,
-  })
   const cartonTriplet = resolveDimensionTripletCm({
     side1Cm: payload.cartonSide1Cm,
     side2Cm: payload.cartonSide2Cm,
@@ -169,21 +147,18 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     legacy: payload.cartonDimensionsCm,
   })
 
-  const unitInputProvided =
-    payload.unitDimensionsCm || payload.unitSide1Cm || payload.unitSide2Cm || payload.unitSide3Cm
   const cartonInputProvided =
     payload.cartonDimensionsCm ||
     payload.cartonSide1Cm ||
     payload.cartonSide2Cm ||
     payload.cartonSide3Cm
 
-  if (unitInputProvided && !unitTriplet) {
-    return ApiResponses.badRequest('Item package dimensions must be a valid LxWxH triple')
-  }
-
   if (cartonInputProvided && !cartonTriplet) {
     return ApiResponses.badRequest('Carton dimensions must be a valid LxWxH triple')
   }
+
+  // Use SKU's unitWeightKg for amazonReferenceWeightKg if not provided
+  const skuWeightKg = sku.unitWeightKg ? Number(sku.unitWeightKg) : null
 
   try {
     const batch = await prisma.skuBatch.create({
@@ -196,11 +171,6 @@ export const POST = withAuthAndParams(async (request, params, session) => {
         packSize: payload.packSize,
         unitsPerCarton: payload.unitsPerCarton,
         material: payload.material ? sanitizeForDisplay(payload.material) : null,
-        unitDimensionsCm: unitTriplet ? formatDimensionTripletCm(unitTriplet) : null,
-        unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
-        unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
-        unitSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
-        unitWeightKg: payload.unitWeightKg,
         cartonDimensionsCm: cartonTriplet ? formatDimensionTripletCm(cartonTriplet) : null,
         cartonSide1Cm: cartonTriplet ? cartonTriplet.side1Cm : null,
         cartonSide2Cm: cartonTriplet ? cartonTriplet.side2Cm : null,
@@ -209,7 +179,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
         packagingType: payload.packagingType ?? null,
         amazonSizeTier: payload.amazonSizeTier ? sanitizeForDisplay(payload.amazonSizeTier) : null,
         amazonFbaFulfillmentFee: payload.amazonFbaFulfillmentFee ?? null,
-        amazonReferenceWeightKg: payload.amazonReferenceWeightKg ?? payload.unitWeightKg,
+        amazonReferenceWeightKg: payload.amazonReferenceWeightKg ?? skuWeightKg,
         storageCartonsPerPallet: payload.storageCartonsPerPallet,
         shippingCartonsPerPallet: payload.shippingCartonsPerPallet,
         isActive: true,

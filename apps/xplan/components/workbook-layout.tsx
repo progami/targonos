@@ -19,6 +19,25 @@ import { TimeZoneClocks } from '@/components/timezone-clocks';
 
 type SheetSlug = WorkbookSheetStatus['slug'];
 
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+function TargonWordmark({ className }: { className?: string }) {
+  return (
+    <div className={className}>
+      <img
+        src={`${assetBasePath}/brand/logo.svg`}
+        alt="Targon"
+        className="h-6 w-auto dark:hidden"
+      />
+      <img
+        src={`${assetBasePath}/brand/logo-inverted.svg`}
+        alt="Targon"
+        className="hidden h-6 w-auto dark:block"
+      />
+    </div>
+  );
+}
+
 interface WorkbookLayoutProps {
   sheets: WorkbookSheetStatus[];
   activeSlug: SheetSlug;
@@ -403,7 +422,16 @@ export function WorkbookLayout({
               className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
               role="banner"
             >
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+                {/* App branding - LEFT */}
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
+                    <span className="text-base font-bold text-white">x</span>
+                  </div>
+                  <h1 className="hidden sm:block text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
+                    xplan
+                  </h1>
+                </div>
                 <div className="min-w-0 overflow-hidden">
                   <SheetTabs
                     sheets={sheetTabs}
@@ -431,15 +459,8 @@ export function WorkbookLayout({
                   {/* Theme toggle */}
                   <ThemeToggle />
 
-                   {/* xplan branding */}
-                   <div className="flex items-center gap-2">
-                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
-                       <span className="text-base font-bold text-white">x</span>
-                     </div>
-                     <h1 className="text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
-                       xplan
-                     </h1>
-                   </div>
+                  {/* Targon branding - RIGHT */}
+                  <TargonWordmark className="shrink-0" />
 
                 </div>
               </div>

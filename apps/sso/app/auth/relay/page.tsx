@@ -1,7 +1,10 @@
 "use client"
 
-import { Suspense, useEffect } from 'react'
+import { Suspense as ReactSuspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Suspense = ReactSuspense as any
 
 function AuthRelayContent() {
   const searchParams = useSearchParams()

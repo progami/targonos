@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColumnDef } from '@tanstack/react-table'
-import { MeApi, TasksApi, type Me, type Task } from '@/lib/api-client'
+import { TasksApi, type Task } from '@/lib/api-client'
 import { CheckCircleIcon, PlusIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ import { DataTable } from '@/components/ui/DataTable'
 import { ResultsCount } from '@/components/ui/table'
 import { TableEmptyContent } from '@/components/ui/EmptyState'
 import { StatusBadge } from '@/components/ui/badge'
+import { useMeStore } from '@/lib/store/me'
+import { usePageState } from '@/lib/store/page-state'
 
 const CATEGORY_LABELS: Record<string, string> = {
   GENERAL: 'General',
@@ -31,30 +33,15 @@ function formatDate(dateStr: string | null | undefined) {
 
 export default function TasksPage() {
   const router = useRouter()
-  const [me, setMe] = useState<Me | null>(null)
+  const me = useMeStore((s) => s.me)
   const [items, setItems] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const { custom, setCustom } = usePageState('/tasks')
+  const scope = custom?.scope === 'all' ? 'all' : 'mine'
+  const setScope = useCallback((next: 'mine' | 'all') => setCustom('scope', next), [setCustom])
 
   const canSeeAllTasks = Boolean(me?.isHR || me?.isSuperAdmin)
-
-  useEffect(() => {
-    let cancelled = false
-    MeApi.get()
-      .then((data) => {
-        if (cancelled) return
-        setMe(data)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setMe(null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (!canSeeAllTasks && scope === 'all') {
@@ -142,6 +129,7 @@ export default function TasksPage() {
         title="Task List"
         description="Track tasks created for you and by you"
         icon={<CheckCircleIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button href="/tasks/add" icon={<PlusIcon className="h-4 w-4" />}>
             Add Task
@@ -160,7 +148,7 @@ export default function TasksPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">
-                Work Queue is your inbox. Task List is the full list of tasks.
+                My Hub is your inbox. Task List is the full list of tasks.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -191,8 +179,8 @@ export default function TasksPage() {
                 </div>
               ) : null}
 
-              <Button href="/work" variant="secondary">
-                Work Queue
+              <Button href="/hub" variant="secondary">
+                My Hub
               </Button>
             </div>
           </div>

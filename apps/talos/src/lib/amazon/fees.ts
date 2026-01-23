@@ -1,4 +1,5 @@
 import type { TenantCode } from '@/lib/tenant/constants'
+import * as ukFees from './fees-uk'
 
 type AmazonMoney = {
   Amount?: unknown
@@ -231,9 +232,9 @@ export function getReferralFeePercent2026(category: string, listingPrice: number
   }
 }
 
-type FeeBand = { under10: number; tenToFifty: number; over50: number }
+export type FeeBand = { under10: number; tenToFifty: number; over50: number }
 
-const SMALL_STANDARD_TABLE_2026: Array<{ maxOz: number; fee: FeeBand }> = [
+export const SMALL_STANDARD_TABLE_2026: Array<{ maxOz: number; fee: FeeBand }> = [
   { maxOz: 2, fee: { under10: 2.43, tenToFifty: 3.32, over50: 3.58 } },
   { maxOz: 4, fee: { under10: 2.49, tenToFifty: 3.42, over50: 3.68 } },
   { maxOz: 6, fee: { under10: 2.56, tenToFifty: 3.45, over50: 3.71 } },
@@ -244,14 +245,14 @@ const SMALL_STANDARD_TABLE_2026: Array<{ maxOz: number; fee: FeeBand }> = [
   { maxOz: 16, fee: { under10: 2.95, tenToFifty: 3.96, over50: 4.22 } },
 ]
 
-const LARGE_STANDARD_OZ_TABLE_2026: Array<{ maxOz: number; fee: FeeBand }> = [
+export const LARGE_STANDARD_OZ_TABLE_2026: Array<{ maxOz: number; fee: FeeBand }> = [
   { maxOz: 4, fee: { under10: 2.91, tenToFifty: 3.73, over50: 3.99 } },
   { maxOz: 8, fee: { under10: 3.13, tenToFifty: 3.95, over50: 4.21 } },
   { maxOz: 12, fee: { under10: 3.38, tenToFifty: 4.2, over50: 4.46 } },
   { maxOz: 16, fee: { under10: 3.78, tenToFifty: 4.6, over50: 4.86 } },
 ]
 
-const LARGE_STANDARD_LB_TABLE_2026: Array<{ maxLb: number; fee: FeeBand }> = [
+export const LARGE_STANDARD_LB_TABLE_2026: Array<{ maxLb: number; fee: FeeBand }> = [
   { maxLb: 1.25, fee: { under10: 4.22, tenToFifty: 5.04, over50: 5.3 } },
   { maxLb: 1.5, fee: { under10: 4.6, tenToFifty: 5.42, over50: 5.68 } },
   { maxLb: 1.75, fee: { under10: 4.75, tenToFifty: 5.57, over50: 5.83 } },
@@ -516,3 +517,70 @@ export function parseAmazonProductFees(response: unknown): AmazonProductFeesPars
     feeBreakdown,
   }
 }
+
+// =============================================================================
+// Tenant-Aware Wrapper Functions
+// =============================================================================
+
+/**
+ * Calculate FBA size tier based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function calculateSizeTierForTenant(
+  tenantCode: TenantCode,
+  side1Cm: number | null,
+  side2Cm: number | null,
+  side3Cm: number | null,
+  weightKg: number | null
+): string | null {
+  if (tenantCode === 'UK') {
+    return ukFees.calculateUKSizeTier(side1Cm, side2Cm, side3Cm, weightKg)
+  }
+  return calculateSizeTier(side1Cm, side2Cm, side3Cm, weightKg)
+}
+
+/**
+ * Calculate FBA fulfillment fee based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function calculateFbaFeeForTenant(
+  tenantCode: TenantCode,
+  input: {
+    side1Cm: number
+    side2Cm: number
+    side3Cm: number
+    unitWeightKg: number
+    listingPrice: number
+    sizeTier: string
+    category?: string
+  }
+): number | null {
+  if (tenantCode === 'UK') {
+    return ukFees.calculateUKFbaFulfillmentFee(input)
+  }
+  return calculateFbaFulfillmentFee2026NonPeakExcludingApparel(input)
+}
+
+/**
+ * Get referral fee percentage based on tenant.
+ * Routes to UK or US implementation.
+ */
+export function getReferralFeePercentForTenant(
+  tenantCode: TenantCode,
+  category: string,
+  listingPrice: number
+): number | null {
+  if (tenantCode === 'UK') {
+    return ukFees.getUKReferralFeePercent2026(category, listingPrice)
+  }
+  return getReferralFeePercent2026(category, listingPrice)
+}
+
+// Re-export UK fee tables for fee tables page
+export {
+  UK_LOW_PRICE_FBA_TABLE_2026,
+  UK_STANDARD_FBA_TABLE_2026,
+  UK_STANDARD_FBA_OVERSIZE_TABLE_2026,
+  UK_SIZE_TIER_DEFINITIONS_2026,
+  isUKLowPriceEligible,
+} from './fees-uk'

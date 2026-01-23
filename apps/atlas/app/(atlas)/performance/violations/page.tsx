@@ -173,6 +173,7 @@ export default function DisciplinaryPage() {
         title="Violations"
         description="Track reported violations"
         icon={<ExclamationTriangleIcon className="h-6 w-6 text-white" />}
+        showBack
         action={
           <Button href="/performance/violations/add" icon={<PlusIcon className="h-4 w-4" />}>
             New Violation
