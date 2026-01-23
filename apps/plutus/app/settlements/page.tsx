@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useSettlementsListStore } from '@/lib/store/settlements';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -158,11 +159,17 @@ async function fetchSettlements({
 
 export default function SettlementsPage() {
   const queryClient = useQueryClient();
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const searchInput = useSettlementsListStore((s) => s.searchInput);
+  const search = useSettlementsListStore((s) => s.search);
+  const page = useSettlementsListStore((s) => s.page);
+  const startDate = useSettlementsListStore((s) => s.startDate);
+  const endDate = useSettlementsListStore((s) => s.endDate);
+  const setSearchInput = useSettlementsListStore((s) => s.setSearchInput);
+  const setSearch = useSettlementsListStore((s) => s.setSearch);
+  const setPage = useSettlementsListStore((s) => s.setPage);
+  const setStartDate = useSettlementsListStore((s) => s.setStartDate);
+  const setEndDate = useSettlementsListStore((s) => s.setEndDate);
+  const clear = useSettlementsListStore((s) => s.clear);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -170,7 +177,10 @@ export default function SettlementsPage() {
       setPage(1);
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [searchInput]);
+  }, [searchInput, setPage, setSearch]);
+
+  const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
+  const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -179,8 +189,8 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, startDate, endDate],
-    queryFn: () => fetchSettlements({ page, search, startDate, endDate }),
+    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate],
+    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 15 * 1000,
   });
@@ -243,10 +253,10 @@ export default function SettlementsPage() {
                   </div>
                   <Input
                     type="date"
-                    value={startDate === null ? '' : startDate}
+                    value={startDate}
                     onChange={(e) => {
                       const value = e.target.value.trim();
-                      setStartDate(value === '' ? null : value);
+                      setStartDate(value);
                       setPage(1);
                     }}
                   />
@@ -258,10 +268,10 @@ export default function SettlementsPage() {
                   </div>
                   <Input
                     type="date"
-                    value={endDate === null ? '' : endDate}
+                    value={endDate}
                     onChange={(e) => {
                       const value = e.target.value.trim();
-                      setEndDate(value === '' ? null : value);
+                      setEndDate(value);
                       setPage(1);
                     }}
                   />
@@ -271,12 +281,9 @@ export default function SettlementsPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setSearchInput('');
-                      setStartDate(null);
-                      setEndDate(null);
-                      setPage(1);
+                      clear();
                     }}
-                    disabled={searchInput.trim() === '' && startDate === null && endDate === null}
+                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
                   >
                     Clear
                   </Button>
