@@ -170,7 +170,7 @@ function AddReviewContent() {
           title="New Performance Review"
           description="Performance"
           icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
-          backHref="/performance/reviews"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -192,7 +192,7 @@ function AddReviewContent() {
           title="New Performance Review"
           description="Performance"
           icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
-          backHref="/performance/reviews"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -209,7 +209,7 @@ function AddReviewContent() {
         title="New Performance Review"
         description="Performance"
         icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
-        backHref="/performance/reviews"
+        showBack
       />
 
       <div className="max-w-2xl mx-auto">
@@ -455,7 +455,7 @@ export default function AddReviewPage() {
             title="New Performance Review"
             description="Performance"
             icon={<ClipboardDocumentCheckIcon className="h-6 w-6 text-white" />}
-            backHref="/performance/reviews"
+            showBack
           />
           <div className="max-w-2xl mx-auto">
             <Card padding="lg">

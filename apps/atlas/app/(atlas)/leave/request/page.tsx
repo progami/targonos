@@ -50,7 +50,7 @@ export default function LeaveRequestPage() {
           title="Request Leave"
           description="Leaves"
           icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
-          backHref="/leave"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -72,7 +72,7 @@ export default function LeaveRequestPage() {
           title="Request Leave"
           description="Leaves"
           icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
-          backHref="/leave"
+          showBack
         />
         <div className="max-w-2xl mx-auto">
           <Card padding="lg">
@@ -92,7 +92,7 @@ export default function LeaveRequestPage() {
         title="Request Leave"
         description="Leaves"
         icon={<CalendarDaysIcon className="h-6 w-6 text-white" />}
-        backHref="/leave"
+        showBack
       />
 
       <div className="max-w-2xl mx-auto">
