@@ -75,3 +75,88 @@ model SetupConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// SettlementProcessing tracks Plutus processing for a single LMB settlement invoice group.
+/// Used for idempotency, history, and settlement list status.
+model SettlementProcessing {
+  id String @id @default(cuid())
+
+  marketplace              String // e.g., "amazon.com", "amazon.co.uk"
+  qboSettlementJournalEntryId String
+  lmbDocNumber             String
+  lmbPostedDate            DateTime
+
+  invoiceId       String
+  processingHash  String
+  sourceFilename  String
+  uploadedAt      DateTime @default(now())
+
+  qboCogsJournalEntryId      String
+  qboPnlReclassJournalEntryId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderSales OrderSale[]
+  orderReturns OrderReturn[]
+
+  @@unique([marketplace, invoiceId])
+  @@unique([qboSettlementJournalEntryId])
+  @@index([marketplace])
+}
+
+/// OrderSale stores per-order, per-SKU COGS results for refund matching across periods.
+model OrderSale {
+  id String @id @default(cuid())
+
+  marketplace String
+  orderId     String
+  sku         String
+
+  saleDate    DateTime
+  quantity    Int
+
+  principalCents            Int
+  costManufacturingCents    Int
+  costFreightCents          Int
+  costDutyCents             Int
+  costMfgAccessoriesCents   Int
+
+  settlementProcessingId String
+  settlementProcessing   SettlementProcessing @relation(fields: [settlementProcessingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([marketplace, orderId, sku])
+  @@index([settlementProcessingId])
+  @@index([marketplace])
+}
+
+/// OrderReturn stores per-order, per-SKU return (refund) COGS reversals for replaying inventory over time.
+model OrderReturn {
+  id String @id @default(cuid())
+
+  marketplace String
+  orderId     String
+  sku         String
+
+  returnDate  DateTime
+  quantity    Int
+
+  principalCents            Int
+  costManufacturingCents    Int
+  costFreightCents          Int
+  costDutyCents             Int
+  costMfgAccessoriesCents   Int
+
+  settlementProcessingId String
+  settlementProcessing   SettlementProcessing @relation(fields: [settlementProcessingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([marketplace, orderId, sku, settlementProcessingId])
+  @@index([settlementProcessingId])
+  @@index([marketplace, orderId, sku])
+}

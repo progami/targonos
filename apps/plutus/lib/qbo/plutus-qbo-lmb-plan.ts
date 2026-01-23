@@ -162,45 +162,45 @@ export async function ensurePlutusQboLmbPlanAccounts(
     amazonPromotions: requireAccountById(accounts, mappings.amazonPromotions, 'Amazon Promotions'),
   };
 
+  const accountSpecs: Array<{ label: string; parent: QboAccount }> = [
+    // Inventory (asset)
+    { label: 'Inv Manufacturing', parent: parents.invManufacturing },
+    { label: 'Inv Freight', parent: parents.invFreight },
+    { label: 'Inv Duty', parent: parents.invDuty },
+    { label: 'Inv Mfg Accessories', parent: parents.invMfgAccessories },
+
+    // COGS
+    { label: 'Manufacturing', parent: parents.cogsManufacturing },
+    { label: 'Freight', parent: parents.cogsFreight },
+    { label: 'Duty', parent: parents.cogsDuty },
+    { label: 'Mfg Accessories', parent: parents.cogsMfgAccessories },
+    { label: 'Land Freight', parent: parents.cogsLandFreight },
+    { label: 'Storage 3PL', parent: parents.cogsStorage3pl },
+    { label: 'Inventory Shrinkage', parent: parents.cogsShrinkage },
+
+    // LMB P&L
+    { label: 'Amazon Sales', parent: parents.amazonSales },
+    { label: 'Amazon Refunds', parent: parents.amazonRefunds },
+    { label: 'Amazon FBA Inventory Reimbursement', parent: parents.amazonFbaInventoryReimbursement },
+    { label: 'Amazon Seller Fees', parent: parents.amazonSellerFees },
+    { label: 'Amazon FBA Fees', parent: parents.amazonFbaFees },
+    { label: 'Amazon Storage Fees', parent: parents.amazonStorageFees },
+    { label: 'Amazon Advertising Costs', parent: parents.amazonAdvertisingCosts },
+    { label: 'Amazon Promotions', parent: parents.amazonPromotions },
+  ];
+
   // For each brand, create sub-accounts under each mapped parent
   for (const brandName of brandNames) {
-    // All accounts that need brand sub-accounts
-    const accountsToCreate = [
-      // Inventory
-      parents.invManufacturing,
-      parents.invFreight,
-      parents.invDuty,
-      parents.invMfgAccessories,
-
-      // COGS
-      parents.cogsManufacturing,
-      parents.cogsFreight,
-      parents.cogsDuty,
-      parents.cogsMfgAccessories,
-      parents.cogsLandFreight,
-      parents.cogsStorage3pl,
-      parents.cogsShrinkage,
-
-      // LMB
-      parents.amazonSales,
-      parents.amazonRefunds,
-      parents.amazonFbaInventoryReimbursement,
-      parents.amazonSellerFees,
-      parents.amazonFbaFees,
-      parents.amazonStorageFees,
-      parents.amazonAdvertisingCosts,
-      parents.amazonPromotions,
-    ];
-
-    for (const parent of accountsToCreate) {
-      const result = await ensureSubAccount(currentConnection, accounts, parent, brandName);
+    for (const spec of accountSpecs) {
+      const subAccountName = `${spec.label} - ${brandName}`;
+      const result = await ensureSubAccount(currentConnection, accounts, spec.parent, subAccountName);
 
       if (result.created && result.account) {
         created.push(result.account);
       }
 
       if (!result.created) {
-        skipped.push({ name: brandName, parentName: parent.Name });
+        skipped.push({ name: subAccountName, parentName: spec.parent.Name });
       }
 
       if (result.updatedConnection) {

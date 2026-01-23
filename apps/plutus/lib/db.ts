@@ -24,12 +24,15 @@ function resolveDatasourceUrl() {
 
 const globalForPrisma = globalThis as GlobalWithPrisma;
 
-export const db =
-  globalForPrisma.__plutusPrisma ??
-  new PrismaClient({
+let dbInstance = globalForPrisma.__plutusPrisma;
+if (dbInstance === undefined) {
+  dbInstance = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     datasourceUrl: resolveDatasourceUrl(),
   });
+}
+
+export const db = dbInstance;
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.__plutusPrisma = db;

@@ -314,6 +314,12 @@ async function syncProducts(session: Session) {
           }
 
           const itemTriplet = parseCatalogItemDimensions(attributes)
+          if (itemTriplet) {
+            updates.amazonItemDimensionsCm = formatDimensionTripletCm(itemTriplet)
+            updates.amazonItemSide1Cm = itemTriplet.side1Cm
+            updates.amazonItemSide2Cm = itemTriplet.side2Cm
+            updates.amazonItemSide3Cm = itemTriplet.side3Cm
+          }
           if (
             itemTriplet &&
             sku.itemDimensionsCm === null &&
@@ -328,6 +334,9 @@ async function syncProducts(session: Session) {
           }
 
           const itemWeightKg = parseCatalogItemWeightKg(attributes)
+          if (itemWeightKg !== null) {
+            updates.amazonItemWeightKg = itemWeightKg
+          }
           if (itemWeightKg !== null && sku.itemWeightKg === null) {
             updates.itemWeightKg = itemWeightKg
           }

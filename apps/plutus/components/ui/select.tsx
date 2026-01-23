@@ -6,6 +6,10 @@ import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+const CheckIcon = Check as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ChevronUpIcon = ChevronUp as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
 const Select = SelectPrimitive.Root;
 
 const SelectGroup = SelectPrimitive.Group;
@@ -26,7 +30,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 text-slate-400 dark:text-slate-500" aria-hidden />
+      <ChevronDownIcon className="h-4 w-4 text-slate-400 dark:text-slate-500" aria-hidden />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -41,7 +45,7 @@ const SelectScrollUpButton = React.forwardRef<
     className={cn('flex cursor-default items-center justify-center py-1', className)}
     {...props}
   >
-    <ChevronUp className="h-4 w-4" aria-hidden />
+    <ChevronUpIcon className="h-4 w-4" aria-hidden />
   </SelectPrimitive.ScrollUpButton>
 ));
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName;
@@ -55,7 +59,7 @@ const SelectScrollDownButton = React.forwardRef<
     className={cn('flex cursor-default items-center justify-center py-1', className)}
     {...props}
   >
-    <ChevronDown className="h-4 w-4" aria-hidden />
+    <ChevronDownIcon className="h-4 w-4" aria-hidden />
   </SelectPrimitive.ScrollDownButton>
 ));
 SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName;
@@ -118,7 +122,7 @@ const SelectItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-brand-teal-600 dark:text-brand-cyan" aria-hidden />
+        <CheckIcon className="h-4 w-4 text-brand-teal-600 dark:text-brand-cyan" aria-hidden />
       </SelectPrimitive.ItemIndicator>
     </span>
 

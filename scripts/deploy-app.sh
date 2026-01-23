@@ -126,7 +126,7 @@ case "$app_key" in
     legacy_app_dir="$REPO_DIR/apps/wms"
     legacy_pm2_name="${PM2_PREFIX}-wms"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation"
+    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:sku-batch-amazon-item-package-dimensions && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields"
     build_cmd="pnpm --filter $workspace build"
     ;;
   sso|targon|targonos)
@@ -172,6 +172,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/plutus"
     pm2_name="${PM2_PREFIX}-plutus"
     prisma_cmd=""
+    migrate_cmd="pnpm --filter $workspace db:push"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)
@@ -530,6 +531,9 @@ if [[ -n "$migrate_cmd" ]]; then
         if any_changed "apps/talos/prisma/schema.prisma" || any_changed_under "apps/talos/scripts/migrations/"; then
           run_migrations="true"
         fi
+        ;;
+      plutus)
+        run_migrations="true"
         ;;
       xplan)
         if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then

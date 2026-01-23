@@ -3,8 +3,10 @@ import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 
 const footerLinks = {
-  Packs: [
-    { label: 'Compare packs', href: '/products' },
+  Explore: [
+    { label: 'Home', href: '/' },
+    { label: 'Caelum Star', href: '/caelum-star' },
+    { label: 'Packs', href: '/products' },
     { label: 'Where to buy', href: '/where-to-buy' }
   ],
   Company: [
@@ -21,27 +23,33 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t border-border">
-      <Container className="py-12">
+    <footer className="mt-16 border-t border-white/10 bg-black text-white">
+      <Container className="py-14">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">
-            <div className="text-base font-semibold tracking-tightish">{site.name}</div>
-            <p className="mt-3 max-w-md text-sm text-muted">
-              Extra-large dust sheets built for clean decorating. Checkout stays on Amazon.
+            <div className="text-base font-semibold tracking-tightish text-white">{site.name}</div>
+            <p className="mt-3 max-w-md text-sm text-white/70">
+              AI‑driven manufacturing &amp; design. Home of {site.productBrandName}.
             </p>
-            <p className="mt-4 text-sm text-muted">
-              Contact: <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>
+            <p className="mt-4 text-sm text-white/70">
+              Contact:{' '}
+              <a className="font-semibold text-white hover:underline" href={`mailto:${site.contactEmail}`}>
+                {site.contactEmail}
+              </a>
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-8 md:col-span-7 md:grid-cols-3">
             {Object.entries(footerLinks).map(([title, links]) => (
               <div key={title}>
-                <div className="text-sm font-semibold text-ink">{title}</div>
+                <div className="text-sm font-semibold text-white">{title}</div>
                 <ul className="mt-3 space-y-2">
                   {links.map((l) => (
                     <li key={l.href}>
-                      <Link className="text-sm text-muted hover:text-ink" href={l.href}>
+                      <Link
+                        className="inline-block text-sm text-white/65 transition-all duration-200 hover:text-white hover:translate-x-0.5"
+                        href={l.href}
+                      >
                         {l.label}
                       </Link>
                     </li>
@@ -52,9 +60,16 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-2 border-t border-border pt-6 text-xs text-muted md:flex-row md:items-center md:justify-between">
-          <div>© {year} {site.name}. All rights reserved.</div>
-          <div>Support: <a className="font-semibold text-ink hover:underline" href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a></div>
+        <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/50 md:flex-row md:items-center md:justify-between">
+          <div>
+            © {year} {site.name}. All rights reserved.
+          </div>
+          <div>
+            Support:{' '}
+            <a className="font-semibold text-white hover:underline" href={`mailto:${site.contactEmail}`}>
+              {site.contactEmail}
+            </a>
+          </div>
         </div>
       </Container>
     </footer>

@@ -6,7 +6,10 @@ import { clsx } from 'clsx';
 import { Providers } from '@/components/providers';
 import { AppHeader } from '@/components/app-header';
 
-const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '';
+const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH;
+if (appBasePath === undefined) {
+  throw new Error('NEXT_PUBLIC_BASE_PATH is required');
+}
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -34,12 +37,23 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
-  const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL || undefined;
-  const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
+  const version = process.env.NEXT_PUBLIC_VERSION;
+  if (version === undefined) {
+    throw new Error('NEXT_PUBLIC_VERSION is required');
+  }
+
+  const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL;
+  const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA;
   const commitUrl = commitSha ? `https://github.com/progami/targonos/commit/${commitSha}` : undefined;
   const inferredReleaseUrl = `https://github.com/progami/targonos/releases/tag/v${version}`;
-  const versionHref = explicitReleaseUrl ?? commitUrl ?? inferredReleaseUrl;
+
+  let versionHref = inferredReleaseUrl;
+  if (commitUrl !== undefined) {
+    versionHref = commitUrl;
+  }
+  if (explicitReleaseUrl !== undefined) {
+    versionHref = explicitReleaseUrl;
+  }
 
   return (
     <html lang="en" suppressHydrationWarning>
