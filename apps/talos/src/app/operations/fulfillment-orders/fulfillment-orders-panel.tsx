@@ -34,9 +34,9 @@ interface FulfillmentOrdersPanelProps {
 }
 
 const STATUS_BADGE_CLASSES: Record<FulfillmentOrderStatusOption, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700 border border-slate-200',
-  SHIPPED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
+  DRAFT: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600',
+  SHIPPED: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+  CANCELLED: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800',
 }
 
 const STATUS_LABELS: Record<FulfillmentOrderStatusOption, string> = {

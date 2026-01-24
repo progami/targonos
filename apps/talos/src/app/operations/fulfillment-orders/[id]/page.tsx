@@ -106,9 +106,9 @@ type FulfillmentOrderDocumentSummary = {
 }
 
 const STATUS_BADGE_CLASSES: Record<FulfillmentOrderStatus, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700 border border-slate-200',
-  SHIPPED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
+  DRAFT: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600',
+  SHIPPED: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+  CANCELLED: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800',
 }
 
 const DOCUMENT_REQUIREMENTS: Record<
@@ -533,7 +533,7 @@ export default function FulfillmentOrderDetailPage() {
             return (
               <div
                 key={key}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 px-3 py-2.5"
+                className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-900 px-3 py-2.5"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {existing ? (
@@ -542,7 +542,7 @@ export default function FulfillmentOrderDetailPage() {
                     <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
                   )}
                   <div className="min-w-0">
-                    <span className="text-sm font-medium text-slate-900">{docType.label}</span>
+                    <span className="text-sm font-medium text-foreground">{docType.label}</span>
                     {existing ? (
                       <a
                         href={existing.viewUrl}
@@ -559,7 +559,7 @@ export default function FulfillmentOrderDetailPage() {
                   </div>
                 </div>
 
-                <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors flex-shrink-0">
                   <Upload className="h-3.5 w-3.5" />
                   {existing ? 'Replace' : 'Upload'}
                   <input
@@ -641,8 +641,8 @@ export default function FulfillmentOrderDetailPage() {
                         key={type}
                         className={`px-4 py-2 rounded-lg border text-sm font-medium ${
                           order.destinationType === type
-                            ? 'bg-cyan-50 border-cyan-500 text-cyan-700'
-                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                            ? 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-600 text-cyan-700 dark:text-cyan-300'
+                            : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400'
                         }`}
                       >
                         {type === 'AMAZON_FBA'
@@ -672,8 +672,8 @@ export default function FulfillmentOrderDetailPage() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm">
                       <Check className="h-4 w-4 text-emerald-600" />
-                      <span className="font-medium text-slate-900">Imported:</span>
-                      <span className="text-slate-600">
+                      <span className="font-medium text-foreground">Imported:</span>
+                      <span className="text-muted-foreground">
                         {order.amazonShipmentId} →{' '}
                         {order.amazonDestinationFulfillmentCenterId || 'N/A'}
                       </span>
@@ -750,7 +750,7 @@ export default function FulfillmentOrderDetailPage() {
               </div>
 
               <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
-                <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50">
+                <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
                   <div className="col-span-3">SKU</div>
                   <div className="col-span-3">Batch</div>
                   <div className="col-span-4">Description</div>
@@ -758,14 +758,14 @@ export default function FulfillmentOrderDetailPage() {
                   <div className="col-span-2">Status</div>
                 </div>
 
-                <div className="divide-y">
+                <div className="divide-y divide-border">
                   {order.lines.map(line => (
                     <div key={line.id} className="grid grid-cols-14 gap-2 items-center p-3">
                       <div className="col-span-3">
-                        <span className="text-sm font-semibold text-slate-900">{line.skuCode}</span>
+                        <span className="text-sm font-semibold text-foreground">{line.skuCode}</span>
                       </div>
                       <div className="col-span-3">
-                        <span className="text-sm text-slate-600 uppercase">{line.batchLot}</span>
+                        <span className="text-sm text-muted-foreground uppercase">{line.batchLot}</span>
                       </div>
                       <div className="col-span-4">
                         <span
@@ -795,7 +795,7 @@ export default function FulfillmentOrderDetailPage() {
                 <button
                   type="button"
                   onClick={() => setFreightExpanded(!freightExpanded)}
-                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Truck className="h-4 w-4 text-muted-foreground" />

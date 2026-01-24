@@ -98,7 +98,7 @@ export function ExportButton({
  <button
  onClick={() => handleExport(formats[0])}
  disabled={loading}
- className={`inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 ${className}`}
+  className={`inline-flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-soft text-sm font-medium text-foreground bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 ${className}`}
  >
  <Download className="h-4 w-4 mr-2" />
  {loading ? 'Exporting...' : buttonText}
@@ -111,7 +111,7 @@ export function ExportButton({
  <button
  onClick={() => setShowFormats(!showFormats)}
  disabled={loading}
- className={`inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-soft text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 ${className}`}
+  className={`inline-flex items-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-soft text-sm font-medium text-foreground bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 ${className}`}
  >
  <Download className="h-4 w-4 mr-2" />
  {loading ? 'Exporting...' : buttonText}
@@ -126,7 +126,7 @@ export function ExportButton({
  <button
  key={format}
  onClick={() => handleExport(format)}
- className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 flex items-center gap-2"
+  className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
  role="menuitem"
  >
  <Icon className="h-4 w-4" />
