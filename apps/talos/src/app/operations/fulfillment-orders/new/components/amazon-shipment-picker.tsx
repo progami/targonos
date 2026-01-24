@@ -302,22 +302,22 @@ export function AmazonShipmentPicker({
       <div className="p-5 space-y-4">
         {/* Import Confirmation */}
         {hasShipment && (
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800">
             <div className="flex-shrink-0 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3.5 w-3.5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-sm font-medium text-emerald-800">
+              <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
                 Imported: {amazonShipment.shipmentId}
               </span>
-              <span className="text-sm text-emerald-700">
+              <span className="text-sm text-emerald-700 dark:text-emerald-300">
                 {' → '}
-                {amazonShipment.destinationFulfillmentCenterId || 'FC'}
+                {amazonShipment.destinationFulfillmentCenterId}
                 {importedUnits > 0 && ` (${importedUnits.toLocaleString()} units)`}
               </span>
             </div>
-            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 flex-shrink-0">
-              {amazonShipment.shipmentStatus || 'Imported'}
+            <Badge className="bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 border-emerald-200 dark:border-emerald-700 flex-shrink-0">
+              {amazonShipment.shipmentStatus}
             </Badge>
           </div>
         )}
@@ -328,7 +328,7 @@ export function AmazonShipmentPicker({
           <select
             value={formData.warehouseCode}
             onChange={e => setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))}
-            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
           >
             <option value="">Select warehouse</option>
             {warehouses.map(w => (
@@ -356,7 +356,7 @@ export function AmazonShipmentPicker({
         </div>
 
         {/* Shipment List */}
-        <div className="rounded-lg border bg-slate-50 overflow-hidden">
+        <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 overflow-hidden">
           {shipmentsLoading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -373,7 +373,7 @@ export function AmazonShipmentPicker({
               {searchTerm ? 'No shipments match your search.' : 'No shipments found.'}
             </div>
           ) : (
-            <div className="max-h-64 overflow-y-auto divide-y divide-slate-200">
+            <div className="max-h-64 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-700">
               {filteredShipments.map((shipment, index) => {
                 const record = shipment as Record<string, unknown>
                 const id = getStringField(record, ['ShipmentId', 'shipmentId'])
@@ -393,29 +393,29 @@ export function AmazonShipmentPicker({
                     disabled={importLoading || !id}
                     className={`w-full px-4 py-3 text-left transition-colors ${
                       isSelected
-                        ? 'bg-cyan-50 border-l-4 border-l-cyan-600'
-                        : 'bg-white hover:bg-slate-50'
+                        ? 'bg-cyan-50 dark:bg-cyan-900/30 border-l-4 border-l-cyan-600'
+                        : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
                     } disabled:cursor-not-allowed disabled:opacity-60`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900 truncate text-sm">
-                            {id || 'Unknown shipment'}
+                          <span className="font-medium text-slate-900 dark:text-slate-100 truncate text-sm">
+                            {id}
                           </span>
                           {isSelected && (
-                            <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200 text-xs">
+                            <Badge className="bg-cyan-100 dark:bg-cyan-800 text-cyan-700 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700 text-xs">
                               Selected
                             </Badge>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 truncate">
-                          {name || 'No name'} · FC: {destination || '—'}
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                          {name} · FC: {destination}
                         </div>
                       </div>
                       <div className="flex-shrink-0">
                         {status && (
-                          <Badge className="bg-slate-100 text-slate-600 border border-slate-200 dark:border-slate-700 text-xs">
+                          <Badge className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 text-xs">
                             {status}
                           </Badge>
                         )}

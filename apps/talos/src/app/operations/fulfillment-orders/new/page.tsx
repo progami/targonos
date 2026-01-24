@@ -398,7 +398,7 @@ export default function NewFulfillmentOrderPage() {
                     onChange={e =>
                       setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
                     }
-                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                     disabled={loading}
                     required
                   >
@@ -474,7 +474,7 @@ export default function NewFulfillmentOrderPage() {
                 <div className="col-span-1"></div>
               </div>
 
-              <div className="divide-y">
+              <div className="divide-y divide-border">
                 {lineItems.map(item => {
                   const batches = getBatchOptions(item.skuCode)
                   const sku = skus.find(s => s.skuCode === item.skuCode)
@@ -488,7 +488,7 @@ export default function NewFulfillmentOrderPage() {
                         <select
                           value={item.skuCode}
                           onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           required
                         >
                           <option value="">Select SKU</option>
@@ -504,7 +504,7 @@ export default function NewFulfillmentOrderPage() {
                         <select
                           value={item.batchLot}
                           onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           required
                           disabled={!item.skuCode}
                         >
