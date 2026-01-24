@@ -19,7 +19,6 @@ export const GET = withAuth(async (req, session) => {
  const searchParams = req.nextUrl.searchParams
  const warehouseId = searchParams.get('warehouseId')
  const date = searchParams.get('date')
- const showZeroStock = searchParams.get('showZeroStock') === 'true'
  const skuCode = searchParams.get('skuCode')
 
  const paginationParams = getPaginationParams(req)
@@ -89,9 +88,7 @@ export const GET = withAuth(async (req, session) => {
     fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
   }))
 
-  const aggregated = aggregateInventoryTransactions(ledgerTransactions, {
-    includeZeroStock: showZeroStock
-  })
+  const aggregated = aggregateInventoryTransactions(ledgerTransactions)
 
   const paginatedBalances = date
     ? aggregated.balances

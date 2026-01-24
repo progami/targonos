@@ -9,6 +9,7 @@ export type SkuBatchOption = {
   id: string
   batchCode: string
   unitsPerCarton?: number | null
+  availableCartons?: number
 }
 
 export type SkuOption = {
