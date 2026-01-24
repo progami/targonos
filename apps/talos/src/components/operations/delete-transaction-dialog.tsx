@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { AlertTriangle, X, Loader2, Package2, Truck } from '@/lib/lucide-icons'
 import { formatDateGMT } from '@/lib/date-utils'
 
@@ -52,6 +53,18 @@ export function DeleteTransactionDialog({
  validation,
  isDeleting
 }: DeleteTransactionDialogProps) {
+ // Handle ESC key to close dialog
+ useEffect(() => {
+  if (!isOpen) return
+  const handleKeyDown = (event: KeyboardEvent) => {
+   if (event.key === 'Escape' && !isDeleting) {
+    onClose()
+   }
+  }
+  document.addEventListener('keydown', handleKeyDown)
+  return () => document.removeEventListener('keydown', handleKeyDown)
+ }, [isOpen, isDeleting, onClose])
+
  if (!isOpen) return null
 
  const isReceive = transaction?.transactionType === 'RECEIVE'
