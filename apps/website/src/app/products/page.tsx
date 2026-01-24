@@ -5,6 +5,7 @@ import { ProductCard } from '@/components/ProductCard';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Reveal } from '@/components/Reveal';
+import { ScrollableTable } from '@/components/ScrollableTable';
 import { products } from '@/content/products';
 import { site } from '@/content/site';
 
@@ -19,6 +20,7 @@ export default function ProductsPage() {
         <Container>
           <Reveal>
             <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Packs.</h1>
+            <div className="mt-3 h-1 w-12 rounded-full bg-accent" />
           </Reveal>
           <Reveal delay={80}>
             <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Pick a size. Buy on Amazon.</p>
@@ -55,7 +57,7 @@ export default function ProductsPage() {
                   <Button asChild variant="outline">
                     <Link href="/where-to-buy">Where to buy</Link>
                   </Button>
-                  <Button asChild variant="primary">
+                  <Button asChild variant="accent">
                     <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
                       View on Amazon <ArrowUpRight className="h-4 w-4" />
                     </a>
@@ -67,9 +69,9 @@ export default function ProductsPage() {
             <div className="md:col-span-8">
               <Reveal variant="media" delay={120}>
                 <Card className="overflow-hidden">
-                  <div className="overflow-x-auto">
+                  <ScrollableTable>
                     <table className="min-w-[720px] w-full text-left">
-                    <thead className="bg-surface">
+                    <thead className="bg-surface sticky top-0 z-10">
                       <tr className="border-b border-border">
                         <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
                           Pack
@@ -87,7 +89,7 @@ export default function ProductsPage() {
                     </thead>
                     <tbody>
                       {products.map((p) => (
-                        <tr key={p.slug} className="border-b border-border last:border-b-0">
+                        <tr key={p.slug} className="border-b border-border last:border-b-0 transition-colors hover:bg-surface/50">
                           <td className="px-5 py-4">
                             <div className="text-sm font-semibold text-ink">{p.name}</div>
                             <div className="mt-1 text-xs text-muted">{p.packLabel}</div>
@@ -110,7 +112,7 @@ export default function ProductsPage() {
                       ))}
                     </tbody>
                     </table>
-                  </div>
+                  </ScrollableTable>
                 </Card>
               </Reveal>
               <Reveal delay={220}>

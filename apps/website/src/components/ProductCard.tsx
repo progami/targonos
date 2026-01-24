@@ -5,10 +5,14 @@ import type { Product } from '@/content/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { cn } from '@/lib/utils';
 
 export function ProductCard({ product }: { product: Product }) {
   return (
-    <Card className="group overflow-hidden transition-shadow will-change-transform motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg">
+    <Card className={cn(
+      "group overflow-hidden transition-shadow will-change-transform motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg",
+      product.primary && "ring-1 ring-accent/40"
+    )}>
       <div className="relative aspect-[3/2] w-full bg-white">
         <Image
           src={product.image.src}

@@ -9,6 +9,8 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Reveal } from '@/components/Reveal';
+import { ProductGallery } from '@/components/ProductGallery';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { getProductBySlug, getProductSlugs, products } from '@/content/products';
 import { site } from '@/content/site';
 import { cn } from '@/lib/utils';
@@ -39,9 +41,12 @@ export function generateMetadata({ params }: PageProps): Metadata {
   };
 }
 
-function SpecRow({ label, value }: { label: string; value: string }) {
+function SpecRow({ label, value, index }: { label: string; value: string; index: number }) {
   return (
-    <div className="flex items-start justify-between gap-6 border-b border-border py-4">
+    <div className={cn(
+      "flex items-start justify-between gap-6 border-b border-border py-4 pl-4 -ml-4 border-l-2",
+      index % 2 === 0 ? "border-l-accent/50" : "border-l-transparent"
+    )}>
       <div className="text-sm font-semibold text-ink">{label}</div>
       <div className="text-sm text-muted text-right">{value}</div>
     </div>
@@ -61,6 +66,13 @@ export default function ProductDetailPage({ params }: PageProps) {
         <Container>
           <div className="grid gap-10 md:grid-cols-12 md:items-center">
             <div className="md:col-span-6">
+              <Breadcrumb
+                items={[
+                  { label: 'Home', href: '/' },
+                  { label: 'Products', href: '/products' },
+                  { label: p.name }
+                ]}
+              />
               <Reveal>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="bg-surface">{site.productBrandName}</Badge>
@@ -116,19 +128,20 @@ export default function ProductDetailPage({ params }: PageProps) {
               ) : null}
 
               <Reveal delay={420}>
-                <div className="mt-5 flex flex-wrap items-baseline gap-3">
+                <div className="mt-6 flex flex-wrap items-center gap-4">
                   {p.price ? (
-                    <div className="text-sm font-semibold text-ink">
-                      From {p.price}
-                      <span className="ml-1 text-xs font-normal text-muted">(on Amazon)</span>
+                    <div className="inline-flex items-baseline gap-1 rounded-pill bg-accent/10 px-4 py-2">
+                      <span className="text-sm text-ink">From</span>
+                      <span className="text-xl font-bold tracking-tight text-ink">{p.price}</span>
+                      <span className="text-xs text-muted">(on Amazon)</span>
                     </div>
                   ) : (
-                    <div className="text-sm font-semibold text-ink">
+                    <div className="inline-flex items-center rounded-pill bg-surface px-4 py-2 text-sm font-semibold text-ink">
                       Price and availability on Amazon
                     </div>
                   )}
                   {p.coverageLabel ? (
-                    <div className="text-xs text-muted">{p.coverageLabel} total coverage</div>
+                    <div className="text-sm text-muted">{p.coverageLabel} total coverage</div>
                   ) : null}
                 </div>
               </Reveal>
@@ -159,33 +172,39 @@ export default function ProductDetailPage({ params }: PageProps) {
           <div className="grid gap-4 md:grid-cols-3">
             <Reveal variant="media" delay={0}>
               <Card className="p-6">
-                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <Shield className="h-4 w-4" />
+                <div className="flex items-center gap-3 text-sm font-semibold text-ink">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15">
+                    <Shield className="h-4 w-4 text-accent-strong" />
+                  </div>
                   Protection first
                 </div>
-                <p className="mt-2 text-sm text-muted">
+                <p className="mt-3 text-sm text-muted">
                   Built for dust, paint splatter, and everyday decorating mess.
                 </p>
               </Card>
             </Reveal>
             <Reveal variant="media" delay={120}>
               <Card className="p-6">
-                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <Sparkles className="h-4 w-4" />
+                <div className="flex items-center gap-3 text-sm font-semibold text-ink">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15">
+                    <Sparkles className="h-4 w-4 text-accent-strong" />
+                  </div>
                   Clean coverage
                 </div>
-                <p className="mt-2 text-sm text-muted">
+                <p className="mt-3 text-sm text-muted">
                   Extra‑large sheets help you cover faster with fewer joins.
                 </p>
               </Card>
             </Reveal>
             <Reveal variant="media" delay={240}>
               <Card className="p-6">
-                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <Check className="h-4 w-4" />
+                <div className="flex items-center gap-3 text-sm font-semibold text-ink">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15">
+                    <Check className="h-4 w-4 text-accent-strong" />
+                  </div>
                   Simple choices
                 </div>
-                <p className="mt-2 text-sm text-muted">Pick your pack size. Checkout stays on Amazon.</p>
+                <p className="mt-3 text-sm text-muted">Pick your pack size. Checkout stays on Amazon.</p>
               </Card>
             </Reveal>
           </div>
@@ -212,37 +231,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
           </Reveal>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-12">
-            {p.gallery.map((img, i) => (
-              <Reveal key={img.src} variant="media" delay={i * 80}>
-                <Card
-                  className={cn(
-                    'group overflow-hidden',
-                    img.variant === 'wide' ? 'md:col-span-12' : 'md:col-span-6'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'relative bg-white',
-                      img.variant === 'wide' ? 'aspect-[61/25]' : 'aspect-square'
-                    )}
-                  >
-                    <Image
-                      src={img.src}
-                      alt={img.alt}
-                      fill
-                      sizes={
-                        img.variant === 'wide'
-                          ? '(max-width: 768px) 100vw, 1440px'
-                          : '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 820px'
-                      }
-                      className="object-contain transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.01]"
-                    />
-                  </div>
-                </Card>
-              </Reveal>
-            ))}
-          </div>
+          <ProductGallery images={p.gallery} />
         </Container>
       </section>
 
@@ -288,8 +277,8 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <Card className="p-6">
                   <div className="text-sm font-semibold text-ink">Specifications</div>
                   <div className="mt-4">
-                    {p.specs.map((s) => (
-                      <SpecRow key={s.label} label={s.label} value={s.value} />
+                    {p.specs.map((s, i) => (
+                      <SpecRow key={s.label} label={s.label} value={s.value} index={i} />
                     ))}
                   </div>
                   <div className="mt-4 text-xs text-muted">* Specs and pricing may vary by marketplace.</div>
