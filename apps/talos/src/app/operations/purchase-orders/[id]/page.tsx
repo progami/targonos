@@ -357,6 +357,27 @@ type PurchaseOrderForwardingCostSummary = {
   createdByName: string | null
 }
 
+type PurchaseOrderCostBreakdownRow = {
+  costName: string
+  totalCost: number
+}
+
+type PurchaseOrderCostLedgerSummary = {
+  totals: {
+    inbound: number
+    outbound: number
+    forwarding: number
+    storage: number
+    total: number
+  }
+  breakdown: {
+    inbound: PurchaseOrderCostBreakdownRow[]
+    outbound: PurchaseOrderCostBreakdownRow[]
+    forwarding: PurchaseOrderCostBreakdownRow[]
+    storage: PurchaseOrderCostBreakdownRow[]
+  }
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -726,6 +747,11 @@ export default function PurchaseOrderDetailPage() {
   })
   const [forwardingCostDeletingId, setForwardingCostDeletingId] = useState<string | null>(null)
 
+  const [costLedgerSummary, setCostLedgerSummary] = useState<PurchaseOrderCostLedgerSummary | null>(
+    null
+  )
+  const [costLedgerLoading, setCostLedgerLoading] = useState(false)
+
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
   const [batchesBySkuId, setBatchesBySkuId] = useState<Record<string, BatchOption[]>>({})
@@ -972,6 +998,36 @@ export default function PurchaseOrderDetailPage() {
     void refreshForwardingCosts()
   }, [refreshForwardingCosts])
 
+  const refreshCostLedgerSummary = useCallback(async () => {
+    const orderId = order?.id
+    if (!orderId) return
+
+    try {
+      setCostLedgerLoading(true)
+      const response = await fetch(`/api/purchase-orders/${orderId}/costs`)
+      if (!response.ok) {
+        setCostLedgerSummary(null)
+        return
+      }
+
+      const payload: unknown = await response.json().catch(() => null)
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        setCostLedgerSummary(null)
+        return
+      }
+
+      setCostLedgerSummary(payload as PurchaseOrderCostLedgerSummary)
+    } catch {
+      setCostLedgerSummary(null)
+    } finally {
+      setCostLedgerLoading(false)
+    }
+  }, [order?.id])
+
+  useEffect(() => {
+    void refreshCostLedgerSummary()
+  }, [refreshCostLedgerSummary])
+
   const selectedForwardingWarehouse = useMemo(() => {
     const code = forwardingWarehouseCode.trim()
     if (!code) return null
@@ -1057,6 +1113,9 @@ export default function PurchaseOrderDetailPage() {
     [forwardingCosts]
   )
 
+  const inboundCostRows = costLedgerSummary?.breakdown?.inbound ?? []
+  const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
+
   const createForwardingCost = useCallback(async () => {
     if (!order) return
     if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
@@ -1113,6 +1172,9 @@ export default function PurchaseOrderDetailPage() {
       const created = (await response.json()) as PurchaseOrderForwardingCostSummary
       setForwardingCosts(prev => [...prev, created])
       setNewForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
+      if (order.status === 'WAREHOUSE') {
+        void refreshCostLedgerSummary()
+      }
       toast.success('Cargo cost added')
     } catch {
       toast.error('Failed to add cargo cost')
@@ -1126,6 +1188,7 @@ export default function PurchaseOrderDetailPage() {
     newForwardingCostDraft.notes,
     newForwardingCostDraft.quantity,
     order,
+    refreshCostLedgerSummary,
   ])
 
   const startEditForwardingCost = useCallback((row: PurchaseOrderForwardingCostSummary) => {
@@ -1195,6 +1258,9 @@ export default function PurchaseOrderDetailPage() {
 
       const updated = (await response.json()) as PurchaseOrderForwardingCostSummary
       setForwardingCosts(prev => prev.map(row => (row.id === updated.id ? updated : row)))
+      if (order.status === 'WAREHOUSE') {
+        void refreshCostLedgerSummary()
+      }
       cancelEditForwardingCost()
       toast.success('Cargo cost updated')
     } catch {
@@ -1210,6 +1276,7 @@ export default function PurchaseOrderDetailPage() {
     editingForwardingCostDraft.quantity,
     editingForwardingCostId,
     order,
+    refreshCostLedgerSummary,
   ])
 
   const deleteForwardingCost = useCallback(
@@ -1241,6 +1308,9 @@ export default function PurchaseOrderDetailPage() {
         }
 
         setForwardingCosts(prev => prev.filter(item => item.id !== row.id))
+        if (order.status === 'WAREHOUSE') {
+          void refreshCostLedgerSummary()
+        }
         toast.success('Cargo cost deleted')
       } catch {
         toast.error('Failed to delete cargo cost')
@@ -1248,7 +1318,7 @@ export default function PurchaseOrderDetailPage() {
         setForwardingCostDeletingId(null)
       }
     },
-    [order]
+    [order, refreshCostLedgerSummary]
   )
 
   const handleDocumentUpload = useCallback(
@@ -1266,14 +1336,64 @@ export default function PurchaseOrderDetailPage() {
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
       try {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('stage', stage)
-        formData.append('documentType', documentType)
+        const presignResponse = await fetchWithCSRF(
+          `/api/purchase-orders/${orderId}/documents/presigned-url`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              stage,
+              documentType,
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+            }),
+          }
+        )
+
+        if (!presignResponse.ok) {
+          const payload = await presignResponse.json().catch(() => null)
+          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
+          const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
+          if (errorMessage && detailsMessage) {
+            toast.error(`${errorMessage}: ${detailsMessage}`)
+          } else if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to start document upload (HTTP ${presignResponse.status})`)
+          }
+          return
+        }
+
+        const presignPayload = await presignResponse.json().catch(() => null)
+        const uploadUrl = typeof presignPayload?.uploadUrl === 'string' ? presignPayload.uploadUrl : null
+        const s3Key = typeof presignPayload?.s3Key === 'string' ? presignPayload.s3Key : null
+
+        if (!uploadUrl || !s3Key) {
+          toast.error('Failed to start document upload')
+          return
+        }
+
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        })
+
+        if (!uploadResponse.ok) {
+          toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+          return
+        }
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
-          body: formData,
+          body: JSON.stringify({
+            stage,
+            documentType,
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            s3Key,
+          }),
         })
 
         if (!response.ok) {
@@ -1555,6 +1675,7 @@ export default function PurchaseOrderDetailPage() {
       setOrder(updated)
       setStageFormData({}) // Clear form
       void refreshAuditLogs()
+      void refreshCostLedgerSummary()
       toast.success(`Order moved to ${formatStatusLabel(targetStatus)}`)
       return true
     } catch (_error) {
@@ -3494,11 +3615,63 @@ export default function PurchaseOrderDetailPage() {
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                     Inbound Costs
                   </h4>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Inbound costs will be calculated when the PO is received at warehouse.
-                    </p>
-                  </div>
+                  {costLedgerLoading ? (
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                      <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
+                    </div>
+                  ) : inboundCostRows.length === 0 ? (
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                      <p className="text-sm text-muted-foreground">
+                        {order.status === 'WAREHOUSE'
+                          ? 'No inbound costs found for this receipt.'
+                          : 'Inbound costs will be calculated when the PO is received at warehouse.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
+                            <th className="text-left px-4 py-2 font-medium">Cost</th>
+                            <th className="text-right px-4 py-2 font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inboundCostRows.map(row => (
+                            <tr
+                              key={row.costName}
+                              className="border-t border-slate-100 dark:border-slate-700"
+                            >
+                              <td className="px-4 py-2 font-medium text-foreground">
+                                {row.costName}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                {tenantCurrency}{' '}
+                                {row.totalCost.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                            <td className="px-4 py-2 text-right font-medium text-muted-foreground">
+                              Inbound Subtotal
+                            </td>
+                            <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                              {tenantCurrency}{' '}
+                              {inboundSubtotal.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 {/* Storage Costs Section */}
@@ -3571,7 +3744,14 @@ export default function PurchaseOrderDetailPage() {
                         </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Inbound Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                            {inboundSubtotal > 0
+                              ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}`
+                              : '—'}
+                          </td>
                         </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Storage Costs</td>
@@ -3597,6 +3777,7 @@ export default function PurchaseOrderDetailPage() {
                             {tenantCurrency} {(
                               order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0) +
                               forwardingSubtotal +
+                              inboundSubtotal +
                               (order.stageData.warehouse?.dutyAmount || 0)
                             ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
