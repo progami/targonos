@@ -13,10 +13,10 @@ const badgeVariants = cva(
         secondary:
           'border-transparent bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-300',
         destructive:
-          'border-transparent bg-danger-100 text-danger-700 dark:bg-danger-950 dark:text-danger-400',
+          'border-transparent bg-danger-100 text-danger-700 dark:bg-danger-900/50 dark:text-danger-400',
         outline: 'border-slate-300 text-slate-600 dark:border-white/20 dark:text-slate-400',
         success:
-          'border-transparent bg-success-100 text-success-700 dark:bg-success-950 dark:text-success-400',
+          'border-transparent bg-success-100 text-success-700 dark:bg-success-900/50 dark:text-success-400',
       },
     },
     defaultVariants: {
