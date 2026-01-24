@@ -326,7 +326,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
         Import from Amazon
       </Button>
 
-      <PortalModal open={isOpen} className="items-center">
+      <PortalModal open={isOpen} className="items-center" onClose={handleClose}>
         <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-xl bg-white dark:bg-slate-800 shadow-2xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b px-6 py-4">
