@@ -2,7 +2,7 @@
   "name": "@targon/website",
   "version": "1.1.0",
   "private": true,
-  "description": "Targon Global – Company site and product catalog",
+  "description": "Targon – Company site and product catalog",
   "scripts": {
     "dev": "node ../../scripts/run-dev-with-logs.js website -- next dev -p 3105",
     "clean": "rm -rf .next out dist",

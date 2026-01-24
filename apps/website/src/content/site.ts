@@ -1,5 +1,5 @@
 export const site = {
-  name: 'Targon Global',
+  name: 'Targon',
   domain: 'targonglobal.com',
   description:
     'AI-driven manufacturing & design. Home of Caelum Star.',

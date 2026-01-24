@@ -17,13 +17,25 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0B273F',
-          color: '#00C2B9',
-          fontSize: 32,
-          fontWeight: 800,
+          position: 'relative',
+          background: '#002C51',
+          color: '#FFFFFF',
+          fontSize: 44,
+          fontWeight: 900,
           letterSpacing: '-0.02em'
         }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            right: 10,
+            bottom: 10,
+            width: 12,
+            height: 12,
+            borderRadius: 3,
+            background: '#00C2B9'
+          }}
+        />
         T
       </div>
     ),
