@@ -258,7 +258,7 @@ export default function SuppliersPanel({
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400">Manage supplier information and contacts</p>
           </div>
-          <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">
+          <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 font-medium">
             {suppliers.length} suppliers
           </Badge>
         </div>
@@ -341,7 +341,7 @@ export default function SuppliersPanel({
                           {supplier.defaultIncoterms && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                              className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                             >
                               {supplier.defaultIncoterms}
                             </Badge>
@@ -349,7 +349,7 @@ export default function SuppliersPanel({
                           {supplier.defaultPaymentTerms && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200"
+                              className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                             >
                               {supplier.defaultPaymentTerms.length > 20
                                 ? `${supplier.defaultPaymentTerms.slice(0, 20)}…`
