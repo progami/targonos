@@ -33,8 +33,11 @@ export function ProductCard({ product }: { product: Product }) {
         {/* Name + Price row */}
         <div className="flex items-baseline justify-between gap-3">
           <h3 className="text-xl font-semibold tracking-tight">{product.name}</h3>
-          <div className="text-2xl font-bold text-accent">
-            {product.price ?? <span className="text-base text-muted">See Amazon</span>}
+          <div className="text-right">
+            <div className="text-2xl font-bold text-accent">
+              {product.price ?? <span className="text-base text-muted">See store</span>}
+            </div>
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted">RRP</div>
           </div>
         </div>
 
@@ -52,7 +55,7 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="mt-4 flex items-center gap-3">
           <Button asChild variant="accent" size="sm" className="flex-1">
             <a href={product.amazonUrl} target="_blank" rel="noreferrer">
-              Buy on Amazon <ArrowUpRight className="h-4 w-4" />
+              Buy Now <ArrowUpRight className="h-4 w-4" />
             </a>
           </Button>
           <Link
