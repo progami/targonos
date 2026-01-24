@@ -32,8 +32,8 @@ export default function AboutPage() {
                   <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Built for clean work.</h2>
                   <div className="mt-5 space-y-3 text-sm text-muted md:text-base">
                     <p>Big coverage. Simple choices. Clear details.</p>
-                    <p>We focus on extra-large dust sheets designed for fast setup and easy cleanup.</p>
-                    <p>Checkout stays on Amazon for shipping and returns.</p>
+                    <p>Extra-large dust sheets designed for fast setup and easy cleanup.</p>
+                    <p>Available through authorized retailers worldwide.</p>
                   </div>
                 </Card>
               </Reveal>
