@@ -31,6 +31,18 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
    setMounted(true)
  }, [])
 
+ // Handle ESC key to close modal
+ useEffect(() => {
+   if (!isOpen) return
+   const handleKeyDown = (event: KeyboardEvent) => {
+     if (event.key === 'Escape' && !importing) {
+       handleClose()
+     }
+   }
+   document.addEventListener('keydown', handleKeyDown)
+   return () => document.removeEventListener('keydown', handleKeyDown)
+ }, [isOpen, importing])
+
  const config = getImportConfig(entityName)
  if (!config) return null
 

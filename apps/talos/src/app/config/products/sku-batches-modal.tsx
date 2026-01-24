@@ -187,11 +187,24 @@ export function SkuBatchesModal({
   onBatchesUpdated?: () => void
   sku: SkuSummary | null
 }) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   if (!isOpen || !sku) return null
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-5xl">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full max-w-5xl">
         <SkuBatchesManager sku={sku} onRequestClose={onClose} onBatchesUpdated={onBatchesUpdated} />
       </div>
     </div>
@@ -241,6 +254,28 @@ function SkuBatchesManager({
   )
 
   const [confirmDelete, setConfirmDelete] = useState<BatchRow | null>(null)
+
+  // Handle ESC key to close form modal or main panel
+  // Note: closeForm is defined later but React hoists function definitions
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (confirmDelete) {
+          setConfirmDelete(null)
+        } else if (isFormOpen && !isSubmitting) {
+          setIsFormOpen(false)
+          setEditingBatch(null)
+          setMeasurements(buildMeasurementState(null))
+          setFormState(buildBatchFormState(null, unitSystem, buildMeasurementState(null)))
+        } else if (onRequestClose) {
+          onRequestClose()
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isFormOpen, isSubmitting, confirmDelete, onRequestClose, unitSystem])
 
   useEffect(() => {
     try {
@@ -328,14 +363,14 @@ function SkuBatchesManager({
     setIsFormOpen(true)
   }
 
-  const closeForm = () => {
+  const closeForm = useCallback(() => {
     if (isSubmitting) return
     const nextMeasurements = buildMeasurementState(null)
     setIsFormOpen(false)
     setEditingBatch(null)
     setMeasurements(nextMeasurements)
     setFormState(buildBatchFormState(null, unitSystem, nextMeasurements))
-  }
+  }, [isSubmitting, unitSystem])
 
   type DimensionFieldKey = 'cartonLength' | 'cartonWidth' | 'cartonHeight'
 
@@ -671,7 +706,12 @@ function SkuBatchesManager({
 
       {isFormOpen ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-          <div className="flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
+          <div
+            className="absolute inset-0"
+            onClick={() => !isSubmitting && closeForm()}
+            aria-hidden="true"
+          />
+          <div className="relative flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div className="flex flex-col">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
