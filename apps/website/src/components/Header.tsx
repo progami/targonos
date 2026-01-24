@@ -11,10 +11,10 @@ import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
 
 const homeNavLinks = [
-  { label: 'Products', href: '/#products' },
   { label: 'Mission', href: '/#mission' },
   { label: 'Vision', href: '/#vision' },
-  { label: 'Values', href: '/#values' }
+  { label: 'Values', href: '/#values' },
+  { label: 'Products', href: '/#products' }
 ];
 
 const siteNavLinks = [

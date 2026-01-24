@@ -27,9 +27,18 @@ export default function HomePage() {
         </div>
 
         <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
-          <h1 className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] select-none text-[15vw] font-black leading-none tracking-tighter text-white/15 blur-[2px] md:text-[12vw]">
-            TARGON
-          </h1>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] select-none blur-[2px]"
+          >
+            <Image
+              src="/brand/logo-inverted.svg"
+              alt=""
+              width={2048}
+              height={537}
+              className="h-auto w-[88vw] max-w-none opacity-[0.14] md:w-[78vw]"
+            />
+          </div>
 
           <Reveal>
             <h2 className="mx-auto w-[min(560px,90vw)]">
