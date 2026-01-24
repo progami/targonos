@@ -42,7 +42,8 @@ export default function WhereToBuyPage() {
       <section className="pt-14 md:pt-20">
         <Container>
           <Reveal>
-            <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Where to buy</h1>
+            <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Where to buy.</h1>
+            <div className="mt-3 h-1 w-12 rounded-full bg-accent" />
           </Reveal>
           <Reveal delay={80}>
             <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">We sell on Amazon.</p>
@@ -94,7 +95,7 @@ export default function WhereToBuyPage() {
 
                 <ul className="divide-y divide-border">
                   {products.map((p) => (
-                    <li key={p.slug} className="px-6 py-5">
+                    <li key={p.slug} className="px-6 py-5 transition-colors hover:bg-surface/50">
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div>
                           {p.primary ? (

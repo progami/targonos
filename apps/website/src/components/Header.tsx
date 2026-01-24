@@ -63,10 +63,10 @@ export function Header() {
           <Image
             src={onHome ? '/brand/logo-inverted.svg' : '/brand/logo.svg'}
             alt={`${site.name} logo`}
-            width={140}
-            height={28}
+            width={160}
+            height={32}
             priority
-            className="h-7 w-auto"
+            className="h-8 w-auto"
           />
           <span className="sr-only">{site.name}</span>
         </Link>
@@ -79,11 +79,9 @@ export function Header() {
                 key={l.href}
                 href={l.href}
                 className={cn(
-                  'relative text-sm font-semibold transition',
-                  onHome ? 'text-white/70 hover:text-white' : 'text-muted hover:text-ink',
-                  'after:absolute after:-bottom-1 after:left-0 after:h-[2px] after:w-0 after:transition-all after:duration-300 hover:after:w-full',
-                  onHome ? 'after:bg-white/80' : 'after:bg-accent',
-                  active && (onHome ? 'text-white after:w-full' : 'text-ink after:w-full')
+                  'relative rounded-full px-3 py-1.5 text-sm font-semibold transition-all duration-200',
+                  onHome ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-muted hover:text-ink hover:bg-surface',
+                  active && (onHome ? 'text-white bg-white/15' : 'text-ink bg-accent/10')
                 )}
               >
                 {l.label}
@@ -94,11 +92,18 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           {onHome ? (
-            <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
-              <Link href="/caelum-star">
-                Explore {site.productBrandName} <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <>
+              <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
+                <Link href="/caelum-star">
+                  Explore {site.productBrandName} <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="accent" className="sm:hidden">
+                <Link href="/caelum-star">
+                  Explore <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </>
           ) : (
             <>
               <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
@@ -106,7 +111,7 @@ export function Header() {
                   Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
                 </a>
               </Button>
-              <Button asChild size="sm" className="sm:hidden">
+              <Button asChild size="sm" variant="accent" className="sm:hidden">
                 <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
                   Buy <ArrowUpRight className="h-4 w-4" />
                 </a>

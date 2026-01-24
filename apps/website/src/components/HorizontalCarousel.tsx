@@ -1,38 +1,57 @@
 'use client';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Children, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export function HorizontalCarousel({
   children,
   className,
-  scrollerClassName
+  scrollerClassName,
+  showDots = true
 }: {
   children: ReactNode;
   className?: string;
   scrollerClassName?: string;
+  showDots?: boolean;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const itemCount = Children.count(children);
 
-  const update = () => {
+  const update = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
 
     const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
     setCanScrollLeft(scroller.scrollLeft > 2);
     setCanScrollRight(scroller.scrollLeft < maxScrollLeft - 2);
-  };
+
+    // Calculate active dot based on scroll position
+    if (itemCount > 1 && maxScrollLeft > 0) {
+      const scrollProgress = scroller.scrollLeft / maxScrollLeft;
+      const newIndex = Math.round(scrollProgress * (itemCount - 1));
+      setActiveIndex(Math.min(Math.max(newIndex, 0), itemCount - 1));
+    }
+  }, [itemCount]);
+
+  const scrollToIndex = useCallback((index: number) => {
+    const scroller = scrollerRef.current;
+    if (!scroller || itemCount <= 1) return;
+
+    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    const targetScroll = (index / (itemCount - 1)) * maxScrollLeft;
+    scroller.scrollTo({ left: targetScroll, behavior: 'smooth' });
+  }, [itemCount]);
 
   useEffect(() => {
     update();
     const onResize = () => update();
     window.addEventListener('resize', onResize, { passive: true });
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [update]);
 
   const scrollByViewport = (direction: 'left' | 'right') => {
     const scroller = scrollerRef.current;
@@ -84,6 +103,26 @@ export function HorizontalCarousel({
       <div ref={scrollerRef} className={cn(scrollerClassName)} onScroll={update}>
         {children}
       </div>
+
+      {/* Dot pagination - visible on mobile */}
+      {showDots && itemCount > 1 && (
+        <div className="mt-4 flex justify-center gap-2 md:hidden">
+          {Array.from({ length: itemCount }).map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => scrollToIndex(i)}
+              className={cn(
+                'h-2 w-2 rounded-full transition-all duration-300',
+                i === activeIndex
+                  ? 'w-6 bg-white'
+                  : 'bg-white/40 hover:bg-white/60'
+              )}
+              aria-label={`Go to item ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

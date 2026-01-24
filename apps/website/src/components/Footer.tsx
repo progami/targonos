@@ -47,10 +47,11 @@ export function Footer() {
                   {links.map((l) => (
                     <li key={l.href}>
                       <Link
-                        className="inline-block text-sm text-white/65 transition-all duration-200 hover:text-white hover:translate-x-0.5"
+                        className="group relative inline-block text-sm text-white/65 transition-colors duration-200 hover:text-white"
                         href={l.href}
                       >
                         {l.label}
+                        <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-accent transition-all duration-300 group-hover:w-full" />
                       </Link>
                     </li>
                   ))}
@@ -60,15 +61,9 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-white/50 md:flex-row md:items-center md:justify-between">
+        <div className="mt-12 border-t border-white/10 pt-6 text-xs text-white/50">
           <div>
             © {year} {site.name}. All rights reserved.
-          </div>
-          <div>
-            Support:{' '}
-            <a className="font-semibold text-white hover:underline" href={`mailto:${site.contactEmail}`}>
-              {site.contactEmail}
-            </a>
           </div>
         </div>
       </Container>

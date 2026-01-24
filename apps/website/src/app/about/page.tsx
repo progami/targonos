@@ -15,6 +15,7 @@ export default function AboutPage() {
         <Container>
           <Reveal>
             <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">About.</h1>
+            <div className="mt-3 h-1 w-12 rounded-full bg-accent" />
           </Reveal>
           <Reveal delay={80}>
             <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">{site.name} builds protection products for decorating.</p>
@@ -22,7 +23,7 @@ export default function AboutPage() {
         </Container>
       </section>
 
-      <section className="mt-12">
+      <section className="mt-12 pb-16">
         <Container>
           <div className="grid gap-6 md:grid-cols-12 md:items-start">
             <div className="md:col-span-7">
@@ -64,13 +65,13 @@ export default function AboutPage() {
 
             <div className="md:col-span-5">
               <Reveal variant="media" delay={100}>
-                <Card className="overflow-hidden">
+                <Card className="group overflow-hidden">
                   <div className="relative aspect-[4/5]">
                     <Image
                       src="/images/unsplash/painting-setup.webp"
                       alt="Decorating setup"
                       fill
-                      className="object-cover"
+                      className="object-cover transition-transform duration-700 ease-out motion-safe:group-hover:scale-105"
                       sizes="(min-width: 768px) 520px, 100vw"
                     />
                   </div>

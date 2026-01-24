@@ -44,6 +44,20 @@ a {
   text-decoration: none;
 }
 
+/* Global focus-visible styles for accessibility */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--accent));
+  border-radius: 4px;
+}
+
+/* Skip focus ring on elements that handle their own (buttons, FAQ, etc.) */
+.focus-handled:focus-visible {
+  box-shadow: none;
+}
+
 /* Scrollbar: keep subtle (won't apply everywhere) */
 @media (pointer: fine) {
   ::-webkit-scrollbar {
@@ -371,5 +385,25 @@ body.tg-home .tg-ring--core {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Floating animation for hero images */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float {
+    animation: none;
   }
 }
