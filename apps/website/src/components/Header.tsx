@@ -59,16 +59,19 @@ export function Header() {
       )}
     >
       <Container className="flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-3 font-semibold tracking-tightish">
+        <Link
+          href="/"
+          aria-label={site.name}
+          className="flex items-center gap-3 font-semibold tracking-tightish"
+        >
           <Image
             src={onHome ? '/brand/logo-inverted.svg' : '/brand/logo.svg'}
-            alt={`${site.name} logo`}
+            alt=""
             width={160}
             height={32}
             priority
             className="h-8 w-auto"
           />
-          <span className="sr-only">{site.name}</span>
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
