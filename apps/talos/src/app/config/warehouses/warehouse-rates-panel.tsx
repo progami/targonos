@@ -658,17 +658,6 @@ function StorageTab({ templates, renderRateRow, warehouseName }: StorageTabProps
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>
         </table>
       </div>
-
-      <div className="rounded-lg border border-border bg-muted/10 px-4 py-3">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-foreground">Pallet conversions</h3>
-          <p className="text-xs text-muted-foreground">
-            Storage/shipping cartons per pallet are configured per batch during the purchase order
-            workflow (and can be edited in Config → Products → Batches).
-            {warehouseName ? ` ${warehouseName} rates are still managed here.` : null}
-          </p>
-        </div>
-      </div>
     </div>
   )
 }
