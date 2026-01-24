@@ -350,6 +350,8 @@ function validateDate(value: string): boolean {
   return date !== null;
 }
 
+const NON_CLEARABLE_FIELDS = new Set<keyof OpsInputRow>(['orderCode', 'quantity']);
+
 type ColumnDef = {
   key: keyof OpsInputRow;
   header: string;
@@ -1009,6 +1011,25 @@ export function CustomOpsPlanningGrid({
 
       let finalValue = nextValue ?? editValue;
 
+      if (colKey === 'orderCode') {
+        const trimmed = finalValue.trim();
+        if (!trimmed) {
+          toast.error('Order code is required');
+          cancelEditing();
+          return;
+        }
+        finalValue = trimmed;
+      }
+
+      if (colKey === 'quantity') {
+        const trimmed = finalValue.trim();
+        if (!trimmed) {
+          toast.error('Quantity is required');
+          cancelEditing();
+          return;
+        }
+      }
+
       // Validate and normalize based on column type
       if (column.type === 'numeric') {
         const validator = validateNumeric;
@@ -1019,6 +1040,14 @@ export function CustomOpsPlanningGrid({
         }
         const precision = column.precision ?? NUMERIC_PRECISION[colKey] ?? 2;
         finalValue = normalizeNumeric(finalValue, precision);
+        if (colKey === 'quantity') {
+          const numericValue = sanitizeNumeric(finalValue);
+          if (!Number.isFinite(numericValue) || numericValue < 0) {
+            toast.error('Quantity must be a non-negative number');
+            cancelEditing();
+            return;
+          }
+        }
       } else if (column.type === 'stage' && stageMode === 'weeks') {
         const trimmed = finalValue.trim();
         if (!trimmed) {
@@ -1674,6 +1703,7 @@ export function CustomOpsPlanningGrid({
         if (column.type === 'dropdown') continue;
 
         const colKey = column.key;
+        if (NON_CLEARABLE_FIELDS.has(colKey)) continue;
         const oldValue = row[colKey] ?? '';
         if (oldValue === '') continue;
 
@@ -1764,13 +1794,16 @@ export function CustomOpsPlanningGrid({
         const nextValues: Record<string, string> = {};
         let nextRow = { ...baseRow };
 
-        for (const update of rowUpdates) {
-          const { column, colKey } = update;
-          let rawValue = update.value;
+      for (const update of rowUpdates) {
+        const { column, colKey } = update;
+        let rawValue = update.value;
+        if (NON_CLEARABLE_FIELDS.has(colKey) && rawValue.trim() === '') {
+          continue;
+        }
 
-          // Stage columns: allow paste in both date and weeks modes.
-          if (column.type === 'stage') {
-            const stageField = colKey as StageWeeksKey;
+        // Stage columns: allow paste in both date and weeks modes.
+        if (column.type === 'stage') {
+          const stageField = colKey as StageWeeksKey;
             const overrideField = STAGE_OVERRIDE_FIELDS[stageField];
             const trimmed = rawValue.trim();
 
