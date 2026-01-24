@@ -133,7 +133,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
            <div className="relative w-full max-w-lg overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
  <div className="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
  <div className="flex items-center justify-between mb-4">
- <h3 className="text-lg font-medium text-slate-900">
+ <h3 className="text-lg font-medium text-foreground">
  Import {config.displayName}
  </h3>
  <Button
@@ -148,8 +148,8 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
 
  <div className="space-y-4">
  {/* Instructions */}
- <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
- <div className="text-sm text-cyan-800">
+ <div className="bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-800 rounded-lg p-3">
+ <div className="text-sm text-cyan-800 dark:text-cyan-200">
  <p className="font-medium mb-1">Import Instructions:</p>
  <ul className="list-disc list-inside space-y-1 text-xs">
  <li>File must be in Excel format (.xlsx or .xls)</li>
@@ -161,14 +161,14 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  </div>
 
  {/* Template download */}
- <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+ <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
  <div>
- <p className="text-sm font-medium text-slate-900">Need a template?</p>
- <p className="text-xs text-slate-500">Download a pre-formatted Excel template</p>
+ <p className="text-sm font-medium text-foreground">Need a template?</p>
+ <p className="text-xs text-muted-foreground">Download a pre-formatted Excel template</p>
  </div>
  <button
  onClick={downloadTemplate}
- className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-medium rounded text-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50"
+ className="inline-flex items-center px-3 py-1.5 border border-slate-300 dark:border-slate-600 text-xs font-medium rounded text-foreground bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
  >
  <Download className="h-3 w-3 mr-1" />
  Template
@@ -177,7 +177,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
 
  {/* File upload */}
  <div>
- <label htmlFor={`import-file-${entityName}`} className="block text-sm font-medium text-slate-700 mb-2">
+ <label htmlFor={`import-file-${entityName}`} className="block text-sm font-medium text-foreground mb-2">
  Select Excel file
  </label>
  <input
@@ -186,7 +186,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  type="file"
  accept=".xlsx,.xls"
  onChange={handleFileChange}
- className="block w-full text-sm text-slate-500
+ className="block w-full text-sm text-muted-foreground
  file:mr-4 file:py-2 file:px-4
  file:rounded-md file:border-0
  file:text-sm file:font-medium
@@ -200,7 +200,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  Upload an Excel file containing {config.displayName} data to import
  </span>
  {file && (
- <p className="mt-2 text-sm text-slate-600">
+ <p className="mt-2 text-sm text-muted-foreground">
  Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
  </p>
  )}
@@ -232,19 +232,19 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  
  <div className="grid grid-cols-2 gap-2 text-sm mb-2">
  <div>
- <span className="text-slate-500">Imported:</span>
- <span className="ml-2 font-medium text-green-600">{result.imported}</span>
+ <span className="text-muted-foreground">Imported:</span>
+ <span className="ml-2 font-medium text-green-600 dark:text-green-400">{result.imported}</span>
  </div>
  <div>
- <span className="text-slate-500">Skipped:</span>
- <span className="ml-2 font-medium text-yellow-600">{result.skipped}</span>
+ <span className="text-muted-foreground">Skipped:</span>
+ <span className="ml-2 font-medium text-yellow-600 dark:text-yellow-400">{result.skipped}</span>
  </div>
  </div>
  
  {result.errors.length > 0 && (
- <div className="mt-2 p-2 bg-red-50 rounded text-xs">
- <p className="font-medium text-red-900 mb-1">Errors:</p>
- <ul className="text-red-800 space-y-0.5">
+ <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/30 rounded text-xs">
+ <p className="font-medium text-red-900 dark:text-red-200 mb-1">Errors:</p>
+ <ul className="text-red-800 dark:text-red-300 space-y-0.5">
  {result.errors.slice(0, 5).map((error, idx) => (
  <li key={idx}>• {error}</li>
  ))}
@@ -259,7 +259,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  </div>
  </div>
 
- <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+ <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
  <button
  onClick={handleImport}
  disabled={!file || importing}
@@ -282,7 +282,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  </button>
  <button
  onClick={handleClose}
- className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-soft px-4 py-2 bg-white dark:bg-slate-800 text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+ className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 dark:border-slate-600 shadow-soft px-4 py-2 bg-white dark:bg-slate-800 text-base font-medium text-foreground hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
  >
  Cancel
  </button>

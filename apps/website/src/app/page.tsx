@@ -286,8 +286,14 @@ export default function HomePage() {
                   </div>
                 </Reveal>
                 <Reveal delay={120}>
-                  <h2 className="mt-6 text-balance text-5xl font-semibold tracking-tight text-white md:text-6xl">
-                    {site.productBrandName}.
+                  <h2 className="mt-6 flex justify-center md:justify-start">
+                    <Image
+                      src="/brand/cs/logo-on-dark.webp"
+                      alt={site.productBrandName}
+                      width={1384}
+                      height={300}
+                      className="h-auto w-[min(420px,90%)] opacity-95"
+                    />
                   </h2>
                 </Reveal>
                 <Reveal delay={200}>
