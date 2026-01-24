@@ -204,7 +204,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   </div>
                   Simple choices
                 </div>
-                <p className="mt-3 text-sm text-muted">Pick your pack size. Checkout stays on Amazon.</p>
+                <p className="mt-3 text-sm text-muted">Pick your pack size. Available at authorized retailers.</p>
               </Card>
             </Reveal>
           </div>

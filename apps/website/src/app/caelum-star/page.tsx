@@ -151,7 +151,7 @@ export default function CaelumStarPage() {
 
               <Reveal delay={400}>
                 <p className="mt-6 text-sm text-muted">
-                  Checkout stays on Amazon. This page is built for pack details.
+                  Compare packs below. Purchase through authorized retailers.
                 </p>
               </Reveal>
             </div>

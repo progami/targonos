@@ -307,8 +307,8 @@ export default function HomePage() {
                 </Reveal>
                 <Reveal delay={200}>
                   <p className="mt-4 max-w-xl text-pretty text-base text-white/70 md:text-lg">
-                    Extra‑large dust sheets built for clean decorating. Clear pack options. Checkout stays on
-                    Amazon.
+                    Extra‑large dust sheets built for clean decorating. Clear pack options. Available at select
+                    retailers.
                   </p>
                 </Reveal>
                 <Reveal delay={280}>
