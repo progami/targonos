@@ -210,6 +210,41 @@ export async function createFulfillmentOrder(
     }
   }
 
+  const inventoryGrouped = await prisma.inventoryTransaction.groupBy({
+    by: ['skuCode', 'batchLot'],
+    where: {
+      warehouseCode: warehouse.code,
+      skuCode: { in: skuCodes },
+      batchLot: { in: batchCodes },
+    },
+    _sum: { cartonsIn: true, cartonsOut: true },
+  })
+
+  const availableCartonsByKey = new Map<string, number>()
+  for (const row of inventoryGrouped) {
+    const cartonsIn = row._sum.cartonsIn
+    const cartonsOut = row._sum.cartonsOut
+    const totalIn = typeof cartonsIn === 'number' ? cartonsIn : 0
+    const totalOut = typeof cartonsOut === 'number' ? cartonsOut : 0
+    availableCartonsByKey.set(`${row.skuCode}::${row.batchLot}`, totalIn - totalOut)
+  }
+
+  const inventoryIssues: string[] = []
+  for (const line of normalizedLines) {
+    const available = availableCartonsByKey.get(`${line.skuCode}::${line.batchLot}`)
+    const availableCartons = typeof available === 'number' ? available : 0
+
+    if (availableCartons < line.quantity) {
+      inventoryIssues.push(
+        `${line.skuCode} batch ${line.batchLot} (available ${availableCartons}, requested ${line.quantity})`
+      )
+    }
+  }
+
+  if (inventoryIssues.length > 0) {
+    throw new ValidationError(`Insufficient inventory: ${inventoryIssues.join('; ')}`)
+  }
+
   const MAX_FO_NUMBER_ATTEMPTS = 5
 
   for (let attempt = 0; attempt < MAX_FO_NUMBER_ATTEMPTS; attempt += 1) {

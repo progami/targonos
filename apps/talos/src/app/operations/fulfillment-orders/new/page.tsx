@@ -41,6 +41,8 @@ export default function NewFulfillmentOrderPage() {
 
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
   const [skus, setSkus] = useState<SkuOption[]>([])
+  const [inventorySkus, setInventorySkus] = useState<SkuOption[]>([])
+  const [inventoryOptionsLoading, setInventoryOptionsLoading] = useState(false)
 
   // Source type selection (replaces destination type in Order Details tab)
   const [sourceType, setSourceType] = useState<DestinationType>('AMAZON_FBA')
@@ -129,12 +131,24 @@ export default function NewFulfillmentOrderPage() {
   const totalUnits = useMemo(() => {
     return lineItems.reduce((sum, item) => {
       if (!item.skuCode || !item.batchLot) return sum
-      const sku = skus.find(s => s.skuCode === item.skuCode)
-      const batch = sku?.batches?.find((b: SkuBatchOption) => b.batchCode === item.batchLot)
-      const unitsPerCarton = batch?.unitsPerCarton ?? sku?.unitsPerCarton ?? 1
+
+      let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
+      if (!sku) {
+        sku = skus.find(s => s.skuCode === item.skuCode)
+      }
+
+      const batch = sku?.batches?.find(b => b.batchCode === item.batchLot)
+
+      let unitsPerCarton = 1
+      if (batch && typeof batch.unitsPerCarton === 'number' && batch.unitsPerCarton > 0) {
+        unitsPerCarton = batch.unitsPerCarton
+      } else if (sku && typeof sku.unitsPerCarton === 'number' && sku.unitsPerCarton > 0) {
+        unitsPerCarton = sku.unitsPerCarton
+      }
+
       return sum + item.quantity * unitsPerCarton
     }, 0)
-  }, [lineItems, skus])
+  }, [inventorySkus, lineItems, skus])
 
   useEffect(() => {
     if (status === 'loading') return
@@ -190,9 +204,60 @@ export default function NewFulfillmentOrderPage() {
     load()
   }, [status])
 
+  useEffect(() => {
+    if (status !== 'authenticated') return
+
+    const selectedWarehouseCode = formData.warehouseCode.trim()
+    if (!selectedWarehouseCode) {
+      setInventorySkus([])
+      return
+    }
+
+    const selectedWarehouse = warehouses.find(w => w.code === selectedWarehouseCode)
+    if (!selectedWarehouse) {
+      setInventorySkus([])
+      return
+    }
+
+    const controller = new AbortController()
+
+    const loadInventoryOptions = async () => {
+      try {
+        setInventoryOptionsLoading(true)
+
+        const response = await fetch(
+          `/api/fulfillment-orders/inventory-options?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`,
+          { signal: controller.signal }
+        )
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          toast.error(payload?.error ?? 'Failed to load inventory options')
+          setInventorySkus([])
+          return
+        }
+
+        const options = Array.isArray(payload?.skus) ? (payload.skus as SkuOption[]) : []
+        setInventorySkus(options)
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+        toast.error(error instanceof Error ? error.message : 'Failed to load inventory options')
+        setInventorySkus([])
+      } finally {
+        setInventoryOptionsLoading(false)
+      }
+    }
+
+    void loadInventoryOptions()
+
+    return () => controller.abort()
+  }, [formData.warehouseCode, status, warehouses])
+
   // Line item helpers
   const getBatchOptions = (skuCode: string): SkuBatchOption[] => {
-    const sku = skus.find(s => s.skuCode === skuCode)
+    const sku = inventorySkus.find(s => s.skuCode === skuCode)
     return sku?.batches ?? []
   }
 
@@ -221,7 +286,10 @@ export default function NewFulfillmentOrderPage() {
 
         if (field === 'skuCode') {
           const nextSkuCode = String(value)
-          const sku = skus.find(s => s.skuCode === nextSkuCode)
+          let sku = inventorySkus.find(s => s.skuCode === nextSkuCode)
+          if (!sku) {
+            sku = skus.find(s => s.skuCode === nextSkuCode)
+          }
           return {
             ...item,
             skuCode: nextSkuCode,
@@ -251,6 +319,39 @@ export default function NewFulfillmentOrderPage() {
       if (invalidLine) {
         toast.error('Each line requires SKU, batch, and quantity')
         return
+      }
+
+      if (inventoryOptionsLoading) {
+        toast.error('Inventory options are still loading')
+        return
+      }
+
+      if (inventorySkus.length === 0) {
+        toast.error('No on-hand inventory available for this warehouse')
+        return
+      }
+
+      for (const item of lineItems) {
+        const sku = inventorySkus.find(s => s.skuCode === item.skuCode)
+        if (!sku) {
+          toast.error(`SKU ${item.skuCode} has no on-hand inventory in this warehouse`)
+          return
+        }
+
+        const batch = sku.batches.find(b => b.batchCode === item.batchLot)
+        if (!batch) {
+          toast.error(
+            `Batch ${item.batchLot} for SKU ${item.skuCode} has no on-hand inventory in this warehouse`
+          )
+          return
+        }
+
+        if (typeof batch.availableCartons === 'number' && batch.availableCartons < item.quantity) {
+          toast.error(
+            `Insufficient inventory for SKU ${item.skuCode} batch ${item.batchLot}. Available: ${batch.availableCartons}, Requested: ${item.quantity}`
+          )
+          return
+        }
       }
 
       setSubmitting(true)
@@ -477,7 +578,10 @@ export default function NewFulfillmentOrderPage() {
               <div className="divide-y">
                 {lineItems.map(item => {
                   const batches = getBatchOptions(item.skuCode)
-                  const sku = skus.find(s => s.skuCode === item.skuCode)
+                  let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
+                  if (!sku) {
+                    sku = skus.find(s => s.skuCode === item.skuCode)
+                  }
                   const batch = batches.find(b => b.batchCode === item.batchLot)
                   const unitsPerCarton = batch?.unitsPerCarton ?? sku?.unitsPerCarton ?? 1
                   const totalItemUnits = item.quantity * unitsPerCarton
@@ -490,9 +594,10 @@ export default function NewFulfillmentOrderPage() {
                           onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
                           className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                           required
+                          disabled={!formData.warehouseCode || inventoryOptionsLoading}
                         >
                           <option value="">Select SKU</option>
-                          {skus.map(s => (
+                          {inventorySkus.map(s => (
                             <option key={s.id} value={s.skuCode}>
                               {s.skuCode}
                             </option>
