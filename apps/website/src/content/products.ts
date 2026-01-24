@@ -94,7 +94,7 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    price: '$8.99',
+    price: '$9.99',
     tagline: 'Essential coverage for standard projects.',
     description: 'Extra‑large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
@@ -209,7 +209,7 @@ export const products: Product[] = [
     packLabel: '12 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1296 sq ft',
-    price: '$12.99',
+    price: '$14.99',
     tagline: 'Deluxe coverage for multi‑room renovations.',
     description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
