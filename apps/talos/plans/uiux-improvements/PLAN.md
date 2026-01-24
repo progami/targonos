@@ -10,62 +10,77 @@ This document tracks UI/UX improvements for the Talos application.
 
 ### Dark Mode Issues
 
-- [x] **Fix text not white in dark mode** - Some text elements are not properly styled for dark mode and appear in incorrect colors (should be white/light)
+- [x] **Fix text not white in dark mode** - Comprehensive fix across components
 
 ### Content Cleanup
 
-- [x] **Remove "Pallet conversions" text from warehouse rates page** - Remove the informational box about pallet conversions from `/config/warehouses/[id]/rates`
+- [x] **Remove "Pallet conversions" text from warehouse rates page**
 
 ---
 
 ## Completed Fixes
 
-### `/operations/fulfillment-orders/new` Page
+### Batch 2 - Comprehensive Dark Mode Scan
 
-#### Fixed:
+1. **amazon-import-button.tsx** - Full dark mode support for modal
+   - Header, workflow steps, filter buttons
+   - Table headers, rows, cells
+   - Status badges, results section, footer
+
+2. **empty-state.tsx** - Text colors using semantic classes
+
+3. **import-button.tsx** - Modal dark mode support
+   - Instructions, template download, file input, results
+
+4. **export-button.tsx** - Button and dropdown dark mode
+
+5. **form-field.tsx** - Labels, inputs, hints dark mode
+
+6. **fulfillment-orders/[id]/page.tsx** - Detail page dark mode
+   - Status badges, document upload section, line items table, freight section
+
+7. **fulfillment-orders-panel.tsx** - Status badge classes
+
+### Batch 1 - Initial Fixes
 
 1. **amazon-shipment-picker.tsx**
-   - Added dark mode variants to import confirmation banner (`dark:bg-emerald-900/30`, `dark:text-emerald-200/300`)
-   - Added dark mode to shipment list (`dark:bg-slate-900`)
-   - Fixed shipment items with dark variants (`dark:text-slate-100`, `dark:text-slate-400`)
-   - Added hover dark variant (`dark:hover:bg-slate-700`)
-   - Added `text-foreground` to warehouse select for proper text color
+   - Import confirmation banner, shipment list, hover states, warehouse select
 
-2. **freight-section.tsx**
-   - Added hover dark variant (`dark:hover:bg-slate-700`)
+2. **freight-section.tsx** - Hover dark variant
 
-3. **page.tsx**
-   - Added `text-foreground` to all select elements for proper dark mode text color
-   - Added `divide-border` for proper divider color in dark mode
+3. **fulfillment-orders/new/page.tsx** - Select elements, dividers
+
+4. **warehouse-rates-panel.tsx** - Removed pallet conversions text
 
 ---
 
-### `/config/warehouses/[id]/rates` Page
+## Dark Mode Pattern Reference
 
-#### Fixed:
+### Text Colors
+- `text-slate-900` -> `text-foreground`
+- `text-slate-700` -> `text-foreground`
+- `text-slate-600` -> `text-muted-foreground`
+- `text-slate-500` -> `text-muted-foreground`
 
-1. **warehouse-rates-panel.tsx**
-   - Removed the "Pallet conversions" info box
+### Background Colors
+- `bg-slate-50` -> `bg-slate-50 dark:bg-slate-900`
+- `bg-white` -> `bg-white dark:bg-slate-800`
+- `hover:bg-slate-50` -> `hover:bg-slate-50 dark:hover:bg-slate-800`
+- `hover:bg-slate-100` -> `hover:bg-slate-100 dark:hover:bg-slate-700`
+
+### Status/Badge Colors
+- `bg-emerald-50 text-emerald-700` -> `bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300`
+- `bg-rose-50 text-rose-700` -> `bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300`
+- `bg-slate-100 text-slate-700` -> `bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300`
 
 ---
 
-## Implementation Notes
+## Known Remaining Files (Lower Priority)
 
-### Dark Mode Fix Pattern
-
-When fixing dark mode text issues:
-
-1. Replace hardcoded colors with dark variants:
-   - `text-slate-900` -> `text-slate-900 dark:text-slate-100`
-   - `text-slate-500` -> `text-slate-500 dark:text-slate-400`
-   - `bg-slate-50` -> `bg-slate-50 dark:bg-slate-900`
-   - `bg-emerald-50` -> `bg-emerald-50 dark:bg-emerald-900/30`
-   - `text-emerald-800` -> `text-emerald-800 dark:text-emerald-200`
-   - `hover:bg-slate-50` -> `hover:bg-slate-50 dark:hover:bg-slate-700`
-
-2. Use semantic color classes:
-   - `text-foreground` for text that should adapt to theme
-   - `divide-border` for dividers that should adapt to theme
+Some files still have hardcoded colors but are lower impact:
+- `landing-page.tsx` - Public landing page (light mode only is acceptable)
+- `no-access/page.tsx`, `unauthorized/page.tsx`, `500.tsx` - Error pages
+- Various config pages with labels
 
 ---
 
@@ -73,13 +88,3 @@ When fixing dark mode text issues:
 
 - Theme configuration: `apps/talos/tailwind.config.ts`
 - Global styles: `apps/talos/src/app/globals.css`
-- Warehouse rates panel: `apps/talos/src/app/config/warehouses/warehouse-rates-panel.tsx`
-
----
-
-## Progress Tracking
-
-| Issue | Status | Notes |
-|-------|--------|-------|
-| Dark mode text - fulfillment-orders/new | Completed | Fixed select elements, dividers, and component colors |
-| Remove pallet conversions text - warehouse rates | Completed | Removed info box |
