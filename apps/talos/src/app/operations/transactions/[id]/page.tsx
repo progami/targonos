@@ -241,12 +241,12 @@ export default function TransactionDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={`px-2 py-1 text-xs font-medium rounded-full ${
-                isReceive ? 'bg-green-100 text-green-800' : 'bg-cyan-100 text-cyan-800'
+                isReceive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300'
               }`}
             >
               {transaction.transactionType}
             </span>
-            <span className="px-2 py-1 text-xs font-mono text-slate-500 bg-slate-100 rounded">
+            <span className="px-2 py-1 text-xs font-mono text-muted-foreground bg-slate-100 dark:bg-slate-700 rounded">
               {transaction.id}
             </span>
           </div>
@@ -259,35 +259,35 @@ export default function TransactionDetailPage() {
           <div className="space-y-2">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Transaction Date
                 </label>
                 <input
                   type="date"
                   value={transaction.transactionDate?.split('T')[0] || ''}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                   readOnly
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   {isReceive ? 'PI/CI Number' : 'CI/PI Number'}
                 </label>
                 <input
                   type="text"
                   value={transaction.referenceId || ''}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                   readOnly
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Warehouse</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Warehouse</label>
                 <input
                   type="text"
                   value={transaction.warehouse?.name || ''}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                   readOnly
                 />
               </div>
@@ -295,37 +295,37 @@ export default function TransactionDetailPage() {
               {isReceive && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Ship Name
                     </label>
                     <input
                       type="text"
                       value={transaction.shipName || ''}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                       readOnly
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Container Number
                     </label>
                     <input
                       type="text"
                       value={transaction.trackingNumber || ''}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                       readOnly
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Supplier
                     </label>
                     <input
                       type="text"
                       value={transaction.supplier || ''}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                       readOnly
                     />
                   </div>
@@ -335,25 +335,25 @@ export default function TransactionDetailPage() {
               {isShip && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Pickup Date
                     </label>
                     <input
                       type="date"
                       value={transaction.pickupDate?.split('T')[0] || ''}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                       readOnly
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Tracking Number
                     </label>
                     <input
                       type="text"
                       value={transaction.trackingNumber || ''}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                       readOnly
                     />
                   </div>
@@ -368,46 +368,46 @@ export default function TransactionDetailPage() {
           <div className="space-y-4">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       SKU
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Batch
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Cartons
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Units
                     </th>
                     {isReceive && (
                       <>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Storage Pallets In
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Storage Cartons/Pallet
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Shipping Cartons/Pallet
                         </th>
                       </>
                     )}
                     {isShip && (
                       <>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Shipping Pallets Out
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           Shipping Cartons/Pallet
                         </th>
                       </>
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
                   {cargoItems.map((item, _index) => (
                     <tr key={item.id}>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -415,7 +415,7 @@ export default function TransactionDetailPage() {
                           <input
                             type="text"
                             value={item.skuCode}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                             readOnly
                           />
                         </div>
@@ -424,7 +424,7 @@ export default function TransactionDetailPage() {
                         <input
                           type="text"
                           value={item.batchLot}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                           readOnly
                         />
                       </td>
@@ -432,7 +432,7 @@ export default function TransactionDetailPage() {
                         <input
                           type="number"
                           value={item.cartons}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                           readOnly
                         />
                       </td>
@@ -440,7 +440,7 @@ export default function TransactionDetailPage() {
                         <input
                           type="number"
                           value={item.units}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                           readOnly
                         />
                       </td>
@@ -450,7 +450,7 @@ export default function TransactionDetailPage() {
                             <input
                               type="number"
                               value={item.storagePalletsIn}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                               readOnly
                             />
                           </td>
@@ -458,7 +458,7 @@ export default function TransactionDetailPage() {
                             <input
                               type="number"
                               value={item.storageCartonsPerPallet}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                               readOnly
                             />
                           </td>
@@ -466,7 +466,7 @@ export default function TransactionDetailPage() {
                             <input
                               type="number"
                               value={item.shippingCartonsPerPallet}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                               readOnly
                             />
                           </td>
@@ -478,7 +478,7 @@ export default function TransactionDetailPage() {
                             <input
                               type="number"
                               value={item.shippingPalletsOut}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                               readOnly
                             />
                           </td>
@@ -486,7 +486,7 @@ export default function TransactionDetailPage() {
                             <input
                               type="number"
                               value={item.shippingCartonsPerPallet}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                               readOnly
                             />
                           </td>
@@ -504,37 +504,37 @@ export default function TransactionDetailPage() {
         <TabPanel>
           <div className="space-y-6">
             {!transaction.calculatedCosts || transaction.calculatedCosts.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
+              <div className="text-center py-12 text-muted-foreground">
                 <p>No costs recorded for this transaction</p>
                 <p className="text-sm mt-2">Costs need to be saved when creating the transaction</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 dark:bg-slate-900">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Cost Category
                       </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Quantity
                       </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Unit Rate
                       </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Total Cost
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
                     {transaction.calculatedCosts.map((cost, index) => (
                       <tr key={index}>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <input
                             type="text"
                             value={cost.costCategory ?? cost.category ?? ''}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                             readOnly
                           />
                         </td>
@@ -542,7 +542,7 @@ export default function TransactionDetailPage() {
                           <input
                             type="number"
                             value={cost.quantity ?? 0}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                             readOnly
                           />
                         </td>
@@ -550,7 +550,7 @@ export default function TransactionDetailPage() {
                           <input
                             type="number"
                             value={cost.unitRate ?? cost.rate ?? 0}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                             readOnly
                           />
                         </td>
@@ -558,7 +558,7 @@ export default function TransactionDetailPage() {
                           <input
                             type="number"
                             value={cost.totalCost ?? cost.amount ?? 0}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
                             readOnly
                           />
                         </td>
@@ -575,15 +575,15 @@ export default function TransactionDetailPage() {
         <TabPanel>
           <div className="space-y-4">
             {!transaction.attachments || Object.keys(transaction.attachments).length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
-                <Paperclip className="h-12 w-12 mx-auto mb-4 text-slate-400" />
-                <p className="text-lg font-medium">No attachments</p>
+              <div className="text-center py-12 text-muted-foreground">
+                <Paperclip className="h-12 w-12 mx-auto mb-4 text-slate-400 dark:text-slate-600" />
+                <p className="text-lg font-medium text-foreground">No attachments</p>
                 <p className="text-sm mt-2">No documents have been attached to this transaction</p>
               </div>
             ) : (
               <div className="bg-white dark:bg-slate-800 rounded-xl border">
-                <div className="px-6 py-4 border-b bg-slate-50">
-                  <h3 className="text-lg font-semibold">Transaction Documents</h3>
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                  <h3 className="text-lg font-semibold text-foreground">Transaction Documents</h3>
                 </div>
                 <div className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -605,20 +605,20 @@ export default function TransactionDetailPage() {
                       }
 
                       return (
-                        <div key={category} className="border rounded-lg p-4 bg-slate-50">
+                        <div key={category} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900">
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-sm text-slate-900">
+                              <h4 className="font-medium text-sm text-foreground">
                                 {categoryLabels[category] || category}
                               </h4>
                               <div className="flex items-center gap-2 mt-2">
-                                <Paperclip className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                                <p className="text-sm text-slate-700 truncate">
+                                <Paperclip className="h-4 w-4 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                                <p className="text-sm text-foreground truncate">
                                   {attachment.fileName || attachment.name || 'Document'}
                                 </p>
                               </div>
                               {attachment.size && (
-                                <p className="text-xs text-slate-500 mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                   {(attachment.size / 1024).toFixed(1)} KB
                                 </p>
                               )}
@@ -628,7 +628,7 @@ export default function TransactionDetailPage() {
                                 href={attachment.s3Url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="ml-2 p-2 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 rounded"
+                                className="ml-2 p-2 text-cyan-600 dark:text-cyan-400 hover:text-cyan-800 dark:hover:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 rounded"
                                 title="Download"
                               >
                                 <svg
