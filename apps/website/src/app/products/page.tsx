@@ -50,6 +50,11 @@ export default function ProductsPage() {
               </Reveal>
             ))}
           </div>
+          <Reveal delay={280}>
+            <p className="mt-4 text-center text-xs text-muted">
+              Prices shown are RRP. Actual prices may vary on Amazon.
+            </p>
+          </Reveal>
         </Container>
       </section>
 
