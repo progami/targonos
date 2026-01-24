@@ -58,7 +58,7 @@ export default function WhereToBuyPage() {
               <Reveal variant="media">
                 <Card className="p-6">
                 <div className="text-sm font-semibold text-ink">Amazon</div>
-                <p className="mt-2 text-sm text-muted">Checkout stays on Amazon.</p>
+                <p className="mt-2 text-sm text-muted">Official retailer. Fast shipping available.</p>
                 <div className="mt-5">
                   <Button asChild variant="accent">
                     <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
@@ -66,7 +66,7 @@ export default function WhereToBuyPage() {
                     </a>
                   </Button>
                 </div>
-                <div className="mt-5 text-xs text-muted">Tip: compare packs here, then buy on Amazon.</div>
+                <div className="mt-5 text-xs text-muted">Compare packs on this site, then purchase on Amazon.</div>
                 </Card>
               </Reveal>
 
