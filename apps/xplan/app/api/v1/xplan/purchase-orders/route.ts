@@ -143,6 +143,7 @@ const REQUIRED_STAGE_WEEK_FIELDS = new Set([
   'oceanWeeks',
   'finalWeeks',
 ]);
+const REQUIRED_NON_NULLABLE_FIELDS = new Set(['productId', 'orderCode', 'quantity', 'status']);
 
 function parseNumber(value: string | null | undefined) {
   if (!value) return null;
@@ -272,6 +273,13 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
   }
 
   for (const update of parsed.data.updates) {
+    for (const field of REQUIRED_NON_NULLABLE_FIELDS) {
+      if (!(field in update.values)) continue;
+      const incoming = update.values[field];
+      if (incoming === null || incoming === undefined || incoming.trim() === '') {
+        return NextResponse.json({ error: `${field} is required` }, { status: 400 });
+      }
+    }
     for (const field of REQUIRED_STAGE_WEEK_FIELDS) {
       if (!(field in update.values)) continue;
       const incoming = update.values[field];
@@ -381,7 +389,7 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
         if (!(field in values)) continue;
         const incoming = values[field];
         if (incoming === null || incoming === undefined || incoming === '') {
-          if (REQUIRED_STAGE_WEEK_FIELDS.has(field)) {
+          if (REQUIRED_STAGE_WEEK_FIELDS.has(field) || REQUIRED_NON_NULLABLE_FIELDS.has(field)) {
             continue;
           }
           data[field] = null;
@@ -395,7 +403,9 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
         }
 
         if (field === 'quantity') {
-          data[field] = parseNumber(incoming) ?? null;
+          const parsedQuantity = parseNumber(incoming);
+          if (parsedQuantity == null) continue;
+          data[field] = Math.max(0, Math.round(parsedQuantity));
         } else if (weekNumberFields[field]) {
           const parsedWeek = parseNumber(incoming);
           const weekNumber = parsedWeek == null ? null : Math.round(parsedWeek);
