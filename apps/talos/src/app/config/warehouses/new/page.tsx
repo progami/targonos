@@ -147,7 +147,7 @@ export default function NewWarehousePage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Warehouse Code *
                 </label>
                 <input
@@ -161,11 +161,11 @@ export default function NewWarehousePage() {
                   maxLength={10}
                 />
                 {errors.code && <p className="text-red-500 text-sm mt-1">{errors.code}</p>}
-                <p className="text-slate-500 text-xs mt-1">Unique identifier, max 10 characters</p>
+                <p className="text-muted-foreground text-xs mt-1">Unique identifier, max 10 characters</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Warehouse Name *
                 </label>
                 <input
@@ -181,7 +181,7 @@ export default function NewWarehousePage() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Warehouse Type
                 </label>
                 <select
@@ -193,7 +193,7 @@ export default function NewWarehousePage() {
                   <option value="AMAZON_AWD">Amazon AWD</option>
                   <option value="AMAZON_FBA">Amazon FBA (virtual)</option>
                 </select>
-                <p className="text-slate-500 text-xs mt-1">
+                <p className="text-muted-foreground text-xs mt-1">
                   Use Amazon AWD/FBA types for Amazon-connected warehouses.
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function NewWarehousePage() {
 
             <div className="grid grid-cols-1 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Address Line 1 *
                 </label>
                 <input
@@ -219,7 +219,7 @@ export default function NewWarehousePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Address Line 2
                 </label>
                 <input
@@ -233,7 +233,7 @@ export default function NewWarehousePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     City *
                   </label>
                   <input
@@ -249,7 +249,7 @@ export default function NewWarehousePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     State *
                   </label>
                   <input
@@ -268,7 +268,7 @@ export default function NewWarehousePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     ZIP code *
                   </label>
                   <input
@@ -289,7 +289,7 @@ export default function NewWarehousePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Contact Email
                 </label>
                 <input
@@ -307,7 +307,7 @@ export default function NewWarehousePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Contact Phone
                 </label>
                 <input
