@@ -4,6 +4,7 @@ import {
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderStatus,
+  PurchaseOrderType,
   PurchaseOrderLineStatus,
   PurchaseOrderDocumentStage,
   TransactionType,
@@ -1464,6 +1465,19 @@ export async function transitionPurchaseOrderStage(
         throw new ValidationError(`Invalid warehouse code: ${nextOrder.warehouseCode}`)
       }
 
+      if (nextOrder.type === PurchaseOrderType.PURCHASE) {
+        const hasForwardingCost = await tx.purchaseOrderForwardingCost.findFirst({
+          where: { purchaseOrderId: nextOrder.id, warehouseId: warehouse.id },
+          select: { id: true },
+        })
+
+        if (!hasForwardingCost) {
+          throw new ValidationError(
+            'At least one forwarding (freight) cost is required before receiving this purchase order'
+          )
+        }
+      }
+
       const activeLines = nextOrder.lines.filter(
         line => line.status !== PurchaseOrderLineStatus.CANCELLED
       )
@@ -1686,26 +1700,32 @@ export async function transitionPurchaseOrderStage(
         }
       }
 
-      const costLedgerEntries = buildTacticalCostLedgerEntries({
-        transactionType: 'RECEIVE',
-        receiveType: nextOrder.receiveType,
-        shipMode: null,
-        ratesByCostName,
-        lines: createdTransactions.map(row => ({
-          transactionId: row.id,
-          skuCode: row.skuCode,
-          cartons: row.cartons,
-          pallets: row.pallets,
-          cartonDimensionsCm: row.cartonDimensionsCm,
-        })),
-        warehouseCode: warehouse.code,
-        warehouseName: warehouse.name,
-        createdAt: receivedAt,
-        createdByName: user.name,
-      })
+      let inboundLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
+      try {
+        inboundLedgerEntries = buildTacticalCostLedgerEntries({
+          transactionType: 'RECEIVE',
+          receiveType: nextOrder.receiveType,
+          shipMode: null,
+          ratesByCostName,
+          lines: createdTransactions.map(row => ({
+            transactionId: row.id,
+            skuCode: row.skuCode,
+            cartons: row.cartons,
+            pallets: row.pallets,
+            cartonDimensionsCm: row.cartonDimensionsCm,
+          })),
+          warehouseCode: warehouse.code,
+          warehouseName: warehouse.name,
+          createdAt: receivedAt,
+          createdByName: user.name,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Cost calculation failed'
+        throw new ValidationError(message)
+      }
 
-      if (costLedgerEntries.length > 0) {
-        await tx.costLedger.createMany({ data: costLedgerEntries })
+      if (inboundLedgerEntries.length > 0) {
+        await tx.costLedger.createMany({ data: inboundLedgerEntries })
       }
 
       const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
@@ -1736,17 +1756,23 @@ export async function transitionPurchaseOrderStage(
           cartonDimensionsCm: row.cartonDimensionsCm,
         }))
 
-        const forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
-          buildPoForwardingCostLedgerEntries({
-            costName: cost.costName,
-            totalCost: Number(cost.totalCost),
-            lines,
-            warehouseCode: warehouse.code,
-            warehouseName: warehouse.name,
-            createdAt: receivedAt,
-            createdByName: user.name,
-          })
-        )
+        let forwardingLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
+        try {
+          forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
+            buildPoForwardingCostLedgerEntries({
+              costName: cost.costName,
+              totalCost: Number(cost.totalCost),
+              lines,
+              warehouseCode: warehouse.code,
+              warehouseName: warehouse.name,
+              createdAt: receivedAt,
+              createdByName: user.name,
+            })
+          )
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Cost allocation failed'
+          throw new ValidationError(message)
+        }
 
         if (forwardingLedgerEntries.length > 0) {
           await tx.costLedger.createMany({ data: forwardingLedgerEntries })
