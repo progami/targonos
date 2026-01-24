@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 
 const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -88,6 +89,7 @@ export function AppHeader() {
           <Suspense fallback={<QboStatusFallback />}>
             <QboStatusIndicator />
           </Suspense>
+          <ThemeToggle />
           <TargonWordmark className="hidden sm:block shrink-0" />
         </div>
       </div>

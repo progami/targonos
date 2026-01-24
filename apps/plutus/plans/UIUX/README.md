@@ -2,15 +2,45 @@
 
 This folder contains UI/UX documentation for replicating Link My Books (LMB) patterns while adapting to the Targon design system.
 
+## Implementation Checklist
+
+### Components
+- [x] SplitButton - LMB-style action button with dropdown
+- [x] FilterBar - Styled filter row with dropdowns
+- [x] SelectionCard - Card selection with badge support
+- [ ] TreeTable - Expandable rows with tree lines (deferred)
+
+### Styling
+- [x] Font: Outfit
+- [x] Filter labels: Teal accent color (`text-brand-teal-600`)
+- [x] PageHeader: Accent variant for orange titles
+- [x] SplitButton navigation on click
+
+### Dark Mode
+- [x] ThemeToggle button in header
+- [x] Settlements page dark mode support
+- [x] Setup page dark mode support
+- [x] Bills page dark mode support
+- [x] Chart of Accounts dark mode support
+- [x] Filter bar dark mode
+- [x] SplitButton dark mode
+
+### Future Enhancements
+- [ ] Tree table with expand/collapse for account mapping
+- [ ] Step wizard with connecting lines
+- [ ] Country flags for marketplace indicators
+
+---
+
 ## Color Mapping (LMB to Targon)
 
 | LMB Color | LMB Usage | Targon Equivalent |
 |-----------|-----------|-------------------|
 | #E86C3A (coral) | Page titles, links | `text-accent-500` |
 | #38B2AC (teal) | CTAs, badges | `bg-brand-teal-500` |
-| #2D3748 (dark) | Body text | `text-slate-900` |
-| #718096 (muted) | Secondary text | `text-slate-500` |
-| #E2E8F0 (border) | Borders | `border-slate-200` |
+| #2D3748 (dark) | Body text | `text-slate-900 dark:text-white` |
+| #718096 (muted) | Secondary text | `text-slate-500 dark:text-slate-400` |
+| #E2E8F0 (border) | Borders | `border-slate-200 dark:border-slate-700` |
 
 ## Components Built
 
@@ -57,6 +87,13 @@ Card selection with optional "Most Popular" badge.
 />
 ```
 
+### 4. ThemeToggle (`components/theme-toggle.tsx`)
+Dark/light mode toggle button.
+
+```tsx
+<ThemeToggle />
+```
+
 ## Page Title Pattern
 
 LMB uses coral/orange for page titles. In Targon, use:
@@ -65,6 +102,26 @@ LMB uses coral/orange for page titles. In Targon, use:
 ```
 
 Or use the PageHeader component with `variant="accent"`.
+
+## Dark Mode Guidelines
+
+All components must support dark mode. Use these patterns:
+
+```tsx
+// Text
+className="text-slate-900 dark:text-white"
+className="text-slate-500 dark:text-slate-400"
+
+// Backgrounds
+className="bg-white dark:bg-slate-800"
+className="bg-slate-50 dark:bg-slate-900"
+
+// Borders
+className="border-slate-200 dark:border-slate-700"
+
+// Interactive states
+className="hover:bg-slate-50 dark:hover:bg-slate-700"
+```
 
 ## LMB Patterns Reference
 
