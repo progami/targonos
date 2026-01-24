@@ -335,84 +335,84 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                 <Cloud className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Import from Amazon</h3>
-                <p className="text-sm text-slate-500">Select products to import into your catalog</p>
+                <h3 className="text-lg font-semibold text-foreground">Import from Amazon</h3>
+                <p className="text-sm text-muted-foreground">Select products to import into your catalog</p>
               </div>
             </div>
-            <Button onClick={handleClose} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+            <Button onClick={handleClose} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
               <X className="h-5 w-5" />
             </Button>
           </div>
 
           {/* Workflow Steps */}
-          <div className="border-b bg-slate-50 px-6 py-3">
+          <div className="border-b bg-slate-50 dark:bg-slate-900 px-6 py-3">
             <div className="flex items-center gap-2">
               {/* Step 1: Select */}
-              <div className={`flex items-center gap-2 ${currentStep === 'select' ? 'text-cyan-600' : selectedSkuCodes.size > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <div className={`flex items-center gap-2 ${currentStep === 'select' ? 'text-cyan-600 dark:text-cyan-400' : selectedSkuCodes.size > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                 <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                   currentStep === 'select'
-                    ? 'bg-cyan-100 text-cyan-700'
+                    ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
                     : selectedSkuCodes.size > 0
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-200 text-slate-500'
+                      ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                 }`}>
                   {selectedSkuCodes.size > 0 && currentStep !== 'select' ? <Check className="h-3.5 w-3.5" /> : '1'}
                 </div>
                 <span className="text-sm font-medium">Select</span>
                 {selectedSkuCodes.size > 0 && (
-                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                     {selectedSkuCodes.size}
                   </span>
                 )}
               </div>
 
-              <ChevronRight className="h-4 w-4 text-slate-300" />
+              <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
 
               {/* Step 2: Validate */}
               <div className={`flex items-center gap-2 ${
                 currentStep === 'validate'
-                  ? 'text-cyan-600'
+                  ? 'text-cyan-600 dark:text-cyan-400'
                   : validation && validatedKey === selectionKey
-                    ? 'text-emerald-600'
-                    : 'text-slate-400'
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-slate-400 dark:text-slate-500'
               }`}>
                 <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                   currentStep === 'validate'
-                    ? 'bg-cyan-100 text-cyan-700'
+                    ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
                     : validation && validatedKey === selectionKey
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-200 text-slate-500'
+                      ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                 }`}>
                   {validation && validatedKey === selectionKey && currentStep === 'import' ? <Check className="h-3.5 w-3.5" /> : '2'}
                 </div>
                 <span className="text-sm font-medium">Validate</span>
                 {validation && validatedKey === selectionKey && (
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    invalidCount > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                    invalidCount > 0 ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300' : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
                   }`}>
                     {validCount}/{selectedSkuCodes.size} ready
                   </span>
                 )}
               </div>
 
-              <ChevronRight className="h-4 w-4 text-slate-300" />
+              <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
 
               {/* Step 3: Import */}
               <div className={`flex items-center gap-2 ${
-                result && result.imported > 0 ? 'text-emerald-600' : currentStep === 'import' ? 'text-cyan-600' : 'text-slate-400'
+                result && result.imported > 0 ? 'text-emerald-600 dark:text-emerald-400' : currentStep === 'import' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'
               }`}>
                 <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                   result && result.imported > 0
-                    ? 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
                     : currentStep === 'import'
-                      ? 'bg-cyan-100 text-cyan-700'
-                      : 'bg-slate-200 text-slate-500'
+                      ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                 }`}>
                   {result && result.imported > 0 ? <Check className="h-3.5 w-3.5" /> : '3'}
                 </div>
                 <span className="text-sm font-medium">Import</span>
                 {result && result.imported > 0 && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                  <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                     {result.imported} imported
                   </span>
                 )}
@@ -424,16 +424,16 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   <div className="flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      <span className="text-slate-600">{preview.summary.newCount} new</span>
+                      <span className="text-muted-foreground">{preview.summary.newCount} new</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-slate-400" />
-                      <span className="text-slate-600">{preview.summary.existingCount} existing</span>
+                      <span className="text-muted-foreground">{preview.summary.existingCount} existing</span>
                     </div>
                     {preview.summary.blockedCount > 0 && (
                       <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full bg-rose-500" />
-                        <span className="text-slate-600">{preview.summary.blockedCount} blocked</span>
+                        <span className="text-muted-foreground">{preview.summary.blockedCount} blocked</span>
                       </div>
                     )}
                   </div>
@@ -444,7 +444,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   size="sm"
                   onClick={loadPreview}
                   disabled={loadingPreview || importing || validating}
-                  className="gap-1.5 text-slate-600"
+                  className="gap-1.5 text-muted-foreground"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${loadingPreview ? 'animate-spin' : ''}`} />
                   Refresh
@@ -465,7 +465,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
               />
             </div>
 
-            <div className="flex items-center rounded-lg border bg-slate-50 p-0.5">
+            <div className="flex items-center rounded-lg border bg-slate-50 dark:bg-slate-900 p-0.5">
               {(['all', 'new', 'existing', 'blocked'] as const).map(f => (
                 <button
                   key={f}
@@ -473,8 +473,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   onClick={() => setFilter(f)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     filter === f
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-700 text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -489,7 +489,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                 size="sm"
                 onClick={selectAllNew}
                 disabled={!preview || importing || validating || loadingPreview || selectableItems.length === 0}
-                className="text-slate-600"
+                className="text-muted-foreground"
               >
                 Select all
               </Button>
@@ -500,7 +500,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   size="sm"
                   onClick={clearSelection}
                   disabled={importing || validating}
-                  className="text-slate-600"
+                  className="text-muted-foreground"
                 >
                   Clear
                 </Button>
@@ -512,8 +512,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
           <div className="flex-1 overflow-hidden">
             <div className="h-full overflow-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-50 border-b">
-                  <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b">
+                  <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     <th className="w-12 px-4 py-3">
                       <input
                         type="checkbox"
@@ -532,11 +532,11 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                     <th className="px-4 py-3 w-[100px] text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-border">
                   {loadingPreview ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-16 text-center">
-                        <div className="flex flex-col items-center gap-3 text-slate-500">
+                        <div className="flex flex-col items-center gap-3 text-muted-foreground">
                           <Loader2 className="h-6 w-6 animate-spin text-cyan-600" />
                           <span>Loading Amazon listings...</span>
                         </div>
@@ -547,7 +547,7 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                       <td colSpan={5} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <AlertCircle className="h-8 w-8 text-rose-400" />
-                          <span className="text-rose-700">{previewError}</span>
+                          <span className="text-rose-600 dark:text-rose-400">{previewError}</span>
                           <Button variant="outline" size="sm" onClick={loadPreview}>
                             Try again
                           </Button>
@@ -557,8 +557,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   ) : !preview || preview.items.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-16 text-center">
-                        <div className="flex flex-col items-center gap-2 text-slate-500">
-                          <Cloud className="h-8 w-8 text-slate-300" />
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Cloud className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                           <span>No listings found in Amazon</span>
                         </div>
                       </td>
@@ -566,8 +566,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   ) : filteredItems.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-16 text-center">
-                        <div className="flex flex-col items-center gap-2 text-slate-500">
-                          <Search className="h-8 w-8 text-slate-300" />
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Search className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                           <span>No results match your search</span>
                         </div>
                       </td>
@@ -588,11 +588,11 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                           className={`transition-colors ${
                             checked
                               ? isInvalid
-                                ? 'bg-rose-50'
+                                ? 'bg-rose-50 dark:bg-rose-900/20'
                                 : isValid
-                                  ? 'bg-emerald-50'
-                                  : 'bg-cyan-50'
-                              : 'hover:bg-slate-50'
+                                  ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                                  : 'bg-cyan-50 dark:bg-cyan-900/20'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800'
                           } ${!isSelectable ? 'opacity-60' : ''}`}
                         >
                           <td className="px-4 py-3">
@@ -609,44 +609,44 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-slate-900">{item.skuCode ?? '—'}</div>
-                            <div className="text-xs text-slate-500 truncate max-w-[160px]" title={item.sellerSku}>
+                            <div className="font-medium text-foreground">{item.skuCode ?? '—'}</div>
+                            <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={item.sellerSku}>
                               {item.sellerSku}
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-mono text-xs text-slate-600">{item.asin ?? '—'}</span>
+                            <span className="font-mono text-xs text-muted-foreground">{item.asin ?? '—'}</span>
                             {item.listingType === 'PARENT' && (
                               <div className="mt-0.5">
-                                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-rose-100 text-rose-700">
+                                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300">
                                   Parent
                                 </span>
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="text-slate-700 line-clamp-2 text-sm" title={item.title ?? undefined}>
+                            <div className="text-foreground line-clamp-2 text-sm" title={item.title ?? undefined}>
                               {item.title ?? '—'}
                             </div>
                             {isInvalid && validationDetail?.message && (
-                              <div className="mt-1 flex items-center gap-1 text-xs text-rose-600">
+                              <div className="mt-1 flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400">
                                 <AlertCircle className="h-3 w-3 flex-shrink-0" />
                                 <span className="truncate">{validationDetail.message}</span>
                               </div>
                             )}
                             {item.reason && !isInvalid && (
-                              <div className="mt-1 text-xs text-slate-500 truncate">{item.reason}</div>
+                              <div className="mt-1 text-xs text-muted-foreground truncate">{item.reason}</div>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {checked && validatedKey === selectionKey ? (
                               isValid ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                                   <CheckCircle className="h-3.5 w-3.5" />
                                   Ready
                                 </span>
                               ) : isInvalid ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 dark:bg-rose-900/50 px-2.5 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
                                   <AlertCircle className="h-3.5 w-3.5" />
                                   Failed
                                 </span>
@@ -668,32 +668,32 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
 
           {/* Import Results */}
           {result && (
-            <div className={`border-t px-6 py-4 ${result.errors.length > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+            <div className={`border-t px-6 py-4 ${result.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20'}`}>
               <div className="flex items-start gap-3">
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  result.errors.length > 0 ? 'bg-amber-100' : 'bg-emerald-100'
+                  result.errors.length > 0 ? 'bg-amber-100 dark:bg-amber-900/50' : 'bg-emerald-100 dark:bg-emerald-900/50'
                 }`}>
                   {result.errors.length > 0 ? (
-                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   ) : (
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="font-medium text-slate-900">
+                  <div className="font-medium text-foreground">
                     {result.errors.length > 0 ? 'Import completed with warnings' : 'Import successful'}
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">
+                  <div className="mt-1 text-sm text-muted-foreground">
                     {result.imported} SKU{result.imported !== 1 ? 's' : ''} imported
                     {result.skipped > 0 && `, ${result.skipped} skipped`}
                   </div>
                   {result.errors.length > 0 && (
-                    <div className="mt-2 text-xs text-slate-600">
+                    <div className="mt-2 text-xs text-muted-foreground">
                       {result.errors.slice(0, 3).map((err, i) => (
                         <div key={i} className="truncate">{err}</div>
                       ))}
                       {result.errors.length > 3 && (
-                        <div className="text-slate-500">+{result.errors.length - 3} more</div>
+                        <div className="text-muted-foreground">+{result.errors.length - 3} more</div>
                       )}
                     </div>
                   )}
@@ -703,19 +703,19 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t bg-slate-50 px-6 py-4">
-            <div className="text-sm text-slate-600">
+          <div className="flex items-center justify-between border-t bg-slate-50 dark:bg-slate-900 px-6 py-4">
+            <div className="text-sm text-muted-foreground">
               {selectedSkuCodes.size > 0 ? (
                 <span>
-                  <span className="font-semibold text-slate-900">{selectedSkuCodes.size}</span> selected
+                  <span className="font-semibold text-foreground">{selectedSkuCodes.size}</span> selected
                   {validation && validatedKey === selectionKey && validCount > 0 && (
-                    <span className="ml-2 text-emerald-600">
+                    <span className="ml-2 text-emerald-600 dark:text-emerald-400">
                       ({validCount} ready to import)
                     </span>
                   )}
                 </span>
               ) : (
-                <span className="text-slate-500">Select products to import</span>
+                <span className="text-muted-foreground">Select products to import</span>
               )}
             </div>
 
@@ -775,19 +775,19 @@ function StatusBadge({ status }: { status: 'new' | 'existing' | 'blocked' }) {
   switch (status) {
     case 'new':
       return (
-        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+        <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           New
         </span>
       )
     case 'existing':
       return (
-        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300">
           Existing
         </span>
       )
     case 'blocked':
       return (
-        <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+        <span className="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-900/50 px-2.5 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
           Blocked
         </span>
       )
