@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 
 import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
@@ -69,13 +69,13 @@ export default function HomePage() {
           </Reveal>
         </Container>
 
-        <div className="absolute bottom-10 left-0 right-0 z-10 flex flex-col items-center gap-3 motion-safe:animate-pulse">
+        <div className="absolute bottom-10 left-0 right-0 z-10 flex flex-col items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-white/50">
             Explore
           </span>
-          <span className="text-2xl text-white/50" aria-hidden>
-            ↓
-          </span>
+          <div className="motion-safe:animate-bounce">
+            <ChevronDown className="h-6 w-6 text-white/60" aria-hidden />
+          </div>
         </div>
       </section>
 

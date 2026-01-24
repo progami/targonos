@@ -3,6 +3,7 @@ import './globals.css';
 import { site } from '@/content/site';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { SkipLink } from '@/components/SkipLink';
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${site.domain}`),
@@ -19,6 +20,11 @@ export const metadata: Metadata = {
     locale: 'en_GB',
     type: 'website'
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: site.name,
+    description: site.description
+  },
   icons: {
     icon: '/favicon.ico'
   }
@@ -32,8 +38,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <SkipLink />
         <Header />
-        <main>{children}</main>
+        <main id="main-content" className="min-h-[calc(100vh-12rem)]">{children}</main>
         <Footer />
       </body>
     </html>

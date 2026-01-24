@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowRight, ExternalLink, Check } from 'lucide-react';
 
 import { Container } from '@/components/Container';
 import { ProductFeatureCard } from '@/components/ProductFeatureCard';
@@ -29,7 +29,7 @@ function WideImage({
   return (
     <div
       className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
+        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm transition-all duration-500 motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1',
         // Our EBC wide creatives are 1464x600.
         'aspect-[61/25]',
         className
@@ -58,7 +58,7 @@ function SquareImage({
   return (
     <div
       className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm',
+        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm transition-all duration-500 motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1',
         'aspect-square',
         className
       )}
@@ -123,14 +123,14 @@ export default function CaelumStarPage() {
 
               <Reveal delay={240}>
                 <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <Button asChild size="lg">
-                    <Link href={`/products/${primary.slug}`}>Learn more</Link>
-                  </Button>
                   <Button asChild variant="accent" size="lg">
                     <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
                       Buy on Amazon
-                      <ExternalLink className="ml-2 h-4 w-4" />
+                      <ExternalLink className="h-4 w-4" />
                     </a>
+                  </Button>
+                  <Button asChild variant="outline" size="lg">
+                    <Link href={`/products/${primary.slug}`}>Learn more</Link>
                   </Button>
                 </div>
               </Reveal>
@@ -140,8 +140,9 @@ export default function CaelumStarPage() {
                   {highlightChips.map((h) => (
                     <span
                       key={h}
-                      className="rounded-full border bg-white/70 px-3 py-1 text-xs font-medium text-slate-800"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-ink"
                     >
+                      <Check className="h-3 w-3 text-accent-strong" />
                       {h}
                     </span>
                   ))}
@@ -157,7 +158,7 @@ export default function CaelumStarPage() {
 
             <div className="lg:col-span-7">
               <Reveal variant="zoom" delay={140} className="h-full">
-                <div className="relative mx-auto max-w-[680px]">
+                <div className="relative mx-auto max-w-[680px] animate-float">
                   <Image
                     src={primary.image.src}
                     alt={primary.image.alt}
@@ -187,7 +188,7 @@ export default function CaelumStarPage() {
                 </Button>
                 <Button asChild variant="ghost" size="lg">
                   <Link href="/where-to-buy">
-                    Where to buy <ArrowRight className="ml-2 h-4 w-4" />
+                    Where to buy <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
               </div>
@@ -278,7 +279,12 @@ export default function CaelumStarPage() {
 
       <section className="py-10 md:py-14">
         <Container>
-          <Reveal variant="media">
+          <Reveal>
+            <p className="mb-4 text-center text-sm font-medium uppercase tracking-[0.2em] text-muted">
+              Sustainability
+            </p>
+          </Reveal>
+          <Reveal variant="media" delay={80}>
             <WideImage
               src="/images/amazon/sustainable-process.webp"
               alt="Sustainable efficiency process"
@@ -289,7 +295,12 @@ export default function CaelumStarPage() {
 
       <section className="py-10 md:py-14">
         <Container>
-          <Reveal variant="media">
+          <Reveal>
+            <p className="mb-4 text-center text-sm font-medium uppercase tracking-[0.2em] text-muted">
+              Made with 55% recycled plastic
+            </p>
+          </Reveal>
+          <Reveal variant="media" delay={80}>
             <WideImage
               src="/images/amazon/sustainable-efficiency.webp"
               alt="Sustainable efficiency — 55% recycled plastic"
@@ -311,7 +322,7 @@ export default function CaelumStarPage() {
               </div>
               <Button asChild variant="ghost" className="hidden md:inline-flex">
                 <Link href="/products">
-                  View all <ArrowRight className="ml-2 h-4 w-4" />
+                  View all <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
@@ -348,7 +359,7 @@ export default function CaelumStarPage() {
                 <div className="md:col-span-4 md:flex md:justify-end">
                   <Button asChild size="lg">
                     <Link href="/where-to-buy">
-                      Where to buy <ArrowRight className="ml-2 h-4 w-4" />
+                      Where to buy <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
                 </div>

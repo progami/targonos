@@ -3,7 +3,9 @@ import { Container } from '@/components/Container';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Reveal } from '@/components/Reveal';
+import { FAQ } from '@/components/FAQ';
 import { site } from '@/content/site';
+import { faqs } from '@/content/faqs';
 
 export const metadata = {
   title: 'Support'
@@ -16,6 +18,10 @@ export default function SupportPage() {
         <Container>
           <Reveal>
             <h1 className="text-4xl font-semibold tracking-tightish md:text-6xl">Support.</h1>
+            <div className="mt-3 h-1 w-12 rounded-full bg-accent" />
+          </Reveal>
+          <Reveal delay={80}>
+            <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we&apos;ll help.</p>
           </Reveal>
           <Reveal delay={80}>
             <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we’ll help.</p>
@@ -79,6 +85,22 @@ export default function SupportPage() {
               </Reveal>
             </div>
           </div>
+        </Container>
+      </section>
+
+      <section className="mt-16 pb-16">
+        <Container>
+          <Reveal>
+            <h2 className="text-2xl font-semibold tracking-tightish md:text-4xl">Frequently asked questions</h2>
+            <p className="mt-3 max-w-2xl text-sm text-muted">
+              Quick answers to common questions about our dust sheets.
+            </p>
+          </Reveal>
+          <Reveal variant="media" delay={120}>
+            <div className="mt-8 space-y-3">
+              <FAQ items={faqs} />
+            </div>
+          </Reveal>
         </Container>
       </section>
     </div>
