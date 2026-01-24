@@ -31,7 +31,7 @@ export function FreightSection({
         onClick={() => setIsOpen(prev => !prev)}
         aria-expanded={isOpen}
         aria-controls={contentId}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
       >
         <div className="flex items-center gap-2">
           <h4 className="text-sm font-medium text-foreground">{label}</h4>
