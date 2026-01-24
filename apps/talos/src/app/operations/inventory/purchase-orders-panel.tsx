@@ -446,10 +446,6 @@ export function PurchaseOrdersPanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
 	          <div>
 	            <h2 className="text-lg font-semibold text-foreground">Purchase Orders</h2>
-	            <p className="text-sm text-muted-foreground">
-	              Track purchase orders across stages. Use movement notes in the Warehouse stage to
-	              record receipts.
-	            </p>
 	          </div>
           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
             <span>
