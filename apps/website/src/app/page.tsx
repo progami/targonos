@@ -44,7 +44,7 @@ export default function HomePage() {
             <h2 className="mx-auto w-[min(560px,90vw)]">
               <Image
                 src="/brand/logo-inverted.svg"
-                alt={`${site.name} logo`}
+                alt=""
                 width={2048}
                 height={537}
                 priority
