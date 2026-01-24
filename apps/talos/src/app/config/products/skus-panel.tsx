@@ -1218,7 +1218,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
+                          <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5">
                             Amazon Fees
                             <Link
                               href="/amazon/fba-fee-tables"
