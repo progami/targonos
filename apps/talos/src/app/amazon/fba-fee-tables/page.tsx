@@ -173,6 +173,8 @@ export default function FbaFeeTablesPage() {
             title="FBA Fee Tables"
             description="Amazon UK Rate Card 2026"
             icon={DollarSign}
+            backHref="/config/products"
+            backLabel="Products"
           />
 
           <PageContent className="space-y-8">
@@ -436,6 +438,8 @@ export default function FbaFeeTablesPage() {
           title="FBA Fee Tables"
           description="Amazon US Rate Card 2026 (after Jan 15, 2026)"
           icon={DollarSign}
+          backHref="/config/products"
+          backLabel="Products"
         />
 
         <PageContent className="space-y-8">
