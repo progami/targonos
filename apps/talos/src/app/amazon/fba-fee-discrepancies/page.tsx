@@ -415,6 +415,18 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     return filteredRows.slice(start, start + SKUS_PER_PAGE)
   }, [filteredRows, currentPage])
 
+  const summary = useMemo(() => {
+    const counts = { mismatch: 0, match: 0, warning: 0, pending: 0 }
+    for (const row of computedRows) {
+      const s = row.comparison.status
+      if (s === 'MISMATCH') counts.mismatch += 1
+      else if (s === 'MATCH') counts.match += 1
+      else if (s === 'NO_ASIN' || s === 'MISSING_REFERENCE' || s === 'ERROR') counts.warning += 1
+      else counts.pending += 1
+    }
+    return counts
+  }, [computedRows])
+
   if (status === 'loading') {
     return (
       <div className="flex h-full items-center justify-center">
@@ -466,8 +478,13 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 <option value="UNKNOWN">Pending</option>
               </select>
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}
+            <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span className="text-red-600 dark:text-red-400">{summary.mismatch} mismatches</span>
+              <span className="text-emerald-600 dark:text-emerald-400">{summary.match} matches</span>
+              <span className="text-amber-600 dark:text-amber-400">{summary.warning} warnings</span>
+              <span>{summary.pending} pending</span>
+              <span className="text-slate-400 dark:text-slate-500">·</span>
+              <span>{filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}</span>
             </div>
           </div>
 
