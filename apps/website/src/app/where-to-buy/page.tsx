@@ -9,28 +9,21 @@ import { site } from '@/content/site';
 
 const bySlug = (slug: string) => products.find((p) => p.slug === slug)?.amazonUrl;
 
-const internationalAmazonLinks = [
-  {
-    label: '6 Pack — Light (Primary)',
-    url: site.amazonStoreUrl
-  },
-  {
-    label: '12 Pack — Light (Alternate)',
-    url: site.amazonStoreAltUrl
-  },
-  {
-    label: '1 Pack — Strong (Amazon.com)',
-    url: bySlug('1pk-strong') ?? '#'
-  },
-  {
-    label: '3 Pack — Standard (Amazon.com)',
-    url: bySlug('3pk-standard') ?? '#'
-  },
-  {
-    label: '12 Pack — Light (Amazon.com)',
-    url: bySlug('12pk-light') ?? '#'
-  }
-];
+const rawInternationalAmazonLinks = [
+  { label: '6 Pack — Light (Primary)', url: site.amazonStoreUrl },
+  // Keep a dedicated 12 pack entry; only include the "alternate" link if it differs.
+  { label: '12 Pack — Light', url: bySlug('12pk-light') ?? site.amazonStoreAltUrl ?? '#' },
+  { label: '1 Pack — Strong', url: bySlug('1pk-strong') ?? '#' },
+  { label: '3 Pack — Standard', url: bySlug('3pk-standard') ?? '#' },
+  site.amazonStoreAltUrl && site.amazonStoreAltUrl !== (bySlug('12pk-light') ?? '')
+    ? { label: '12 Pack — Light (Alternate)', url: site.amazonStoreAltUrl }
+    : null
+].filter(Boolean) as { label: string; url: string }[];
+
+// De-duplicate by URL to avoid React key collisions and repeated links.
+const internationalAmazonLinks = Array.from(
+  new Map(rawInternationalAmazonLinks.map((l) => [l.url, l])).values()
+);
 
 export const metadata = {
   title: 'Where to buy'
@@ -138,7 +131,7 @@ export default function WhereToBuyPage() {
                 <p className="mt-2 text-sm text-muted">Direct links by pack.</p>
                 <ul className="mt-4 space-y-2">
                   {internationalAmazonLinks.map((l) => (
-                    <li key={l.url}>
+                    <li key={`${l.label}-${l.url}`}>
                       <a className="text-sm font-semibold text-ink hover:underline" href={l.url} target="_blank" rel="noreferrer">
                         {l.label} <ArrowUpRight className="inline h-4 w-4" />
                       </a>

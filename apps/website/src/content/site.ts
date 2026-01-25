@@ -1,8 +1,10 @@
+const defaultDomain = 'targonglobal.com';
+const domain = process.env.NEXT_PUBLIC_SITE_DOMAIN ?? defaultDomain;
+
 export const site = {
   name: 'Targon',
-  domain: 'targonglobal.com',
-  description:
-    'AI-driven manufacturing & design.',
+  domain,
+  description: 'AI-driven manufacturing & design.',
   contactEmail: 'support@targonglobal.com',
 
   // Primary retail link (requested: 6-pack is the main focus).
