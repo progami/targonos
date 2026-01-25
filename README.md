@@ -28,8 +28,8 @@ Cloudflared routes hostnames to local nginx listener ports (`~/.cloudflared/conf
 
 | Hostname | Purpose | Origin |
 | --- | --- | --- |
-| `targonos.targonglobal.com` | Main Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8080` |
-| `dev-targonos.targonglobal.com` | Dev Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8081` |
+| `os.targonglobal.com` | Main Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8080` |
+| `dev-os.targonglobal.com` | Dev Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8081` |
 | `www.targonglobal.com` / `targonglobal.com` | Main Website | `http://localhost:8082` |
 | `dev.targonglobal.com` | Dev Website | `http://localhost:8083` |
 | `db.targonglobal.com` | PostgreSQL (TCP) | `tcp://localhost:5432` |

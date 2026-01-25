@@ -60,7 +60,7 @@ On PO detail/PDF (example: `/talos/operations/purchase-orders/9c89e5c2-2c47-4570
   - Keep formatting consistent with UI (shared formatter utility if appropriate).
 
 - [ ] 7. Validation
-  - Verify on `https://dev-targonos.targonglobal.com/talos`:
+  - Verify on `https://dev-os.targonglobal.com/talos`:
     - Banking block present by default for suppliers with banking configured
     - Ship-to includes phone + country code and uses consistent line breaks
     - Multiple PIs display correctly on UI + PDF

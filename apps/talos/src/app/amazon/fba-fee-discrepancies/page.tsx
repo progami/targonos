@@ -15,10 +15,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
-import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import {
   AlertTriangle,
-  AlertCircle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -418,8 +416,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   }, [filteredRows, currentPage])
 
   const summary = useMemo(() => {
-    const counts = { total: computedRows.length, mismatch: 0, match: 0, warning: 0, pending: 0 }
-
+    const counts = { mismatch: 0, match: 0, warning: 0, pending: 0 }
     for (const row of computedRows) {
       const s = row.comparison.status
       if (s === 'MISMATCH') counts.mismatch += 1
@@ -427,7 +424,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       else if (s === 'NO_ASIN' || s === 'MISSING_REFERENCE' || s === 'ERROR') counts.warning += 1
       else counts.pending += 1
     }
-
     return counts
   }, [computedRows])
 
@@ -455,37 +451,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       />
 
       <PageContent className="space-y-6">
-        <StatsCardGrid cols={4} gap="gap-4">
-          <StatsCard
-            title="Mismatches"
-            value={summary.mismatch}
-            icon={XCircle}
-            variant="danger"
-            size="sm"
-          />
-          <StatsCard
-            title="Matches"
-            value={summary.match}
-            icon={CheckCircle2}
-            variant="success"
-            size="sm"
-          />
-          <StatsCard
-            title="Warnings"
-            value={summary.warning}
-            icon={AlertCircle}
-            variant="warning"
-            size="sm"
-          />
-          <StatsCard
-            title="Pending"
-            value={summary.pending}
-            icon={Clock}
-            variant="default"
-            size="sm"
-          />
-        </StatsCardGrid>
-
         <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           {/* Header with search and filter */}
           <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -513,8 +478,13 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 <option value="UNKNOWN">Pending</option>
               </select>
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}
+            <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span className="text-red-600 dark:text-red-400">{summary.mismatch} mismatches</span>
+              <span className="text-emerald-600 dark:text-emerald-400">{summary.match} matches</span>
+              <span className="text-amber-600 dark:text-amber-400">{summary.warning} warnings</span>
+              <span>{summary.pending} pending</span>
+              <span className="text-slate-400 dark:text-slate-500">·</span>
+              <span>{filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}</span>
             </div>
           </div>
 

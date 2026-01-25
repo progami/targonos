@@ -303,9 +303,9 @@ bootstrap_talos_env_local_if_missing() {
     local desired_app_url=""
 
     if [[ "$environment" == "dev" ]]; then
-      desired_app_url="https://dev-targonos.targonglobal.com/talos"
+      desired_app_url="https://dev-os.targonglobal.com/talos"
     else
-      desired_app_url="https://targonos.targonglobal.com/talos"
+      desired_app_url="https://os.targonglobal.com/talos"
     fi
 
     set_env_var_in_file "$env_file" "BASE_PATH" "$desired_base_path"

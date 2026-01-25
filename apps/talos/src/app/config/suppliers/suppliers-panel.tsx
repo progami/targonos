@@ -344,31 +344,11 @@ export default function SuppliersPanel({
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={supplier.phone ?? undefined}>
                       {supplier.phone ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 truncate" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
                       {supplier.defaultPaymentTerms || supplier.defaultIncoterms ? (
-                        <div className="flex flex-wrap gap-1">
-                          {supplier.defaultIncoterms && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600"
-                            >
-                              {supplier.defaultIncoterms}
-                            </Badge>
-                          )}
-                          {supplier.defaultPaymentTerms && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600"
-                              title={supplier.defaultPaymentTerms}
-                            >
-                              {supplier.defaultPaymentTerms.length > 16
-                                ? `${supplier.defaultPaymentTerms.slice(0, 16)}…`
-                                : supplier.defaultPaymentTerms}
-                            </Badge>
-                          )}
-                        </div>
+                        [supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ')
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-500 text-xs">Not set</span>
+                        <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
