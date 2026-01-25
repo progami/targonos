@@ -513,11 +513,6 @@ async function validateTransitionGate(params: {
         piNumbers.push(piNumber)
       }
 
-      const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
-      if (!productNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
-      }
-
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
       if (!commodityCode) {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
@@ -608,11 +603,6 @@ async function validateTransitionGate(params: {
     const tenantCode = tenant.code
 
     for (const line of activeLines) {
-      const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
-      if (!productNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
-      }
-
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
       if (!commodityCode) {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
@@ -2856,11 +2846,6 @@ export async function generatePurchaseOrderShippingMarks(params: {
       recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
     }
 
-    const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
-    if (!productNumber) {
-      recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
-    }
-
     const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
     if (!commodityCode) {
       recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
@@ -2930,10 +2915,9 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const commodityLabel = typeof line.commodityCode === 'string' ? formatCommodityCode(line.commodityCode) : ''
     const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
     const material = typeof line.material === 'string' ? line.material.trim() : ''
-    const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
     const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
-    const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : 0
-    const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : 0
+    const netWeightKg = Number(line.netWeightKg)
+    const grossWeightKg = Number(line.cartonWeightKg)
     const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
 
     const perCarton: string[] = []
@@ -2941,7 +2925,6 @@ export async function generatePurchaseOrderShippingMarks(params: {
       perCarton.push(`
         <div class="label">
           <div class="label-header">${escapeHtml(piNumber)} / TARGON/唛头格式</div>
-          <div class="label-row"><span class="k">Product #</span><span class="v">${escapeHtml(productNumber)}</span></div>
           <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartons} Ctns</span></div>
           <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
           <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>

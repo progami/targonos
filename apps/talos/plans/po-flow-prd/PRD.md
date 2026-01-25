@@ -137,7 +137,6 @@ If issuance fails because supplier banking is missing, the UI highlights the Sup
 │ Sub-tabs: [Line Details] [Packaging / Attributes*]                             │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Shipping Mark Inputs (per cargo line)                                          │
-│ - Product Number:     [ ________ ]   !                                         │
 │ - Commodity Code:     [ ________ ]   !   (US/UK differs; format checked)       │
 │ - Country of Origin:  [ ________ ]   !   (e.g. “Made in China”)                │
 │                                                                               │
@@ -252,7 +251,6 @@ At Issued, commercial fields are locked (terms, ordered units, PI numbers, confi
 │ Sub-tabs: [Line Details] [Packaging / Shipping Marks* !]                       │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Shipping Mark Inputs (editable at Issued)                                      │
-│ - Product Number:     [ ________ ]  !                                          │
 │ - Commodity Code:     [ ________ ]  !   (region-specific; format checked)      │
 │ - Country of Origin:  [ ________ ]  !                                          │
 │ - Units per carton:   [   62   ]   !                                          │
