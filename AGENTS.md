@@ -49,11 +49,16 @@ Once work is complete:
 
 1. **Test in browser** - Verify changes work in Chrome before proceeding
 2. **PR to dev** - Create a pull request targeting the `dev` branch
-3. **Merge to dev** - Merge the PR yourself as soon as GitHub CI is green
-4. **Auto-merge to main** - Immediately PR `dev` → `main` and merge as soon as CI is green
-5. **Delete merged branches** - Delete all feature/fix branches you created after they are merged (both remote and local)
+3. **Wait for GitHub CI to pass** - Do not proceed until all checks are green
+4. **Review PR feedback** - Always read and address PR reviews/comments from anyone before merging
+5. **Merge to dev** - Merge the PR yourself without waiting for approval
+6. **PR to main** - Create a pull request from `dev` to `main` (PR must come from `dev` branch or CI will fail)
+7. **Wait for GitHub CI to pass** - Ensure all checks pass on the main PR
+8. **Review PR feedback** - Always read and address PR reviews/comments from anyone before merging
+9. **Merge to main** - Merge the PR yourself without waiting for approval
+10. **Delete merged branches** - Delete all feature/fix branches you created after they are merged (both remote and local)
 
-Default behavior: treat `dev` as a transit branch; always ship to `main` after merging to `dev` unless explicitly told otherwise.
+Always wait for CI to pass before merging. Always read and address PR reviews/comments from anyone before merging. Merge PRs yourself without requiring approval. Always clean up your branches after merging.
 
 ### Handling Merge Conflicts
 
