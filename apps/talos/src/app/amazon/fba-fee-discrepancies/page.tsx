@@ -15,10 +15,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
-import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import {
   AlertTriangle,
-  AlertCircle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -417,20 +415,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     return filteredRows.slice(start, start + SKUS_PER_PAGE)
   }, [filteredRows, currentPage])
 
-  const summary = useMemo(() => {
-    const counts = { total: computedRows.length, mismatch: 0, match: 0, warning: 0, pending: 0 }
-
-    for (const row of computedRows) {
-      const s = row.comparison.status
-      if (s === 'MISMATCH') counts.mismatch += 1
-      else if (s === 'MATCH') counts.match += 1
-      else if (s === 'NO_ASIN' || s === 'MISSING_REFERENCE' || s === 'ERROR') counts.warning += 1
-      else counts.pending += 1
-    }
-
-    return counts
-  }, [computedRows])
-
   if (status === 'loading') {
     return (
       <div className="flex h-full items-center justify-center">
@@ -455,37 +439,6 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       />
 
       <PageContent className="space-y-6">
-        <StatsCardGrid cols={4} gap="gap-4">
-          <StatsCard
-            title="Mismatches"
-            value={summary.mismatch}
-            icon={XCircle}
-            variant="danger"
-            size="sm"
-          />
-          <StatsCard
-            title="Matches"
-            value={summary.match}
-            icon={CheckCircle2}
-            variant="success"
-            size="sm"
-          />
-          <StatsCard
-            title="Warnings"
-            value={summary.warning}
-            icon={AlertCircle}
-            variant="warning"
-            size="sm"
-          />
-          <StatsCard
-            title="Pending"
-            value={summary.pending}
-            icon={Clock}
-            variant="default"
-            size="sm"
-          />
-        </StatsCardGrid>
-
         <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           {/* Header with search and filter */}
           <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
