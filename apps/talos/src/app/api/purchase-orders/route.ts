@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server'
 import { withAuth, ApiResponses, z } from '@/lib/api'
-import { getPurchaseOrders, serializePurchaseOrder } from '@/lib/services/purchase-order-service'
+import {
+  getPurchaseOrders,
+  getPurchaseOrdersBySplitGroup,
+  serializePurchaseOrder,
+} from '@/lib/services/purchase-order-service'
 import {
   createPurchaseOrder,
   serializePurchaseOrder as serializeNewPO,
@@ -9,8 +13,12 @@ import type { UserContext } from '@/lib/services/po-stage-service'
 import { hasPermission } from '@/lib/services/permission-service'
 import { getCurrentTenant } from '@/lib/tenant/server'
 
-export const GET = withAuth(async (_request: NextRequest, _session) => {
-  const orders = await getPurchaseOrders()
+export const GET = withAuth(async (request: NextRequest, _session) => {
+  const splitGroupId = request.nextUrl.searchParams.get('splitGroupId')
+  const orders =
+    typeof splitGroupId === 'string' && splitGroupId.trim().length > 0
+      ? await getPurchaseOrdersBySplitGroup(splitGroupId)
+      : await getPurchaseOrders()
   return ApiResponses.success({
     data: orders.map(order => serializePurchaseOrder(order)),
   })

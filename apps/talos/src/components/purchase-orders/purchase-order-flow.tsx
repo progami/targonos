@@ -78,6 +78,9 @@ interface PurchaseOrderLineSummary {
   cartonSide3Cm?: number | null
   cartonWeightKg?: number | null
   packagingType?: string | null
+  cartonRangeStart?: number | null
+  cartonRangeEnd?: number | null
+  cartonRangeTotal?: number | null
   unitsOrdered: number
   unitsPerCarton: number
   quantity: number
@@ -324,6 +327,8 @@ interface PurchaseOrderSummary {
   id: string
   orderNumber: string
   poNumber: string | null
+  splitGroupId: string | null
+  splitParentId: string | null
   type: 'PURCHASE' | 'ADJUSTMENT'
   status: POStageStatus
   isLegacy: boolean
@@ -344,6 +349,14 @@ interface PurchaseOrderSummary {
   stageData: StageData
   proformaInvoices: ProformaInvoiceSummary[]
   approvalHistory: StageApproval[]
+}
+
+type SplitGroupOrderSummary = {
+  id: string
+  orderNumber: string
+  poNumber: string | null
+  status: POStageStatus
+  createdAt: string
 }
 
 type PurchaseOrderDocumentStage =
@@ -754,6 +767,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const orderId = props.orderId
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
+  const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
+  const [splitGroupLoading, setSplitGroupLoading] = useState(false)
   const [draftLines, setDraftLines] = useState<PurchaseOrderLineSummary[]>([])
   const [tenantDestination, setTenantDestination] = useState<string>('')
   const [tenantCurrency, setTenantCurrency] = useState<string>('USD')
@@ -776,6 +791,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   // Stage transition form data
   const [stageFormData, setStageFormData] = useState<Record<string, string>>({})
+  const [dispatchSplitAllocations, setDispatchSplitAllocations] = useState<Record<string, string>>({})
   const setStageField = useCallback((key: string, value: string) => {
     setStageFormData(prev => {
       const next = { ...prev }
@@ -1765,6 +1781,104 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   useEffect(() => {
     if (!order) return
+
+    if (order.status !== 'MANUFACTURING') {
+      setDispatchSplitAllocations({})
+      return
+    }
+
+    const activeLines = order.lines.filter(line => line.status !== 'CANCELLED')
+    setDispatchSplitAllocations(prev => {
+      const next: Record<string, string> = {}
+      for (const line of activeLines) {
+        if (Object.prototype.hasOwnProperty.call(prev, line.id)) {
+          next[line.id] = prev[line.id]
+          continue
+        }
+        next[line.id] = String(line.quantity)
+      }
+      return next
+    })
+  }, [order])
+
+  useEffect(() => {
+    if (!order?.splitGroupId) {
+      setSplitGroupOrders([])
+      return
+    }
+
+    const groupId = order.splitGroupId
+    let cancelled = false
+
+    const loadSplitGroup = async () => {
+      try {
+        setSplitGroupLoading(true)
+        const response = await fetch(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`)
+        if (!response.ok) {
+          setSplitGroupOrders([])
+          return
+        }
+
+        const payload = await response.json().catch(() => null)
+        const list =
+          payload && typeof payload === 'object' && 'data' in payload
+            ? (payload as { data?: unknown }).data
+            : null
+        if (!Array.isArray(list)) {
+          setSplitGroupOrders([])
+          return
+        }
+
+        const parsed = list
+          .map((item): SplitGroupOrderSummary | null => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+            const record = item as Record<string, unknown>
+            const id = record.id
+            const orderNumber = record.orderNumber
+            const poNumberCandidate = record.poNumber
+            const status = record.status
+            const createdAt = record.createdAt
+
+            if (typeof id !== 'string' || !id.trim()) return null
+            if (typeof orderNumber !== 'string' || !orderNumber.trim()) return null
+            if (typeof status !== 'string') return null
+            if (typeof createdAt !== 'string' || !createdAt.trim()) return null
+
+            const poNumber =
+              poNumberCandidate === null || poNumberCandidate === undefined
+                ? null
+                : typeof poNumberCandidate === 'string'
+                  ? poNumberCandidate
+                  : null
+
+            return {
+              id,
+              orderNumber,
+              poNumber,
+              status: status as POStageStatus,
+              createdAt,
+            }
+          })
+          .filter((value): value is SplitGroupOrderSummary => value !== null)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+
+        if (cancelled) return
+        setSplitGroupOrders(parsed)
+      } finally {
+        if (cancelled) return
+        setSplitGroupLoading(false)
+      }
+    }
+
+    void loadSplitGroup()
+
+    return () => {
+      cancelled = true
+    }
+  }, [order?.splitGroupId])
+
+  useEffect(() => {
+    if (!order) return
     if (activeViewStage !== 'WAREHOUSE') return
 
     const wh = order.stageData.warehouse
@@ -1880,12 +1994,22 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
     try {
       setTransitioning(true)
+      const stageData: Record<string, unknown> = { ...stageFormData }
+
+      if (order.status === 'MANUFACTURING' && targetStatus === 'OCEAN') {
+        const activeLines = order.lines.filter(line => line.status !== 'CANCELLED')
+        stageData.splitAllocations = activeLines.map(line => ({
+          lineId: line.id,
+          shipNowCartons: dispatchSplitAllocations[line.id],
+        }))
+      }
+
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           targetStatus,
-          stageData: stageFormData,
+          stageData,
         }),
       })
 
@@ -1947,7 +2071,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         return
       }
 
-      const lineReceipts = order.lines.map(line => ({
+      const lineReceipts = order.lines
+        .filter(line => line.status !== 'CANCELLED')
+        .map(line => ({
         lineId: line.id,
         quantityReceived: line.quantityReceived ?? line.quantity,
       }))
@@ -2042,7 +2168,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   }
 
   const flowStatus: POStageStatus = order ? order.status : 'DRAFT'
-  const flowLines = order ? order.lines : draftLines
+  const flowLines = order ? order.lines.filter(line => line.status !== 'CANCELLED') : draftLines
   const totalUnits = flowLines.reduce((sum, line) => sum + (line.unitsOrdered ?? 0), 0)
   const totalCartons = flowLines.reduce((sum, line) => sum + line.quantity, 0)
   const isTerminalStatus = order
@@ -2051,6 +2177,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const isReceived = Boolean(order?.postedAt)
   const isReadOnly = isTerminalStatus || isReceived
   const canEdit = isCreate ? true : !isReadOnly && order?.status === 'DRAFT'
+  const canEditDispatchAllocation =
+    !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
   const canEditForwardingCosts =
     !isTerminalStatus && !isReceived && (flowStatus === 'OCEAN' || flowStatus === 'WAREHOUSE')
 
@@ -2629,6 +2757,45 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
 	            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
 	              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Order Progress</h2>
+
+                {!isCreate && order?.splitGroupId && (
+                  <div className="mb-4 rounded-lg border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-semibold text-muted-foreground uppercase tracking-wide">
+                        Split Group
+                      </span>
+                      {splitGroupLoading ? (
+                        <span className="text-muted-foreground">Loading…</span>
+                      ) : splitGroupOrders.length === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {splitGroupOrders.map(member => {
+                            const label = member.poNumber ?? member.orderNumber
+                            const isCurrent = member.id === order.id
+                            return (
+                              <div key={member.id} className="flex items-center gap-1.5">
+                                {isCurrent ? (
+                                  <span className="font-semibold text-foreground">{label}</span>
+                                ) : (
+                                  <Link
+                                    href={`/operations/purchase-orders/${member.id}`}
+                                    className="text-emerald-700 dark:text-emerald-400 hover:underline"
+                                  >
+                                    {label}
+                                  </Link>
+                                )}
+                                <Badge variant="outline" className="text-[10px]">
+                                  {formatStatusLabel(member.status)}
+                                </Badge>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
               {/* Stage Progress - Clickable Navigation */}
               <div className="flex items-center justify-between relative">
@@ -3230,6 +3397,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                          {canEditDispatchAllocation && (
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                              Ship Now
+                            </th>
+                          )}
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">PI #</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Received</th>
@@ -3237,17 +3409,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </tr>
                       </thead>
                       <tbody>
-                        {order.lines.length === 0 ? (
+                        {flowLines.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={canEdit ? 10 : 9}
+                              colSpan={(canEdit ? 10 : 9) + (canEditDispatchAllocation ? 1 : 0)}
                               className="px-3 py-6 text-center text-muted-foreground"
                             >
                               No lines added to this order yet.
                             </td>
                           </tr>
                         ) : (
-                          order.lines.map((line) => (
+                          flowLines.map((line) => (
                             <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                               <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
                                 {line.skuCode}
@@ -3267,6 +3439,40 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
                               </td>
+                              {canEditDispatchAllocation && (
+                                <td
+                                  className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap"
+                                  data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
+                                >
+                                  {(() => {
+                                    const gateKey = `cargo.lines.${line.id}.shipNowCartons`
+                                    const issue = gateIssues ? gateIssues[gateKey] : null
+                                    return (
+                                      <div className="space-y-1" data-gate-key={gateKey}>
+                                        <Input
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="0"
+                                          step="1"
+                                          max={line.quantity}
+                                          value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
+                                          onChange={e =>
+                                            setDispatchSplitAllocations(prev => ({
+                                              ...prev,
+                                              [line.id]: e.target.value,
+                                            }))
+                                          }
+                                          className={
+                                            issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                          }
+                                          data-gate-key={gateKey}
+                                        />
+                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                      </div>
+                                    )
+                                  })()}
+                                </td>
+                              )}
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
                                 {(() => {
                                   const gateKey = `cargo.lines.${line.id}.piNumber`
@@ -3354,10 +3560,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
                   <div className="p-4 space-y-4">
-                    {order.lines.length === 0 ? (
+                    {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
-                      order.lines.map(line => {
+                      flowLines.map(line => {
                         const canEditAttributes =
                           !isReadOnly &&
                           order.status === activeViewStage &&
@@ -3686,14 +3892,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </tr>
                         </thead>
                         <tbody>
-                          {order.lines.length === 0 ? (
+                          {flowLines.length === 0 ? (
                             <tr>
                               <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
                                 No lines added to this order yet.
                               </td>
                             </tr>
                           ) : (
-                            order.lines.map(line => {
+                            flowLines.map(line => {
                               const gateKey = `cargo.lines.${line.id}.quantityReceived`
                               const issue = gateIssues ? gateIssues[gateKey] ?? null : null
                               const canEditReceiving =
@@ -4383,7 +4589,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     stage === 'DRAFT'
                       ? Array.from(
                           new Set(
-                            order.lines
+                            flowLines
                               .map(line => (typeof line.piNumber === 'string' ? line.piNumber.trim() : ''))
                               .filter(value => value.length > 0)
                           )
@@ -4803,7 +5009,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                       Product Costs
                     </h4>
-                    {order.lines.length === 0 ? (
+                    {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -4818,7 +5024,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </tr>
                           </thead>
                           <tbody>
-                            {order.lines.map(line => {
+                            {flowLines.map(line => {
                               const canEditProductCosts =
                                 canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
 
@@ -4897,7 +5103,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               </td>
                               <td className="px-4 py-2 text-right tabular-nums font-semibold">
                                 {tenantCurrency}{' '}
-                                {order.lines
+                                {flowLines
                                   .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
                                   .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
@@ -5404,7 +5610,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
                           <td className="px-4 py-2 text-right tabular-nums font-medium">
-                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {tenantCurrency}{' '}
+                            {flowLines
+                              .reduce((sum, line) => sum + (line.totalCost ?? 0), 0)
+                              .toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
                           </td>
                         </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
@@ -5451,7 +5663,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <td className="px-4 py-3 font-semibold">Total Cost</td>
                           <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
                             {tenantCurrency} {(
-                              order.lines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0) +
+                              flowLines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0) +
                               forwardingSubtotal +
                               inboundSubtotal +
                               (order.stageData.warehouse?.dutyAmount ?? 0)
