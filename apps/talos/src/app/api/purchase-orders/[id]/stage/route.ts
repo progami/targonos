@@ -154,8 +154,8 @@ export const PATCH = withAuthAndParams(
 
     const userContext: UserContext = {
       id: session.user.id,
-      name: session.user.name || session.user.email || 'Unknown',
-      email: session.user.email || '',
+      name: session.user.name ?? session.user.email ?? 'Unknown',
+      email: session.user.email ?? '',
     }
 
     try {

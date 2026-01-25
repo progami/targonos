@@ -14,6 +14,7 @@ export const maxDuration = 60 // 60 seconds for file uploads
 const MAX_DOCUMENT_SIZE_MB = 50
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
+  'DRAFT',
   'ISSUED',
   'MANUFACTURING',
   'OCEAN',
@@ -22,6 +23,7 @@ const STAGES: readonly PurchaseOrderDocumentStage[] = [
 ]
 
 const DOCUMENT_STAGE_ORDER: Record<PurchaseOrderDocumentStage, number> = {
+  DRAFT: 0,
   ISSUED: 1,
   MANUFACTURING: 2,
   OCEAN: 3,
@@ -31,6 +33,8 @@ const DOCUMENT_STAGE_ORDER: Record<PurchaseOrderDocumentStage, number> = {
 
 function statusToDocumentStage(status: PurchaseOrderStatus): PurchaseOrderDocumentStage | null {
   switch (status) {
+    case PurchaseOrderStatus.DRAFT:
+      return PurchaseOrderDocumentStage.DRAFT
     case PurchaseOrderStatus.ISSUED:
       return PurchaseOrderDocumentStage.ISSUED
     case PurchaseOrderStatus.MANUFACTURING:

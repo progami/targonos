@@ -24,6 +24,16 @@ const LineItemSchema = z.object({
     .trim()
     .min(1)
     .refine(value => value.trim().toUpperCase() !== 'DEFAULT', 'Batch is required'),
+  piNumber: z.string().trim().optional(),
+  productNumber: z.string().trim().optional(),
+  commodityCode: z.string().trim().optional(),
+  countryOfOrigin: z.string().trim().optional(),
+  netWeightKg: z.number().positive().optional(),
+  cartonWeightKg: z.number().positive().optional(),
+  cartonSide1Cm: z.number().positive().optional(),
+  cartonSide2Cm: z.number().positive().optional(),
+  cartonSide3Cm: z.number().positive().optional(),
+  material: z.string().trim().optional(),
   unitsOrdered: z.number().int().positive(),
   unitsPerCarton: z.number().int().positive(),
   totalCost: z.number().min(0).optional(),
@@ -62,8 +72,8 @@ export const POST = withAuth(async (request: NextRequest, session) => {
 
   const userContext: UserContext = {
     id: session.user.id,
-    name: session.user.name || session.user.email || 'Unknown',
-    email: session.user.email || '',
+    name: session.user.name ?? session.user.email ?? 'Unknown',
+    email: session.user.email ?? '',
   }
 
   const canCreate = await hasPermission(userContext.id, 'po.create')
@@ -83,6 +93,16 @@ export const POST = withAuth(async (request: NextRequest, session) => {
           skuCode: line.skuCode,
           skuDescription: line.skuDescription,
           batchLot: line.batchLot,
+          piNumber: line.piNumber,
+          productNumber: line.productNumber,
+          commodityCode: line.commodityCode,
+          countryOfOrigin: line.countryOfOrigin,
+          netWeightKg: line.netWeightKg,
+          cartonWeightKg: line.cartonWeightKg,
+          cartonSide1Cm: line.cartonSide1Cm,
+          cartonSide2Cm: line.cartonSide2Cm,
+          cartonSide3Cm: line.cartonSide3Cm,
+          material: line.material,
           unitsOrdered: line.unitsOrdered,
           unitsPerCarton: line.unitsPerCarton,
           totalCost: line.totalCost,

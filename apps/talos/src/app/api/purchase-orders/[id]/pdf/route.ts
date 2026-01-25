@@ -18,6 +18,17 @@ function formatDate(value: Date | null | undefined): string {
   })
 }
 
+function formatDateTime(value: Date | null | undefined): string {
+  if (!value) return '—'
+  return value.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
   const num = typeof value === 'number' ? value : Number(value)
@@ -83,6 +94,8 @@ function renderOrderDocumentHtml(params: {
   documentType: OrderDocumentType
   documentNumber: string
   vendorPiNumbers: string[]
+  generatedAt: Date
+  generatedByName: string | null
   buyerName: string
   buyerAddress: string
   buyerPhone?: string | null
@@ -668,6 +681,10 @@ function renderOrderDocumentHtml(params: {
               <span class="po-meta-label">Date:</span>
               <span class="po-meta-value">${formatDate(params.createdAt)}</span>
             </div>
+            <div class="po-meta-row">
+              <span class="po-meta-label">Generated:</span>
+              <span class="po-meta-value">${formatDateTime(params.generatedAt)}${params.generatedByName ? ` by ${escapeHtml(params.generatedByName)}` : ''}</span>
+            </div>
             ${!isRfq && params.vendorPiNumbers.length > 0 ? `
             <div class="po-meta-row">
               <span class="po-meta-label">Vendor PI${params.vendorPiNumbers.length === 1 ? '' : 's'}:</span>
@@ -808,6 +825,7 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     return ApiResponses.badRequest('Purchase order ID is required')
   }
 
+  const prisma = await getTenantPrisma()
   const order = await getPurchaseOrderById(id)
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
@@ -818,7 +836,6 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   let supplierPhone: string | null = null
   let supplierBankingDetails: string | null = null
   if (order.counterpartyName) {
-    const prisma = await getTenantPrisma()
     const supplierName = order.counterpartyName.trim()
     const supplier = await prisma.supplier.findFirst({
       where: { name: { equals: supplierName, mode: 'insensitive' } },
@@ -848,17 +865,49 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     )
   }
 
-  const vendorPiNumbers: string[] = []
-  for (const pi of order.proformaInvoices) {
-    const trimmed = pi.piNumber.trim()
-    if (trimmed.length === 0) continue
-    vendorPiNumbers.push(trimmed)
-  }
-  if (vendorPiNumbers.length === 0) {
+  const vendorPiNumbers = (() => {
+    const values = new Set<string>()
+    for (const line of order.lines) {
+      const piNumber = typeof (line as { piNumber?: string | null }).piNumber === 'string'
+        ? (line as { piNumber?: string | null }).piNumber!.trim()
+        : ''
+      if (piNumber.length > 0) {
+        values.add(piNumber)
+      }
+    }
+    for (const pi of order.proformaInvoices) {
+      const trimmed = pi.piNumber.trim()
+      if (trimmed.length === 0) continue
+      values.add(trimmed)
+    }
     const primary = (order as { proformaInvoiceNumber?: string | null }).proformaInvoiceNumber
     if (primary && primary.trim().length > 0) {
-      vendorPiNumbers.push(primary.trim())
+      values.add(primary.trim())
     }
+    return Array.from(values)
+  })()
+
+  const generatedAt = new Date()
+  const generatedByName = _session.user.name ?? _session.user.email ?? null
+
+  if (documentType === 'rfq') {
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        rfqPdfGeneratedAt: generatedAt,
+        rfqPdfGeneratedById: _session.user.id,
+        rfqPdfGeneratedByName: generatedByName,
+      },
+    })
+  } else {
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        poPdfGeneratedAt: generatedAt,
+        poPdfGeneratedById: _session.user.id,
+        poPdfGeneratedByName: generatedByName,
+      },
+    })
   }
 
   const lines = order.lines.map(line => ({
@@ -875,6 +924,8 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     documentType,
     documentNumber,
     vendorPiNumbers,
+    generatedAt,
+    generatedByName,
     buyerName: BUYER_LEGAL_ENTITY.name,
     buyerAddress: BUYER_LEGAL_ENTITY.address,
     buyerPhone: BUYER_LEGAL_ENTITY.phone,
