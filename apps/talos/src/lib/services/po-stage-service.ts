@@ -391,7 +391,7 @@ export function validateStageData(
     const existingValue = existingOrder[field as keyof PurchaseOrder]
 
     if (!newValue && !existingValue) {
-      missingFields.push(FIELD_LABELS[field] || field)
+      missingFields.push(FIELD_LABELS[field] ?? field)
     }
   }
 
@@ -673,30 +673,33 @@ async function computeManufacturingCargoTotals(
 }
 
 /**
- * Generate the next PO number in sequence (TG-<Country>-<number> format)
+ * Generate the next order number in sequence (TG-<Country>-<number> format)
+ * Used as RFQ number in DRAFT and becomes PO number at ISSUED.
+ *
  * Format: TG-US-2601, TG-US-2602, etc. for US tenant
  *         TG-UK-2601, TG-UK-2602, etc. for UK tenant
+ *
  * Starting number: 2601
  */
-export async function generatePoNumber(): Promise<string> {
+export async function generateOrderNumber(): Promise<string> {
   const prisma = await getTenantPrisma()
   const tenant = await getCurrentTenant()
   const prefix = `TG-${tenant.code}-`
   const startingNumber = 2601
 
-  const lastPoRows = await prisma.$queryRaw<{ po_number: string | null }[]>`
-    SELECT po_number
+  const lastOrderRows = await prisma.$queryRaw<{ order_number: string | null }[]>`
+    SELECT order_number
     FROM purchase_orders
-    WHERE po_number LIKE ${`${prefix}%`}
-    ORDER BY CAST(substring(po_number FROM '\\d+$') AS bigint) DESC
+    WHERE order_number LIKE ${`${prefix}%`}
+    ORDER BY CAST(substring(order_number FROM '\\d+$') AS bigint) DESC
     LIMIT 1
   `
 
-  const lastPoNumber = lastPoRows.length > 0 ? lastPoRows[0]?.po_number : null
+  const lastOrderNumber = lastOrderRows.length > 0 ? lastOrderRows[0]?.order_number : null
 
   let nextNumber = startingNumber
-  if (typeof lastPoNumber === 'string') {
-    const match = lastPoNumber.match(new RegExp(`^${prefix}(\\d+)$`))
+  if (typeof lastOrderNumber === 'string') {
+    const match = lastOrderNumber.match(new RegExp(`^${prefix}(\\d+)$`))
     if (match) {
       nextNumber = parseInt(match[1], 10) + 1
     }
@@ -879,12 +882,11 @@ export async function createPurchaseOrder(
     skuRecordsForLines = skus
   }
 
-  const MAX_PO_NUMBER_ATTEMPTS = 5
+  const MAX_ORDER_NUMBER_ATTEMPTS = 5
   let order: PurchaseOrderWithLines | null = null
 
-  for (let attempt = 0; attempt < MAX_PO_NUMBER_ATTEMPTS; attempt += 1) {
-    const poNumber = await generatePoNumber()
-    const orderNumber = poNumber // Order number is just the PO number now
+  for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt += 1) {
+    const orderNumber = await generateOrderNumber()
 
 	    try {
 	      order = await prisma.$transaction(async tx => {
@@ -965,7 +967,6 @@ export async function createPurchaseOrder(
 	        return tx.purchaseOrder.create({
 	          data: {
 	            orderNumber,
-	            poNumber,
             type: 'PURCHASE',
             status: 'DRAFT',
             counterpartyName,
@@ -1035,7 +1036,7 @@ export async function createPurchaseOrder(
                         line.unitsOrdered > 0
                           ? (line.totalCost / line.unitsOrdered).toFixed(4)
                           : undefined,
-                      currency: line.currency?.trim().toUpperCase() || tenant.currency,
+                      currency: line.currency.trim().toUpperCase(),
                       lineNotes: line.notes,
                       status: 'PENDING',
                     })),
@@ -1057,7 +1058,7 @@ export async function createPurchaseOrder(
   }
 
   if (!order) {
-    throw new ValidationError('Unable to generate a unique PO number. Please retry.')
+    throw new ValidationError('Unable to generate a unique order number. Please retry.')
   }
 
   await auditLog({
@@ -1065,7 +1066,7 @@ export async function createPurchaseOrder(
     action: 'CREATE',
     entityType: 'PurchaseOrder',
     entityId: order.id,
-    data: { poNumber: order.poNumber, status: 'DRAFT', lineCount: input.lines?.length || 0 },
+    data: { orderNumber: order.orderNumber, status: 'DRAFT', lineCount: input.lines?.length ?? 0 },
   })
 
   return order
@@ -1107,9 +1108,10 @@ export async function transitionPurchaseOrderStage(
 
   // Validate the transition is allowed
   if (!isValidTransition(currentStatus, targetStatus)) {
+    const validTargets = getValidNextStages(currentStatus)
     throw new ValidationError(
       `Invalid transition from ${currentStatus} to ${targetStatus}. ` +
-        `Valid targets: ${getValidNextStages(currentStatus).join(', ') || 'none'}`
+        `Valid targets: ${validTargets.length > 0 ? validTargets.join(', ') : 'none'}`
     )
   }
 
@@ -1253,6 +1255,10 @@ export async function transitionPurchaseOrderStage(
   // Build the update data
   const updateData: Prisma.PurchaseOrderUpdateInput = {
     status: targetStatus,
+  }
+
+  if (targetStatus === PurchaseOrderStatus.ISSUED && !order.poNumber) {
+    updateData.poNumber = toPublicOrderNumber(order.orderNumber)
   }
 
   // Stage 2: Manufacturing fields
@@ -1674,13 +1680,13 @@ export async function transitionPurchaseOrderStage(
           },
         })
 
-        totalStoragePalletsIn += Number(txRow.storagePalletsIn || 0)
+        totalStoragePalletsIn += Number(txRow.storagePalletsIn ?? 0)
 
         createdTransactions.push({
           id: txRow.id,
           skuCode: txRow.skuCode,
           cartons,
-          pallets: Number(txRow.storagePalletsIn || 0),
+          pallets: Number(txRow.storagePalletsIn ?? 0),
           cartonDimensionsCm: txRow.cartonDimensionsCm,
           warehouseCode: txRow.warehouseCode,
           warehouseName: txRow.warehouseName,
@@ -2119,7 +2125,7 @@ export function serializePurchaseOrder(
 	      quantity: line.quantity,
 	      unitCost: line.unitCost ? Number(line.unitCost) : null,
 	      totalCost: line.totalCost ? Number(line.totalCost) : null,
-	      currency: line.currency || defaultCurrency,
+	      currency: line.currency ?? defaultCurrency,
 	      status: line.status,
 	      postedQuantity: line.postedQuantity,
 	      quantityReceived: line.quantityReceived,

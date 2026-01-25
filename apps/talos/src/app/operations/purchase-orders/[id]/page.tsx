@@ -1783,8 +1783,11 @@ export default function PurchaseOrderDetailPage() {
       ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
       : null
   const canDownloadPdf = true
+  const pdfLabel = order.status === 'DRAFT' ? 'RFQ PDF' : 'PO PDF'
+  const displayOrderNumber =
+    order.status === 'DRAFT' ? order.orderNumber : order.poNumber ?? order.orderNumber
   const documentsCount = documents.length
-  const historyCount = auditLogs.length || order.approvalHistory?.length || 0
+  const historyCount = auditLogs.length > 0 ? auditLogs.length : order.approvalHistory?.length ?? 0
   const selectedSku = newLineDraft.skuId
     ? skus.find(sku => sku.id === newLineDraft.skuId)
     : undefined
@@ -2128,7 +2131,7 @@ export default function PurchaseOrderDetailPage() {
 
   const handleDownloadPdf = () => {
     if (!order) return
-    // Open the HTML-based PO document in a new tab for printing
+    // Open the RFQ/PO HTML document in a new tab for printing
     window.open(withBasePath(`/api/purchase-orders/${order.id}/pdf`), '_blank')
   }
 
@@ -2350,7 +2353,7 @@ export default function PurchaseOrderDetailPage() {
   return (
     <PageContainer>
       <PageHeaderSection
-        title={order.poNumber || order.orderNumber}
+        title={displayOrderNumber}
         description="Operations"
         icon={Package2}
         backHref="/operations/purchase-orders"
@@ -2365,7 +2368,7 @@ export default function PurchaseOrderDetailPage() {
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
-                PDF
+                {pdfLabel}
               </Button>
             )}
             {!isTerminal && (
@@ -3953,10 +3956,10 @@ export default function PurchaseOrderDetailPage() {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        PO Number
+                        {order.status === 'DRAFT' ? 'RFQ Number' : 'PO Number'}
                       </p>
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {order.poNumber || order.orderNumber}
+                        {displayOrderNumber}
                       </p>
                     </div>
                     <div className="space-y-1">
