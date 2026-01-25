@@ -144,10 +144,10 @@ export default function WarehousesPanel() {
             <p className="text-sm text-slate-600 dark:text-slate-400">Manage warehouses and configure cost rates</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">
+            <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 font-medium">
               {warehouses.length} warehouses
             </Badge>
-            <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 font-medium">{totals.costRates} rates</Badge>
+            <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 font-medium">{totals.costRates} rates</Badge>
           </div>
         </div>
 
@@ -212,7 +212,7 @@ export default function WarehousesPanel() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200">
+                        <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800">
                           {warehouse.code}
                         </Badge>
                         <Badge className={kindMeta(warehouse.kind).badgeClass}>
