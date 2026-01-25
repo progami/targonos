@@ -1818,7 +1818,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const isIssuedShippingMarksKey = (key: string): boolean => {
     return (
-      key.includes('.productNumber') ||
       key.includes('.commodityCode') ||
       key.includes('.countryOfOrigin') ||
       key.includes('.material') ||
@@ -2199,18 +2198,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       const response = await fetchWithCSRF('/api/purchase-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          counterpartyName,
-          expectedDate,
-          incoterms,
-          paymentTerms,
-          notes: notes ? notes : undefined,
+          body: JSON.stringify({
+            counterpartyName,
+            expectedDate,
+            incoterms,
+            paymentTerms,
+            notes: notes ? notes : undefined,
 	          lines: draftLines.map(line => ({
 	            skuCode: line.skuCode,
 	            skuDescription: line.skuDescription ? line.skuDescription : undefined,
 	            batchLot: line.batchLot!,
 	            piNumber: line.piNumber ? line.piNumber : undefined,
-	            productNumber: line.productNumber ? line.productNumber : undefined,
 	            commodityCode: line.commodityCode ? line.commodityCode : undefined,
 	            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
 	            netWeightKg: line.netWeightKg !== null ? line.netWeightKg : undefined,
@@ -3410,36 +3408,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.productNumber`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Product Number
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.productNumber ?? ''}
-                                    data-gate-key={`${issuePrefix}.productNumber`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, {
-                                        productNumber: trimmed.length > 0 ? trimmed : null,
-                                      })
-                                    }}
-                                    className={
-                                      issue('productNumber')
-                                        ? 'border-rose-500 focus-visible:ring-rose-500'
-                                        : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {line.productNumber ? line.productNumber : '—'}
-                                  </p>
-                                )}
-                                {issue('productNumber') && (
-                                  <p className="text-xs text-rose-600">{issue('productNumber')}</p>
-                                )}
-                              </div>
-
                               <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
                                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                   Commodity Code
@@ -4064,23 +4032,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.productNumber`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Product Number
-                                </label>
-                                <Input
-                                  value={line.productNumber ?? ''}
-                                  data-gate-key={`${issuePrefix}.productNumber`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, productNumber: value.trim() ? value : null }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.productNumber`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.productNumber`]}</p>
-                                )}
-                              </div>
-
                               <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
                                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                   Commodity Code
