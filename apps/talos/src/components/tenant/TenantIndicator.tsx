@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TenantConfig, TenantCode, TENANTS } from '@/lib/tenant/constants'
-import { Globe, MapPin, LogOut } from '@/lib/lucide-icons'
+import { Globe, MapPin, RefreshCw } from '@/lib/lucide-icons'
 
 interface TenantIndicatorProps {
   className?: string
@@ -78,7 +78,7 @@ export function TenantIndicator({ className, collapsed, showLogout = true }: Ten
           className="flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-2.5 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
           title="Switch Region"
         >
-          <LogOut className="h-5 w-5" />
+          <RefreshCw className="h-4 w-4" />
         </button>
       )}
     </div>
