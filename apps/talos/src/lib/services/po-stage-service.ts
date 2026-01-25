@@ -143,8 +143,8 @@ export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrde
 
 // Stage-specific required fields for transition
 export const STAGE_REQUIREMENTS: Record<string, string[]> = {
-  // Issued = supplier accepted (signed PI received)
-  ISSUED: ['expectedDate', 'incoterms', 'paymentTerms', 'proformaInvoiceNumber'],
+  // Issued = PO issued to supplier
+  ISSUED: ['expectedDate', 'incoterms', 'paymentTerms'],
   // Manufacturing = production started
   MANUFACTURING: ['manufacturingStartDate'],
   // Stage 3: Ocean
@@ -167,7 +167,6 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 }
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
-  ISSUED: ['proforma_invoice'],
   MANUFACTURING: ['box_artwork'],
   OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
   WAREHOUSE: ['movement_note', 'custom_declaration'],
@@ -890,12 +889,17 @@ export async function createPurchaseOrder(
 
 	    try {
 	      order = await prisma.$transaction(async tx => {
-          let counterpartyAddress: string | null = null
-          const supplier = await tx.supplier.findUnique({
-            where: { name: counterpartyName },
-            select: { address: true },
-          })
-          counterpartyAddress = supplier?.address ?? null
+	          const supplier = await tx.supplier.findFirst({
+	            where: { name: { equals: counterpartyName, mode: 'insensitive' } },
+	            select: { name: true, address: true },
+	          })
+	          if (!supplier) {
+	            throw new ValidationError(
+	              `Supplier ${counterpartyName} not found. Create it in Config → Suppliers first.`
+	            )
+	          }
+	          const counterpartyNameCanonical = supplier.name
+	          const counterpartyAddress = supplier.address ?? null
 
           const skuByCode = new Map(skuRecordsForLines.map(sku => [sku.skuCode.toLowerCase(), sku]))
           const batchByKey = new Map<string, LineBatchRecord>()
@@ -969,8 +973,8 @@ export async function createPurchaseOrder(
 	            orderNumber,
             type: 'PURCHASE',
             status: 'DRAFT',
-            counterpartyName,
-            counterpartyAddress,
+	            counterpartyName: counterpartyNameCanonical,
+	            counterpartyAddress,
             expectedDate,
             incoterms,
             paymentTerms,
