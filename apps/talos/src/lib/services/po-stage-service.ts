@@ -5,7 +5,6 @@ import {
   PurchaseOrderProformaInvoice,
   PurchaseOrderLine,
   PurchaseOrderStatus,
-  PurchaseOrderType,
   PurchaseOrderLineStatus,
   PurchaseOrderDocumentStage,
   TransactionType,
@@ -20,6 +19,7 @@ import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
+import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
 type PurchaseOrderWithLines = PurchaseOrder & {
@@ -196,21 +196,17 @@ const FIELD_LABELS: Record<string, string> = {
   receivedDate: 'Received Date',
 }
 
-function toDocumentStage(status: PurchaseOrderStatus): PurchaseOrderDocumentStage {
-  switch (status) {
-    case PurchaseOrderStatus.ISSUED:
-      return PurchaseOrderDocumentStage.ISSUED
-    case PurchaseOrderStatus.MANUFACTURING:
-      return PurchaseOrderDocumentStage.MANUFACTURING
-    case PurchaseOrderStatus.OCEAN:
-      return PurchaseOrderDocumentStage.OCEAN
-    case PurchaseOrderStatus.WAREHOUSE:
-      return PurchaseOrderDocumentStage.WAREHOUSE
-    case PurchaseOrderStatus.SHIPPED:
-      return PurchaseOrderDocumentStage.SHIPPED
-    default:
-      throw new ValidationError(`Unsupported stage for document validation: ${status}`)
+function normalizePiNumber(value: string): string {
+  return value.trim().toUpperCase()
+}
+
+function buildPiDocumentType(piNumber: string): string {
+  const normalized = normalizePiNumber(piNumber)
+  const sanitized = normalized.replace(/[^A-Z0-9-]+/g, '')
+  if (!sanitized) {
+    throw new ValidationError('Invalid PI number')
   }
+  return `pi_${sanitized.toLowerCase()}`
 }
 
 export interface StageTransitionInput {
@@ -348,6 +344,16 @@ export interface UserContext {
   email: string
 }
 
+export class StageGateError extends ValidationError {
+  readonly details: Record<string, string>
+
+  constructor(message: string, details: Record<string, string>) {
+    super(message)
+    this.name = 'StageGateError'
+    this.details = details
+  }
+}
+
 /**
  * Check if a transition is valid
  */
@@ -397,6 +403,340 @@ export function validateStageData(
   return {
     valid: missingFields.length === 0,
     missingFields,
+  }
+}
+
+function recordGateIssue(
+  issues: Record<string, string>,
+  key: string,
+  message: string
+): void {
+  if (issues[key]) return
+  issues[key] = message
+}
+
+async function requireDocuments(params: {
+  prisma: Prisma.TransactionClient
+  purchaseOrderId: string
+  stage: PurchaseOrderDocumentStage
+  documentTypes: string[]
+  issues: Record<string, string>
+  issueKeyPrefix: string
+  issueLabel: (documentType: string) => string
+}) {
+  if (params.documentTypes.length === 0) return
+
+  const rows = await params.prisma.purchaseOrderDocument.findMany({
+    where: {
+      purchaseOrderId: params.purchaseOrderId,
+      stage: params.stage,
+      documentType: { in: params.documentTypes },
+    },
+    select: { documentType: true },
+  })
+
+  const present = new Set(rows.map(row => row.documentType))
+  for (const docType of params.documentTypes) {
+    if (present.has(docType)) continue
+    recordGateIssue(
+      params.issues,
+      `${params.issueKeyPrefix}.${docType}`,
+      `${params.issueLabel(docType)} is required`
+    )
+  }
+}
+
+function validateCommodityCodeFormat(params: { tenantCode: string; commodityCode: string }): boolean {
+  const digits = params.commodityCode.replace(/[^0-9]/g, '')
+  if (digits.length < 6) return false
+  if (params.tenantCode === 'US') {
+    return digits.length === 10
+  }
+  if (params.tenantCode === 'UK') {
+    return digits.length === 10 || digits.length === 8 || digits.length === 6
+  }
+  return digits.length >= 6
+}
+
+function validateCustomsEntryNumberFormat(params: { tenantCode: string; customsEntryNumber: string }): boolean {
+  const normalized = params.customsEntryNumber.replace(/\s+/g, '').toUpperCase()
+
+  if (params.tenantCode === 'US') {
+    const digits = normalized.replace(/[^0-9]/g, '')
+    return digits.length === 11
+  }
+
+  if (params.tenantCode === 'UK') {
+    return /^[0-9]{2}[A-Z]{2}[A-Z0-9]{14}$/.test(normalized)
+  }
+
+  return normalized.length > 0
+}
+
+async function validateTransitionGate(params: {
+  prisma: Prisma.TransactionClient
+  order: PurchaseOrderWithLines
+  targetStatus: PurchaseOrderStatus
+  stageData: StageTransitionInput
+}) {
+  const issues: Record<string, string> = {}
+
+  const activeLines = params.order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
+
+  if (params.targetStatus === PurchaseOrderStatus.ISSUED) {
+    const tenant = await getCurrentTenant()
+    const tenantCode = tenant.code
+
+    if (!params.order.counterpartyName || params.order.counterpartyName.trim().length === 0) {
+      recordGateIssue(issues, 'details.counterpartyName', 'Supplier is required')
+    }
+    if (!params.order.expectedDate) {
+      recordGateIssue(issues, 'details.expectedDate', 'Cargo ready date is required')
+    }
+    if (!params.order.incoterms || params.order.incoterms.trim().length === 0) {
+      recordGateIssue(issues, 'details.incoterms', 'Incoterms is required')
+    }
+    if (!params.order.paymentTerms || params.order.paymentTerms.trim().length === 0) {
+      recordGateIssue(issues, 'details.paymentTerms', 'Payment terms is required')
+    }
+
+    if (activeLines.length === 0) {
+      recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
+    }
+
+    const piNumbers: string[] = []
+    for (const line of activeLines) {
+      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+      if (!piNumber) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+      } else {
+        piNumbers.push(piNumber)
+      }
+
+      const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
+      if (!productNumber) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
+      }
+
+      const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
+      if (!commodityCode) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
+      } else if (!validateCommodityCodeFormat({ tenantCode, commodityCode })) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
+      }
+
+      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+      if (!origin) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      }
+
+      const material = typeof line.material === 'string' ? line.material.trim() : ''
+      if (!material) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.material`, 'Material is required')
+      }
+
+      const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
+      if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+      }
+
+      const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
+      if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+      }
+
+      const cartonVolumeCbm =
+        computeCartonVolumeCbm({
+          cartonSide1Cm: line.cartonSide1Cm,
+          cartonSide2Cm: line.cartonSide2Cm,
+          cartonSide3Cm: line.cartonSide3Cm,
+          cartonDimensionsCm: line.cartonDimensionsCm,
+        }) ?? null
+      if (cartonVolumeCbm === null) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonDimensions`, 'Carton dimensions are required')
+      }
+
+      if (!Number.isInteger(line.unitsOrdered) || !Number.isInteger(line.unitsPerCarton)) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.unitsPerCarton`, 'Units per carton is required')
+      } else if (line.unitsOrdered % line.unitsPerCarton !== 0) {
+        recordGateIssue(
+          issues,
+          `cargo.lines.${line.id}.unitsPerCarton`,
+          'Units must be divisible by units per carton'
+        )
+      }
+
+      const totalCost = line.totalCost ? Number(line.totalCost) : null
+      if (totalCost === null || !Number.isFinite(totalCost)) {
+        recordGateIssue(issues, `costs.lines.${line.id}.totalCost`, 'Targeted product cost is required')
+      }
+    }
+
+    if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
+      const supplierName = params.order.counterpartyName.trim()
+      const supplier = await params.prisma.supplier.findFirst({
+        where: { name: { equals: supplierName, mode: 'insensitive' } },
+        select: { bankingDetails: true },
+      })
+      const banking = supplier?.bankingDetails
+      if (!banking || banking.trim().length === 0) {
+        recordGateIssue(
+          issues,
+          'details.counterpartyName',
+          'Supplier banking information is required to issue a PO'
+        )
+      }
+    }
+
+    const uniquePiNumbers = Array.from(new Set(piNumbers))
+    if (uniquePiNumbers.length > 0) {
+      const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
+      await requireDocuments({
+        prisma: params.prisma,
+        purchaseOrderId: params.order.id,
+        stage: PurchaseOrderDocumentStage.DRAFT,
+        documentTypes: requiredDocTypes,
+        issues,
+        issueKeyPrefix: 'documents.pi',
+        issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
+      })
+    }
+  }
+
+  if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
+    const tenant = await getCurrentTenant()
+    const tenantCode = tenant.code
+
+    for (const line of activeLines) {
+      const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
+      if (!productNumber) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
+      }
+
+      const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
+      if (!commodityCode) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
+      } else if (!validateCommodityCodeFormat({ tenantCode, commodityCode })) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
+      }
+
+      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+      if (!origin) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      }
+
+      const material = typeof line.material === 'string' ? line.material.trim() : ''
+      if (!material) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.material`, 'Material is required')
+      }
+
+      const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
+      if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+      }
+
+      const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
+      if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+      }
+
+      const cartonVolumeCbm =
+        computeCartonVolumeCbm({
+          cartonSide1Cm: line.cartonSide1Cm,
+          cartonSide2Cm: line.cartonSide2Cm,
+          cartonSide3Cm: line.cartonSide3Cm,
+          cartonDimensionsCm: line.cartonDimensionsCm,
+        }) ?? null
+      if (cartonVolumeCbm === null) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonDimensions`, 'Carton dimensions are required')
+      }
+
+      if (!Number.isInteger(line.unitsOrdered) || !Number.isInteger(line.unitsPerCarton)) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.unitsPerCarton`, 'Units per carton is required')
+      } else if (line.unitsOrdered % line.unitsPerCarton !== 0) {
+        recordGateIssue(
+          issues,
+          `cargo.lines.${line.id}.unitsPerCarton`,
+          'Units must be divisible by units per carton'
+        )
+      }
+    }
+  }
+
+  if (params.targetStatus === PurchaseOrderStatus.OCEAN) {
+    const manufacturingStartDate = resolveOrderDate(
+      'manufacturingStartDate',
+      params.stageData,
+      params.order,
+      'Manufacturing start date'
+    )
+    if (!manufacturingStartDate) {
+      recordGateIssue(issues, 'details.manufacturingStartDate', 'Manufacturing start date is required')
+    }
+
+    await requireDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      stage: PurchaseOrderDocumentStage.MANUFACTURING,
+      documentTypes: ['box_artwork'],
+      issues,
+      issueKeyPrefix: 'documents',
+      issueLabel: () => 'Box artwork',
+    })
+  }
+
+  if (params.targetStatus === PurchaseOrderStatus.WAREHOUSE) {
+    const resolveOrderString = (key: keyof StageTransitionInput & keyof PurchaseOrder): string | null => {
+      if (Object.prototype.hasOwnProperty.call(params.stageData, key)) {
+        const value = params.stageData[key]
+        if (typeof value !== 'string') return null
+        const trimmed = value.trim()
+        return trimmed.length > 0 ? trimmed : null
+      }
+
+      const existing = params.order[key]
+      if (typeof existing !== 'string') return null
+      const trimmed = existing.trim()
+      return trimmed.length > 0 ? trimmed : null
+    }
+
+    const oceanFields: Array<{ key: keyof PurchaseOrder; issueKey: string; label: string }> = [
+      { key: 'houseBillOfLading', issueKey: 'details.houseBillOfLading', label: 'Bill of lading reference' },
+      { key: 'commercialInvoiceNumber', issueKey: 'details.commercialInvoiceNumber', label: 'Commercial invoice number' },
+      { key: 'packingListRef', issueKey: 'details.packingListRef', label: 'Packing list reference' },
+      { key: 'vesselName', issueKey: 'details.vesselName', label: 'Vessel name' },
+      { key: 'portOfLoading', issueKey: 'details.portOfLoading', label: 'Port of loading' },
+      { key: 'portOfDischarge', issueKey: 'details.portOfDischarge', label: 'Port of discharge' },
+    ]
+
+    for (const field of oceanFields) {
+      const value = resolveOrderString(field.key as keyof StageTransitionInput & keyof PurchaseOrder)
+      if (!value) {
+        recordGateIssue(issues, field.issueKey, `${field.label} is required`)
+      }
+    }
+
+    await requireDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      stage: PurchaseOrderDocumentStage.OCEAN,
+      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
+      issues,
+      issueKeyPrefix: 'documents',
+      issueLabel: (docType) => docType.replace(/_/g, ' '),
+    })
+
+    const hasForwardingCost = await params.prisma.purchaseOrderForwardingCost.findFirst({
+      where: { purchaseOrderId: params.order.id },
+      select: { id: true },
+    })
+    if (!hasForwardingCost) {
+      recordGateIssue(issues, 'costs.forwarding', 'Freight (forwarding) cost is required')
+    }
+  }
+
+  if (Object.keys(issues).length > 0) {
+    throw new StageGateError('Missing required information', issues)
   }
 }
 
@@ -711,6 +1051,16 @@ export interface CreatePurchaseOrderLineInput {
   skuCode: string
   skuDescription?: string
   batchLot: string
+  piNumber?: string
+  productNumber?: string
+  commodityCode?: string
+  countryOfOrigin?: string
+  netWeightKg?: number
+  cartonWeightKg?: number
+  cartonSide1Cm?: number
+  cartonSide2Cm?: number
+  cartonSide3Cm?: number
+  material?: string
   unitsOrdered: number
   unitsPerCarton: number
   totalCost?: number
@@ -733,7 +1083,6 @@ export async function createPurchaseOrder(
   },
   user: UserContext
 ): Promise<PurchaseOrderWithLines> {
-  const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
   type LineSkuRecord = Prisma.SkuGetPayload<{
     select: {
@@ -995,22 +1344,52 @@ export async function createPurchaseOrder(
                               ? batchByKey.get(`${skuRecord.id}::${batchCode}`)
                               : null
 
+                            const baseDimensionsCm =
+                              batchRecord?.cartonDimensionsCm ?? skuRecord?.cartonDimensionsCm ?? null
+                            const baseTriplet = resolveDimensionTripletCm({
+                              side1Cm: batchRecord?.cartonSide1Cm ?? skuRecord?.cartonSide1Cm ?? null,
+                              side2Cm: batchRecord?.cartonSide2Cm ?? skuRecord?.cartonSide2Cm ?? null,
+                              side3Cm: batchRecord?.cartonSide3Cm ?? skuRecord?.cartonSide3Cm ?? null,
+                              legacy: baseDimensionsCm,
+                            })
+                            const overrideTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: null,
+                            })
+                            const chosenTriplet = overrideTriplet ?? baseTriplet
+                            const dimensionData = chosenTriplet
+                              ? {
+                                  cartonDimensionsCm: formatDimensionTripletCm(chosenTriplet),
+                                  cartonSide1Cm: new Prisma.Decimal(chosenTriplet.side1Cm.toFixed(2)),
+                                  cartonSide2Cm: new Prisma.Decimal(chosenTriplet.side2Cm.toFixed(2)),
+                                  cartonSide3Cm: new Prisma.Decimal(chosenTriplet.side3Cm.toFixed(2)),
+                                }
+                              : {
+                                  cartonDimensionsCm: baseDimensionsCm,
+                                  cartonSide1Cm: batchRecord?.cartonSide1Cm ?? skuRecord?.cartonSide1Cm ?? null,
+                                  cartonSide2Cm: batchRecord?.cartonSide2Cm ?? skuRecord?.cartonSide2Cm ?? null,
+                                  cartonSide3Cm: batchRecord?.cartonSide3Cm ?? skuRecord?.cartonSide3Cm ?? null,
+                                }
+
+                            const overrideCartonWeightKg =
+                              typeof line.cartonWeightKg === 'number' && Number.isFinite(line.cartonWeightKg)
+                                ? new Prisma.Decimal(line.cartonWeightKg.toFixed(3))
+                                : null
+
                             return {
                               batchLot: batchRecord?.batchCode ?? batchCode,
                               skuDescription:
                                 typeof line.skuDescription === 'string' && line.skuDescription.trim()
                                   ? line.skuDescription
                                   : skuRecord?.description ?? '',
-                              cartonDimensionsCm:
-                                batchRecord?.cartonDimensionsCm ?? skuRecord?.cartonDimensionsCm ?? null,
-                              cartonSide1Cm:
-                                batchRecord?.cartonSide1Cm ?? skuRecord?.cartonSide1Cm ?? null,
-                              cartonSide2Cm:
-                                batchRecord?.cartonSide2Cm ?? skuRecord?.cartonSide2Cm ?? null,
-                              cartonSide3Cm:
-                                batchRecord?.cartonSide3Cm ?? skuRecord?.cartonSide3Cm ?? null,
+                              ...dimensionData,
                               cartonWeightKg:
-                                batchRecord?.cartonWeightKg ?? skuRecord?.cartonWeightKg ?? null,
+                                overrideCartonWeightKg ??
+                                batchRecord?.cartonWeightKg ??
+                                skuRecord?.cartonWeightKg ??
+                                null,
                               packagingType: batchRecord?.packagingType ?? skuRecord?.packagingType ?? null,
                               storageCartonsPerPallet: batchRecord?.storageCartonsPerPallet ?? null,
                               shippingCartonsPerPallet: batchRecord?.shippingCartonsPerPallet ?? null,
@@ -1025,6 +1404,30 @@ export async function createPurchaseOrder(
                       unitsOrdered: line.unitsOrdered,
                       unitsPerCarton: line.unitsPerCarton,
                       skuCode: line.skuCode,
+                      piNumber:
+                        typeof line.piNumber === 'string' && line.piNumber.trim().length > 0
+                          ? normalizePiNumber(line.piNumber)
+                          : null,
+                      productNumber:
+                        typeof line.productNumber === 'string' && line.productNumber.trim().length > 0
+                          ? line.productNumber.trim()
+                          : null,
+                      commodityCode:
+                        typeof line.commodityCode === 'string' && line.commodityCode.trim().length > 0
+                          ? line.commodityCode.trim()
+                          : null,
+                      countryOfOrigin:
+                        typeof line.countryOfOrigin === 'string' && line.countryOfOrigin.trim().length > 0
+                          ? line.countryOfOrigin.trim()
+                          : null,
+                      netWeightKg:
+                        typeof line.netWeightKg === 'number' && Number.isFinite(line.netWeightKg)
+                          ? new Prisma.Decimal(line.netWeightKg.toFixed(3))
+                          : null,
+                      material:
+                        typeof line.material === 'string' && line.material.trim().length > 0
+                          ? line.material.trim()
+                          : null,
                       quantity: computeCartonsOrdered({
                         skuCode: line.skuCode,
                         unitsOrdered: line.unitsOrdered,
@@ -1201,49 +1604,16 @@ export async function transitionPurchaseOrderStage(
   }
 
   // Validate stage data requirements
-  const filteredStageData = filterStageDataForTarget(targetStatus, stageData)
+  const filteredStageData = filterStageDataForTarget(currentStatus, stageData)
 
-  const validation = validateStageData(targetStatus, filteredStageData, order)
-  if (!validation.valid) {
-    throw new ValidationError(
-      `Missing required fields for ${targetStatus}: ${validation.missingFields.join(', ')}`
-    )
-  }
+  await validateTransitionGate({
+    prisma,
+    order,
+    targetStatus,
+    stageData: filteredStageData,
+  })
 
   validateStageDateOrdering(targetStatus, filteredStageData, order)
-
-  const requiredDocs = STAGE_DOCUMENT_REQUIREMENTS[targetStatus]
-  if (requiredDocs && requiredDocs.length > 0) {
-    const stageDocs = await prisma.purchaseOrderDocument.findMany({
-      where: {
-        purchaseOrderId: order.id,
-        stage: toDocumentStage(targetStatus),
-        documentType: { in: requiredDocs },
-      },
-      select: { documentType: true },
-    })
-
-    const present = new Set(stageDocs.map(doc => doc.documentType))
-    const missing = requiredDocs.filter(docType => !present.has(docType))
-
-    if (missing.length > 0) {
-      throw new ValidationError(
-        `Missing required documents for ${targetStatus}: ${missing.join(', ')}`
-      )
-    }
-  }
-
-  if (targetStatus === PurchaseOrderStatus.WAREHOUSE) {
-    if (!order.lines || order.lines.length === 0) {
-      throw new ValidationError('Cannot receive an order with no cargo lines')
-    }
-
-    for (const line of order.lines) {
-      if (!line.batchLot) {
-        throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
-      }
-    }
-  }
 
   const derivedManufacturingTotals =
     targetStatus === PurchaseOrderStatus.MANUFACTURING
@@ -1490,68 +1860,8 @@ export async function transitionPurchaseOrderStage(
     }
 
     if (targetStatus === PurchaseOrderStatus.WAREHOUSE) {
-      if (!nextOrder.warehouseCode || !nextOrder.warehouseName) {
-        throw new ValidationError('Warehouse is required before receiving inventory')
-      }
-
-      if (!nextOrder.receiveType) {
-        throw new ValidationError('Inbound type is required before receiving inventory')
-      }
-
-      const receivedAt = nextOrder.receivedDate ? new Date(nextOrder.receivedDate) : now
-
-      const warehouse = await tx.warehouse.findFirst({
-        where: { code: nextOrder.warehouseCode },
-        select: { id: true, code: true, name: true, address: true },
-      })
-
-      if (!warehouse) {
-        throw new ValidationError(`Invalid warehouse code: ${nextOrder.warehouseCode}`)
-      }
-
-      if (nextOrder.type === PurchaseOrderType.PURCHASE) {
-        const hasForwardingCost = await tx.purchaseOrderForwardingCost.findFirst({
-          where: { purchaseOrderId: nextOrder.id, warehouseId: warehouse.id },
-          select: { id: true },
-        })
-
-        if (!hasForwardingCost) {
-          throw new ValidationError(
-            'At least one forwarding (freight) cost is required before receiving this purchase order'
-          )
-        }
-      }
-
-      const activeLines = nextOrder.lines.filter(
-        line => line.status !== PurchaseOrderLineStatus.CANCELLED
-      )
-      if (activeLines.length === 0) {
-        throw new ValidationError('Cannot receive an order with no active cargo lines')
-      }
-
-      const skuCodes = activeLines.map(line => line.skuCode)
-      const skus = await tx.sku.findMany({
-        where: { skuCode: { in: skuCodes } },
-        select: {
-          id: true,
-          skuCode: true,
-          description: true,
-          unitsPerCarton: true,
-          unitDimensionsCm: true,
-          unitWeightKg: true,
-          cartonDimensionsCm: true,
-          cartonWeightKg: true,
-          packagingType: true,
-        },
-      })
-      const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
-
-      for (const line of activeLines) {
-        if (!skuMap.has(line.skuCode)) {
-          throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
-        }
-      }
-
+      // Receiving inventory is handled via a dedicated receive action, not the stage transition.
+      /*
       const batchCodes = Array.from(new Set(activeLines.map(line => String(line.batchLot))))
       const batchRecords = await tx.skuBatch.findMany({
         where: {
@@ -1840,6 +2150,7 @@ export async function transitionPurchaseOrderStage(
           transactionDate: row.transactionDate,
         }))
       )
+      */
     }
 
     const refreshed = await tx.purchaseOrder.findUnique({
@@ -1894,6 +2205,797 @@ export async function transitionPurchaseOrderStage(
   )
 
   return updatedOrder
+}
+
+export interface ReceivePurchaseOrderInventoryInput {
+  warehouseCode: string
+  receiveType: InboundReceiveType
+  customsEntryNumber: string
+  customsClearedDate: Date | string
+  receivedDate: Date | string
+  dutyAmount?: number | null
+  dutyCurrency?: string | null
+  discrepancyNotes?: string | null
+  lineReceipts?: Array<{ lineId: string; quantityReceived: number }>
+}
+
+export async function receivePurchaseOrderInventory(params: {
+  orderId: string
+  input: ReceivePurchaseOrderInventoryInput
+  user: UserContext
+}): Promise<PurchaseOrder> {
+  const prisma = await getTenantPrisma()
+
+  const order = await prisma.purchaseOrder.findUnique({
+    where: { id: params.orderId },
+    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+  })
+
+  if (!order) {
+    throw new NotFoundError(`Purchase Order not found: ${params.orderId}`)
+  }
+
+  if (order.isLegacy) {
+    throw new ConflictError('Cannot receive inventory for legacy orders. They are archived.')
+  }
+
+  if (order.status !== PurchaseOrderStatus.WAREHOUSE) {
+    throw new ConflictError('Inventory can only be received at the At Warehouse stage')
+  }
+
+  if (order.postedAt) {
+    throw new ConflictError('Inventory has already been received for this purchase order')
+  }
+
+  const tenant = await getCurrentTenant()
+  const tenantCode = tenant.code
+
+  const issues: Record<string, string> = {}
+
+  const warehouseCode = params.input.warehouseCode.trim()
+  if (!warehouseCode) {
+    recordGateIssue(issues, 'details.warehouseCode', 'Warehouse is required')
+  }
+
+  const receiveType = params.input.receiveType
+  if (!receiveType) {
+    recordGateIssue(issues, 'details.receiveType', 'Receive type is required')
+  }
+
+  const customsEntryNumber = params.input.customsEntryNumber.trim()
+  if (!customsEntryNumber) {
+    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number is required')
+  } else if (!validateCustomsEntryNumberFormat({ tenantCode, customsEntryNumber })) {
+    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number format is invalid')
+  }
+
+  const customsClearedDate = resolveDateValue(params.input.customsClearedDate, 'Customs cleared date')
+  if (!customsClearedDate) {
+    recordGateIssue(issues, 'details.customsClearedDate', 'Customs cleared date is required')
+  }
+
+  const receivedDate = resolveDateValue(params.input.receivedDate, 'Received date')
+  if (!receivedDate) {
+    recordGateIssue(issues, 'details.receivedDate', 'Received date is required')
+  }
+
+  if (customsClearedDate && receivedDate && receivedDate < customsClearedDate) {
+    recordGateIssue(
+      issues,
+      'details.receivedDate',
+      'Received date cannot be earlier than customs cleared date'
+    )
+  }
+
+  const activeLines = order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
+  if (activeLines.length === 0) {
+    recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
+  }
+
+  const receiptOverrides = new Map<string, number>()
+  if (params.input.lineReceipts && params.input.lineReceipts.length > 0) {
+    for (const receipt of params.input.lineReceipts) {
+      receiptOverrides.set(receipt.lineId, receipt.quantityReceived)
+    }
+  }
+
+  let mismatch = false
+  for (const line of activeLines) {
+    const received = receiptOverrides.has(line.id)
+      ? receiptOverrides.get(line.id)
+      : line.quantityReceived ?? line.quantity
+
+    if (!Number.isInteger(received) || received < 0) {
+      recordGateIssue(
+        issues,
+        `cargo.lines.${line.id}.quantityReceived`,
+        'Received cartons must be a non-negative integer'
+      )
+      continue
+    }
+
+    if (received !== line.quantity) {
+      mismatch = true
+    }
+  }
+
+  if (mismatch) {
+    const notes =
+      typeof params.input.discrepancyNotes === 'string' ? params.input.discrepancyNotes.trim() : ''
+    if (!notes) {
+      recordGateIssue(
+        issues,
+        'details.discrepancyNotes',
+        'Discrepancy notes are required when received quantity differs from ordered'
+      )
+    }
+  }
+
+  const warehouse = warehouseCode
+    ? await prisma.warehouse.findUnique({
+        where: { code: warehouseCode },
+        select: { id: true, code: true, name: true, address: true },
+      })
+    : null
+
+  if (warehouseCode && !warehouse) {
+    recordGateIssue(issues, 'details.warehouseCode', 'Warehouse code is invalid')
+  }
+
+  await requireDocuments({
+    prisma,
+    purchaseOrderId: order.id,
+    stage: PurchaseOrderDocumentStage.WAREHOUSE,
+    documentTypes: ['movement_note', 'custom_declaration'],
+    issues,
+    issueKeyPrefix: 'documents',
+    issueLabel: (docType) =>
+      docType === 'custom_declaration'
+        ? 'Customs & Border Patrol Clearance Proof'
+        : 'Movement Note',
+  })
+
+  if (warehouse) {
+    const forwardingCost = await prisma.purchaseOrderForwardingCost.findFirst({
+      where: { purchaseOrderId: order.id, warehouseId: warehouse.id },
+      select: { id: true },
+    })
+    if (!forwardingCost) {
+      recordGateIssue(issues, 'costs.forwarding', 'Freight (forwarding) cost is required')
+    }
+  }
+
+  if (Object.keys(issues).length > 0) {
+    throw new StageGateError('Missing required information', issues)
+  }
+
+  const receivedAt = receivedDate as Date
+
+  const storageCostInputs: Array<{
+    warehouseCode: string
+    warehouseName: string
+    skuCode: string
+    skuDescription: string
+    batchLot: string
+    transactionDate: Date
+  }> = []
+
+  const updatedOrder = await prisma.$transaction(async tx => {
+    const existingCount = await tx.inventoryTransaction.count({
+      where: { purchaseOrderId: order.id },
+    })
+    if (existingCount > 0) {
+      throw new ConflictError('Inventory transactions already exist for this purchase order')
+    }
+
+    const skuCodes = Array.from(new Set(activeLines.map(line => line.skuCode)))
+    const skus = await tx.sku.findMany({
+      where: { skuCode: { in: skuCodes } },
+      select: {
+        id: true,
+        skuCode: true,
+        description: true,
+        unitDimensionsCm: true,
+        unitWeightKg: true,
+        cartonDimensionsCm: true,
+        cartonWeightKg: true,
+        packagingType: true,
+        unitsPerCarton: true,
+      },
+    })
+    const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
+
+    const batchCodes = Array.from(
+      new Set(activeLines.map(line => (typeof line.batchLot === 'string' ? line.batchLot : '')))
+    ).filter(code => code.trim().length > 0)
+
+    const batchRecords = await tx.skuBatch.findMany({
+      where: {
+        skuId: { in: skus.map(sku => sku.id) },
+        batchCode: { in: batchCodes },
+      },
+      select: {
+        skuId: true,
+        batchCode: true,
+        unitsPerCarton: true,
+        cartonDimensionsCm: true,
+        cartonWeightKg: true,
+        packagingType: true,
+        storageCartonsPerPallet: true,
+        shippingCartonsPerPallet: true,
+      },
+    })
+    const batchMap = new Map(
+      batchRecords.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch])
+    )
+
+    const createdTransactions: Array<{
+      id: string
+      skuCode: string
+      cartons: number
+      pallets: number
+      cartonDimensionsCm: string | null
+      warehouseCode: string
+      warehouseName: string
+      skuDescription: string
+      batchLot: string
+      transactionDate: Date
+    }> = []
+
+    let totalStoragePalletsIn = 0
+    const referenceId =
+      order.commercialInvoiceNumber ??
+      order.proformaInvoiceNumber ??
+      toPublicOrderNumber(order.orderNumber)
+
+    for (const line of activeLines) {
+      const sku = skuMap.get(line.skuCode)
+      if (!sku) {
+        throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
+      }
+
+      const batchLot = typeof line.batchLot === 'string' ? line.batchLot : ''
+      const batch =
+        batchLot.trim().length > 0 ? batchMap.get(`${sku.id}::${batchLot}`) : undefined
+
+      const storageCartonsPerPallet =
+        line.storageCartonsPerPallet && line.storageCartonsPerPallet > 0
+          ? line.storageCartonsPerPallet
+          : batch?.storageCartonsPerPallet ?? null
+      const shippingCartonsPerPallet =
+        line.shippingCartonsPerPallet && line.shippingCartonsPerPallet > 0
+          ? line.shippingCartonsPerPallet
+          : batch?.shippingCartonsPerPallet ?? null
+
+      if (!storageCartonsPerPallet || storageCartonsPerPallet <= 0) {
+        throw new ValidationError(
+          `Storage cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
+        )
+      }
+
+      if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
+        throw new ValidationError(
+          `Shipping cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
+        )
+      }
+
+      const cartonsRaw = receiptOverrides.has(line.id)
+        ? receiptOverrides.get(line.id)
+        : line.quantityReceived ?? line.quantity
+      const cartons = Number(cartonsRaw)
+      if (!Number.isInteger(cartons) || cartons < 0) {
+        throw new ValidationError(`Invalid received cartons quantity for SKU ${line.skuCode}`)
+      }
+
+      if (cartons === 0) {
+        await tx.purchaseOrderLine.update({
+          where: { id: line.id },
+          data: {
+            postedQuantity: 0,
+            quantityReceived: 0,
+            status: PurchaseOrderLineStatus.POSTED,
+          },
+        })
+        continue
+      }
+
+      const { storagePalletsIn } = calculatePalletValues({
+        transactionType: 'RECEIVE',
+        cartons,
+        storageCartonsPerPallet,
+      })
+
+      if (storagePalletsIn <= 0) {
+        throw new ValidationError('Storage pallet count is required for inbound transactions')
+      }
+
+      const txRow = await tx.inventoryTransaction.create({
+        data: {
+          warehouseCode: warehouse!.code,
+          warehouseName: warehouse!.name,
+          warehouseAddress: warehouse!.address,
+          skuCode: sku.skuCode,
+          skuDescription: line.skuDescription ?? sku.description,
+          unitDimensionsCm: sku.unitDimensionsCm,
+          unitWeightKg: sku.unitWeightKg,
+          cartonDimensionsCm: line.cartonDimensionsCm ?? batch?.cartonDimensionsCm ?? sku.cartonDimensionsCm,
+          cartonWeightKg: line.cartonWeightKg ?? batch?.cartonWeightKg ?? sku.cartonWeightKg,
+          packagingType: line.packagingType ?? batch?.packagingType ?? sku.packagingType,
+          unitsPerCarton: line.unitsPerCarton,
+          batchLot,
+          transactionType: TransactionType.RECEIVE,
+          referenceId,
+          cartonsIn: cartons,
+          cartonsOut: 0,
+          storagePalletsIn,
+          shippingPalletsOut: 0,
+          storageCartonsPerPallet,
+          shippingCartonsPerPallet,
+          shipName: null,
+          trackingNumber: null,
+          supplier: order.counterpartyName ?? null,
+          attachments: null,
+          transactionDate: receivedAt,
+          pickupDate: receivedAt,
+          createdById: params.user.id,
+          createdByName: params.user.name,
+          purchaseOrderId: order.id,
+          purchaseOrderLineId: line.id,
+          isReconciled: false,
+          isDemo: false,
+        },
+        select: {
+          id: true,
+          skuCode: true,
+          cartonDimensionsCm: true,
+          storagePalletsIn: true,
+          warehouseCode: true,
+          warehouseName: true,
+          skuDescription: true,
+          batchLot: true,
+          transactionDate: true,
+        },
+      })
+
+      totalStoragePalletsIn += Number(txRow.storagePalletsIn ?? 0)
+
+      createdTransactions.push({
+        id: txRow.id,
+        skuCode: txRow.skuCode,
+        cartons,
+        pallets: Number(txRow.storagePalletsIn ?? 0),
+        cartonDimensionsCm: txRow.cartonDimensionsCm,
+        warehouseCode: txRow.warehouseCode,
+        warehouseName: txRow.warehouseName,
+        skuDescription: txRow.skuDescription,
+        batchLot: txRow.batchLot,
+        transactionDate: txRow.transactionDate,
+      })
+
+      await tx.purchaseOrderLine.update({
+        where: { id: line.id },
+        data: {
+          postedQuantity: cartons,
+          quantityReceived: cartons,
+          status: PurchaseOrderLineStatus.POSTED,
+        },
+      })
+    }
+
+    if (createdTransactions.length === 0) {
+      throw new ValidationError('No inventory transactions were created for this receipt')
+    }
+
+    if (totalStoragePalletsIn <= 0) {
+      throw new ValidationError('Storage pallet count is required for inbound transactions')
+    }
+
+    const rates = await tx.costRate.findMany({
+      where: {
+        warehouseId: warehouse!.id,
+        isActive: true,
+        effectiveDate: { lte: receivedAt },
+        OR: [{ endDate: null }, { endDate: { gte: receivedAt } }],
+      },
+      orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }],
+    })
+
+    const ratesByCostName = new Map<
+      string,
+      { costName: string; costValue: number; unitOfMeasure: string }
+    >()
+    for (const rate of rates) {
+      if (!ratesByCostName.has(rate.costName)) {
+        ratesByCostName.set(rate.costName, {
+          costName: rate.costName,
+          costValue: Number(rate.costValue),
+          unitOfMeasure: rate.unitOfMeasure,
+        })
+      }
+    }
+
+    let inboundLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
+    try {
+      inboundLedgerEntries = buildTacticalCostLedgerEntries({
+        transactionType: 'RECEIVE',
+        receiveType,
+        shipMode: null,
+        ratesByCostName,
+        lines: createdTransactions.map(row => ({
+          transactionId: row.id,
+          skuCode: row.skuCode,
+          cartons: row.cartons,
+          pallets: row.pallets,
+          cartonDimensionsCm: row.cartonDimensionsCm,
+        })),
+        warehouseCode: warehouse!.code,
+        warehouseName: warehouse!.name,
+        createdAt: receivedAt,
+        createdByName: params.user.name,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Cost calculation failed'
+      throw new ValidationError(message)
+    }
+
+    if (inboundLedgerEntries.length > 0) {
+      await tx.costLedger.createMany({ data: inboundLedgerEntries })
+    }
+
+    const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
+      where: {
+        purchaseOrderId: order.id,
+        warehouseId: warehouse!.id,
+      },
+      select: {
+        costName: true,
+        totalCost: true,
+      },
+      orderBy: [{ createdAt: 'asc' }],
+    })
+
+    const transactionIds = createdTransactions.map(row => row.id)
+    await tx.costLedger.deleteMany({
+      where: {
+        transactionId: { in: transactionIds },
+        costCategory: CostCategory.Forwarding,
+      },
+    })
+
+    if (forwardingCosts.length > 0) {
+      const lines = createdTransactions.map(row => ({
+        transactionId: row.id,
+        skuCode: row.skuCode,
+        cartons: row.cartons,
+        cartonDimensionsCm: row.cartonDimensionsCm,
+      }))
+
+      let forwardingLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
+      try {
+        forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
+          buildPoForwardingCostLedgerEntries({
+            costName: cost.costName,
+            totalCost: Number(cost.totalCost),
+            lines,
+            warehouseCode: warehouse!.code,
+            warehouseName: warehouse!.name,
+            createdAt: receivedAt,
+            createdByName: params.user.name,
+          })
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Cost allocation failed'
+        throw new ValidationError(message)
+      }
+
+      if (forwardingLedgerEntries.length > 0) {
+        await tx.costLedger.createMany({ data: forwardingLedgerEntries })
+      }
+    }
+
+    const dutyAmount =
+      typeof params.input.dutyAmount === 'number' && Number.isFinite(params.input.dutyAmount)
+        ? new Prisma.Decimal(params.input.dutyAmount.toFixed(2))
+        : null
+    const dutyCurrency =
+      typeof params.input.dutyCurrency === 'string' && params.input.dutyCurrency.trim().length > 0
+        ? params.input.dutyCurrency.trim().toUpperCase()
+        : null
+    const discrepancyNotes =
+      typeof params.input.discrepancyNotes === 'string' && params.input.discrepancyNotes.trim().length > 0
+        ? params.input.discrepancyNotes.trim()
+        : null
+
+    await tx.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        warehouseCode: warehouse!.code,
+        warehouseName: warehouse!.name,
+        receiveType,
+        customsEntryNumber,
+        customsClearedDate,
+        receivedDate: receivedAt,
+        dutyAmount,
+        dutyCurrency,
+        discrepancyNotes,
+        postedAt: receivedAt,
+      },
+    })
+
+    const refreshed = await tx.purchaseOrder.findUnique({
+      where: { id: order.id },
+      include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+    })
+
+    if (!refreshed) {
+      throw new NotFoundError(`Purchase Order not found after receiving: ${order.id}`)
+    }
+
+    storageCostInputs.push(
+      ...createdTransactions.map(row => ({
+        warehouseCode: row.warehouseCode,
+        warehouseName: row.warehouseName,
+        skuCode: row.skuCode,
+        skuDescription: row.skuDescription,
+        batchLot: row.batchLot,
+        transactionDate: row.transactionDate,
+      }))
+    )
+
+    return refreshed
+  })
+
+  await auditLog({
+    userId: params.user.id,
+    action: 'INVENTORY_RECEIVE',
+    entityType: 'PurchaseOrder',
+    entityId: params.orderId,
+    oldValue: { postedAt: null },
+    newValue: {
+      postedAt: updatedOrder.postedAt?.toISOString() ?? null,
+      receivedDate: updatedOrder.receivedDate?.toISOString() ?? null,
+      warehouseCode: updatedOrder.warehouseCode ?? null,
+      warehouseName: updatedOrder.warehouseName ?? null,
+    },
+  })
+
+  await Promise.all(
+    storageCostInputs.map(input =>
+      recordStorageCostEntry(input).catch(storageError => {
+        const message = storageError instanceof Error ? storageError.message : 'Unknown error'
+        console.error(
+          `Storage cost recording failed for ${input.warehouseCode}/${input.skuCode}/${input.batchLot}:`,
+          message
+        )
+      })
+    )
+  )
+
+  return updatedOrder
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function formatCommodityCode(value: string): string {
+  const digits = value.replace(/[^0-9]/g, '')
+  if (digits.length < 2) return value
+  const groups: string[] = []
+  for (let i = 0; i < digits.length; i += 2) {
+    groups.push(digits.slice(i, i + 2))
+  }
+  return groups.join(' ')
+}
+
+function formatDimensionCm(value: number): string {
+  const fixed = value.toFixed(2)
+  return fixed.replace(/\.?0+$/, '')
+}
+
+function resolveCartonDimensionsLabel(line: PurchaseOrderLine): string | null {
+  const side1 = toFiniteNumber(line.cartonSide1Cm)
+  const side2 = toFiniteNumber(line.cartonSide2Cm)
+  const side3 = toFiniteNumber(line.cartonSide3Cm)
+
+  if (side1 !== null && side2 !== null && side3 !== null) {
+    return `${formatDimensionCm(side1)}x${formatDimensionCm(side2)}x${formatDimensionCm(side3)}`
+  }
+
+  const parsed = parseDimensionsCm(line.cartonDimensionsCm)
+  if (!parsed) return null
+  const [a, b, c] = parsed
+  return `${formatDimensionCm(a)}x${formatDimensionCm(b)}x${formatDimensionCm(c)}`
+}
+
+export async function generatePurchaseOrderShippingMarks(params: {
+  orderId: string
+  user: UserContext
+}): Promise<string> {
+  const prisma = await getTenantPrisma()
+
+  const order = await prisma.purchaseOrder.findUnique({
+    where: { id: params.orderId },
+    include: { lines: true },
+  })
+
+  if (!order) {
+    throw new NotFoundError(`Purchase Order not found: ${params.orderId}`)
+  }
+
+  if (order.isLegacy) {
+    throw new ConflictError('Cannot generate shipping marks for legacy orders. They are archived.')
+  }
+
+  if (order.status === PurchaseOrderStatus.DRAFT) {
+    throw new ConflictError('Shipping marks can be generated after the RFQ is issued')
+  }
+
+  if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
+    throw new ConflictError(`Cannot generate shipping marks for ${order.status.toLowerCase()} purchase orders`)
+  }
+
+  const tenant = await getCurrentTenant()
+  const tenantCode = tenant.code
+
+  const issues: Record<string, string> = {}
+  const activeLines = order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
+
+  if (activeLines.length === 0) {
+    recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
+  }
+
+  for (const line of activeLines) {
+    const piNumber = typeof line.piNumber === 'string' ? line.piNumber.trim() : ''
+    if (!piNumber) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+    }
+
+    const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
+    if (!productNumber) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.productNumber`, 'Product number is required')
+    }
+
+    const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
+    if (!commodityCode) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
+    } else if (!validateCommodityCodeFormat({ tenantCode, commodityCode })) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
+    }
+
+    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+    if (!origin) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+    }
+
+    const material = typeof line.material === 'string' ? line.material.trim() : ''
+    if (!material) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.material`, 'Material is required')
+    }
+
+    const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
+    if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+    }
+
+    const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
+    if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+    }
+
+    const cartonVolumeCbm =
+      computeCartonVolumeCbm({
+        cartonSide1Cm: line.cartonSide1Cm,
+        cartonSide2Cm: line.cartonSide2Cm,
+        cartonSide3Cm: line.cartonSide3Cm,
+        cartonDimensionsCm: line.cartonDimensionsCm,
+      }) ?? null
+    if (cartonVolumeCbm === null) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.cartonDimensions`, 'Carton dimensions are required')
+    }
+
+    if (!Number.isInteger(line.unitsOrdered) || !Number.isInteger(line.unitsPerCarton)) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.unitsPerCarton`, 'Units per carton is required')
+    } else if (line.unitsOrdered % line.unitsPerCarton !== 0) {
+      recordGateIssue(
+        issues,
+        `cargo.lines.${line.id}.unitsPerCarton`,
+        'Units must be divisible by units per carton'
+      )
+    }
+  }
+
+  if (Object.keys(issues).length > 0) {
+    throw new StageGateError('Missing required information', issues)
+  }
+
+  const generatedAt = new Date()
+  await prisma.purchaseOrder.update({
+    where: { id: order.id },
+    data: {
+      shippingMarksGeneratedAt: generatedAt,
+      shippingMarksGeneratedById: params.user.id,
+      shippingMarksGeneratedByName: params.user.name,
+    },
+  })
+
+  const labels = activeLines.flatMap(line => {
+    const cartons = Math.floor(line.unitsOrdered / line.unitsPerCarton)
+    const dimsLabel = resolveCartonDimensionsLabel(line) ?? ''
+    const commodityLabel = typeof line.commodityCode === 'string' ? formatCommodityCode(line.commodityCode) : ''
+    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+    const material = typeof line.material === 'string' ? line.material.trim() : ''
+    const productNumber = typeof line.productNumber === 'string' ? line.productNumber.trim() : ''
+    const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+    const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : 0
+    const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : 0
+    const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
+
+    const perCarton: string[] = []
+    for (let index = 1; index <= cartons; index += 1) {
+      perCarton.push(`
+        <div class="label">
+          <div class="label-header">${escapeHtml(piNumber)} / TARGON/唛头格式</div>
+          <div class="label-row"><span class="k">Product #</span><span class="v">${escapeHtml(productNumber)}</span></div>
+          <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartons} Ctns</span></div>
+          <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
+          <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
+          <div class="label-row"><span class="k"># of Units</span><span class="v">${line.unitsPerCarton} sets</span></div>
+          <div class="label-row"><span class="k">Net Weight</span><span class="v">${netWeightKg.toFixed(1)} kg</span></div>
+          <div class="label-row"><span class="k">Gross Weight</span><span class="v">${grossWeightKg.toFixed(1)} kg</span></div>
+          <div class="label-row"><span class="k">Dimensions (cm)</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+          <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
+          <div class="label-footer">${escapeHtml(origin)}</div>
+        </div>
+      `)
+    }
+
+    return perCarton
+  })
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shipping Marks</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 16px; background: #f6f7fb; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      .print-btn { background: #0ea5a4; color: white; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+      .meta { color: #475569; font-size: 12px; }
+      .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .label { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 12px 10px 12px; break-inside: avoid; }
+      .label-header { font-weight: 700; font-size: 12px; margin-bottom: 8px; }
+      .label-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; border-bottom: 1px dashed #e2e8f0; }
+      .label-row:last-of-type { border-bottom: none; }
+      .k { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .v { color: #0f172a; font-size: 12px; font-weight: 600; text-align: right; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
+      .label-footer { margin-top: 8px; text-align: center; font-weight: 800; color: #0f172a; }
+      @media print {
+        body { background: white; padding: 0; }
+        .toolbar { display: none; }
+        .labels { gap: 8px; }
+        .label { border-radius: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+      <div class="meta">Generated ${generatedAt.toISOString()} by ${escapeHtml(params.user.name)}</div>
+    </div>
+    <div class="labels">
+      ${labels.join('')}
+    </div>
+  </body>
+</html>`
 }
 
 /**
@@ -2074,6 +3176,24 @@ export function serializePurchaseOrder(
 ): Record<string, unknown> {
   const defaultCurrency = options?.defaultCurrency ?? 'USD'
 
+  const lastLineUpdatedAt = (() => {
+    if (!order.lines || order.lines.length === 0) return null
+    let max = order.lines[0].updatedAt
+    for (const line of order.lines) {
+      if (line.updatedAt > max) {
+        max = line.updatedAt
+      }
+    }
+    return max
+  })()
+
+  const lastChangedAt =
+    lastLineUpdatedAt && lastLineUpdatedAt > order.updatedAt ? lastLineUpdatedAt : order.updatedAt
+
+  const rfqPdfGeneratedAt = order.rfqPdfGeneratedAt ?? null
+  const poPdfGeneratedAt = order.poPdfGeneratedAt ?? null
+  const shippingMarksGeneratedAt = order.shippingMarksGeneratedAt ?? null
+
   return {
     id: order.id,
     orderNumber: toPublicOrderNumber(order.orderNumber),
@@ -2088,7 +3208,25 @@ export function serializePurchaseOrder(
     paymentTerms: order.paymentTerms,
     notes: order.notes,
     receiveType: order.receiveType,
+    postedAt: order.postedAt ? order.postedAt.toISOString() : null,
     isLegacy: order.isLegacy,
+    outputs: {
+      rfqPdf: {
+        generatedAt: rfqPdfGeneratedAt ? rfqPdfGeneratedAt.toISOString() : null,
+        generatedByName: order.rfqPdfGeneratedByName ?? null,
+        outOfDate: rfqPdfGeneratedAt ? rfqPdfGeneratedAt < lastChangedAt : false,
+      },
+      poPdf: {
+        generatedAt: poPdfGeneratedAt ? poPdfGeneratedAt.toISOString() : null,
+        generatedByName: order.poPdfGeneratedByName ?? null,
+        outOfDate: poPdfGeneratedAt ? poPdfGeneratedAt < lastChangedAt : false,
+      },
+      shippingMarks: {
+        generatedAt: shippingMarksGeneratedAt ? shippingMarksGeneratedAt.toISOString() : null,
+        generatedByName: order.shippingMarksGeneratedByName ?? null,
+        outOfDate: shippingMarksGeneratedAt ? shippingMarksGeneratedAt < lastChangedAt : false,
+      },
+    },
 
     // Stage data - serialize dates to ISO strings
     stageData: serializeStageData(getStageData(order)),
@@ -2116,6 +3254,12 @@ export function serializePurchaseOrder(
 	      skuCode: line.skuCode,
 	      skuDescription: line.skuDescription,
 	      batchLot: line.batchLot,
+        piNumber: line.piNumber ?? null,
+        productNumber: line.productNumber ?? null,
+        commodityCode: line.commodityCode ?? null,
+        countryOfOrigin: line.countryOfOrigin ?? null,
+        netWeightKg: toFiniteNumber(line.netWeightKg),
+        material: line.material ?? null,
         cartonDimensionsCm: line.cartonDimensionsCm ?? null,
         cartonSide1Cm: toFiniteNumber(line.cartonSide1Cm),
         cartonSide2Cm: toFiniteNumber(line.cartonSide2Cm),

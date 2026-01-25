@@ -66,6 +66,12 @@ interface PurchaseOrderLineSummary {
   skuCode: string
   skuDescription: string | null
   batchLot: string | null
+  piNumber: string | null
+  productNumber: string | null
+  commodityCode: string | null
+  countryOfOrigin: string | null
+  netWeightKg: number | null
+  material: string | null
   cartonDimensionsCm?: string | null
   cartonSide1Cm?: number | null
   cartonSide2Cm?: number | null
@@ -302,6 +308,18 @@ interface ProformaInvoiceSummary {
   invoiceDate: string | null
 }
 
+type PurchaseOrderOutputMeta = {
+  generatedAt: string | null
+  generatedByName: string | null
+  outOfDate: boolean
+}
+
+type PurchaseOrderOutputs = {
+  rfqPdf: PurchaseOrderOutputMeta
+  poPdf: PurchaseOrderOutputMeta
+  shippingMarks: PurchaseOrderOutputMeta
+}
+
 interface PurchaseOrderSummary {
   id: string
   orderNumber: string
@@ -315,17 +333,26 @@ interface PurchaseOrderSummary {
   expectedDate: string | null
   incoterms: string | null
   paymentTerms: string | null
+  receiveType: string | null
+  postedAt: string | null
   createdAt: string
   updatedAt: string
   notes?: string | null
   createdByName: string | null
+  outputs: PurchaseOrderOutputs
   lines: PurchaseOrderLineSummary[]
   stageData: StageData
   proformaInvoices: ProformaInvoiceSummary[]
   approvalHistory: StageApproval[]
 }
 
-type PurchaseOrderDocumentStage = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED'
+type PurchaseOrderDocumentStage =
+  | 'DRAFT'
+  | 'ISSUED'
+  | 'MANUFACTURING'
+  | 'OCEAN'
+  | 'WAREHOUSE'
+  | 'SHIPPED'
 
 interface PurchaseOrderDocumentSummary {
   id: string
@@ -389,6 +416,7 @@ const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
 > = {
+  DRAFT: [],
   ISSUED: [],
   MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
   OCEAN: [
@@ -397,8 +425,8 @@ const STAGE_DOCUMENTS: Record<
     { id: 'packing_list', label: 'Packing List' },
   ],
   WAREHOUSE: [
-    { id: 'movement_note', label: 'Movement Note / Warehouse Receipt' },
-    { id: 'custom_declaration', label: 'Customs Declaration (CDS)' },
+    { id: 'movement_note', label: 'Movement Note' },
+    { id: 'custom_declaration', label: 'Customs & Border Patrol Clearance Proof' },
   ],
 }
 
@@ -406,6 +434,7 @@ const DOCUMENT_STAGE_META: Record<
   PurchaseOrderDocumentStage,
   { label: string; icon: ComponentType<{ className?: string }> }
 > = {
+  DRAFT: { label: 'RFQ', icon: FileEdit },
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
   OCEAN: { label: 'In Transit', icon: Ship },
@@ -417,6 +446,15 @@ function formatDocumentTypeFallback(documentType: string) {
   const cleaned = documentType.trim().replace(/[_-]+/g, ' ')
   if (!cleaned) return 'Document'
   return cleaned.replace(/\b\w/g, match => match.toUpperCase())
+}
+
+function buildPiDocumentType(piNumber: string): string {
+  const normalized = piNumber.trim().toUpperCase()
+  const sanitized = normalized.replace(/[^A-Z0-9-]+/g, '')
+  if (!sanitized) {
+    return ''
+  }
+  return `pi_${sanitized.toLowerCase()}`
 }
 
 function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: string) {
@@ -700,6 +738,13 @@ function formatDateOnly(value: string | null) {
   return parsed.toISOString().slice(0, 10)
 }
 
+function formatTextOrDash(value: string | null | undefined) {
+  if (value === null || value === undefined) return '—'
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return '—'
+  return value
+}
+
 export type PurchaseOrderFlowMode = 'detail' | 'create'
 
 export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
@@ -731,6 +776,37 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   // Stage transition form data
   const [stageFormData, setStageFormData] = useState<Record<string, string>>({})
+  const setStageField = useCallback((key: string, value: string) => {
+    setStageFormData(prev => {
+      const next = { ...prev }
+      const trimmed = value.trim()
+      if (trimmed.length === 0) {
+        delete next[key]
+        return next
+      }
+      next[key] = value
+      return next
+    })
+  }, [])
+
+  const getStageField = useCallback(
+    (key: string): string | undefined => {
+      if (!Object.prototype.hasOwnProperty.call(stageFormData, key)) return undefined
+      return stageFormData[key]
+    },
+    [stageFormData]
+  )
+  const [receiveFormData, setReceiveFormData] = useState({
+    warehouseCode: '',
+    receiveType: '',
+    customsEntryNumber: '',
+    customsClearedDate: '',
+    receivedDate: '',
+    dutyAmount: '',
+    dutyCurrency: '',
+    discrepancyNotes: '',
+  })
+  const [receivingInventory, setReceivingInventory] = useState(false)
   const [warehouses, setWarehouses] = useState<Array<{ id: string; code: string; name: string }>>(
     []
   )
@@ -764,6 +840,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   })
   const [forwardingCostDeletingId, setForwardingCostDeletingId] = useState<string | null>(null)
 
+  const [gateIssues, setGateIssues] = useState<Record<string, string> | null>(null)
+
   const [costLedgerSummary, setCostLedgerSummary] = useState<PurchaseOrderCostLedgerSummary | null>(
     null
   )
@@ -778,13 +856,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [activeBottomTab, setActiveBottomTab] = useState<
     'details' | 'cargo' | 'costs' | 'documents' | 'history'
   >('details')
-  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
+  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes' | 'receiving'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
     batchLot: '',
     unitsOrdered: 1,
     unitsPerCarton: null as number | null,
-    totalCost: '',
     notes: '',
   })
   const [editLineOpen, setEditLineOpen] = useState(false)
@@ -794,7 +871,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     batchLot: '',
     unitsOrdered: 1,
     unitsPerCarton: null as number | null,
-    totalCost: '',
     notes: '',
   })
 
@@ -990,6 +1066,84 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   useEffect(() => {
     void refreshAuditLogs()
   }, [refreshAuditLogs])
+
+  const patchOrderLine = useCallback(
+    async (lineId: string, data: Record<string, unknown>) => {
+      if (!order) return
+
+      try {
+        const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          const message = typeof payload?.error === 'string' ? payload.error : null
+          toast.error(message ? message : `Failed to update line item (HTTP ${response.status})`)
+          return
+        }
+
+        const updatedLine = (await response.json()) as PurchaseOrderLineSummary
+        setOrder(prev =>
+          prev
+            ? {
+                ...prev,
+                lines: prev.lines.map(line => (line.id === updatedLine.id ? updatedLine : line)),
+              }
+            : prev
+        )
+        setGateIssues(null)
+        void refreshAuditLogs()
+      } catch {
+        toast.error('Failed to update line item')
+      }
+    },
+    [order, refreshAuditLogs]
+  )
+
+  const maybePatchCartonDimensions = useCallback(
+    (lineId: string) => {
+      const readAxisValue = (axis: '1' | '2' | '3'): string => {
+        const element = document.querySelector(
+          `input[data-carton-side-line="${lineId}"][data-carton-side-axis="${axis}"]`
+        )
+        if (!(element instanceof HTMLInputElement)) return ''
+        return element.value
+      }
+
+      const raw1 = readAxisValue('1').trim()
+      const raw2 = readAxisValue('2').trim()
+      const raw3 = readAxisValue('3').trim()
+
+      if (!raw1 || !raw2 || !raw3) return
+
+      const side1 = Number(raw1)
+      const side2 = Number(raw2)
+      const side3 = Number(raw3)
+
+      if (!Number.isFinite(side1) || side1 <= 0) {
+        toast.error('Carton length must be a positive number')
+        return
+      }
+      if (!Number.isFinite(side2) || side2 <= 0) {
+        toast.error('Carton width must be a positive number')
+        return
+      }
+      if (!Number.isFinite(side3) || side3 <= 0) {
+        toast.error('Carton height must be a positive number')
+        return
+      }
+
+      void patchOrderLine(lineId, {
+        cartonSide1Cm: side1,
+        cartonSide2Cm: side2,
+        cartonSide3Cm: side3,
+      })
+    },
+    [patchOrderLine]
+  )
 
   useEffect(() => {
     const selected = forwardingWarehouseCode.trim()
@@ -1609,14 +1763,80 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     return order.status
   }, [selectedStageView, order])
 
+  useEffect(() => {
+    if (!order) return
+    if (activeViewStage !== 'WAREHOUSE') return
+
+    const wh = order.stageData.warehouse
+    setReceiveFormData({
+      warehouseCode: order.warehouseCode ?? '',
+      receiveType: order.receiveType ?? '',
+      customsEntryNumber: wh?.customsEntryNumber ?? '',
+      customsClearedDate: formatDateOnly(wh?.customsClearedDate ?? null),
+      receivedDate: formatDateOnly(wh?.receivedDate ?? null),
+      dutyAmount: wh?.dutyAmount != null ? String(wh.dutyAmount) : '',
+      dutyCurrency: wh?.dutyCurrency ?? '',
+      discrepancyNotes: wh?.discrepancyNotes ?? '',
+    })
+  }, [activeViewStage, order])
+
+  useEffect(() => {
+    if (cargoSubTab !== 'receiving') return
+    if (activeViewStage === 'WAREHOUSE') return
+    setCargoSubTab('details')
+  }, [activeViewStage, cargoSubTab])
+
+  const gateTabIssues = useMemo(() => {
+    const details: Record<'details' | 'cargo' | 'costs' | 'documents', boolean> = {
+      details: false,
+      cargo: false,
+      costs: false,
+      documents: false,
+    }
+
+    if (!gateIssues) return details
+
+    for (const key of Object.keys(gateIssues)) {
+      if (key.startsWith('details.')) details.details = true
+      if (key.startsWith('cargo.')) details.cargo = true
+      if (key.startsWith('costs.')) details.costs = true
+      if (key.startsWith('documents.')) details.documents = true
+    }
+
+    return details
+  }, [gateIssues])
+
+  const tabForGateKey = (
+    key: string
+  ): 'details' | 'cargo' | 'costs' | 'documents' | 'history' => {
+    if (key.startsWith('cargo.')) return 'cargo'
+    if (key.startsWith('costs.')) return 'costs'
+    if (key.startsWith('documents.')) return 'documents'
+    if (key.startsWith('details.')) return 'details'
+    return 'details'
+  }
+
+  const isIssuedShippingMarksKey = (key: string): boolean => {
+    return (
+      key.includes('.productNumber') ||
+      key.includes('.commodityCode') ||
+      key.includes('.countryOfOrigin') ||
+      key.includes('.material') ||
+      key.includes('.netWeightKg') ||
+      key.includes('.cartonWeightKg') ||
+      key.includes('.cartonDimensions') ||
+      key.includes('.unitsPerCarton')
+    )
+  }
+
   // Can user click on a stage to view it?
   const canViewStage = (stageValue: string) => {
     if (isCreate) return stageValue === 'DRAFT'
     if (!order || order.status === 'CANCELLED') return false
     const targetIdx = STAGES.findIndex(s => s.value === stageValue)
     if (targetIdx < 0) return false
-    // Can view completed stages, current stage, and the next stage (to prepare inputs/docs)
-    return targetIdx <= currentStageIndex + 1
+    // Can view completed stages and current stage.
+    return targetIdx <= currentStageIndex
   }
 
   const nextStage = useMemo(() => {
@@ -1627,40 +1847,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
     return null
   }, [order])
-
-  const nextStageDocsComplete = useMemo(() => {
-    if (!order || !nextStage) return true
-    const stage = nextStage.value as keyof typeof STAGE_DOCUMENTS
-    const required = STAGE_DOCUMENTS[stage] ?? []
-    if (required.length === 0) return true
-
-    return required.every(req =>
-      documents.some(doc => doc.stage === stage && doc.documentType === req.id)
-    )
-  }, [documents, nextStage, order])
-
-  const hasIssuedProformaInvoiceNumber = useMemo(() => {
-    const draftValue = stageFormData.proformaInvoiceNumber
-    if (typeof draftValue === 'string' && draftValue.trim().length > 0) return true
-    if (!order) return false
-
-    const primary = order.stageData.manufacturing.proformaInvoiceNumber
-    if (typeof primary === 'string' && primary.trim().length > 0) return true
-
-    return order.proformaInvoices.some(pi => pi.piNumber.trim().length > 0)
-  }, [order, stageFormData.proformaInvoiceNumber])
-
-  const hasManufacturingStartDate = useMemo(() => {
-    const draftValue = stageFormData.manufacturingStartDate
-    if (typeof draftValue === 'string' && draftValue.trim().length > 0) return true
-    if (!order) return false
-
-    const existing = order.stageData.manufacturing.manufacturingStartDate
-    if (typeof existing === 'string' && existing.trim().length > 0) return true
-
-    const legacy = order.stageData.manufacturing.manufacturingStart
-    return typeof legacy === 'string' && legacy.trim().length > 0
-  }, [order, stageFormData.manufacturingStartDate])
 
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
@@ -1706,13 +1892,37 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
-        toast.error(payload?.error ?? 'Failed to transition order')
+        const details = payload?.details
+        if (details && typeof details === 'object') {
+          setGateIssues(details as Record<string, string>)
+          const keys = Object.keys(details as Record<string, string>)
+          const firstKey = keys.length > 0 ? keys[0] : null
+          if (firstKey) {
+            const targetTab = tabForGateKey(firstKey)
+            setActiveBottomTab(targetTab)
+            if (targetTab === 'cargo' && isIssuedShippingMarksKey(firstKey)) {
+              setCargoSubTab('attributes')
+            }
+            setTimeout(() => {
+              const element = document.querySelector(`[data-gate-key="${firstKey}"]`)
+              if (element instanceof HTMLElement) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                if (element instanceof HTMLInputElement) {
+                  element.focus()
+                }
+              }
+            }, 50)
+          }
+        }
+
+        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to transition order')
         return false
       }
 
       const updated = await response.json()
       setOrder(updated)
       setStageFormData({}) // Clear form
+      setGateIssues(null)
       void refreshAuditLogs()
       void refreshCostLedgerSummary()
       toast.success(`Order moved to ${formatStatusLabel(targetStatus)}`)
@@ -1722,6 +1932,81 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return false
     } finally {
       setTransitioning(false)
+    }
+  }
+
+  const handleReceiveInventory = async () => {
+    if (!order) return
+    if (receivingInventory) return
+
+    try {
+      setReceivingInventory(true)
+
+      const dutyAmount = receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null
+      if (receiveFormData.dutyAmount.trim().length > 0 && (!Number.isFinite(dutyAmount) || dutyAmount < 0)) {
+        toast.error('Duty amount must be a positive number')
+        return
+      }
+
+      const lineReceipts = order.lines.map(line => ({
+        lineId: line.id,
+        quantityReceived: line.quantityReceived ?? line.quantity,
+      }))
+
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warehouseCode: receiveFormData.warehouseCode,
+          receiveType: receiveFormData.receiveType,
+          customsEntryNumber: receiveFormData.customsEntryNumber,
+          customsClearedDate: receiveFormData.customsClearedDate,
+          receivedDate: receiveFormData.receivedDate,
+          dutyAmount,
+          dutyCurrency: receiveFormData.dutyCurrency,
+          discrepancyNotes: receiveFormData.discrepancyNotes,
+          lineReceipts,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const details = payload?.details
+        if (details && typeof details === 'object') {
+          setGateIssues(details as Record<string, string>)
+          const keys = Object.keys(details as Record<string, string>)
+          const firstKey = keys.length > 0 ? keys[0] : null
+          if (firstKey) {
+            const targetTab = tabForGateKey(firstKey)
+            setActiveBottomTab(targetTab)
+            if (targetTab === 'cargo' && firstKey.includes('.quantityReceived')) {
+              setCargoSubTab('details')
+            }
+            setTimeout(() => {
+              const element = document.querySelector(`[data-gate-key="${firstKey}"]`)
+              if (element instanceof HTMLElement) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                if (element instanceof HTMLInputElement) {
+                  element.focus()
+                }
+              }
+            }, 50)
+          }
+        }
+        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to receive inventory')
+        return
+      }
+
+      const updated = await response.json()
+      setOrder(updated)
+      setGateIssues(null)
+      void refreshAuditLogs()
+      void refreshCostLedgerSummary()
+      toast.success('Inventory received')
+    } catch (_error) {
+      toast.error('Failed to receive inventory')
+    } finally {
+      setReceivingInventory(false)
     }
   }
 
@@ -1761,11 +2046,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const flowLines = order ? order.lines : draftLines
   const totalUnits = flowLines.reduce((sum, line) => sum + (line.unitsOrdered ?? 0), 0)
   const totalCartons = flowLines.reduce((sum, line) => sum + line.quantity, 0)
-  const isTerminal =
-    order ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED' : false
-  const canEdit = isCreate ? true : !isTerminal && order?.status === 'DRAFT'
+  const isTerminalStatus = order
+    ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
+    : false
+  const isReceived = Boolean(order?.postedAt)
+  const isReadOnly = isTerminalStatus || isReceived
+  const canEdit = isCreate ? true : !isReadOnly && order?.status === 'DRAFT'
   const canEditForwardingCosts =
-    !isTerminal && (flowStatus === 'OCEAN' || flowStatus === 'WAREHOUSE')
+    !isTerminalStatus && !isReceived && (flowStatus === 'OCEAN' || flowStatus === 'WAREHOUSE')
 
   const draftForwardingRate = forwardingRateByName.get(newForwardingCostDraft.costName.trim())
   const draftForwardingUnitRate = draftForwardingRate ? draftForwardingRate.costValue : null
@@ -1787,13 +2075,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
       : null
   const canDownloadPdf = !isCreate
+  const canDownloadShippingMarks =
+    !isCreate && Boolean(order) && !isTerminalStatus && flowStatus !== 'DRAFT'
   const pdfLabel = flowStatus === 'DRAFT' ? 'RFQ PDF' : 'PO PDF'
   const displayOrderNumber = isCreate
     ? 'New RFQ'
     : flowStatus === 'DRAFT'
       ? order.orderNumber
       : order.poNumber ?? order.orderNumber
-  const documentsCount = documents.length
   const historyCount = isCreate
     ? 0
     : auditLogs.length > 0
@@ -1916,16 +2205,26 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
           incoterms,
           paymentTerms,
           notes: notes ? notes : undefined,
-          lines: draftLines.map(line => ({
-            skuCode: line.skuCode,
-            skuDescription: line.skuDescription ? line.skuDescription : undefined,
-            batchLot: line.batchLot!,
-            unitsOrdered: line.unitsOrdered,
-            unitsPerCarton: line.unitsPerCarton,
-            totalCost: line.totalCost !== null ? line.totalCost : undefined,
-            currency: line.currency ? line.currency : tenantCurrency,
-            notes: line.lineNotes ? line.lineNotes : undefined,
-          })),
+	          lines: draftLines.map(line => ({
+	            skuCode: line.skuCode,
+	            skuDescription: line.skuDescription ? line.skuDescription : undefined,
+	            batchLot: line.batchLot!,
+	            piNumber: line.piNumber ? line.piNumber : undefined,
+	            productNumber: line.productNumber ? line.productNumber : undefined,
+	            commodityCode: line.commodityCode ? line.commodityCode : undefined,
+	            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
+	            netWeightKg: line.netWeightKg !== null ? line.netWeightKg : undefined,
+	            cartonWeightKg: line.cartonWeightKg != null ? line.cartonWeightKg : undefined,
+	            cartonSide1Cm: line.cartonSide1Cm != null ? line.cartonSide1Cm : undefined,
+	            cartonSide2Cm: line.cartonSide2Cm != null ? line.cartonSide2Cm : undefined,
+	            cartonSide3Cm: line.cartonSide3Cm != null ? line.cartonSide3Cm : undefined,
+	            material: line.material ? line.material : undefined,
+	            unitsOrdered: line.unitsOrdered,
+	            unitsPerCarton: line.unitsPerCarton,
+	            totalCost: line.totalCost !== null ? line.totalCost : undefined,
+	            currency: line.currency ? line.currency : tenantCurrency,
+	            notes: line.lineNotes ? line.lineNotes : undefined,
+	          })),
         }),
       })
 
@@ -1965,7 +2264,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       batchLot: line.batchLot ?? '',
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
-      totalCost: line.totalCost !== null ? String(line.totalCost) : '',
       notes: line.lineNotes ?? '',
     })
     setEditLineOpen(true)
@@ -1992,37 +2290,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return
     }
 
-    const totalCostInput = editLineDraft.totalCost.trim()
-    const totalCost =
-      totalCostInput.length === 0
-        ? null
-        : (() => {
-            const parsed = Number(totalCostInput)
-            return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-          })()
-
-    if (totalCostInput.length > 0 && totalCost === null) {
-      toast.error('Please enter a valid total cost')
-      return
-    }
-
     if (isCreate) {
       setDraftLines(prev =>
         prev.map(line => {
           if (line.id !== editingLine.id) return line
           const quantity = Math.ceil(unitsOrdered / unitsPerCarton)
-          const normalizedTotal = totalCost === null ? null : totalCost
-          const unitCost =
-            normalizedTotal !== null && unitsOrdered > 0
-              ? Number((normalizedTotal / unitsOrdered).toFixed(4))
-              : null
+          const normalizedTotal = line.totalCost !== null ? line.totalCost : null
+          const unitCost = normalizedTotal !== null && unitsOrdered > 0
+            ? Number((normalizedTotal / unitsOrdered).toFixed(4))
+            : null
           return {
             ...line,
             batchLot,
             unitsOrdered,
             unitsPerCarton,
             quantity,
-            totalCost: normalizedTotal,
             unitCost,
             lineNotes: editLineDraft.notes.trim().length > 0 ? editLineDraft.notes.trim() : null,
             updatedAt: new Date().toISOString(),
@@ -2048,7 +2330,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
             batchLot,
             unitsOrdered,
             unitsPerCarton,
-            totalCost,
             notes: editLineDraft.notes.trim().length ? editLineDraft.notes.trim() : null,
           }),
         }
@@ -2140,37 +2421,33 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return
     }
 
-    const totalCostInput = newLineDraft.totalCost.trim()
-    const totalCost =
-      totalCostInput.length === 0
-        ? undefined
-        : (() => {
-            const parsed = Number(totalCostInput)
-            return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-          })()
-
-    if (totalCost === null) {
-      toast.error('Please enter a valid total cost')
-      return
-    }
-
     if (isCreate) {
       const now = new Date().toISOString()
       const quantity = Math.ceil(unitsOrdered / unitsPerCarton)
-      const unitCost =
-        typeof totalCost === 'number' && Number.isFinite(totalCost) && unitsOrdered > 0
-          ? Number((totalCost / unitsOrdered).toFixed(4))
-          : null
+      const batchOptions = batchesBySkuId[newLineDraft.skuId] ?? []
+      const selectedBatch = batchOptions.find(option => option.batchCode === batchLot) ?? null
       const createdLine: PurchaseOrderLineSummary = {
         id: `draft-${now}-${Math.random().toString(36).slice(2, 9)}`,
         skuCode: selectedSku.skuCode,
         skuDescription: selectedSku.description,
         batchLot,
+        piNumber: null,
+        productNumber: null,
+        commodityCode: null,
+        countryOfOrigin: null,
+        netWeightKg: null,
+        material: null,
+        cartonDimensionsCm: selectedBatch?.cartonDimensionsCm ?? null,
+        cartonSide1Cm: selectedBatch?.cartonSide1Cm ?? null,
+        cartonSide2Cm: selectedBatch?.cartonSide2Cm ?? null,
+        cartonSide3Cm: selectedBatch?.cartonSide3Cm ?? null,
+        cartonWeightKg: selectedBatch?.cartonWeightKg ?? null,
+        packagingType: selectedBatch?.packagingType ?? null,
         unitsOrdered,
         unitsPerCarton,
         quantity,
-        unitCost,
-        totalCost: typeof totalCost === 'number' ? totalCost : null,
+        unitCost: null,
+        totalCost: null,
         currency: tenantCurrency,
         status: 'PENDING',
         postedQuantity: 0,
@@ -2188,7 +2465,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
-        totalCost: '',
         notes: '',
       })
       return
@@ -2207,7 +2483,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
           batchLot,
           unitsOrdered,
           unitsPerCarton,
-          totalCost,
           currency: tenantCurrency,
           notes: newLineDraft.notes.trim() ? newLineDraft.notes.trim() : undefined,
         }),
@@ -2227,7 +2502,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
-        totalCost: '',
         notes: '',
       })
       void refreshAuditLogs()
@@ -2238,219 +2512,70 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
   }
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!order) return
-    // Open the RFQ/PO HTML document in a new tab for printing
-    window.open(withBasePath(`/api/purchase-orders/${order.id}/pdf`), '_blank')
+    try {
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/pdf`))
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const details = payload?.details
+        if (details && typeof details === 'object') {
+          setGateIssues(details as Record<string, string>)
+          const keys = Object.keys(details as Record<string, string>)
+          const firstKey = keys.length > 0 ? keys[0] : null
+          if (firstKey) {
+            setActiveBottomTab(tabForGateKey(firstKey))
+          }
+        }
+        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate PDF')
+        return
+      }
+
+      const html = await response.text()
+      const popup = window.open('', '_blank')
+      if (!popup) return
+      popup.document.open()
+      popup.document.write(html)
+      popup.document.close()
+    } catch (_error) {
+      toast.error('Failed to generate PDF')
+    }
   }
 
-  // Stage-specific form fields based on next stage
-  const renderStageTransitionForm = () => {
-    if (!nextStage) return null
+  const handleDownloadShippingMarks = async () => {
+    if (!order) return
 
-    const fields: Array<{
-      key: string
-      label: string
-      type: 'text' | 'date' | 'select' | 'number'
-      placeholder?: string
-      options?: Array<{ value: string; label: string }>
-      disabled?: boolean
-    }> = []
+    try {
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`))
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const details = payload?.details
+        if (details && typeof details === 'object') {
+          setGateIssues(details as Record<string, string>)
+          const keys = Object.keys(details as Record<string, string>)
+          const firstKey = keys.length > 0 ? keys[0] : null
+          if (firstKey) {
+            const targetTab = tabForGateKey(firstKey)
+            setActiveBottomTab(targetTab)
+            if (targetTab === 'cargo' && isIssuedShippingMarksKey(firstKey)) {
+              setCargoSubTab('attributes')
+            }
+          }
+        }
 
-    const intro =
-      nextStage.value === 'ISSUED'
-        ? (() => {
-            const missingFields = [
-              !order?.expectedDate ? 'Cargo ready date' : null,
-              !order?.incoterms ? 'Incoterms' : null,
-              !order?.paymentTerms ? 'Payment terms' : null,
-            ].filter((value): value is string => value !== null)
+        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate shipping marks')
+        return
+      }
 
-            return (
-              <div className="space-y-3">
-                <p className="text-sm text-slate-700 dark:text-slate-300">
-                  Issuing this RFQ generates the PO number and locks RFQ edits.
-                </p>
-                {missingFields.length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    Missing required details: {missingFields.join(', ')}. Set them in Order Details.
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Make sure the supplier and order terms are correct before advancing.
-                </p>
-              </div>
-            )
-          })()
-        : null
-
-    switch (nextStage.value) {
-      case 'MANUFACTURING':
-        fields.push(
-          { key: 'manufacturingStartDate', label: 'Manufacturing Start Date', type: 'date' },
-          { key: 'expectedCompletionDate', label: 'Expected Completion Date', type: 'date' },
-          { key: 'packagingNotes', label: 'Packaging Notes', type: 'text' }
-        )
-        break
-      case 'OCEAN':
-        fields.push(
-          { key: 'houseBillOfLading', label: 'House Bill of Lading', type: 'text' },
-          { key: 'commercialInvoiceNumber', label: 'Commercial Invoice Number', type: 'text' },
-          { key: 'packingListRef', label: 'Packing List Reference', type: 'text' },
-          { key: 'vesselName', label: 'Vessel Name', type: 'text' },
-          { key: 'portOfLoading', label: 'Port of Loading', type: 'text' },
-          { key: 'portOfDischarge', label: 'Port of Discharge', type: 'text' }
-        )
-        break
-      case 'WAREHOUSE':
-        fields.push(
-          {
-            key: 'warehouseCode',
-            label: 'Warehouse',
-            type: 'select',
-            options: warehouses.map(w => ({ value: w.code, label: `${w.name} (${w.code})` })),
-            disabled: warehousesLoading || warehouses.length === 0,
-          },
-          {
-            key: 'receiveType',
-            label: 'Inbound Type',
-            type: 'select',
-            options: [
-              { value: 'LCL', label: 'LCL' },
-              { value: 'CONTAINER_20', label: "20' Container" },
-              { value: 'CONTAINER_40', label: "40' Container" },
-              { value: 'CONTAINER_40_HQ', label: "40' HQ Container" },
-              { value: 'CONTAINER_45_HQ', label: "45' HQ Container" },
-            ],
-          },
-          { key: 'customsEntryNumber', label: 'Customs Entry Number', type: 'text' },
-          { key: 'customsClearedDate', label: 'Customs Cleared Date', type: 'date' },
-          { key: 'receivedDate', label: 'Received Date', type: 'date' }
-        )
-        break
+      const html = await response.text()
+      const popup = window.open('', '_blank')
+      if (!popup) return
+      popup.document.open()
+      popup.document.write(html)
+      popup.document.close()
+    } catch (_error) {
+      toast.error('Failed to generate shipping marks')
     }
-
-    if (fields.length === 0 && !intro) return null
-
-    const docStage = nextStage.value as keyof typeof STAGE_DOCUMENTS
-    const requiredDocs = STAGE_DOCUMENTS[docStage] ?? []
-
-    const docsByType = new Map<string, PurchaseOrderDocumentSummary>(
-      documents
-        .filter(doc => doc.stage === docStage)
-        .map(doc => [`${doc.stage}::${doc.documentType}`, doc])
-    )
-
-    return (
-      <div className="space-y-5">
-        {intro}
-        {fields.length > 0 && (
-          <div className="grid grid-cols-1 gap-4">
-            {fields.map(field => (
-              <div key={field.key} className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {field.label}
-                </label>
-                {field.type === 'select' ? (
-                  <select
-                    value={stageFormData[field.key] || ''}
-                    onChange={e => {
-                      const value = e.target.value
-                      setStageFormData(prev => ({ ...prev, [field.key]: value }))
-                    }}
-                    disabled={field.disabled}
-                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                  >
-                    <option value="">
-                      {field.key === 'warehouseCode'
-                        ? warehousesLoading
-                          ? 'Loading warehouses…'
-                          : 'Select warehouse'
-                        : `Select ${field.label.toLowerCase()}`}
-                    </option>
-                    {field.options?.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    type={field.type}
-                    value={stageFormData[field.key] || ''}
-                    onChange={e =>
-                      setStageFormData(prev => ({ ...prev, [field.key]: e.target.value }))
-                    }
-                    placeholder={field.type === 'date' ? '' : `Enter ${field.label.toLowerCase()}`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {requiredDocs.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Required Documents</h5>
-              {documentsLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
-            </div>
-            <div className="space-y-2">
-              {requiredDocs.map(doc => {
-                const key = `${docStage}::${doc.id}`
-                const existing = docsByType.get(key)
-                const isUploading = Boolean(uploadingDoc[key])
-
-                return (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {existing ? (
-                        <Check className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-                      ) : (
-                        <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                      )}
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{doc.label}</span>
-                        {existing ? (
-                          <a
-                            href={existing.viewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block truncate text-xs text-primary hover:underline"
-                            title={existing.fileName}
-                          >
-                            {existing.fileName}
-                          </a>
-                        ) : (
-                          <span className="block text-xs text-muted-foreground">
-                            Not uploaded yet
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
-                      <Upload className="h-3.5 w-3.5" />
-                      {existing ? 'Replace' : 'Upload'}
-                      <input
-                        type="file"
-                        className="hidden"
-                        disabled={isUploading}
-                        onChange={e => void handleDocumentUpload(e, docStage, doc.id)}
-                      />
-                      {isUploading && <span className="text-xs text-muted-foreground ml-1">…</span>}
-                    </label>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    )
   }
 
   return (
@@ -2467,14 +2592,25 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleDownloadPdf}
+                onClick={() => void handleDownloadPdf()}
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
                 {pdfLabel}
               </Button>
             )}
-            {!isCreate && !isTerminal && (
+            {canDownloadShippingMarks && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDownloadShippingMarks()}
+                className="gap-2"
+              >
+                <Package2 className="h-4 w-4" />
+                Shipping Marks
+              </Button>
+            )}
+            {!isCreate && !isReadOnly && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2559,30 +2695,37 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               </div>
 
 	              {/* Action Buttons - All grouped together */}
-	              <div className="flex flex-wrap items-center gap-2 mt-6">
-	                {/* Primary: Advance */}
-	                {nextStage && (
-	                  <Button
+		              <div className="flex flex-wrap items-center gap-2 mt-6">
+		                {/* Primary: Advance */}
+		                {nextStage && (
+		                  <Button
                     onClick={async () => {
                       if (!nextStage) return
-                      if (activeViewStage !== nextStage.value) {
-                        setSelectedStageView(nextStage.value)
-                        return
-                      }
                       await executeTransition(nextStage.value as POStageStatus)
                     }}
-                    disabled={transitioning}
+                    disabled={transitioning || (order ? activeViewStage !== order.status : false)}
                     className="gap-2"
                   >
-                    {activeViewStage === nextStage.value ? 'Advance to ' : 'Open '}
-                    {nextStage.label}
+                    {order?.status === 'DRAFT' ? 'Issue PO' : `Advance to ${nextStage.label}`}
                     <ChevronRight className="h-4 w-4" />
-	                  </Button>
-	                )}
+		                  </Button>
+		                )}
 
-                {isCreate && (
-                  <Button
-                    onClick={() => void handleCreateRfq()}
+		                {order?.status === 'WAREHOUSE' && !isReadOnly && (
+		                  <Button
+		                    type="button"
+		                    onClick={() => void handleReceiveInventory()}
+		                    disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
+		                    className="gap-2"
+		                  >
+		                    {receivingInventory && <Loader2 className="h-4 w-4 animate-spin" />}
+		                    Receive Inventory
+		                  </Button>
+		                )}
+
+	                {isCreate && (
+	                  <Button
+	                    onClick={() => void handleCreateRfq()}
                     disabled={creating}
                     className="gap-2"
                   >
@@ -2654,6 +2797,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               >
                 <Info className="h-4 w-4" />
                 Details
+                {gateTabIssues.details && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
                 {activeBottomTab === 'details' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
@@ -2672,6 +2818,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 <Badge variant="outline" className="text-xs ml-1">
                   {flowLines.length}
                 </Badge>
+                {gateTabIssues.cargo && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
                 {activeBottomTab === 'cargo' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
@@ -2687,6 +2836,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               >
                 <DollarSign className="h-4 w-4" />
                 Costs
+                {gateTabIssues.costs && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
                 {activeBottomTab === 'costs' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
@@ -2705,6 +2857,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               >
                 <FileText className="h-4 w-4" />
                 Documents
+                {gateTabIssues.documents && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
                 {activeBottomTab === 'documents' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
@@ -2770,7 +2925,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 batchLot: '',
                                 unitsOrdered: 1,
                                 unitsPerCarton: null,
-                                totalCost: '',
                                 notes: '',
                               }))
                               void ensureSkuBatchesLoaded(skuId)
@@ -2840,12 +2994,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               min="1"
                               step="1"
                               value={newLineDraft.unitsOrdered}
-                              onChange={e =>
+                              onChange={e => {
+                                const parsed = Number.parseInt(e.target.value, 10)
                                 setNewLineDraft(prev => ({
                                   ...prev,
-                                  unitsOrdered: parseInt(e.target.value) || 0,
+                                  unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
                                 }))
-                              }
+                              }}
                               disabled={addLineSubmitting}
                             />
                           </div>
@@ -2918,44 +3073,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </p>
                           )
                         })()}
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Total Cost
-                          </label>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={newLineDraft.totalCost}
-                              onChange={e =>
-                                setNewLineDraft(prev => ({ ...prev, totalCost: e.target.value }))
-                              }
-                              placeholder="0.00"
-                              className="pr-12"
-                              disabled={addLineSubmitting}
-                            />
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-xs font-medium text-muted-foreground">
-                              {tenantCurrency}
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">
-                            Unit:{' '}
-                            {(() => {
-                              const trimmed = newLineDraft.totalCost.trim()
-                              if (!trimmed) return '—'
-                              const parsed = Number(trimmed)
-                              if (!Number.isFinite(parsed) || parsed < 0) return '—'
-                              if (
-                                !Number.isInteger(newLineDraft.unitsOrdered) ||
-                                newLineDraft.unitsOrdered <= 0
-                              )
-                                return '—'
-                              return (parsed / newLineDraft.unitsOrdered).toFixed(4)
-                            })()}
-                          </p>
-                        </div>
 
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -3087,6 +3204,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     <Package2 className="h-4 w-4" />
                     Attributes
                   </button>
+                  {activeViewStage === 'WAREHOUSE' && (
+                    <button
+                      type="button"
+                      onClick={() => setCargoSubTab('receiving')}
+                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                        cargoSubTab === 'receiving'
+                          ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+                          : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      <Warehouse className="h-4 w-4" />
+                      Receiving
+                    </button>
+                  )}
                 </div>
 
                 {/* Details Sub-tab */}
@@ -3101,8 +3232,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">PI #</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Received</th>
                           {canEdit && <th className="w-[60px]"></th>}
@@ -3112,7 +3242,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         {order.lines.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={canEdit ? 11 : 10}
+                              colSpan={canEdit ? 10 : 9}
                               className="px-3 py-6 text-center text-muted-foreground"
                             >
                               No lines added to this order yet.
@@ -3125,10 +3255,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 {line.skuCode}
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                {line.batchLot || '—'}
+                                {line.batchLot ? line.batchLot : '—'}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
-                                {line.skuDescription || '—'}
+                                {line.skuDescription ? line.skuDescription : '—'}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.unitsOrdered.toLocaleString()}
@@ -3139,21 +3269,44 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                                {line.totalCost !== null
-                                  ? `${line.totalCost.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })} ${(line.currency || tenantCurrency).toUpperCase()}`
-                                  : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {line.unitCost !== null
-                                  ? Number(line.unitCost).toFixed(4)
-                                  : '—'}
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                                {(() => {
+                                  const gateKey = `cargo.lines.${line.id}.piNumber`
+                                  const issue = gateIssues ? gateIssues[gateKey] : null
+                                  const canEditPiNumber =
+                                    canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
+
+                                  if (canEditPiNumber) {
+                                    return (
+                                      <div className="space-y-1" data-gate-key={gateKey}>
+                                        <Input
+                                          defaultValue={line.piNumber ?? ''}
+                                          placeholder="PI-..."
+                                          data-gate-key={gateKey}
+                                          onBlur={e => {
+                                            const trimmed = e.target.value.trim()
+                                            void patchOrderLine(line.id, {
+                                              piNumber: trimmed.length > 0 ? trimmed : null,
+                                            })
+                                          }}
+                                          className={
+                                            issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                          }
+                                        />
+                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                      </div>
+                                    )
+                                  }
+
+                                  return (
+                                    <span data-gate-key={gateKey}>
+                                      {line.piNumber ? line.piNumber : '—'}
+                                    </span>
+                                  )
+                                })()}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
-                                {line.lineNotes || '—'}
+                                {line.lineNotes ? line.lineNotes : '—'}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
@@ -3202,72 +3355,447 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[800px]">
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM/ctn</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">CBM Total</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG/ctn</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">KG Total</th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Pkg Type</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {order.lines.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
-                              No lines added to this order yet.
-                            </td>
+                  <div className="p-4 space-y-4">
+                    {order.lines.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                    ) : (
+                      order.lines.map(line => {
+                        const canEditAttributes =
+                          !isReadOnly &&
+                          order.status === activeViewStage &&
+                          (order.status === 'DRAFT' || order.status === 'ISSUED')
+
+                        const issuePrefix = `cargo.lines.${line.id}`
+                        const issue = (suffix: string): string | null => {
+                          const key = `${issuePrefix}.${suffix}`
+                          return gateIssues ? gateIssues[key] ?? null : null
+                        }
+
+                        const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
+
+                        const cartonTriplet = resolveDimensionTripletCm({
+                          side1Cm: line.cartonSide1Cm ?? null,
+                          side2Cm: line.cartonSide2Cm ?? null,
+                          side3Cm: line.cartonSide3Cm ?? null,
+                          legacy: line.cartonDimensionsCm ?? null,
+                        })
+
+                        const pkg = buildLinePackagingDetails(line)
+
+                        return (
+                          <div key={line.id} className="rounded-xl border bg-white dark:bg-slate-800 p-4 space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {line.skuCode}{' '}
+                                  <span className="text-muted-foreground font-medium">
+                                    • {line.batchLot ? line.batchLot : '—'}
+                                  </span>
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {line.unitsOrdered.toLocaleString()} units • {line.quantity.toLocaleString()} cartons
+                                </p>
+                              </div>
+                              {pkg && (
+                                <div className="text-xs text-muted-foreground">
+                                  {[
+                                    pkg.cartonDims ? `Carton: ${pkg.cartonDims}` : null,
+                                    pkg.kgPerCarton ? `KG/ctn: ${pkg.kgPerCarton}` : null,
+                                    pkg.cbmPerCarton ? `CBM/ctn: ${pkg.cbmPerCarton}` : null,
+                                  ]
+                                    .filter(value => typeof value === 'string' && value.length > 0)
+                                    .join(' • ')}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.productNumber`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Product Number
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.productNumber ?? ''}
+                                    data-gate-key={`${issuePrefix}.productNumber`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, {
+                                        productNumber: trimmed.length > 0 ? trimmed : null,
+                                      })
+                                    }}
+                                    className={
+                                      issue('productNumber')
+                                        ? 'border-rose-500 focus-visible:ring-rose-500'
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {line.productNumber ? line.productNumber : '—'}
+                                  </p>
+                                )}
+                                {issue('productNumber') && (
+                                  <p className="text-xs text-rose-600">{issue('productNumber')}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Commodity Code
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.commodityCode ?? ''}
+                                    data-gate-key={`${issuePrefix}.commodityCode`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, {
+                                        commodityCode: trimmed.length > 0 ? trimmed : null,
+                                      })
+                                    }}
+                                    className={
+                                      issue('commodityCode')
+                                        ? 'border-rose-500 focus-visible:ring-rose-500'
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {line.commodityCode ? line.commodityCode : '—'}
+                                  </p>
+                                )}
+                                {issue('commodityCode') && (
+                                  <p className="text-xs text-rose-600">{issue('commodityCode')}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Country of Origin
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.countryOfOrigin ?? ''}
+                                    data-gate-key={`${issuePrefix}.countryOfOrigin`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, {
+                                        countryOfOrigin: trimmed.length > 0 ? trimmed : null,
+                                      })
+                                    }}
+                                    className={
+                                      issue('countryOfOrigin')
+                                        ? 'border-rose-500 focus-visible:ring-rose-500'
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {line.countryOfOrigin ? line.countryOfOrigin : '—'}
+                                  </p>
+                                )}
+                                {issue('countryOfOrigin') && (
+                                  <p className="text-xs text-rose-600">{issue('countryOfOrigin')}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Units/Ctn
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    defaultValue={String(line.unitsPerCarton)}
+                                    data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) return
+                                      const parsed = Number.parseInt(trimmed, 10)
+                                      if (!Number.isInteger(parsed) || parsed <= 0) {
+                                        toast.error('Units per carton must be a positive integer')
+                                        return
+                                      }
+                                      void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                    }}
+                                    className={
+                                      issue('unitsPerCarton')
+                                        ? 'border-rose-500 focus-visible:ring-rose-500'
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">{line.unitsPerCarton.toLocaleString()}</p>
+                                )}
+                                {issue('unitsPerCarton') && (
+                                  <p className="text-xs text-rose-600">{issue('unitsPerCarton')}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5 lg:col-span-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Carton Size (cm)
+                                </label>
+                                {canEditAttributes ? (
+                                  <div className="grid grid-cols-3 gap-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="L"
+                                      defaultValue={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                      data-carton-side-line={line.id}
+                                      data-carton-side-axis="1"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                    />
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="W"
+                                      defaultValue={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                      data-carton-side-line={line.id}
+                                      data-carton-side-axis="2"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                    />
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="H"
+                                      defaultValue={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                      data-carton-side-line={line.id}
+                                      data-carton-side-axis="3"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                    />
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {cartonTriplet ? formatDimensionTripletCm(cartonTriplet) : '—'}
+                                  </p>
+                                )}
+                                {cartonDimsIssue && <p className="text-xs text-rose-600">{cartonDimsIssue}</p>}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Net (kg)
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.001"
+                                    defaultValue={line.netWeightKg != null ? String(line.netWeightKg) : ''}
+                                    data-gate-key={`${issuePrefix}.netWeightKg`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) {
+                                        void patchOrderLine(line.id, { netWeightKg: null })
+                                        return
+                                      }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) {
+                                        toast.error('Net weight must be a positive number')
+                                        return
+                                      }
+                                      void patchOrderLine(line.id, { netWeightKg: parsed })
+                                    }}
+                                    className={
+                                      issue('netWeightKg') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {line.netWeightKg != null ? line.netWeightKg.toFixed(3) : '—'}
+                                  </p>
+                                )}
+                                {issue('netWeightKg') && <p className="text-xs text-rose-600">{issue('netWeightKg')}</p>}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Gross (kg)
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.001"
+                                    defaultValue={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
+                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) {
+                                        void patchOrderLine(line.id, { cartonWeightKg: null })
+                                        return
+                                      }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) {
+                                        toast.error('Gross weight must be a positive number')
+                                        return
+                                      }
+                                      void patchOrderLine(line.id, { cartonWeightKg: parsed })
+                                    }}
+                                    className={
+                                      issue('cartonWeightKg') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">
+                                    {line.cartonWeightKg != null ? line.cartonWeightKg.toFixed(3) : '—'}
+                                  </p>
+                                )}
+                                {issue('cartonWeightKg') && (
+                                  <p className="text-xs text-rose-600">{issue('cartonWeightKg')}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.material`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Material
+                                </label>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.material ?? ''}
+                                    data-gate-key={`${issuePrefix}.material`}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
+                                    }}
+                                    className={
+                                      issue('material') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm text-foreground">{line.material ? line.material : '—'}</p>
+                                )}
+                                {issue('material') && <p className="text-xs text-rose-600">{issue('material')}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+
+                {cargoSubTab === 'receiving' && activeViewStage === 'WAREHOUSE' && (
+                  <div className="p-4">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                      <table className="w-full text-sm min-w-[700px]">
+                        <thead>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                              SKU
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                              Batch
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                              Ordered (ctns)
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                              Received (ctns)
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                              Delta
+                            </th>
                           </tr>
-                        ) : (
-                          order.lines.map((line) => {
-                            const pkg = buildLinePackagingDetails(line)
-                            return (
-                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                  {line.skuCode}
-                                </td>
-                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                  {line.batchLot || '—'}
-                                </td>
-                                <td className="px-3 py-2 text-foreground whitespace-nowrap">
-                                  {pkg?.cartonDims ? (
-                                    pkg.cartonDims
-                                  ) : (
-                                    <span className="text-amber-600">Not set</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                  {pkg?.cbmPerCarton ?? <span className="text-muted-foreground">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
-                                  {pkg?.cbmTotal ?? <span className="text-muted-foreground">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                  {pkg?.kgPerCarton ?? <span className="text-muted-foreground">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
-                                  {pkg?.kgTotal ?? <span className="text-muted-foreground">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-center whitespace-nowrap">
-                                  {pkg?.packagingType ? (
-                                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                      {pkg.packagingType}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {order.lines.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                                No lines added to this order yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            order.lines.map(line => {
+                              const gateKey = `cargo.lines.${line.id}.quantityReceived`
+                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+                              const canEditReceiving =
+                                !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+
+                              const received = line.quantityReceived ?? null
+                              const delta = received !== null ? received - line.quantity : null
+
+                              return (
+                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700">
+                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
+                                    {line.skuCode}
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                                    {line.batchLot ? line.batchLot : '—'}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                    {line.quantity.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" data-gate-key={gateKey}>
+                                    {canEditReceiving ? (
+                                      <div className="flex flex-col items-end gap-1">
+                                        <Input
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="0"
+                                          step="1"
+                                          defaultValue={received !== null ? String(received) : ''}
+                                          data-gate-key={gateKey}
+                                          onBlur={e => {
+                                            const trimmed = e.target.value.trim()
+                                            if (!trimmed) {
+                                              void patchOrderLine(line.id, { quantityReceived: null })
+                                              return
+                                            }
+                                            const parsed = Number.parseInt(trimmed, 10)
+                                            if (!Number.isInteger(parsed) || parsed < 0) {
+                                              toast.error('Received cartons must be a non-negative integer')
+                                              return
+                                            }
+                                            void patchOrderLine(line.id, { quantityReceived: parsed })
+                                          }}
+                                          className={
+                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'
+                                          }
+                                        />
+                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        {received !== null ? received.toLocaleString() : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                    {delta !== null ? (
+                                      <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
+                                        {delta.toLocaleString()}
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -3365,11 +3893,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
                             Cartons
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Total
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Unit Cost
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                            PI #
                           </th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
                             Notes
@@ -3384,7 +3909,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         {draftLines.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={canEdit ? 11 : 10}
+                              colSpan={canEdit ? 10 : 9}
                               className="px-3 py-6 text-center text-muted-foreground"
                             >
                               No lines added to this order yet.
@@ -3414,16 +3939,30 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                                {line.totalCost !== null
-                                  ? `${line.totalCost.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })} ${tenantCurrency.toUpperCase()}`
-                                  : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {line.unitCost !== null ? Number(line.unitCost).toFixed(4) : '—'}
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                                <Input
+                                  value={line.piNumber ?? ''}
+                                  placeholder="PI-..."
+                                  data-gate-key={`cargo.lines.${line.id}.piNumber`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    setDraftLines(prev =>
+                                      prev.map(candidate =>
+                                        candidate.id === line.id
+                                          ? { ...candidate, piNumber: value.trim() ? value : null }
+                                          : candidate
+                                      )
+                                    )
+                                  }}
+                                />
+                                {gateIssues?.[`cargo.lines.${line.id}.piNumber`] && (
+                                  <p
+                                    className="mt-1 text-xs text-rose-600"
+                                    data-gate-key={`cargo.lines.${line.id}.piNumber`}
+                                  >
+                                    {gateIssues[`cargo.lines.${line.id}.piNumber`]}
+                                  </p>
+                                )}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
                                 {line.lineNotes ? line.lineNotes : '—'}
@@ -3475,110 +4014,293 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[800px]">
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
-                            SKU
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
-                            Batch
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Carton Size
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            CBM/ctn
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            CBM Total
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            KG/ctn
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            KG Total
-                          </th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Pkg Type
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {draftLines.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={8}
-                              className="px-3 py-6 text-center text-muted-foreground"
-                            >
-                              No lines added to this order yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          draftLines.map((line) => {
-                            const pkg = buildLinePackagingDetails(line)
-                            return (
-                              <tr
-                                key={line.id}
-                                className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                              >
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                  {line.skuCode}
-                                </td>
-                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                  {line.batchLot ? line.batchLot : '—'}
-                                </td>
-                                <td className="px-3 py-2 text-foreground whitespace-nowrap">
-                                  {pkg?.cartonDims ? (
-                                    pkg.cartonDims
-                                  ) : (
-                                    <span className="text-amber-600">Not set</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                  {pkg?.cbmPerCarton ? (
-                                    pkg.cbmPerCarton
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
-                                  {pkg?.cbmTotal ? (
-                                    pkg.cbmTotal
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                  {pkg?.kgPerCarton ? (
-                                    pkg.kgPerCarton
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground whitespace-nowrap">
-                                  {pkg?.kgTotal ? (
-                                    pkg.kgTotal
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-center whitespace-nowrap">
-                                  {pkg?.packagingType ? (
-                                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                      {pkg.packagingType}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="p-4 space-y-4">
+                    {draftLines.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                    ) : (
+                      draftLines.map(line => {
+                        const issuePrefix = `cargo.lines.${line.id}`
+
+                        const cartonTriplet = resolveDimensionTripletCm({
+                          side1Cm: line.cartonSide1Cm ?? null,
+                          side2Cm: line.cartonSide2Cm ?? null,
+                          side3Cm: line.cartonSide3Cm ?? null,
+                          legacy: line.cartonDimensionsCm ?? null,
+                        })
+
+                        const pkg = buildLinePackagingDetails(line)
+
+                        const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
+                          setDraftLines(prev =>
+                            prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
+                          )
+                        }
+
+                        return (
+                          <div key={line.id} className="rounded-xl border bg-white dark:bg-slate-800 p-4 space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {line.skuCode}{' '}
+                                  <span className="text-muted-foreground font-medium">
+                                    • {line.batchLot ? line.batchLot : '—'}
+                                  </span>
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {line.unitsOrdered.toLocaleString()} units • {line.quantity.toLocaleString()} cartons
+                                </p>
+                              </div>
+                              {pkg && (
+                                <div className="text-xs text-muted-foreground">
+                                  {[
+                                    pkg.cartonDims ? `Carton: ${pkg.cartonDims}` : null,
+                                    pkg.kgPerCarton ? `KG/ctn: ${pkg.kgPerCarton}` : null,
+                                    pkg.cbmPerCarton ? `CBM/ctn: ${pkg.cbmPerCarton}` : null,
+                                  ]
+                                    .filter(value => typeof value === 'string' && value.length > 0)
+                                    .join(' • ')}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.productNumber`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Product Number
+                                </label>
+                                <Input
+                                  value={line.productNumber ?? ''}
+                                  data-gate-key={`${issuePrefix}.productNumber`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, productNumber: value.trim() ? value : null }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.productNumber`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.productNumber`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Commodity Code
+                                </label>
+                                <Input
+                                  value={line.commodityCode ?? ''}
+                                  data-gate-key={`${issuePrefix}.commodityCode`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.commodityCode`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.commodityCode`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Country of Origin
+                                </label>
+                                <Input
+                                  value={line.countryOfOrigin ?? ''}
+                                  data-gate-key={`${issuePrefix}.countryOfOrigin`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, countryOfOrigin: value.trim() ? value : null }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.countryOfOrigin`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.countryOfOrigin`]}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Units/Ctn
+                                </label>
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="1"
+                                  step="1"
+                                  value={String(line.unitsPerCarton)}
+                                  data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                  onChange={e => {
+                                    const parsed = Number.parseInt(e.target.value, 10)
+                                    if (!Number.isInteger(parsed) || parsed <= 0) return
+                                    updateLine(current => ({
+                                      ...current,
+                                      unitsPerCarton: parsed,
+                                      quantity: Math.ceil(current.unitsOrdered / parsed),
+                                    }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.unitsPerCarton`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.unitsPerCarton`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5 lg:col-span-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Carton Size (cm)
+                                </label>
+                                <div className="grid grid-cols-3 gap-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="L"
+                                    value={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: next,
+                                          side2Cm: current.cartonSide2Cm ?? null,
+                                          side3Cm: current.cartonSide3Cm ?? null,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide1Cm: next,
+                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
+                                    }}
+                                  />
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="W"
+                                    value={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: current.cartonSide1Cm ?? null,
+                                          side2Cm: next,
+                                          side3Cm: current.cartonSide3Cm ?? null,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide2Cm: next,
+                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
+                                    }}
+                                  />
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="H"
+                                    value={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: current.cartonSide1Cm ?? null,
+                                          side2Cm: current.cartonSide2Cm ?? null,
+                                          side3Cm: next,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide3Cm: next,
+                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
+                                    }}
+                                  />
+                                </div>
+                                {!cartonTriplet && (
+                                  <p className="text-xs text-muted-foreground">Enter length, width, and height.</p>
+                                )}
+                                {gateIssues?.[`${issuePrefix}.cartonDimensions`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.cartonDimensions`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Net (kg)
+                                </label>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.001"
+                                  value={line.netWeightKg != null ? String(line.netWeightKg) : ''}
+                                  data-gate-key={`${issuePrefix}.netWeightKg`}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    updateLine(current => ({
+                                      ...current,
+                                      netWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                    }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.netWeightKg`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.netWeightKg`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Gross (kg)
+                                </label>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.001"
+                                  value={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
+                                  data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    updateLine(current => ({
+                                      ...current,
+                                      cartonWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                    }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.cartonWeightKg`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.cartonWeightKg`]}</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.material`}>
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Material
+                                </label>
+                                <Input
+                                  value={line.material ?? ''}
+                                  data-gate-key={`${issuePrefix}.material`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
+                                  }}
+                                />
+                                {gateIssues?.[`${issuePrefix}.material`] && (
+                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.material`]}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 )}
               </div>
@@ -3588,6 +4310,103 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
             {activeBottomTab === 'documents' && (
               <>
+                {!isCreate && order && (
+                  <div className="p-6 border-b">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Outputs
+                      </h4>
+                    </div>
+
+                    {(() => {
+                      const items: Array<{
+                        id: 'rfqPdf' | 'poPdf' | 'shippingMarks'
+                        label: string
+                        meta: PurchaseOrderOutputMeta
+                        canDownload: boolean
+                        onDownload: () => void
+                      }> = []
+
+                      if (activeViewStage === 'DRAFT') {
+                        items.push({
+                          id: 'rfqPdf',
+                          label: 'RFQ PDF',
+                          meta: order.outputs.rfqPdf,
+                          canDownload: order.status === 'DRAFT',
+                          onDownload: () => void handleDownloadPdf(),
+                        })
+                      }
+
+                      if (activeViewStage === 'ISSUED') {
+                        items.push({
+                          id: 'poPdf',
+                          label: 'PO PDF',
+                          meta: order.outputs.poPdf,
+                          canDownload: order.status !== 'DRAFT',
+                          onDownload: () => void handleDownloadPdf(),
+                        })
+                        items.push({
+                          id: 'shippingMarks',
+                          label: 'Shipping Marks',
+                          meta: order.outputs.shippingMarks,
+                          canDownload: order.status !== 'DRAFT',
+                          onDownload: () => void handleDownloadShippingMarks(),
+                        })
+                      }
+
+                      if (items.length === 0) {
+                        return (
+                          <p className="text-sm text-muted-foreground">
+                            No outputs are generated in this stage.
+                          </p>
+                        )
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {items.map(item => {
+                            const meta = item.meta
+                            const generatedSummary = meta.generatedAt
+                              ? `Generated ${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
+                              : 'Not generated yet'
+
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground">{item.label}</p>
+                                  <p className="text-xs text-muted-foreground">{generatedSummary}</p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {meta.outOfDate && (
+                                    <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
+                                      OUT OF DATE
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={item.onDownload}
+                                    disabled={!item.canDownload}
+                                    className="gap-2"
+                                  >
+                                    <Download className="h-4 w-4" />
+                                    Download
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
                 {/* Stage requirements & documents */}
                 <div className="p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -3601,54 +4420,80 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 <p className="text-sm text-muted-foreground">
                   Create the RFQ to upload stage documents.
                 </p>
-              ) : nextStage && activeViewStage === nextStage.value ? (
-                <div>{renderStageTransitionForm()}</div>
               ) : (
                 (() => {
                   if (!order) return null
-                  if (activeViewStage === 'DRAFT') {
-                    return (
-                      <p className="text-sm text-muted-foreground">
-                        No documents are required during the RFQ stage.
-                      </p>
-                    )
-                  }
-
-                  if (
-                    activeViewStage !== 'ISSUED' &&
-                    activeViewStage !== 'MANUFACTURING' &&
-                    activeViewStage !== 'OCEAN' &&
-                    activeViewStage !== 'WAREHOUSE'
-                  ) {
-                    return (
-                      <p className="text-sm text-muted-foreground">
-                        No documents are configured for this stage.
-                      </p>
-                    )
-                  }
-
                   const stage = activeViewStage as PurchaseOrderDocumentStage
                   const stageKey = stage as keyof typeof STAGE_DOCUMENTS
-                  const requiredDocs = STAGE_DOCUMENTS[stageKey] ?? []
+                  const canUpload = order.status === stage && !isReadOnly
                   const stageDocs = documents.filter(doc => doc.stage === stage)
-                  const requiredIds = new Set(requiredDocs.map(doc => doc.id))
                   const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                  const otherDocs = stageDocs.filter(doc => !requiredIds.has(doc.documentType))
+                  const draftPiNumbers =
+                    stage === 'DRAFT'
+                      ? Array.from(
+                          new Set(
+                            order.lines
+                              .map(line => (typeof line.piNumber === 'string' ? line.piNumber.trim() : ''))
+                              .filter(value => value.length > 0)
+                          )
+                        )
+                      : []
 
-                  const rows = [
-                    ...requiredDocs.map(doc => ({
-                      id: doc.id,
-                      label: doc.label,
-                      required: true,
-                      doc: docsByType.get(doc.id),
-                    })),
-                    ...otherDocs.map(doc => ({
-                      id: doc.documentType,
-                      label: getDocumentLabel(stage, doc.documentType),
-                      required: false,
-                      doc,
-                    })),
-                  ]
+                  const rows = (() => {
+                    if (stage === 'DRAFT') {
+                      const requiredPiDocs = draftPiNumbers
+                        .map(pi => ({ piNumber: pi, docType: buildPiDocumentType(pi) }))
+                        .filter(entry => entry.docType.length > 0)
+                        .map(entry => ({
+                          id: entry.docType,
+                          label: entry.piNumber,
+                          required: true,
+                          doc: docsByType.get(entry.docType),
+                          gateKey: `documents.pi.${entry.docType}`,
+                        }))
+
+                      const otherDocs = stageDocs.filter(doc => !doc.documentType.startsWith('pi_'))
+                      return [
+                        ...requiredPiDocs,
+                        ...otherDocs.map(doc => ({
+                          id: doc.documentType,
+                          label: getDocumentLabel(stage, doc.documentType),
+                          required: false,
+                          doc,
+                          gateKey: `documents.${doc.documentType}`,
+                        })),
+                      ]
+                    }
+
+                    const requiredDocs = stage === 'SHIPPED' ? [] : (STAGE_DOCUMENTS[stageKey] ?? [])
+                    const requiredIds = new Set(requiredDocs.map(doc => doc.id))
+                    const otherDocs = stageDocs.filter(doc => !requiredIds.has(doc.documentType))
+
+                    return [
+                      ...requiredDocs.map(doc => ({
+                        id: doc.id,
+                        label: doc.label,
+                        required: true,
+                        doc: docsByType.get(doc.id),
+                        gateKey: `documents.${doc.id}`,
+                      })),
+                      ...otherDocs.map(doc => ({
+                        id: doc.documentType,
+                        label: getDocumentLabel(stage, doc.documentType),
+                        required: false,
+                        doc,
+                        gateKey: `documents.${doc.documentType}`,
+                      })),
+                    ]
+                  })()
+
+                  if (stage === 'DRAFT' && draftPiNumbers.length === 0) {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Add PI numbers to Cargo lines to unlock PI document uploads.
+                      </p>
+                    )
+                  }
 
                   if (rows.length === 0) {
                     return (
@@ -3664,6 +4509,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         const key = `${stage}::${row.id}`
                         const existing = row.doc
                         const isUploading = Boolean(uploadingDoc[key])
+                        const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                        const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
                         const icon = existing ? (
                           <Check className="h-4 w-4 flex-shrink-0 text-emerald-600" />
                         ) : row.required ? (
@@ -3675,6 +4522,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         return (
                           <div
                             key={key}
+                            data-gate-key={gateKey ?? undefined}
                             className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
                           >
                             <div className="flex items-center gap-3 min-w-0">
@@ -3697,16 +4545,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     Not uploaded yet
                                   </span>
                                 )}
+                                {gateMessage && (
+                                  <p className="mt-1 text-xs text-rose-600">{gateMessage}</p>
+                                )}
                               </div>
                             </div>
 
-                            <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer transition-colors flex-shrink-0">
+                            <label className={`inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors flex-shrink-0 ${
+                              canUpload ? 'hover:bg-slate-100 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                            }`}>
                               <Upload className="h-3.5 w-3.5" />
                               {existing ? 'Replace' : 'Upload'}
                               <input
                                 type="file"
                                 className="hidden"
-                                disabled={isUploading}
+                                disabled={isUploading || !canUpload}
                                 onChange={e => void handleDocumentUpload(e, stage, row.id)}
                               />
                               {isUploading && (
@@ -3890,66 +4743,228 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
             {activeBottomTab === 'costs' && (
               <>
-                {isCreate ? (
+                {isCreate && (
                   <div className="p-6">
-                    <p className="text-sm text-muted-foreground">Create the RFQ to view costs.</p>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                      Product Costs
+                    </h4>
+                    {draftLines.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
+                    ) : (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
+                              <th className="text-left px-4 py-2 font-medium">SKU</th>
+                              <th className="text-left px-4 py-2 font-medium">Batch</th>
+                              <th className="text-right px-4 py-2 font-medium">Units</th>
+                              <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
+                              <th className="text-right px-4 py-2 font-medium">Target Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {draftLines.map(line => {
+                              const totalCost = line.totalCost !== null ? line.totalCost : null
+                              const unitCost = totalCost !== null && line.unitsOrdered > 0 ? totalCost / line.unitsOrdered : null
+                              const gateKey = `costs.lines.${line.id}.totalCost`
+                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+
+                              return (
+                                <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
+                                  <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
+                                  <td className="px-4 py-2 text-muted-foreground">
+                                    {line.batchLot ? line.batchLot : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                                    {line.unitsOrdered.toLocaleString()}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                    {unitCost !== null ? `${tenantCurrency} ${unitCost.toFixed(4)}` : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
+                                    <div className="flex flex-col items-end gap-1">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        value={totalCost !== null ? String(totalCost) : ''}
+                                        data-gate-key={gateKey}
+                                        onChange={e => {
+                                          const raw = e.target.value.trim()
+                                          if (!raw) {
+                                            setDraftLines(prev =>
+                                              prev.map(candidate =>
+                                                candidate.id === line.id
+                                                  ? { ...candidate, totalCost: null, unitCost: null }
+                                                  : candidate
+                                              )
+                                            )
+                                            return
+                                          }
+
+                                          const parsed = Number(raw)
+                                          if (!Number.isFinite(parsed) || parsed < 0) return
+
+                                          setDraftLines(prev =>
+                                            prev.map(candidate => {
+                                              if (candidate.id !== line.id) return candidate
+                                              const nextUnitCost =
+                                                candidate.unitsOrdered > 0 ? parsed / candidate.unitsOrdered : null
+                                              return {
+                                                ...candidate,
+                                                totalCost: parsed,
+                                                unitCost: nextUnitCost !== null ? Number(nextUnitCost.toFixed(4)) : null,
+                                              }
+                                            })
+                                          )
+                                        }}
+                                        className={issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'}
+                                      />
+                                      {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                              <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                                Product Subtotal
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                                {tenantCurrency}{' '}
+                                {draftLines
+                                  .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
+                                  .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                ) : null}
+                )}
+
+                {!isCreate && order && (
+                  <div className="p-6">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                      Product Costs
+                    </h4>
+                    {order.lines.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                    ) : (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
+                              <th className="text-left px-4 py-2 font-medium">SKU</th>
+                              <th className="text-left px-4 py-2 font-medium">Batch</th>
+                              <th className="text-right px-4 py-2 font-medium">Units</th>
+                              <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
+                              <th className="text-right px-4 py-2 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {order.lines.map(line => {
+                              const canEditProductCosts =
+                                canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
+
+                              const totalCost = line.totalCost !== null ? line.totalCost : null
+                              const unitCost =
+                                totalCost !== null && line.unitsOrdered > 0 ? totalCost / line.unitsOrdered : null
+                              const currencyLabel =
+                                typeof line.currency === 'string' && line.currency.trim().length > 0
+                                  ? line.currency.trim().toUpperCase()
+                                  : tenantCurrency
+
+                              const gateKey = `costs.lines.${line.id}.totalCost`
+                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+
+                              return (
+                                <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
+                                  <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
+                                  <td className="px-4 py-2 text-muted-foreground">
+                                    {line.batchLot ? line.batchLot : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                                    {line.unitsOrdered.toLocaleString()}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                    {unitCost !== null ? `${currencyLabel} ${unitCost.toFixed(4)}` : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
+                                    {canEditProductCosts ? (
+                                      <div className="flex flex-col items-end gap-1">
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          defaultValue={totalCost !== null ? String(totalCost) : ''}
+                                          data-gate-key={gateKey}
+                                          onBlur={e => {
+                                            const trimmed = e.target.value.trim()
+                                            if (!trimmed) {
+                                              void patchOrderLine(line.id, { totalCost: null })
+                                              return
+                                            }
+
+                                            const parsed = Number(trimmed)
+                                            if (!Number.isFinite(parsed) || parsed < 0) {
+                                              toast.error('Total cost must be a positive number')
+                                              return
+                                            }
+                                            void patchOrderLine(line.id, { totalCost: parsed })
+                                          }}
+                                          className={
+                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'
+                                          }
+                                        />
+                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        {totalCost !== null
+                                          ? `${currencyLabel} ${totalCost.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}`
+                                          : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                              <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                                Product Subtotal
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                                {tenantCurrency}{' '}
+                                {order.lines
+                                  .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
+                                  .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {!isCreate &&
                   order &&
                   (activeViewStage === 'OCEAN' || activeViewStage === 'WAREHOUSE') && (
-              <div className="p-6">
-                {/* Product Costs Section */}
-                <div className="mb-6">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                    Product Costs
-                  </h4>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
-                          <th className="text-left px-4 py-2 font-medium">SKU</th>
-                          <th className="text-left px-4 py-2 font-medium">Batch</th>
-                          <th className="text-right px-4 py-2 font-medium">Qty</th>
-                          <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
-                          <th className="text-right px-4 py-2 font-medium">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {order.lines.map(line => {
-                          const unitCost = line.totalCost && line.unitsOrdered > 0
-                            ? line.totalCost / line.unitsOrdered
-                            : null
-                          return (
-                            <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
-                              <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
-                              <td className="px-4 py-2 text-muted-foreground">{line.batchLot || '—'}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">{line.unitsOrdered.toLocaleString()}</td>
-                              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                                {unitCost !== null ? `${tenantCurrency} ${unitCost.toFixed(4)}` : '—'}
-                              </td>
-                              <td className="px-4 py-2 text-right tabular-nums font-medium">
-                                {line.totalCost !== null ? `${line.currency || tenantCurrency} ${line.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
-                          <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">Product Subtotal</td>
-                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
-                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+              <div className="p-6 pt-0">
 
                 {/* Cargo Costs Section */}
-                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700" data-gate-key="costs.forwarding">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Cargo Costs
@@ -3958,6 +4973,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       {forwardingCosts.length} item{forwardingCosts.length === 1 ? '' : 's'}
                     </p>
                   </div>
+                  {gateIssues?.['costs.forwarding'] && (
+                    <p className="text-xs text-rose-600 mb-3" data-gate-key="costs.forwarding">
+                      {gateIssues['costs.forwarding']}
+                    </p>
+                  )}
 
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
@@ -4415,7 +5435,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           Duty Amount
                         </p>
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </div>
                     </div>
@@ -4433,7 +5453,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
                           <td className="px-4 py-2 text-right tabular-nums font-medium">
-                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {tenantCurrency} {order.lines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
@@ -4470,7 +5490,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <tr className="border-b border-slate-100 dark:border-slate-700">
                             <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
                             <td className="px-4 py-2 text-right tabular-nums font-medium">
-                              {order.stageData.warehouse.dutyCurrency || 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
                         )}
@@ -4480,10 +5500,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <td className="px-4 py-3 font-semibold">Total Cost</td>
                           <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
                             {tenantCurrency} {(
-                              order.lines.reduce((sum, line) => sum + (line.totalCost || 0), 0) +
+                              order.lines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0) +
                               forwardingSubtotal +
                               inboundSubtotal +
-                              (order.stageData.warehouse?.dutyAmount || 0)
+                              (order.stageData.warehouse?.dutyAmount ?? 0)
                             ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -4500,7 +5520,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   activeViewStage !== 'WAREHOUSE' && (
                     <div className="p-6">
                       <p className="text-sm text-muted-foreground">
-                        Costs are editable during In Transit or At Warehouse stages.
+                        Forwarding (freight) costs are editable during In Transit or At Warehouse stages.
                       </p>
                     </div>
                   )}
@@ -4754,6 +5774,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </p>
                       {canEdit && orderInfoEditing ? (
                         <Input
+                          data-gate-key="details.counterpartyName"
                           value={orderInfoDraft.counterpartyName}
                           onChange={e =>
                             setOrderInfoDraft(prev => ({
@@ -4763,10 +5784,23 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           }
                           placeholder="Supplier"
                           disabled={orderInfoSaving}
+                          className={
+                            gateIssues?.['details.counterpartyName']
+                              ? 'border-rose-500 focus-visible:ring-rose-500'
+                              : undefined
+                          }
                         />
                       ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {order.counterpartyName || '—'}
+                        <p
+                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                          data-gate-key="details.counterpartyName"
+                        >
+                          {order.counterpartyName ?? '—'}
+                        </p>
+                      )}
+                      {gateIssues?.['details.counterpartyName'] && (
+                        <p className="text-xs text-rose-600" data-gate-key="details.counterpartyName">
+                          {gateIssues['details.counterpartyName']} <Link href="/config/suppliers" className="underline">Open Suppliers</Link>
                         </p>
                       )}
                     </div>
@@ -4775,7 +5809,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         Destination
                       </p>
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {tenantDestination || '—'}
+                        {formatTextOrDash(tenantDestination)}
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -4785,6 +5819,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       {canEdit && orderInfoEditing ? (
                         <Input
                           type="date"
+                          data-gate-key="details.expectedDate"
                           value={orderInfoDraft.expectedDate}
                           onChange={e =>
                             setOrderInfoDraft(prev => ({
@@ -4793,10 +5828,23 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             }))
                           }
                           disabled={orderInfoSaving}
+                          className={
+                            gateIssues?.['details.expectedDate']
+                              ? 'border-rose-500 focus-visible:ring-rose-500'
+                              : undefined
+                          }
                         />
                       ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        <p
+                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                          data-gate-key="details.expectedDate"
+                        >
                           {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
+                        </p>
+                      )}
+                      {gateIssues?.['details.expectedDate'] && (
+                        <p className="text-xs text-rose-600" data-gate-key="details.expectedDate">
+                          {gateIssues['details.expectedDate']}
                         </p>
                       )}
                     </div>
@@ -4806,6 +5854,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </p>
                       {canEdit && orderInfoEditing ? (
                         <select
+                          data-gate-key="details.incoterms"
                           value={orderInfoDraft.incoterms}
                           onChange={e =>
                             setOrderInfoDraft(prev => ({
@@ -4814,7 +5863,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             }))
                           }
                           disabled={orderInfoSaving}
-                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                            gateIssues?.['details.incoterms'] ? 'border-rose-500' : ''
+                          }`}
                         >
                           <option value="">Select incoterms</option>
                           {INCOTERMS_OPTIONS.map(option => (
@@ -4824,8 +5875,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           ))}
                         </select>
                       ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {order.incoterms || '—'}
+                        <p
+                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                          data-gate-key="details.incoterms"
+                        >
+                          {order.incoterms ?? '—'}
+                        </p>
+                      )}
+                      {gateIssues?.['details.incoterms'] && (
+                        <p className="text-xs text-rose-600" data-gate-key="details.incoterms">
+                          {gateIssues['details.incoterms']}
                         </p>
                       )}
                     </div>
@@ -4835,6 +5894,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </p>
                       {canEdit && orderInfoEditing ? (
                         <Input
+                          data-gate-key="details.paymentTerms"
                           value={orderInfoDraft.paymentTerms}
                           onChange={e =>
                             setOrderInfoDraft(prev => ({
@@ -4844,10 +5904,23 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           }
                           placeholder="Payment terms"
                           disabled={orderInfoSaving}
+                          className={
+                            gateIssues?.['details.paymentTerms']
+                              ? 'border-rose-500 focus-visible:ring-rose-500'
+                              : undefined
+                          }
                         />
                       ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {order.paymentTerms || '—'}
+                        <p
+                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                          data-gate-key="details.paymentTerms"
+                        >
+                          {order.paymentTerms ?? '—'}
+                        </p>
+                      )}
+                      {gateIssues?.['details.paymentTerms'] && (
+                        <p className="text-xs text-rose-600" data-gate-key="details.paymentTerms">
+                          {gateIssues['details.paymentTerms']}
                         </p>
                       )}
                     </div>
@@ -4856,7 +5929,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         Created
                       </p>
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {formatDateOnly(order.createdAt) || '—'}
+                        {formatTextOrDash(formatDateOnly(order.createdAt))}
                         {order.createdByName ? ` by ${order.createdByName}` : ''}
                       </p>
                     </div>
@@ -4887,12 +5960,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 {(() => {
                   if (activeViewStage !== 'MANUFACTURING') return null
                   const mfg = order.stageData.manufacturing
-                  const hasData =
-                    mfg?.proformaInvoiceNumber ||
-                    mfg?.manufacturingStartDate ||
-                    mfg?.totalCartons ||
-                    mfg?.totalWeightKg
-                  if (!hasData) return null
+                  const canEditStage =
+                    !isReadOnly && order.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
+
+                  const startDateValue =
+                    getStageField('manufacturingStartDate') ??
+                    formatDateOnly(mfg?.manufacturingStartDate ?? mfg?.manufacturingStart ?? null)
+                  const expectedCompletionValue =
+                    getStageField('expectedCompletionDate') ?? formatDateOnly(mfg?.expectedCompletionDate ?? null)
+                  const packagingNotesValue =
+                    getStageField('packagingNotes') ??
+                    (typeof mfg?.packagingNotes === 'string' ? mfg.packagingNotes : '')
+
+                  const startIssue = gateIssues?.['details.manufacturingStartDate'] ?? null
+
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
@@ -4901,34 +5982,56 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Proforma Invoice
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.proformaInvoiceNumber || '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Start Date
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(mfg?.manufacturingStartDate || mfg?.manufacturingStart) || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              type="date"
+                              data-gate-key="details.manufacturingStartDate"
+                              value={startDateValue}
+                              onChange={e => setStageField('manufacturingStartDate', e.target.value)}
+                              className={
+                                startIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.manufacturingStartDate"
+                            >
+                              {formatTextOrDash(
+                                formatDateOnly(mfg?.manufacturingStartDate ?? mfg?.manufacturingStart ?? null)
+                              )}
+                            </p>
+                          )}
+                          {startIssue && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.manufacturingStartDate">
+                              {startIssue}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Expected Completion
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(mfg?.expectedCompletionDate) || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              type="date"
+                              value={expectedCompletionValue}
+                              onChange={e => setStageField('expectedCompletionDate', e.target.value)}
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {formatTextOrDash(formatDateOnly(mfg?.expectedCompletionDate ?? null))}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Cartons
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalCartons?.toLocaleString() || '—'}
+                            {mfg?.totalCartons?.toLocaleString() ?? '—'}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -4936,7 +6039,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Pallets
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalPallets?.toLocaleString() || '—'}
+                            {mfg?.totalPallets?.toLocaleString() ?? '—'}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -4944,7 +6047,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Weight (kg)
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalWeightKg?.toLocaleString() || '—'}
+                            {mfg?.totalWeightKg?.toLocaleString() ?? '—'}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -4952,8 +6055,27 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Volume (CBM)
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalVolumeCbm?.toLocaleString() || '—'}
+                            {mfg?.totalVolumeCbm?.toLocaleString() ?? '—'}
                           </p>
+                        </div>
+                        <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Packaging Notes
+                          </p>
+                          {canEditStage ? (
+                            <Textarea
+                              value={packagingNotesValue}
+                              onChange={e => setStageField('packagingNotes', e.target.value)}
+                              placeholder="Optional packaging notes..."
+                              className="min-h-[88px]"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-700 dark:text-slate-300">
+                              {typeof mfg?.packagingNotes === 'string' && mfg.packagingNotes.trim().length > 0
+                                ? mfg.packagingNotes
+                                : '—'}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -4964,13 +6086,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 {(() => {
                   if (activeViewStage !== 'OCEAN') return null
                   const ocean = order.stageData.ocean
-                  const hasData =
-                    ocean?.houseBillOfLading ||
-                    ocean?.masterBillOfLading ||
-                    ocean?.vesselName ||
-                    ocean?.portOfLoading ||
-                    ocean?.estimatedDeparture
-                  if (!hasData) return null
+                  const canEditStage = !isReadOnly && order.status === 'OCEAN' && activeViewStage === 'OCEAN'
+                  const textField = (key: string, existing: string | null | undefined): string =>
+                    getStageField(key) ?? (typeof existing === 'string' ? existing : '')
+                  const issue = (key: string): string | null => gateIssues?.[`details.${key}`] ?? null
+
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
@@ -4981,56 +6101,150 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             House B/L
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.houseBillOfLading || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.houseBillOfLading"
+                              value={textField('houseBillOfLading', ocean?.houseBillOfLading)}
+                              onChange={e => setStageField('houseBillOfLading', e.target.value)}
+                              placeholder="Enter bill of lading reference"
+                              className={
+                                issue('houseBillOfLading')
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.houseBillOfLading"
+                            >
+                              {formatTextOrDash(ocean?.houseBillOfLading)}
+                            </p>
+                          )}
+                          {issue('houseBillOfLading') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.houseBillOfLading">
+                              {issue('houseBillOfLading')}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Master B/L
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.masterBillOfLading || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              value={textField('masterBillOfLading', ocean?.masterBillOfLading)}
+                              onChange={e => setStageField('masterBillOfLading', e.target.value)}
+                              placeholder="Optional"
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {formatTextOrDash(ocean?.masterBillOfLading)}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Vessel
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.vesselName || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.vesselName"
+                              value={textField('vesselName', ocean?.vesselName)}
+                              onChange={e => setStageField('vesselName', e.target.value)}
+                              placeholder="Enter vessel name"
+                              className={
+                                issue('vesselName') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.vesselName"
+                            >
+                              {formatTextOrDash(ocean?.vesselName)}
+                            </p>
+                          )}
+                          {issue('vesselName') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.vesselName">
+                              {issue('vesselName')}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Voyage
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.voyageNumber || '—'}
+                            {formatTextOrDash(ocean?.voyageNumber)}
                           </p>
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Port of Loading
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.portOfLoading || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.portOfLoading"
+                              value={textField('portOfLoading', ocean?.portOfLoading)}
+                              onChange={e => setStageField('portOfLoading', e.target.value)}
+                              placeholder="Enter port of loading"
+                              className={
+                                issue('portOfLoading')
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.portOfLoading"
+                            >
+                              {formatTextOrDash(ocean?.portOfLoading)}
+                            </p>
+                          )}
+                          {issue('portOfLoading') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.portOfLoading">
+                              {issue('portOfLoading')}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Port of Discharge
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.portOfDischarge || '—'}
-                          </p>
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.portOfDischarge"
+                              value={textField('portOfDischarge', ocean?.portOfDischarge)}
+                              onChange={e => setStageField('portOfDischarge', e.target.value)}
+                              placeholder="Enter port of discharge"
+                              className={
+                                issue('portOfDischarge')
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.portOfDischarge"
+                            >
+                              {formatTextOrDash(ocean?.portOfDischarge)}
+                            </p>
+                          )}
+                          {issue('portOfDischarge') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.portOfDischarge">
+                              {issue('portOfDischarge')}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             ETD
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(ocean?.estimatedDeparture) || '—'}
+                            {formatTextOrDash(formatDateOnly(ocean?.estimatedDeparture ?? null))}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5038,16 +6252,68 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             ETA
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(ocean?.estimatedArrival) || '—'}
+                            {formatTextOrDash(formatDateOnly(ocean?.estimatedArrival ?? null))}
                           </p>
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Commercial Invoice
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ocean?.commercialInvoiceNumber || '—'}
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.commercialInvoiceNumber"
+                              value={textField('commercialInvoiceNumber', ocean?.commercialInvoiceNumber)}
+                              onChange={e => setStageField('commercialInvoiceNumber', e.target.value)}
+                              placeholder="Enter invoice number"
+                              className={
+                                issue('commercialInvoiceNumber')
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.commercialInvoiceNumber"
+                            >
+                              {formatTextOrDash(ocean?.commercialInvoiceNumber)}
+                            </p>
+                          )}
+                          {issue('commercialInvoiceNumber') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.commercialInvoiceNumber">
+                              {issue('commercialInvoiceNumber')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Packing List Ref
                           </p>
+                          {canEditStage ? (
+                            <Input
+                              data-gate-key="details.packingListRef"
+                              value={textField('packingListRef', ocean?.packingListRef)}
+                              onChange={e => setStageField('packingListRef', e.target.value)}
+                              placeholder="Enter packing list reference"
+                              className={
+                                issue('packingListRef')
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.packingListRef"
+                            >
+                              {formatTextOrDash(ocean?.packingListRef)}
+                            </p>
+                          )}
+                          {issue('packingListRef') && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.packingListRef">
+                              {issue('packingListRef')}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -5058,69 +6324,255 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 {(() => {
                   if (activeViewStage !== 'WAREHOUSE') return null
                   const wh = order.stageData.warehouse
-                  const hasData =
-                    wh?.warehouseName ||
-                    wh?.warehouseCode ||
-                    wh?.customsEntryNumber ||
-                    wh?.customsClearedDate ||
-                    wh?.receivedDate
-                  if (!hasData) return null
+                  const canEditStage = !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                         Warehouse
                       </h4>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Warehouse
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {wh?.warehouseName || wh?.warehouseCode || '—'}
-                          </p>
+                      {canEditStage ? (
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                          <div className="space-y-1" data-gate-key="details.warehouseCode">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Warehouse
+                            </p>
+                            <select
+                              data-gate-key="details.warehouseCode"
+                              value={receiveFormData.warehouseCode}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
+                              }
+                              disabled={warehousesLoading}
+                              className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                                gateIssues?.['details.warehouseCode'] ? 'border-rose-500' : ''
+                              }`}
+                            >
+                              <option value="">
+                                {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
+                              </option>
+                              {warehouses.map(w => (
+                                <option key={w.code} value={w.code}>
+                                  {w.name} ({w.code})
+                                </option>
+                              ))}
+                            </select>
+                            {gateIssues?.['details.warehouseCode'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.warehouseCode">
+                                {gateIssues['details.warehouseCode']}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1" data-gate-key="details.receiveType">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Receive Type
+                            </p>
+                            <select
+                              data-gate-key="details.receiveType"
+                              value={receiveFormData.receiveType}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, receiveType: e.target.value }))
+                              }
+                              className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                                gateIssues?.['details.receiveType'] ? 'border-rose-500' : ''
+                              }`}
+                            >
+                              <option value="">Select receive type</option>
+                              <option value="LCL">LCL</option>
+                              <option value="CONTAINER_20">20&apos; Container</option>
+                              <option value="CONTAINER_40">40&apos; Container</option>
+                              <option value="CONTAINER_40_HQ">40&apos; HQ Container</option>
+                              <option value="CONTAINER_45_HQ">45&apos; HQ Container</option>
+                            </select>
+                            {gateIssues?.['details.receiveType'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.receiveType">
+                                {gateIssues['details.receiveType']}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1 col-span-2" data-gate-key="details.customsEntryNumber">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Import Entry Number
+                            </p>
+                            <Input
+                              data-gate-key="details.customsEntryNumber"
+                              value={receiveFormData.customsEntryNumber}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, customsEntryNumber: e.target.value }))
+                              }
+                              placeholder="Enter import entry number"
+                              className={
+                                gateIssues?.['details.customsEntryNumber']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                            {gateIssues?.['details.customsEntryNumber'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.customsEntryNumber">
+                                {gateIssues['details.customsEntryNumber']}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1" data-gate-key="details.customsClearedDate">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Customs Cleared Date
+                            </p>
+                            <Input
+                              type="date"
+                              data-gate-key="details.customsClearedDate"
+                              value={receiveFormData.customsClearedDate}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, customsClearedDate: e.target.value }))
+                              }
+                              className={
+                                gateIssues?.['details.customsClearedDate']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                            {gateIssues?.['details.customsClearedDate'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.customsClearedDate">
+                                {gateIssues['details.customsClearedDate']}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1" data-gate-key="details.receivedDate">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Received Date
+                            </p>
+                            <Input
+                              type="date"
+                              data-gate-key="details.receivedDate"
+                              value={receiveFormData.receivedDate}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, receivedDate: e.target.value }))
+                              }
+                              className={
+                                gateIssues?.['details.receivedDate']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                            {gateIssues?.['details.receivedDate'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.receivedDate">
+                                {gateIssues['details.receivedDate']}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Duty Amount (optional)
+                            </p>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={receiveFormData.dutyAmount}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, dutyAmount: e.target.value }))
+                              }
+                              placeholder="0.00"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Duty Currency (optional)
+                            </p>
+                            <Input
+                              value={receiveFormData.dutyCurrency}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, dutyCurrency: e.target.value }))
+                              }
+                              placeholder="USD"
+                            />
+                          </div>
+
+                          <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4" data-gate-key="details.discrepancyNotes">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Discrepancy Notes
+                            </p>
+                            <Textarea
+                              value={receiveFormData.discrepancyNotes}
+                              onChange={e =>
+                                setReceiveFormData(prev => ({ ...prev, discrepancyNotes: e.target.value }))
+                              }
+                              placeholder="Required if received cartons differ from ordered..."
+                              className={
+                                gateIssues?.['details.discrepancyNotes']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                            {gateIssues?.['details.discrepancyNotes'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="details.discrepancyNotes">
+                                {gateIssues['details.discrepancyNotes']}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Customs Entry
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {wh?.customsEntryNumber || '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Customs Cleared
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(wh?.customsClearedDate) || '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Duty Amount
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {wh?.dutyAmount != null
-                              ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency || ''}`
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Received Date
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(wh?.receivedDate) || '—'}
-                          </p>
-                        </div>
-                      </div>
-                      {wh?.discrepancyNotes && (
-                        <div className="mt-4">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                            Discrepancy Notes
-                          </p>
-                          <p className="text-sm text-slate-700 dark:text-slate-300">{wh.discrepancyNotes}</p>
-                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Warehouse
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(wh?.warehouseName ?? wh?.warehouseCode)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Import Entry
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(wh?.customsEntryNumber)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Customs Cleared
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(formatDateOnly(wh?.customsClearedDate ?? null))}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Duty Amount
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {wh?.dutyAmount != null
+                                  ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency ?? ''}`
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Received Date
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(formatDateOnly(wh?.receivedDate ?? null))}
+                              </p>
+                            </div>
+                          </div>
+                          {wh?.discrepancyNotes && (
+                            <div className="mt-4">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                                Discrepancy Notes
+                              </p>
+                              <p className="text-sm text-slate-700 dark:text-slate-300">
+                                {wh.discrepancyNotes}
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )
@@ -5147,14 +6599,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Ship To
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {[
-                              shipped?.shipToName,
-                              shipped?.shipToAddress,
-                              shipped?.shipToCity,
-                              shipped?.shipToCountry,
-                            ]
-                              .filter(Boolean)
-                              .join(', ') || '—'}
+                            {formatTextOrDash(
+                              [
+                                shipped?.shipToName,
+                                shipped?.shipToAddress,
+                                shipped?.shipToCity,
+                                shipped?.shipToCountry,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')
+                            )}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5162,7 +6616,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Carrier
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {shipped?.shippingCarrier || '—'}
+                            {formatTextOrDash(shipped?.shippingCarrier)}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5170,7 +6624,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Method
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {shipped?.shippingMethod || '—'}
+                            {formatTextOrDash(shipped?.shippingMethod)}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5178,7 +6632,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Tracking
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {shipped?.trackingNumber || '—'}
+                            {formatTextOrDash(shipped?.trackingNumber)}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5186,7 +6640,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Shipped Date
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(shipped?.shippedDate || shipped?.shippedAt) || '—'}
+                            {formatTextOrDash(
+                              formatDateOnly(shipped?.shippedDate ?? shipped?.shippedAt ?? null)
+                            )}
                           </p>
                         </div>
                         <div className="space-y-1">
@@ -5194,7 +6650,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             Delivered Date
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatDateOnly(shipped?.deliveredDate) || '—'}
+                            {formatTextOrDash(formatDateOnly(shipped?.deliveredDate ?? null))}
                           </p>
                         </div>
                       </div>
@@ -5319,7 +6775,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit line item</h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {editingLine.skuCode} • {editingLine.batchLot || '—'}
+                    {editingLine.skuCode} • {formatTextOrDash(editingLine.batchLot)}
                   </p>
                 </div>
                 <button
@@ -5451,41 +6907,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             className="bg-muted/30 text-muted-foreground"
                           />
                         </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Total Cost
-                        </label>
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={editLineDraft.totalCost}
-                            onChange={e =>
-                              setEditLineDraft(prev => ({ ...prev, totalCost: e.target.value }))
-                            }
-                            placeholder="0.00"
-                            className="pr-12"
-                            disabled={editLineSubmitting}
-                          />
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-xs font-medium text-muted-foreground">
-                            {tenantCurrency}
-                          </div>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          Unit:{' '}
-                          {(() => {
-                            const trimmed = editLineDraft.totalCost.trim()
-                            if (!trimmed) return '—'
-                            const parsed = Number(trimmed)
-                            if (!Number.isFinite(parsed) || parsed < 0) return '—'
-                            const units = Number(editLineDraft.unitsOrdered)
-                            if (!Number.isInteger(units) || units <= 0) return '—'
-                            return (parsed / units).toFixed(4)
-                          })()}
-                        </p>
                       </div>
 
                       <div className="space-y-2">

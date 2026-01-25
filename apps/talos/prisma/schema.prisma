@@ -335,6 +335,15 @@ model PurchaseOrder {
   createdAt        DateTime            @default(now()) @map("created_at")
   updatedAt        DateTime            @updatedAt @map("updated_at")
   isLegacy         Boolean             @default(false) @map("is_legacy")
+  rfqPdfGeneratedAt DateTime?          @map("rfq_pdf_generated_at")
+  rfqPdfGeneratedById String?          @map("rfq_pdf_generated_by_id")
+  rfqPdfGeneratedByName String?        @map("rfq_pdf_generated_by_name")
+  poPdfGeneratedAt  DateTime?          @map("po_pdf_generated_at")
+  poPdfGeneratedById String?           @map("po_pdf_generated_by_id")
+  poPdfGeneratedByName String?         @map("po_pdf_generated_by_name")
+  shippingMarksGeneratedAt DateTime?   @map("shipping_marks_generated_at")
+  shippingMarksGeneratedById String?   @map("shipping_marks_generated_by_id")
+  shippingMarksGeneratedByName String? @map("shipping_marks_generated_by_name")
 
   // ===========================================
   // STAGE 1: ISSUED (supplier-facing essentials)
@@ -643,6 +652,12 @@ model PurchaseOrderLine {
   skuCode           String                  @map("sku_code")
   skuDescription    String?                 @map("sku_description")
   batchLot          String?                 @map("batch_lot")
+  piNumber          String?                 @map("pi_number")
+  productNumber     String?                 @map("product_number")
+  commodityCode     String?                 @map("commodity_code")
+  countryOfOrigin   String?                 @map("country_of_origin")
+  netWeightKg       Decimal?                @map("net_weight_kg") @db.Decimal(8, 3)
+  material          String?                 @map("material")
   cartonDimensionsCm String?                @map("carton_dimensions_cm")
   cartonSide1Cm      Decimal?               @map("carton_side1_cm") @db.Decimal(8, 2)
   cartonSide2Cm      Decimal?               @map("carton_side2_cm") @db.Decimal(8, 2)
@@ -994,6 +1009,7 @@ enum OutboundShipMode {
 }
 
 enum PurchaseOrderDocumentStage {
+  DRAFT
   ISSUED
   MANUFACTURING
   OCEAN

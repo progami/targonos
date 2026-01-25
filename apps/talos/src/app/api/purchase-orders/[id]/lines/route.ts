@@ -10,6 +10,7 @@ const CreateLineSchema = z.object({
   skuCode: z.string().trim().min(1),
   skuDescription: z.string().optional(),
   batchLot: z.string().trim().min(1),
+  piNumber: z.string().trim().optional(),
   unitsOrdered: z.number().int().positive(),
   unitsPerCarton: z.number().int().positive(),
   totalCost: z.number().min(0).optional(),
@@ -83,6 +84,12 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 	      skuCode: line.skuCode,
 	      skuDescription: line.skuDescription,
 	      batchLot: line.batchLot,
+        piNumber: line.piNumber ?? null,
+        productNumber: line.productNumber ?? null,
+        commodityCode: line.commodityCode ?? null,
+        countryOfOrigin: line.countryOfOrigin ?? null,
+        netWeightKg: toNumberOrNull(line.netWeightKg),
+        material: line.material ?? null,
         cartonDimensionsCm: line.cartonDimensionsCm ?? null,
         cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
         cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
@@ -96,7 +103,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 	      quantity: line.quantity,
 	      unitCost: line.unitCost ? Number(line.unitCost) : null,
 	      totalCost: line.totalCost ? Number(line.totalCost) : null,
-	      currency: line.currency || tenant.currency,
+	      currency: line.currency ?? tenant.currency,
 	      status: line.status,
 	      postedQuantity: line.postedQuantity,
       quantityReceived: line.quantityReceived,
@@ -215,6 +222,23 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   let line
+  const piNumber =
+    typeof result.data.piNumber === 'string' && result.data.piNumber.trim().length > 0
+      ? result.data.piNumber.trim().toUpperCase()
+      : null
+
+  const netWeightKg = (() => {
+    const unitWeightKg = toNumberOrNull(sku.unitWeightKg)
+    if (unitWeightKg === null) return null
+    const computed = unitWeightKg * result.data.unitsPerCarton
+    return Number.isFinite(computed) && computed > 0 ? new Prisma.Decimal(computed.toFixed(3)) : null
+  })()
+
+  const currency =
+    typeof result.data.currency === 'string' && result.data.currency.trim().length > 0
+      ? result.data.currency.trim().toUpperCase()
+      : tenant.currency
+
   try {
     line = await prisma.purchaseOrderLine.create({
       data: {
@@ -222,6 +246,9 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
         skuCode: sku.skuCode,
         skuDescription: result.data.skuDescription ?? sku.description ?? '',
         batchLot: existingBatch.batchCode,
+        piNumber,
+        netWeightKg,
+        material: sku.material ?? null,
         cartonDimensionsCm: existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null,
         cartonSide1Cm: existingBatch.cartonSide1Cm ?? sku.cartonSide1Cm ?? null,
         cartonSide2Cm: existingBatch.cartonSide2Cm ?? sku.cartonSide2Cm ?? null,
@@ -243,7 +270,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
           result.data.unitsOrdered > 0
             ? (result.data.totalCost / result.data.unitsOrdered).toFixed(4)
             : undefined,
-        currency: result.data.currency || tenant.currency,
+        currency,
         lineNotes: result.data.notes,
         status: 'PENDING',
       },
@@ -268,6 +295,12 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       skuCode: line.skuCode,
       skuDescription: line.skuDescription ?? null,
       batchLot: line.batchLot ?? null,
+      piNumber: line.piNumber ?? null,
+      productNumber: line.productNumber ?? null,
+      commodityCode: line.commodityCode ?? null,
+      countryOfOrigin: line.countryOfOrigin ?? null,
+      netWeightKg: toNumberOrNull(line.netWeightKg),
+      material: line.material ?? null,
       cartonDimensionsCm: line.cartonDimensionsCm ?? null,
       cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
       cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
@@ -291,6 +324,12 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
     batchLot: line.batchLot,
+    piNumber: line.piNumber ?? null,
+    productNumber: line.productNumber ?? null,
+    commodityCode: line.commodityCode ?? null,
+    countryOfOrigin: line.countryOfOrigin ?? null,
+    netWeightKg: toNumberOrNull(line.netWeightKg),
+    material: line.material ?? null,
     cartonDimensionsCm: line.cartonDimensionsCm ?? null,
     cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
     cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
@@ -304,7 +343,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     quantity: line.quantity,
     unitCost: line.unitCost ? Number(line.unitCost) : null,
     totalCost: line.totalCost ? Number(line.totalCost) : null,
-    currency: line.currency || tenant.currency,
+    currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
     quantityReceived: line.quantityReceived,
