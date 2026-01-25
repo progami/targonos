@@ -839,6 +839,15 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     documentType === 'rfq' ? order.orderNumber : order.poNumber ?? order.orderNumber
   )
 
+  if (
+    documentType === 'po' &&
+    (!supplierBankingDetails || supplierBankingDetails.trim().length === 0)
+  ) {
+    return ApiResponses.badRequest(
+      'Supplier banking information is required to generate a PO. Update the supplier record and try again.'
+    )
+  }
+
   const vendorPiNumbers: string[] = []
   for (const pi of order.proformaInvoices) {
     const trimmed = pi.piNumber.trim()
@@ -880,7 +889,7 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     expectedDate: order.expectedDate,
     incoterms: order.incoterms,
     paymentTerms: order.paymentTerms,
-    shipToName: order.warehouseName ?? order.shipToName,
+    shipToName: order.shipToName,
     shipToAddress: order.shipToAddress ?? null,
     notes: order.notes,
     lines,

@@ -140,19 +140,33 @@ export async function updatePurchaseOrderDetails(
         : input.paymentTerms.trim()
       : order.paymentTerms
 
-  const counterpartyName =
+  let counterpartyName =
     input.counterpartyName !== undefined ? input.counterpartyName : order.counterpartyName
 
   let counterpartyAddress = order.counterpartyAddress ?? null
   if (input.counterpartyName !== undefined) {
-    if (!counterpartyName) {
+    const supplierName =
+      typeof counterpartyName === 'string' && counterpartyName.trim().length > 0
+        ? counterpartyName.trim()
+        : null
+
+    if (!supplierName) {
+      counterpartyName = null
       counterpartyAddress = null
-    } else if (counterpartyName !== order.counterpartyName) {
-      const supplier = await prisma.supplier.findUnique({
-        where: { name: counterpartyName },
-        select: { address: true },
+    } else {
+      const supplier = await prisma.supplier.findFirst({
+        where: { name: { equals: supplierName, mode: 'insensitive' } },
+        select: { name: true, address: true },
       })
-      counterpartyAddress = supplier?.address ?? null
+
+      if (!supplier) {
+        throw new ValidationError(
+          `Supplier ${supplierName} not found. Create it in Config → Suppliers first.`
+        )
+      }
+
+      counterpartyName = supplier.name
+      counterpartyAddress = supplier.address ?? null
     }
   }
   const notes = input.notes !== undefined ? input.notes : order.notes

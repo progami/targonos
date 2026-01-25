@@ -389,7 +389,7 @@ const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
 > = {
-  ISSUED: [{ id: 'proforma_invoice', label: 'Signed PI / Proforma Invoice' }],
+  ISSUED: [],
   MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
   OCEAN: [
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
@@ -775,6 +775,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [batchesLoadingBySkuId, setBatchesLoadingBySkuId] = useState<Record<string, boolean>>({})
   const [addLineOpen, setAddLineOpen] = useState(false)
   const [addLineSubmitting, setAddLineSubmitting] = useState(false)
+  const [activeBottomTab, setActiveBottomTab] = useState<
+    'details' | 'cargo' | 'costs' | 'documents' | 'history'
+  >('details')
   const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
@@ -2263,20 +2266,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               !order?.paymentTerms ? 'Payment terms' : null,
             ].filter((value): value is string => value !== null)
 
-            fields.push(
-              {
-                key: 'proformaInvoiceNumber',
-                label: 'Proforma Invoice Number (PI #)',
-                type: 'text',
-              },
-              { key: 'proformaInvoiceDate', label: 'Proforma Invoice Date', type: 'date' }
-            )
-
             return (
               <div className="space-y-3">
                 <p className="text-sm text-slate-700 dark:text-slate-300">
-                  Marking this PO as issued means the supplier accepted it (signed PI received).
-                  This locks draft edits.
+                  Issuing this RFQ generates the PO number and locks RFQ edits.
                 </p>
                 {missingFields.length > 0 && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -2284,7 +2277,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Upload the signed PI and enter its reference number before advancing.
+                  Make sure the supplier and order terms are correct before advancing.
                 </p>
               </div>
             )
@@ -2337,7 +2330,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         break
     }
 
-    if (fields.length === 0) return null
+    if (fields.length === 0 && !intro) return null
 
     const docStage = nextStage.value as keyof typeof STAGE_DOCUMENTS
     const requiredDocs = STAGE_DOCUMENTS[docStage] ?? []
@@ -2351,46 +2344,50 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     return (
       <div className="space-y-5">
         {intro}
-        <div className="grid grid-cols-1 gap-4">
-          {fields.map(field => (
-            <div key={field.key} className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{field.label}</label>
-              {field.type === 'select' ? (
-                <select
-                  value={stageFormData[field.key] || ''}
-                  onChange={e => {
-                    const value = e.target.value
-                    setStageFormData(prev => ({ ...prev, [field.key]: value }))
-                  }}
-                  disabled={field.disabled}
-                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                >
-                  <option value="">
-                    {field.key === 'warehouseCode'
-                      ? warehousesLoading
-                        ? 'Loading warehouses…'
-                        : 'Select warehouse'
-                      : `Select ${field.label.toLowerCase()}`}
-                  </option>
-                  {field.options?.map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
+        {fields.length > 0 && (
+          <div className="grid grid-cols-1 gap-4">
+            {fields.map(field => (
+              <div key={field.key} className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {field.label}
+                </label>
+                {field.type === 'select' ? (
+                  <select
+                    value={stageFormData[field.key] || ''}
+                    onChange={e => {
+                      const value = e.target.value
+                      setStageFormData(prev => ({ ...prev, [field.key]: value }))
+                    }}
+                    disabled={field.disabled}
+                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                  >
+                    <option value="">
+                      {field.key === 'warehouseCode'
+                        ? warehousesLoading
+                          ? 'Loading warehouses…'
+                          : 'Select warehouse'
+                        : `Select ${field.label.toLowerCase()}`}
                     </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  type={field.type}
-                  value={stageFormData[field.key] || ''}
-                  onChange={e =>
-                    setStageFormData(prev => ({ ...prev, [field.key]: e.target.value }))
-                  }
-                  placeholder={field.type === 'date' ? '' : `Enter ${field.label.toLowerCase()}`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+                    {field.options?.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type={field.type}
+                    value={stageFormData[field.key] || ''}
+                    onChange={e =>
+                      setStageFormData(prev => ({ ...prev, [field.key]: e.target.value }))
+                    }
+                    placeholder={field.type === 'date' ? '' : `Enter ${field.label.toLowerCase()}`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {requiredDocs.length > 0 && (
           <div className="space-y-3">
@@ -2642,40 +2639,107 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
             </div>
           )}
 
-          {/* Stage-scoped panels */}
+          {/* Details, Cargo, Costs, Documents & History Tabs */}
           <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
-              {(() => {
-                const stageMeta = STAGES.find(stage => stage.value === activeViewStage)
-                const Icon = stageMeta ? stageMeta.icon : Info
-                const label = stageMeta
-                  ? stageMeta.label
-                  : formatStatusLabel(activeViewStage as POStageStatus)
-
-                return (
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Click a stage above to view documents and requirements.
-                      </p>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-muted-foreground">
-                  Total: {totalUnits.toLocaleString()} units · {totalCartons.toLocaleString()}{' '}
-                  cartons
-                </span>
-                {canEdit && (
-                  <Popover open={addLineOpen} onOpenChange={setAddLineOpen}>
+            {/* Tab Headers */}
+            <div className="flex items-center border-b">
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab('details')}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'details'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Info className="h-4 w-4" />
+                Details
+                {activeBottomTab === 'details' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab('cargo')}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'cargo'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Package2 className="h-4 w-4" />
+                Cargo
+                <Badge variant="outline" className="text-xs ml-1">
+                  {flowLines.length}
+                </Badge>
+                {activeBottomTab === 'cargo' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab('costs')}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'costs'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <DollarSign className="h-4 w-4" />
+                Costs
+                {activeBottomTab === 'costs' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBottomTab('documents')
+                  void refreshDocuments()
+                }}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'documents'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <FileText className="h-4 w-4" />
+                Documents
+                {activeBottomTab === 'documents' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBottomTab('history')
+                  void refreshAuditLogs()
+                }}
+                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
+                  activeBottomTab === 'history'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <History className="h-4 w-4" />
+                History
+                {!isCreate && historyCount > 0 && (
+                  <Badge variant="outline" className="text-xs ml-1">
+                    {historyCount}
+                  </Badge>
+                )}
+                {activeBottomTab === 'history' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              {activeBottomTab === 'cargo' && (
+                <div className="ml-auto flex items-center gap-3 pr-6">
+                  <span className="text-sm text-muted-foreground">
+                    Total: {totalUnits.toLocaleString()} units · {totalCartons.toLocaleString()}{' '}
+                    cartons
+                  </span>
+                  {canEdit && (
+                    <Popover open={addLineOpen} onOpenChange={setAddLineOpen}>
                       <PopoverTrigger asChild>
                         <Button type="button" size="sm" variant="outline" className="gap-2">
                           <Plus className="h-4 w-4" />
@@ -2684,7 +2748,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-[420px] space-y-4">
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Add line item</h4>
+                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            Add line item
+                          </h4>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             Add another SKU to this purchase order.
                           </p>
@@ -2933,13 +2999,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </Button>
                         </div>
                       </PopoverContent>
-                  </Popover>
-                )}
-              </div>
+                    </Popover>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Tab Content */}
-            {!isCreate && order ? (
+            {activeBottomTab === 'cargo' && (
+              <>
+                {!isCreate && order ? (
               <div>
                 {/* Summary Stats */}
                 <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
@@ -3515,9 +3583,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 )}
               </div>
             )}
+              </>
+            )}
 
-            {/* Stage requirements & documents */}
-            <div className="border-t p-6">
+            {activeBottomTab === 'documents' && (
+              <>
+                {/* Stage requirements & documents */}
+                <div className="p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Stage Documents
@@ -3648,9 +3720,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )
                 })()
               )}
-            </div>
+                </div>
 
-            {false && (
+                {false && (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-auto text-sm">
                   <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
@@ -3813,8 +3885,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 </table>
               </div>
             )}
+              </>
+            )}
 
-            {!isCreate && order && (activeViewStage === 'OCEAN' || activeViewStage === 'WAREHOUSE') && (
+            {activeBottomTab === 'costs' && (
+              <>
+                {isCreate ? (
+                  <div className="p-6">
+                    <p className="text-sm text-muted-foreground">Create the RFQ to view costs.</p>
+                  </div>
+                ) : null}
+
+                {!isCreate &&
+                  order &&
+                  (activeViewStage === 'OCEAN' || activeViewStage === 'WAREHOUSE') && (
               <div className="p-6">
                 {/* Product Costs Section */}
                 <div className="mb-6">
@@ -4408,9 +4492,24 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 </div>
               </div>
+                )}
+
+                {!isCreate &&
+                  order &&
+                  activeViewStage !== 'OCEAN' &&
+                  activeViewStage !== 'WAREHOUSE' && (
+                    <div className="p-6">
+                      <p className="text-sm text-muted-foreground">
+                        Costs are editable during In Transit or At Warehouse stages.
+                      </p>
+                    </div>
+                  )}
+              </>
             )}
 
-            {isCreate ? (
+            {activeBottomTab === 'details' && (
+              <>
+                {isCreate ? (
               <div className="p-6">
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-4">
@@ -5103,10 +5202,22 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )
                 })()}
               </div>
-            ) : null}
+                ) : null}
+              </>
+            )}
 
-            {!isCreate && order && (
-              <div className="overflow-x-auto">
+            {activeBottomTab === 'history' && (
+              <>
+                {isCreate ? (
+                  <div className="p-6">
+                    <p className="text-sm text-muted-foreground">
+                      Create the RFQ to view history.
+                    </p>
+                  </div>
+                ) : null}
+
+                {!isCreate && order && (
+                  <div className="overflow-x-auto">
                 {auditLogsLoading ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -5186,7 +5297,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </tbody>
                   </table>
                 )}
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
