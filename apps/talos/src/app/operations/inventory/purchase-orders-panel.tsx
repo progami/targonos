@@ -177,21 +177,21 @@ export function PurchaseOrdersPanel({
     )
   }, [orders])
 
-	  const visibleOrders = useMemo(
-	    () =>
-	      orders.filter(order => {
-	        const matchesStatus = order.status === statusFilter
-	        const matchesType = !typeFilter || order.type === typeFilter
-	        return matchesStatus && matchesType
-	      }),
-	    [orders, statusFilter, typeFilter]
-	  )
+  const visibleOrders = useMemo(
+    () =>
+      orders.filter(order => {
+        const matchesStatus = order.status === statusFilter
+        const matchesType = !typeFilter || order.type === typeFilter
+        return matchesStatus && matchesType
+      }),
+    [orders, statusFilter, typeFilter]
+  )
 
   const columns = useMemo<TableColumn[]>(() => {
     const cols: TableColumn[] = [
       {
         key: 'po-number',
-        header: 'PO #',
+        header: statusFilter === 'DRAFT' ? 'RFQ #' : 'PO #',
         tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
         render: order => (
           <Link
@@ -199,7 +199,7 @@ export function PurchaseOrdersPanel({
             className="text-primary hover:underline"
             prefetch={false}
           >
-            {order.poNumber || order.orderNumber}
+            {order.status === 'DRAFT' ? order.orderNumber : order.poNumber ?? order.orderNumber}
           </Link>
         ),
       },

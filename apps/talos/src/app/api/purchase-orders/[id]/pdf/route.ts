@@ -77,8 +77,11 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/'/g, '&#039;')
 }
 
-function renderPurchaseOrderHtml(params: {
-  poNumber: string
+type OrderDocumentType = 'rfq' | 'po'
+
+function renderOrderDocumentHtml(params: {
+  documentType: OrderDocumentType
+  documentNumber: string
   vendorPiNumbers: string[]
   buyerName: string
   buyerAddress: string
@@ -108,6 +111,7 @@ function renderPurchaseOrderHtml(params: {
     totalCost: number | null
   }>
 }): string {
+  const isRfq = params.documentType === 'rfq'
   const logoSrc = '/talos/brand/logo.svg'
 
   // Calculate totals
@@ -132,22 +136,56 @@ function renderPurchaseOrderHtml(params: {
       ? escapeHtml(params.supplierBankingDetails).replace(/\n/g, '<br>')
       : ''
 
+  const normalizeAddressLines = (value: string, omitLine?: string | null): string[] => {
+    const trimmedLines = value
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+
+    const omitNormalized = omitLine?.trim().toLowerCase() ?? null
+    const normalizedLines =
+      omitNormalized && omitNormalized.length > 0
+        ? trimmedLines.filter(line => line.toLowerCase() !== omitNormalized)
+        : trimmedLines
+
+    if (normalizedLines.length === 0) return []
+
+    if (normalizedLines.length === 1) {
+      const commaParts = normalizedLines[0]
+        .split(',')
+        .map(part => part.trim())
+        .filter(part => part.length > 0)
+
+      if (commaParts.length >= 3) {
+        return [commaParts.slice(0, 2).join(', '), commaParts.slice(2).join(', ')]
+      }
+
+      return normalizedLines
+    }
+
+    if (normalizedLines.length > 2) {
+      return [normalizedLines.slice(0, 2).join(', '), normalizedLines.slice(2).join(', ')]
+    }
+
+    return normalizedLines
+  }
+
   const shipToName = params.shipToName && params.shipToName.trim().length > 0
     ? params.shipToName
     : params.buyerName
 
   const shipToAddressHtml = (() => {
-    if (params.shipToAddress && params.shipToAddress.trim().length > 0) {
-      return escapeHtml(params.shipToAddress).replace(/\n/g, '<br>')
-    }
-
     const lines: string[] = []
 
-    const line1 = buyerAddressLines.slice(0, 2).join(', ')
-    if (line1) lines.push(line1)
+    if (params.shipToAddress && params.shipToAddress.trim().length > 0) {
+      lines.push(...normalizeAddressLines(params.shipToAddress, shipToName))
+    } else {
+      const line1 = buyerAddressLines.slice(0, 2).join(', ')
+      if (line1) lines.push(line1)
 
-    const line2 = buyerAddressLines.slice(2).join(', ')
-    if (line2) lines.push(line2)
+      const line2 = buyerAddressLines.slice(2).join(', ')
+      if (line2) lines.push(line2)
+    }
 
     if (params.buyerCountryCode && params.buyerCountryCode.trim().length > 0) {
       lines.push(params.buyerCountryCode.trim().toUpperCase())
@@ -160,32 +198,53 @@ function renderPurchaseOrderHtml(params: {
     return lines.map(escapeHtml).join('<br>')
   })()
 
-  // Build line items HTML
-  const lineItemsHtml = params.lines.map(line => {
-    const unitCost = line.unitCost
-    const lineTotal = line.totalCost ?? (unitCost !== null ? unitCost * line.unitsOrdered : null)
+  const lineItemsHtml = (() => {
+    if (isRfq) {
+      return params.lines
+        .map(line => {
+          return `
+            <tr>
+              <td class="desc-cell">
+                <div class="sku-code">${escapeHtml(line.skuCode)}</div>
+                ${line.skuDescription ? `<div class="sku-detail"><span class="detail-label">Product:</span> ${escapeHtml(line.skuDescription)}</div>` : ''}
+                ${line.packingDetails ? `<div class="sku-detail"><span class="detail-label">Packing:</span> ${escapeHtml(line.packingDetails)}</div>` : ''}
+                ${line.cartonDetails ? `<div class="sku-detail"><span class="detail-label">Carton:</span> ${escapeHtml(line.cartonDetails)}</div>` : ''}
+              </td>
+              <td class="qty-cell">${line.unitsOrdered.toLocaleString()}</td>
+            </tr>
+          `
+        })
+        .join('')
+    }
 
-    return `
-      <tr>
-        <td class="desc-cell">
-          <div class="sku-code">${escapeHtml(line.skuCode)}</div>
-          ${line.skuDescription ? `<div class="sku-detail"><span class="detail-label">Product:</span> ${escapeHtml(line.skuDescription)}</div>` : ''}
-          ${line.packingDetails ? `<div class="sku-detail"><span class="detail-label">Packing:</span> ${escapeHtml(line.packingDetails)}</div>` : ''}
-          ${line.cartonDetails ? `<div class="sku-detail"><span class="detail-label">Carton:</span> ${escapeHtml(line.cartonDetails)}</div>` : ''}
-        </td>
-        <td class="qty-cell">${line.unitsOrdered.toLocaleString()}</td>
-        <td class="price-cell">${unitCost !== null ? formatCurrency(unitCost) : '—'}</td>
-        <td class="total-cell">${lineTotal !== null ? formatCurrency(lineTotal) : '—'}</td>
-      </tr>
-    `
-  }).join('')
+    return params.lines
+      .map(line => {
+        const unitCost = line.unitCost
+        const lineTotal = line.totalCost ?? (unitCost !== null ? unitCost * line.unitsOrdered : null)
+
+        return `
+          <tr>
+            <td class="desc-cell">
+              <div class="sku-code">${escapeHtml(line.skuCode)}</div>
+              ${line.skuDescription ? `<div class="sku-detail"><span class="detail-label">Product:</span> ${escapeHtml(line.skuDescription)}</div>` : ''}
+              ${line.packingDetails ? `<div class="sku-detail"><span class="detail-label">Packing:</span> ${escapeHtml(line.packingDetails)}</div>` : ''}
+              ${line.cartonDetails ? `<div class="sku-detail"><span class="detail-label">Carton:</span> ${escapeHtml(line.cartonDetails)}</div>` : ''}
+            </td>
+            <td class="qty-cell">${line.unitsOrdered.toLocaleString()}</td>
+            <td class="price-cell">${unitCost !== null ? formatCurrency(unitCost) : '—'}</td>
+            <td class="total-cell">${lineTotal !== null ? formatCurrency(lineTotal) : '—'}</td>
+          </tr>
+        `
+      })
+      .join('')
+  })()
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Purchase Order ${escapeHtml(params.poNumber)}</title>
+  <title>${isRfq ? 'RFQ' : 'Purchase Order'} ${escapeHtml(params.documentNumber)}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -335,6 +394,23 @@ function renderPurchaseOrderHtml(params: {
       font-size: 11px;
       color: #475569;
       line-height: 1.6;
+    }
+
+    .banking-label {
+      display: block;
+      margin-top: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .banking-details {
+      display: block;
+      font-size: 10px;
+      color: #64748b;
+      line-height: 1.5;
     }
 
     /* Table */
@@ -566,7 +642,7 @@ function renderPurchaseOrderHtml(params: {
     }
   </style>
 </head>
-<body>
+  <body>
   <button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button>
 
   <!-- Page 1 -->
@@ -577,22 +653,22 @@ function renderPurchaseOrderHtml(params: {
           <img class="logo" src="${logoSrc}" alt="Targon" />
           <div class="company-address">
             ${buyerAddressLines.slice(0, 2).join(', ')}<br>
-            ${buyerAddressLines.slice(2).join(', ')}<br>
-            ${params.buyerPhone ? `Phone: ${params.buyerPhone}` : ''}
+            ${buyerAddressLines.slice(2).join(', ')}
+            ${params.buyerPhone ? `<br>Phone: ${params.buyerPhone}` : ''}
           </div>
         </div>
         <div class="po-title-section">
-          <div class="po-title">PURCHASE<br>ORDER</div>
+          <div class="po-title">${isRfq ? 'REQUEST<br>FOR QUOTE' : 'PURCHASE<br>ORDER'}</div>
           <div class="po-meta">
             <div class="po-meta-row">
-              <span class="po-meta-label">PO Number:</span>
-              <span class="po-meta-value">${escapeHtml(params.poNumber)}</span>
+              <span class="po-meta-label">${isRfq ? 'RFQ Number:' : 'PO Number:'}</span>
+              <span class="po-meta-value">${escapeHtml(params.documentNumber)}</span>
             </div>
             <div class="po-meta-row">
               <span class="po-meta-label">Date:</span>
               <span class="po-meta-value">${formatDate(params.createdAt)}</span>
             </div>
-            ${params.vendorPiNumbers.length > 0 ? `
+            ${!isRfq && params.vendorPiNumbers.length > 0 ? `
             <div class="po-meta-row">
               <span class="po-meta-label">Vendor PI${params.vendorPiNumbers.length === 1 ? '' : 's'}:</span>
               <span class="po-meta-value">${escapeHtml(params.vendorPiNumbers.join(', '))}</span>
@@ -613,6 +689,10 @@ function renderPurchaseOrderHtml(params: {
           <div class="party-address">
             ${supplierAddressHtml}
             ${params.supplierPhone ? `<br>Tel: ${escapeHtml(params.supplierPhone)}` : ''}
+            ${!isRfq && supplierBankingHtml ? `
+              <span class="banking-label">Banking</span>
+              <span class="banking-details">${supplierBankingHtml}</span>
+            ` : ''}
           </div>
         </div>
         <div class="party">
@@ -627,8 +707,10 @@ function renderPurchaseOrderHtml(params: {
           <tr>
             <th>Description & Packing Details</th>
             <th>Qty</th>
-            <th>Unit Price</th>
-            <th>Total</th>
+            ${isRfq ? '' : `
+              <th>Unit Price</th>
+              <th>Total</th>
+            `}
           </tr>
         </thead>
         <tbody>
@@ -636,21 +718,23 @@ function renderPurchaseOrderHtml(params: {
         </tbody>
       </table>
 
-      <div class="totals-section">
-        <div class="totals-box">
-          <div class="total-row">
-            <span class="total-label">Total Amount (USD):</span>
-            <span class="total-value">${formatCurrency(grandTotal)}</span>
-          </div>
-          <div class="total-row balance">
-            <span class="total-label">BALANCE DUE:</span>
-            <span class="total-value">${formatCurrency(grandTotal)}</span>
-          </div>
-          <div class="amount-words">
-            SAY TOTAL U.S. DOLLARS ${amountInWords.toUpperCase()}.
+      ${isRfq ? '' : `
+        <div class="totals-section">
+          <div class="totals-box">
+            <div class="total-row">
+              <span class="total-label">Total Amount (USD):</span>
+              <span class="total-value">${formatCurrency(grandTotal)}</span>
+            </div>
+            <div class="total-row balance">
+              <span class="total-label">BALANCE DUE:</span>
+              <span class="total-value">${formatCurrency(grandTotal)}</span>
+            </div>
+            <div class="amount-words">
+              SAY TOTAL U.S. DOLLARS ${amountInWords.toUpperCase()}.
+            </div>
           </div>
         </div>
-      </div>
+      `}
     </div>
     <div class="footer">Page 1 of 2</div>
   </div>
@@ -658,11 +742,11 @@ function renderPurchaseOrderHtml(params: {
   <!-- Page 2 -->
   <div class="page">
     <div class="page-content">
-      <div class="page-ref">CONTINUATION SHEET - REF: PO ${escapeHtml(params.poNumber)}</div>
+      <div class="page-ref">CONTINUATION SHEET - REF: ${escapeHtml(params.documentNumber)}</div>
 
       <div class="terms-notes">
         <div class="info-box">
-          <div class="info-box-title">Terms & Conditions</div>
+          <div class="info-box-title">${isRfq ? 'RFQ Details' : 'Terms & Conditions'}</div>
           ${params.expectedDate ? `
           <div class="info-row">
             <span class="info-label">Delivery:</span>
@@ -671,14 +755,8 @@ function renderPurchaseOrderHtml(params: {
           ` : ''}
           ${params.paymentTerms ? `
           <div class="info-row">
-            <span class="info-label">Payment Terms:</span><br>
+            <span class="info-label">${isRfq ? 'Requested Payment Terms:' : 'Payment Terms:'}</span><br>
             <span class="info-value">${escapeHtml(params.paymentTerms)}</span>
-          </div>
-          ` : ''}
-          ${supplierBankingHtml ? `
-          <div class="info-row">
-            <span class="info-label">Banking:</span><br>
-            <span class="info-value">${supplierBankingHtml}</span>
           </div>
           ` : ''}
           ${params.incoterms ? `
@@ -741,8 +819,9 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   let supplierBankingDetails: string | null = null
   if (order.counterpartyName) {
     const prisma = await getTenantPrisma()
+    const supplierName = order.counterpartyName.trim()
     const supplier = await prisma.supplier.findFirst({
-      where: { name: order.counterpartyName },
+      where: { name: { equals: supplierName, mode: 'insensitive' } },
       select: { address: true, phone: true, bankingDetails: true },
     })
     if (!supplierAddress) {
@@ -755,7 +834,10 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const tenant = await getCurrentTenant()
   const buyerVatNumber = getBuyerVatNumber(tenant.code)
 
-  const poNumber = order.poNumber ?? toPublicOrderNumber(order.orderNumber)
+  const documentType: OrderDocumentType = order.status === 'DRAFT' ? 'rfq' : 'po'
+  const documentNumber = toPublicOrderNumber(
+    documentType === 'rfq' ? order.orderNumber : order.poNumber ?? order.orderNumber
+  )
 
   const vendorPiNumbers: string[] = []
   for (const pi of order.proformaInvoices) {
@@ -780,15 +862,16 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     totalCost: toNumber(line.totalCost),
   }))
 
-  const html = renderPurchaseOrderHtml({
-    poNumber,
+  const html = renderOrderDocumentHtml({
+    documentType,
+    documentNumber,
     vendorPiNumbers,
     buyerName: BUYER_LEGAL_ENTITY.name,
     buyerAddress: BUYER_LEGAL_ENTITY.address,
-    buyerPhone: '785-370-3532',
+    buyerPhone: BUYER_LEGAL_ENTITY.phone,
     buyerCountryCode: tenant.code,
     buyerVatNumber,
-    supplierName: order.counterpartyName ?? '',
+    supplierName: order.counterpartyName?.trim() ?? '',
     supplierAddress,
     supplierPhone,
     supplierBankingDetails,
