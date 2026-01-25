@@ -89,35 +89,35 @@ export function WorldMap({ className }: WorldMapProps) {
   }
 
   return (
-    <div className={cn('relative h-screen bg-slate-950 overflow-y-auto', className)}>
+    <div className={cn('relative h-screen bg-slate-950 overflow-hidden', className)}>
       {/* Animated background grid */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]" />
 
       {/* Glow effects */}
-      <div className="fixed top-1/3 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
-      <div className="fixed top-1/3 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
+      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center px-4 py-8 min-h-full">
+      <div className="relative z-10 flex flex-col items-center justify-between h-full px-4 py-4 lg:py-6">
         {/* Header */}
-        <div className="text-center mb-2 lg:mb-4">
-          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-2 lg:mb-4 tracking-tight">
+        <div className="text-center shrink-0">
+          <h1 className="text-3xl lg:text-4xl font-bold text-white mb-1 tracking-tight">
             Talos
           </h1>
-          <p className="text-lg lg:text-xl text-slate-400">
+          <p className="text-base lg:text-lg text-slate-400">
             Select your region to continue
           </p>
         </div>
 
-        {/* World Map */}
-        <div className="relative w-full max-w-4xl lg:max-w-5xl">
+        {/* World Map - flex-1 to take available space */}
+        <div className="relative w-full max-w-3xl lg:max-w-4xl flex-1 min-h-0 flex items-center">
           <ComposableMap
             projection="geoMercator"
             projectionConfig={{
               scale: 120,
               center: [-20, 40],
             }}
-            style={{ width: '100%', height: 'auto' }}
+            style={{ width: '100%', height: '100%' }}
           >
             {/* Countries */}
             <Geographies geography={GEO_URL}>
@@ -216,7 +216,7 @@ export function WorldMap({ className }: WorldMapProps) {
         </div>
 
         {/* Region cards */}
-        <div className="mt-4 lg:mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 w-full max-w-2xl">
+        <div className="shrink-0 grid grid-cols-2 gap-3 lg:gap-4 w-full max-w-xl lg:max-w-2xl">
           {tenants.map((tenant) => {
             const hasAccess = canAccessTenant(tenant.code)
             const isDisabled = selecting !== null || !hasAccess
@@ -227,7 +227,7 @@ export function WorldMap({ className }: WorldMapProps) {
               onClick={() => handleSelectTenant(tenant)}
               disabled={isDisabled}
               className={cn(
-                'group relative overflow-hidden rounded-2xl p-4 lg:p-6 text-left transition-all duration-300',
+                'group relative overflow-hidden rounded-xl p-3 lg:p-4 text-left transition-all duration-300',
                 'bg-slate-900/50 border border-slate-800',
                 hasAccess && 'hover:bg-slate-900 hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-900/50',
                 'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950',
@@ -248,25 +248,25 @@ export function WorldMap({ className }: WorldMapProps) {
               />
 
               <div className="relative">
-                <div className="flex items-center gap-4 mb-3">
-                  <span className="text-4xl">{tenant.flag}</span>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl lg:text-3xl">{tenant.flag}</span>
                   <div>
-                    <h3 className="text-xl font-semibold text-white">
+                    <h3 className="text-base lg:text-lg font-semibold text-white">
                       {tenant.displayName}
                     </h3>
-                    <p className="text-sm text-slate-400">{tenant.name}</p>
+                    <p className="text-xs lg:text-sm text-slate-400">{tenant.name}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-slate-400">
+                <div className="flex items-center justify-between text-xs lg:text-sm text-slate-400">
                   <span>{tenant.timezone.replace('_', ' ')}</span>
                   <span
-                    className="flex items-center gap-2 font-medium transition-colors group-hover:text-white"
+                    className="flex items-center gap-1.5 font-medium transition-colors group-hover:text-white"
                     style={{ color: selecting === tenant.code ? tenant.color : undefined }}
                   >
                     {selecting === tenant.code ? (
                       <>
-                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-3 w-3 lg:h-4 lg:w-4" viewBox="0 0 24 24">
                           <circle
                             className="opacity-25"
                             cx="12"
@@ -290,7 +290,7 @@ export function WorldMap({ className }: WorldMapProps) {
                       <>
                         Enter
                         <svg
-                          className="w-4 h-4 transition-transform group-hover:translate-x-1"
+                          className="w-3 h-3 lg:w-4 lg:h-4 transition-transform group-hover:translate-x-1"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -314,13 +314,13 @@ export function WorldMap({ className }: WorldMapProps) {
 
         {/* Error message */}
         {error && (
-          <div className="mt-6 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="shrink-0 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
             {error}
           </div>
         )}
 
         {/* Footer */}
-        <p className="mt-4 lg:mt-8 pb-4 text-sm text-slate-500">
+        <p className="shrink-0 text-xs lg:text-sm text-slate-500">
           Each region operates as an independent warehouse system
         </p>
       </div>
