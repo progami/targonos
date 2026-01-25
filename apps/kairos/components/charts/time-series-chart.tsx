@@ -11,6 +11,7 @@ import {
   YAxis,
   Line,
 } from './recharts-components';
+import type { TooltipContentProps } from 'recharts';
 
 type TimeSeriesPoint = {
   t: string;
@@ -118,12 +119,12 @@ export function TimeSeriesChart({ data, granularity }: TimeSeriesChartProps) {
             domain={[yAxisBounds.min, yAxisBounds.max]}
           />
 
-          <Tooltip
-            content={({ active, payload }) => {
-              if (!active || !payload?.[0]) return null;
-              const point = payload[0].payload as ChartDataPoint;
-              return (
-                <div className="rounded-lg border bg-background p-2.5 shadow-md">
+	          <Tooltip
+	            content={({ active, payload }: TooltipContentProps<number, string>) => {
+	              if (!active || !payload?.[0]) return null;
+	              const point = payload[0].payload as ChartDataPoint;
+	              return (
+	                <div className="rounded-lg border bg-background p-2.5 shadow-md">
                   <p className="text-xs font-medium text-foreground">
                     {new Date(point.date).toLocaleDateString('en-US', {
                       weekday: 'short',
