@@ -260,8 +260,8 @@ export function MainNav() {
             "mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2",
             isTabletCollapsed && "md:hidden lg:block"
           )}>
-            {/* Region Indicator */}
-            <TenantIndicator collapsed={isTabletCollapsed} showLogout={false} />
+            {/* Region Indicator with Switch Button */}
+            <TenantIndicator collapsed={isTabletCollapsed} />
 
             {/* Theme Toggle */}
             <ThemeToggle collapsed={isTabletCollapsed} />
@@ -386,7 +386,7 @@ export function MainNav() {
 
                 {/* Mobile Sidebar Footer - Region, Theme, Logout */}
                 <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2 -mx-2">
-                  <TenantIndicator showLogout={false} />
+                  <TenantIndicator />
                   <ThemeToggle />
                   <button
                     onClick={() => {
