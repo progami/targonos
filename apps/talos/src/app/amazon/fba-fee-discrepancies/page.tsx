@@ -450,6 +450,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         title="FBA Fee Discrepancies"
         description="Amazon"
         icon={DollarSign}
+        backHref="/config/products"
+        backLabel="Products"
       />
 
       <PageContent className="space-y-6">
