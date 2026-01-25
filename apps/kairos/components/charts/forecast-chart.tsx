@@ -12,6 +12,7 @@ import {
   YAxis,
   Line,
 } from './recharts-components';
+import type { TooltipContentProps } from 'recharts';
 import { cn } from '@/lib/utils';
 
 type ForecastPointRow = {
@@ -177,7 +178,7 @@ export function ForecastChart({ data, granularity, intervalLevel = 0.8 }: Foreca
             />
 
             <Tooltip
-              content={({ active, payload }) => {
+              content={({ active, payload }: TooltipContentProps<number, string>) => {
                 if (!active || !payload?.[0]) return null;
                 const point = payload[0].payload as ChartDataPoint;
                 return (
