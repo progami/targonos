@@ -226,8 +226,12 @@ export function PurchaseOrdersPanel({
       {
         key: 'supplier',
         header: 'Supplier',
-        tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-        render: order => order.counterpartyName || '—',
+        tdClassName: 'px-3 py-2 text-muted-foreground',
+        render: order => (
+          <span className="block max-w-[200px] truncate" title={order.counterpartyName || undefined}>
+            {order.counterpartyName || '—'}
+          </span>
+        ),
       },
       {
         key: 'created-by',
@@ -355,7 +359,9 @@ export function PurchaseOrdersPanel({
             header: 'Payment Terms',
             tdClassName: 'px-3 py-2 text-muted-foreground',
             render: order => (
-              <span className="block max-w-[220px] truncate">{order.paymentTerms || '—'}</span>
+              <span className="block max-w-[160px] truncate" title={order.paymentTerms || undefined}>
+                {order.paymentTerms || '—'}
+              </span>
             ),
           }
         )
@@ -482,8 +488,8 @@ export function PurchaseOrdersPanel({
       </div>
 
 	      <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-soft">
-	        <div className="overflow-x-auto">
-	          <table className="w-full min-w-[960px] table-auto text-sm">
+	        <div className="overflow-hidden">
+	          <table className="w-full table-fixed text-sm">
 	            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
 	              <tr>
 	                {columns.map(column => (
