@@ -325,6 +325,8 @@ model PurchaseOrder {
   id               String              @id @default(uuid())
   orderNumber      String              @map("order_number")
   poNumber         String?             @unique @map("po_number") // Auto-generated PO-0001 format
+  splitGroupId     String?             @map("split_group_id")
+  splitParentId    String?             @map("split_parent_id")
   type             PurchaseOrderType
   status           PurchaseOrderStatus @default(DRAFT)
   counterpartyName String?             @map("counterparty_name")
@@ -472,6 +474,7 @@ model PurchaseOrder {
   @@index([type, status])
   @@index([isLegacy])
   @@index([warehouseCode])
+  @@index([splitGroupId])
   @@map("purchase_orders")
 }
 
@@ -666,6 +669,9 @@ model PurchaseOrderLine {
   packagingType      String?                @map("packaging_type")
   storageCartonsPerPallet  Int?             @map("storage_cartons_per_pallet")
   shippingCartonsPerPallet Int?             @map("shipping_cartons_per_pallet")
+  cartonRangeStart   Int?                   @map("carton_range_start")
+  cartonRangeEnd     Int?                   @map("carton_range_end")
+  cartonRangeTotal   Int?                   @map("carton_range_total")
   unitsOrdered      Int                     @map("units_ordered")
   unitsPerCarton    Int                     @map("units_per_carton")
   quantity          Int

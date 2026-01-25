@@ -6,7 +6,7 @@ import {
   serializePurchaseOrder,
   getValidNextStages,
 } from '@/lib/services/po-stage-service'
-import type { UserContext } from '@/lib/services/po-stage-service'
+import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
 
 const DateInputSchema = z
   .string()
@@ -75,6 +75,14 @@ const OptionalInt = z.preprocess((value) => {
       totalCartons: OptionalInt,
       totalPallets: OptionalInt,
       packagingNotes: OptionalString,
+      splitAllocations: z
+        .array(
+          z.object({
+            lineId: z.string().trim().min(1),
+            shipNowCartons: OptionalInt,
+          })
+        )
+        .optional(),
 
       // ===========================================
       // Stage 3: Ocean
@@ -162,7 +170,7 @@ export const PATCH = withAuthAndParams(
       const order = await transitionPurchaseOrderStage(
         id,
         result.data.targetStatus as PurchaseOrderStatus,
-        result.data.stageData,
+        result.data.stageData as StageTransitionInput,
         userContext
       )
       return ApiResponses.success(serializePurchaseOrder(order))

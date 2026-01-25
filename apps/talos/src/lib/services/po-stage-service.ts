@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import {
   CostCategory,
@@ -224,6 +225,10 @@ export interface StageTransitionInput {
   totalCartons?: number
   totalPallets?: number
   packagingNotes?: string
+  splitAllocations?: Array<{
+    lineId: string
+    shipNowCartons?: number
+  }>
 
   // Stage 3: Ocean
   houseBillOfLading?: string
@@ -284,6 +289,7 @@ const STAGE_EDITABLE_FIELDS: Partial<Record<PurchaseOrderStatus, Array<keyof Sta
       'totalCartons',
       'totalPallets',
       'packagingNotes',
+      'splitAllocations',
       'manufacturingStart',
       'manufacturingEnd',
       'cargoDetails',
@@ -654,6 +660,60 @@ async function validateTransitionGate(params: {
   }
 
   if (params.targetStatus === PurchaseOrderStatus.OCEAN) {
+    const allocationRows = Array.isArray(params.stageData.splitAllocations)
+      ? params.stageData.splitAllocations
+      : null
+    const allocationsByLineId = new Map<string, number>()
+    if (allocationRows) {
+      for (const row of allocationRows) {
+        const lineId = typeof row?.lineId === 'string' ? row.lineId : ''
+        const shipNowCartons = typeof row?.shipNowCartons === 'number' ? row.shipNowCartons : null
+        if (!lineId) continue
+        if (shipNowCartons === null) continue
+        allocationsByLineId.set(lineId, shipNowCartons)
+      }
+    }
+
+    let totalShipNowCartons = 0
+    for (const line of activeLines) {
+      const shipNowCartons = allocationsByLineId.get(line.id)
+      if (shipNowCartons === undefined) {
+        recordGateIssue(
+          issues,
+          `cargo.lines.${line.id}.shipNowCartons`,
+          'Dispatch cartons (ship now) is required'
+        )
+        continue
+      }
+
+      if (!Number.isInteger(shipNowCartons) || shipNowCartons < 0) {
+        recordGateIssue(
+          issues,
+          `cargo.lines.${line.id}.shipNowCartons`,
+          'Dispatch cartons (ship now) must be a non-negative integer'
+        )
+        continue
+      }
+
+      const range = resolveLineCartonRange(line)
+      const availableCartons = range.end - range.start + 1
+
+      if (shipNowCartons > availableCartons) {
+        recordGateIssue(
+          issues,
+          `cargo.lines.${line.id}.shipNowCartons`,
+          `Dispatch cartons (ship now) cannot exceed ${availableCartons}`
+        )
+        continue
+      }
+
+      totalShipNowCartons += shipNowCartons
+    }
+
+    if (totalShipNowCartons <= 0) {
+      recordGateIssue(issues, 'cargo.lines', 'At least one carton must be dispatched')
+    }
+
     const manufacturingStartDate = resolveOrderDate(
       'manufacturingStartDate',
       params.stageData,
@@ -914,6 +974,42 @@ function parseDimensionsCm(value: string | null | undefined): [number, number, n
   const [a, b, c] = matches.slice(0, 3).map(n => Number(n))
   if (![a, b, c].every(n => Number.isFinite(n) && n > 0)) return null
   return [a, b, c]
+}
+
+function resolveLineCartonRange(line: Pick<
+  PurchaseOrderLine,
+  'id' | 'quantity' | 'cartonRangeStart' | 'cartonRangeEnd' | 'cartonRangeTotal'
+>): { start: number; end: number; total: number } {
+  const start = line.cartonRangeStart ?? null
+  const end = line.cartonRangeEnd ?? null
+  const total = line.cartonRangeTotal ?? null
+
+  if (start === null && end === null && total === null) {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new ValidationError(`Invalid carton quantity for line ${line.id}`)
+    }
+    return { start: 1, end: line.quantity, total: line.quantity }
+  }
+
+  if (start === null || end === null || total === null) {
+    throw new ValidationError(`Carton range is incomplete for line ${line.id}`)
+  }
+
+  if (!Number.isInteger(start) || !Number.isInteger(end) || !Number.isInteger(total)) {
+    throw new ValidationError(`Carton range is invalid for line ${line.id}`)
+  }
+  if (start <= 0 || end < start) {
+    throw new ValidationError(`Carton range is invalid for line ${line.id}`)
+  }
+  if (total <= 0 || end > total) {
+    throw new ValidationError(`Carton range is invalid for line ${line.id}`)
+  }
+  const expectedQuantity = end - start + 1
+  if (expectedQuantity !== line.quantity) {
+    throw new ValidationError(`Carton range does not match quantity for line ${line.id}`)
+  }
+
+  return { start, end, total }
 }
 
 function computeCartonVolumeCbm(input: {
@@ -1805,6 +1901,244 @@ export async function transitionPurchaseOrderStage(
       break
   }
 
+  const isDispatchTransition =
+    currentStatus === PurchaseOrderStatus.MANUFACTURING && targetStatus === PurchaseOrderStatus.OCEAN
+
+  const allocationRows =
+    isDispatchTransition && Array.isArray(filteredStageData.splitAllocations)
+      ? filteredStageData.splitAllocations
+      : null
+
+  type RemainderLineSeed = Omit<Prisma.PurchaseOrderLineCreateManyInput, 'purchaseOrderId'>
+  type DispatchSplitPlan = {
+    groupId: string
+    shippingLineUpdates: Array<{ lineId: string; data: Prisma.PurchaseOrderLineUpdateInput }>
+    remainderLineSeeds: RemainderLineSeed[]
+    shippingTotals: Awaited<ReturnType<typeof computeManufacturingCargoTotals>>
+    remainderTotals: Awaited<ReturnType<typeof computeManufacturingCargoTotals>>
+  }
+
+  const buildDispatchSplitPlan = async (): Promise<DispatchSplitPlan | null> => {
+    if (!isDispatchTransition || !allocationRows) return null
+
+    const allocationsByLineId = new Map<string, number>()
+    for (const row of allocationRows) {
+      if (!row) continue
+      const lineId = row.lineId
+      if (typeof lineId !== 'string' || lineId.trim().length === 0) {
+        throw new ValidationError('Dispatch allocation is missing a lineId')
+      }
+      const shipNowCartons = row.shipNowCartons
+      if (typeof shipNowCartons !== 'number' || !Number.isInteger(shipNowCartons) || shipNowCartons < 0) {
+        throw new ValidationError(`Dispatch cartons (ship now) is invalid for line ${lineId}`)
+      }
+      allocationsByLineId.set(lineId, shipNowCartons)
+    }
+
+    const activeLines = order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
+
+    const shippingLineUpdates: Array<{ lineId: string; data: Prisma.PurchaseOrderLineUpdateInput }> = []
+    const remainderLineSeeds: RemainderLineSeed[] = []
+
+    let hasRemainder = false
+
+    const shippingLinesForTotals: PurchaseOrderLine[] = []
+    const remainderLinesForTotals: PurchaseOrderLine[] = []
+
+    for (const line of activeLines) {
+      const shipNowCartons = allocationsByLineId.get(line.id)
+      if (shipNowCartons === undefined) {
+        throw new ValidationError(`Dispatch allocation is missing for line ${line.id}`)
+      }
+
+      const currentRange = resolveLineCartonRange(line)
+      const availableCartons = currentRange.end - currentRange.start + 1
+      if (shipNowCartons > availableCartons) {
+        throw new ValidationError(`Dispatch cartons (ship now) cannot exceed ${availableCartons} for line ${line.id}`)
+      }
+
+      const unitCost =
+        line.unitCost !== null && line.unitCost !== undefined
+          ? new Prisma.Decimal(line.unitCost)
+          : line.totalCost !== null && line.totalCost !== undefined && line.unitsOrdered > 0
+            ? new Prisma.Decimal(line.totalCost).div(line.unitsOrdered)
+            : null
+
+      if (unitCost === null) {
+        throw new ValidationError(`Missing unit cost for line ${line.skuCode}${line.batchLot ? ` (${line.batchLot})` : ''}`)
+      }
+
+      const originalTotalCost =
+        line.totalCost !== null && line.totalCost !== undefined ? new Prisma.Decimal(line.totalCost) : null
+      if (originalTotalCost === null) {
+        throw new ValidationError(`Missing total cost for line ${line.skuCode}${line.batchLot ? ` (${line.batchLot})` : ''}`)
+      }
+
+      const shipNowUnits = shipNowCartons * line.unitsPerCarton
+      const remainderCartons = availableCartons - shipNowCartons
+      const remainderUnits = remainderCartons * line.unitsPerCarton
+
+      const shipNowCostRaw = unitCost.mul(shipNowUnits)
+      const shipNowCostRounded =
+        shipNowUnits === 0
+          ? new Prisma.Decimal('0')
+          : shipNowUnits === line.unitsOrdered
+            ? originalTotalCost
+            : new Prisma.Decimal(shipNowCostRaw.toFixed(2))
+      const remainderCostRounded =
+        shipNowUnits === 0
+          ? originalTotalCost
+          : shipNowUnits === line.unitsOrdered
+            ? new Prisma.Decimal('0')
+            : originalTotalCost.minus(shipNowCostRounded)
+
+      const shipNowRange =
+        shipNowCartons === 0
+          ? null
+          : {
+              start: currentRange.start,
+              end: currentRange.start + shipNowCartons - 1,
+              total: currentRange.total,
+            }
+
+      if (shipNowRange && shipNowRange.end > currentRange.end) {
+        throw new ValidationError(`Dispatch carton range exceeds available cartons for line ${line.id}`)
+      }
+
+      if (remainderCartons > 0) {
+        hasRemainder = true
+        const remainderRangeStart = shipNowRange ? shipNowRange.end + 1 : currentRange.start
+
+        remainderLineSeeds.push({
+          skuCode: line.skuCode,
+          skuDescription: line.skuDescription,
+          batchLot: line.batchLot,
+          piNumber: line.piNumber,
+          productNumber: line.productNumber,
+          commodityCode: line.commodityCode,
+          countryOfOrigin: line.countryOfOrigin,
+          netWeightKg: line.netWeightKg,
+          material: line.material,
+          cartonDimensionsCm: line.cartonDimensionsCm,
+          cartonSide1Cm: line.cartonSide1Cm,
+          cartonSide2Cm: line.cartonSide2Cm,
+          cartonSide3Cm: line.cartonSide3Cm,
+          cartonWeightKg: line.cartonWeightKg,
+          packagingType: line.packagingType,
+          storageCartonsPerPallet: line.storageCartonsPerPallet,
+          shippingCartonsPerPallet: line.shippingCartonsPerPallet,
+          cartonRangeStart: remainderRangeStart,
+          cartonRangeEnd: currentRange.end,
+          cartonRangeTotal: currentRange.total,
+          unitsOrdered: remainderUnits,
+          unitsPerCarton: line.unitsPerCarton,
+          quantity: remainderCartons,
+          unitCost: new Prisma.Decimal(unitCost.toFixed(4)),
+          totalCost: new Prisma.Decimal(remainderCostRounded.toFixed(2)),
+          currency: line.currency,
+          status: PurchaseOrderLineStatus.PENDING,
+          postedQuantity: 0,
+          quantityReceived: null,
+          lineNotes: line.lineNotes,
+        })
+
+        remainderLinesForTotals.push({
+          ...line,
+          id: line.id,
+          status: PurchaseOrderLineStatus.PENDING,
+          quantity: remainderCartons,
+          unitsOrdered: remainderUnits,
+          totalCost: new Prisma.Decimal(remainderCostRounded.toFixed(2)),
+          cartonRangeStart: remainderRangeStart,
+          cartonRangeEnd: currentRange.end,
+          cartonRangeTotal: currentRange.total,
+        })
+      }
+
+      if (shipNowCartons === 0) {
+        shippingLineUpdates.push({
+          lineId: line.id,
+          data: {
+            status: PurchaseOrderLineStatus.CANCELLED,
+            quantity: 0,
+            unitsOrdered: 0,
+            unitCost: null,
+            totalCost: new Prisma.Decimal('0'),
+            cartonRangeStart: null,
+            cartonRangeEnd: null,
+            cartonRangeTotal: null,
+            postedQuantity: 0,
+            quantityReceived: null,
+          },
+        })
+        shippingLinesForTotals.push({
+          ...line,
+          id: line.id,
+          status: PurchaseOrderLineStatus.CANCELLED,
+          quantity: 0,
+        })
+        continue
+      }
+
+      shippingLineUpdates.push({
+        lineId: line.id,
+        data: {
+          status: PurchaseOrderLineStatus.PENDING,
+          quantity: shipNowCartons,
+          unitsOrdered: shipNowUnits,
+          unitCost: new Prisma.Decimal(unitCost.toFixed(4)),
+          totalCost: new Prisma.Decimal(shipNowCostRounded.toFixed(2)),
+          cartonRangeStart: shipNowRange?.start ?? null,
+          cartonRangeEnd: shipNowRange?.end ?? null,
+          cartonRangeTotal: shipNowRange?.total ?? null,
+        },
+      })
+
+      shippingLinesForTotals.push({
+        ...line,
+        id: line.id,
+        status: PurchaseOrderLineStatus.PENDING,
+        quantity: shipNowCartons,
+        unitsOrdered: shipNowUnits,
+        totalCost: new Prisma.Decimal(shipNowCostRounded.toFixed(2)),
+        cartonRangeStart: shipNowRange?.start ?? null,
+        cartonRangeEnd: shipNowRange?.end ?? null,
+        cartonRangeTotal: shipNowRange?.total ?? null,
+      })
+    }
+
+    if (!hasRemainder) {
+      return null
+    }
+
+    const groupId = order.splitGroupId ?? randomUUID()
+
+    const shippingTotals = await computeManufacturingCargoTotals(shippingLinesForTotals)
+    const remainderTotals = await computeManufacturingCargoTotals(remainderLinesForTotals)
+
+    return {
+      groupId,
+      shippingLineUpdates,
+      remainderLineSeeds,
+      shippingTotals,
+      remainderTotals,
+    }
+  }
+
+  const dispatchSplitPlan = await buildDispatchSplitPlan()
+
+  const dispatchSplitGeneratedAt = dispatchSplitPlan ? now : null
+  if (dispatchSplitPlan) {
+    updateData.splitGroupId = dispatchSplitPlan.groupId
+    updateData.totalCartons = dispatchSplitPlan.shippingTotals.totalCartons
+    updateData.totalPallets = dispatchSplitPlan.shippingTotals.totalPallets
+    updateData.totalWeightKg = dispatchSplitPlan.shippingTotals.totalWeightKg
+    updateData.totalVolumeCbm = dispatchSplitPlan.shippingTotals.totalVolumeCbm
+    updateData.shippingMarksGeneratedAt = dispatchSplitGeneratedAt
+    updateData.shippingMarksGeneratedById = user.id
+    updateData.shippingMarksGeneratedByName = user.name
+  }
+
   const storageCostInputs: Array<{
     warehouseCode: string
     warehouseName: string
@@ -1814,13 +2148,127 @@ export async function transitionPurchaseOrderStage(
     transactionDate: Date
   }> = []
 
+  const MAX_SPLIT_ORDER_ATTEMPTS = 5
+  let createdRemainderOrderId: string | null = null
+
   // Execute the transition + inventory impacts atomically.
-  const updatedOrder = await prisma.$transaction(async tx => {
-    const nextOrder = await tx.purchaseOrder.update({
-      where: { id: orderId },
-      data: updateData,
-      include: { lines: true },
-    })
+  let updatedOrder: PurchaseOrder | null = null
+
+  for (let attempt = 0; attempt < MAX_SPLIT_ORDER_ATTEMPTS; attempt += 1) {
+    createdRemainderOrderId = null
+    const remainderOrderNumber = dispatchSplitPlan ? await generateOrderNumber() : null
+
+    try {
+      updatedOrder = await prisma.$transaction(async tx => {
+        if (dispatchSplitPlan && remainderOrderNumber) {
+          for (const update of dispatchSplitPlan.shippingLineUpdates) {
+            await tx.purchaseOrderLine.update({
+              where: { id: update.lineId },
+              data: update.data,
+            })
+          }
+
+          const remainder = await tx.purchaseOrder.create({
+            data: {
+              orderNumber: remainderOrderNumber,
+              poNumber: toPublicOrderNumber(remainderOrderNumber),
+              splitGroupId: dispatchSplitPlan.groupId,
+              splitParentId: order.id,
+              type: order.type,
+              status: PurchaseOrderStatus.MANUFACTURING,
+              counterpartyName: order.counterpartyName,
+              counterpartyAddress: order.counterpartyAddress,
+              notes: order.notes,
+              createdById: user.id,
+              createdByName: user.name,
+              expectedDate: order.expectedDate,
+              incoterms: order.incoterms,
+              paymentTerms: order.paymentTerms,
+              proformaInvoiceNumber: order.proformaInvoiceNumber,
+              proformaInvoiceDate: order.proformaInvoiceDate,
+              factoryName: order.factoryName,
+              manufacturingStartDate: order.manufacturingStartDate,
+              expectedCompletionDate: order.expectedCompletionDate,
+              actualCompletionDate: order.actualCompletionDate,
+              totalWeightKg:
+                dispatchSplitPlan.remainderTotals.totalWeightKg !== null
+                  ? new Prisma.Decimal(dispatchSplitPlan.remainderTotals.totalWeightKg.toFixed(2))
+                  : null,
+              totalVolumeCbm:
+                dispatchSplitPlan.remainderTotals.totalVolumeCbm !== null
+                  ? new Prisma.Decimal(dispatchSplitPlan.remainderTotals.totalVolumeCbm.toFixed(3))
+                  : null,
+              totalCartons: dispatchSplitPlan.remainderTotals.totalCartons,
+              totalPallets: dispatchSplitPlan.remainderTotals.totalPallets,
+              packagingNotes: order.packagingNotes,
+              draftApprovedAt: order.draftApprovedAt,
+              draftApprovedById: order.draftApprovedById,
+              draftApprovedByName: order.draftApprovedByName,
+              shippingMarksGeneratedAt: dispatchSplitGeneratedAt,
+              shippingMarksGeneratedById: user.id,
+              shippingMarksGeneratedByName: user.name,
+            },
+          })
+
+          createdRemainderOrderId = remainder.id
+
+          if (dispatchSplitPlan.remainderLineSeeds.length > 0) {
+            await tx.purchaseOrderLine.createMany({
+              data: dispatchSplitPlan.remainderLineSeeds.map(seed => ({
+                ...seed,
+                purchaseOrderId: remainder.id,
+              })),
+            })
+          }
+
+          const documentsToCopy = await tx.purchaseOrderDocument.findMany({
+            where: {
+              purchaseOrderId: order.id,
+              stage: { in: [PurchaseOrderDocumentStage.DRAFT, PurchaseOrderDocumentStage.MANUFACTURING] },
+            },
+          })
+
+          if (documentsToCopy.length > 0) {
+            await tx.purchaseOrderDocument.createMany({
+              data: documentsToCopy.map(doc => ({
+                purchaseOrderId: remainder.id,
+                stage: doc.stage,
+                documentType: doc.documentType,
+                fileName: doc.fileName,
+                contentType: doc.contentType,
+                size: doc.size,
+                s3Key: doc.s3Key,
+                uploadedAt: doc.uploadedAt,
+                uploadedById: doc.uploadedById,
+                uploadedByName: doc.uploadedByName,
+                metadata: doc.metadata,
+              })),
+            })
+          }
+
+          const invoicesToCopy = await tx.purchaseOrderProformaInvoice.findMany({
+            where: { purchaseOrderId: order.id },
+          })
+
+          if (invoicesToCopy.length > 0) {
+            await tx.purchaseOrderProformaInvoice.createMany({
+              data: invoicesToCopy.map(pi => ({
+                purchaseOrderId: remainder.id,
+                piNumber: pi.piNumber,
+                invoiceDate: pi.invoiceDate,
+                createdAt: pi.createdAt,
+                createdById: pi.createdById,
+                createdByName: pi.createdByName,
+              })),
+            })
+          }
+        }
+
+        const nextOrder = await tx.purchaseOrder.update({
+          where: { id: orderId },
+          data: updateData,
+          include: { lines: true },
+        })
 
     if (filteredStageData.proformaInvoiceNumber !== undefined) {
       const piNumber = filteredStageData.proformaInvoiceNumber?.trim()
@@ -2143,17 +2591,33 @@ export async function transitionPurchaseOrderStage(
       */
     }
 
-    const refreshed = await tx.purchaseOrder.findUnique({
-      where: { id: nextOrder.id },
-      include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
-    })
+        const refreshed = await tx.purchaseOrder.findUnique({
+          where: { id: nextOrder.id },
+          include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+        })
 
-    if (!refreshed) {
-      throw new NotFoundError(`Purchase Order not found after transition: ${nextOrder.id}`)
+        if (!refreshed) {
+          throw new NotFoundError(`Purchase Order not found after transition: ${nextOrder.id}`)
+        }
+
+        return refreshed
+      })
+      break
+    } catch (error) {
+      if (
+        dispatchSplitPlan &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        continue
+      }
+      throw error
     }
+  }
 
-    return refreshed
-  })
+  if (!updatedOrder) {
+    throw new ValidationError('Unable to split purchase order. Please retry.')
+  }
 
   // Audit log the transition
   const auditOldValue: Record<string, unknown> = { status: currentStatus }
@@ -2181,6 +2645,20 @@ export async function transitionPurchaseOrderStage(
     oldValue: auditOldValue,
     newValue: auditNewValue,
   })
+
+  if (createdRemainderOrderId) {
+    await auditLog({
+      userId: user.id,
+      action: 'SPLIT',
+      entityType: 'PurchaseOrder',
+      entityId: orderId,
+      oldValue: { purchaseOrderId: orderId },
+      newValue: {
+        splitGroupId: dispatchSplitPlan?.groupId ?? null,
+        remainderPurchaseOrderId: createdRemainderOrderId,
+      },
+    })
+  }
 
   await Promise.all(
     storageCostInputs.map(input =>
@@ -2910,7 +3388,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
   })
 
   const labels = activeLines.flatMap(line => {
-    const cartons = Math.floor(line.unitsOrdered / line.unitsPerCarton)
+    const cartonRange = resolveLineCartonRange(line)
     const dimsLabel = resolveCartonDimensionsLabel(line) ?? ''
     const commodityLabel = typeof line.commodityCode === 'string' ? formatCommodityCode(line.commodityCode) : ''
     const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
@@ -2921,11 +3399,11 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
 
     const perCarton: string[] = []
-    for (let index = 1; index <= cartons; index += 1) {
+    for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
       perCarton.push(`
         <div class="label">
           <div class="label-header">${escapeHtml(piNumber)} / TARGON/唛头格式</div>
-          <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartons} Ctns</span></div>
+          <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartonRange.total} Ctns</span></div>
           <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
           <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
           <div class="label-row"><span class="k"># of Units</span><span class="v">${line.unitsPerCarton} sets</span></div>
@@ -3181,6 +3659,8 @@ export function serializePurchaseOrder(
     id: order.id,
     orderNumber: toPublicOrderNumber(order.orderNumber),
     poNumber: order.poNumber,
+    splitGroupId: order.splitGroupId ?? null,
+    splitParentId: order.splitParentId ?? null,
     type: order.type,
     status: order.status,
     warehouseCode: order.warehouseCode,
@@ -3251,6 +3731,9 @@ export function serializePurchaseOrder(
         packagingType: line.packagingType ? line.packagingType.trim().toUpperCase() : null,
         storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
         shippingCartonsPerPallet: line.shippingCartonsPerPallet ?? null,
+        cartonRangeStart: line.cartonRangeStart ?? null,
+        cartonRangeEnd: line.cartonRangeEnd ?? null,
+        cartonRangeTotal: line.cartonRangeTotal ?? null,
 	      unitsOrdered: line.unitsOrdered,
 	      unitsPerCarton: line.unitsPerCarton,
 	      quantity: line.quantity,
