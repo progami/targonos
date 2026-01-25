@@ -23,9 +23,6 @@ export default function SupportPage() {
           <Reveal delay={80}>
             <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we&apos;ll help.</p>
           </Reveal>
-          <Reveal delay={80}>
-            <p className="mt-4 max-w-2xl text-base text-muted md:text-lg">Email us and we’ll help.</p>
-          </Reveal>
         </Container>
       </section>
 
