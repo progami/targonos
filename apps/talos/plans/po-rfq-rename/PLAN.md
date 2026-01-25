@@ -47,7 +47,7 @@ Request: rename “Draft” → “RFQ” across the Talos app (UI + PDF + any e
   - Ensure PDF uses “RFQ” for the initial stage/status where applicable.
 
 - [ ] 5. Validation
-  - Verify on `https://dev-targonos.targonglobal.com/talos`:
+  - Verify on `https://dev-os.targonglobal.com/talos`:
     - PO list + detail timeline shows “RFQ” instead of “Draft”
     - Stage transition actions still function
     - PDF/export strings match UI

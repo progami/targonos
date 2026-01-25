@@ -5,7 +5,7 @@ const AUTH_COOKIE_PATTERNS = ['authjs', 'next-auth', '__Secure-', '__Host-', 'cs
 
 export async function GET(request: NextRequest) {
   const cookieDomain = process.env.COOKIE_DOMAIN || '.targonglobal.com'
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://targonos.targonglobal.com'
+  const baseUrl = process.env.NEXTAUTH_URL || 'https://os.targonglobal.com'
 
   // Get provider and callbackUrl for direct signin flow
   const provider = request.nextUrl.searchParams.get('provider')

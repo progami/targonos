@@ -39,10 +39,10 @@ for file in "${required_dev_host_files[@]}"; do
     print_error "Missing expected env file: $file"
     continue
   fi
-  require_contains "$file" 'https://dev-targonos\.targonglobal\.com' \
-    "Dev host https://dev-targonos.targonglobal.com must appear in"
-  forbid_contains "$file" 'https://targonos\.targonglobal\.com' \
-    "Prod host https://targonos.targonglobal.com must not appear in"
+  require_contains "$file" 'https://dev-os\.targonglobal\.com' \
+    "Dev host https://dev-os.targonglobal.com must appear in"
+  forbid_contains "$file" 'https://os\.targonglobal\.com' \
+    "Prod host https://os.targonglobal.com must not appear in"
 done
 
 require_contains "apps/sso/.env.dev" '^PORTAL_APPS_CONFIG=dev\.apps\.json$' \
