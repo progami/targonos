@@ -7,7 +7,7 @@ Goals
 -----
 
 - Single sign-on across `*.targonglobal.com` subdomains
-- One login page at `https://targonos.targonglobal.com/login`
+- One login page at `https://os.targonglobal.com/login`
 - Show a per-user app catalog with deep links
 - Issue a secure, httpOnly, domain-scoped NextAuth session cookie
 
@@ -25,7 +25,7 @@ Environment
 
 - NEXTAUTH_SECRET: strong secret shared by all apps (required)
 - COOKIE_DOMAIN: `.targonglobal.com`
-- NEXTAUTH_URL: `https://targonos.targonglobal.com`
+- NEXTAUTH_URL: `https://os.targonglobal.com`
 - PORTAL_DB_URL: `postgresql://portal_auth:***@localhost:5432/portal_db?schema=auth`
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET: OAuth credentials from the Google Cloud console
 - GOOGLE_ALLOWED_EMAILS: comma or whitespace separated list of permitted Google accounts (e.g. `jarrar@targonglobal.com, mehdi@targonglobal.com`)
