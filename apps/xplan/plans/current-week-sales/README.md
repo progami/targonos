@@ -49,4 +49,4 @@ Today we only fill sales values for *completed* weeks. The current week is exclu
 - [ ] Confirm which screen/table owns the sales fill + `P&L (5)` logic
 - [ ] Locate and remove/adjust the “exclude current week” condition
 - [ ] Add `isIncompleteWeek` visual state (yellow dot) for current week
-- [ ] Verify in Chrome on `https://dev-targonos.targonglobal.com/xplan`
+- [ ] Verify in Chrome on `https://dev-os.targonglobal.com/xplan`

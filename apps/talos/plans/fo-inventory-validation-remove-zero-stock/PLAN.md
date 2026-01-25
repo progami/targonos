@@ -63,7 +63,7 @@ Files:
    - Disable submit if any line fails the rule (selected SKU/batch has no stock / insufficient stock depending on rule).
 
 5) Validation
-   - Browser test on `https://dev-targonos.targonglobal.com/talos/operations/fulfillment-orders/new`:
+   - Browser test on `https://dev-os.targonglobal.com/talos/operations/fulfillment-orders/new`:
      - Creating FO with zero-inventory SKU/batch blocks with a clear message
      - Creating FO with in-stock SKU/batch succeeds
    - Run `pnpm -C apps/talos lint` and `pnpm -C apps/talos type-check`
@@ -80,7 +80,7 @@ Files:
    - Ensure pagination/summary still behaves as expected
 
 3) Validation
-   - Browser test on `https://dev-targonos.targonglobal.com/talos/operations/inventory`:
+   - Browser test on `https://dev-os.targonglobal.com/talos/operations/inventory`:
      - toggle is gone
      - inventory loads and filters still work
    - Run `pnpm -C apps/talos lint` and `pnpm -C apps/talos type-check`

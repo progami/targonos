@@ -7,7 +7,7 @@ const MAIN_DIR =
 module.exports = {
   apps: [
     // ===========================================
-    // DEV ENVIRONMENT (31xx ports) - dev-targonos.targonglobal.com
+    // DEV ENVIRONMENT (31xx ports) - dev-os.targonglobal.com
     // ===========================================
     {
       name: 'dev-targonos',
@@ -105,7 +105,7 @@ module.exports = {
     },
 
     // ===========================================
-    // MAIN ENVIRONMENT (30xx ports) - targonos.targonglobal.com
+    // MAIN ENVIRONMENT (30xx ports) - os.targonglobal.com
     // ===========================================
     {
       name: 'main-targonos',

@@ -22,7 +22,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ## Testing
 
-- Test via Chrome browser at `https://dev-targonos.targonglobal.com/<app>`
+- Test via Chrome browser at `https://dev-os.targonglobal.com/<app>`
 - Do not test on localhost
 - **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.

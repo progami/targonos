@@ -1,5 +1,5 @@
 {
-  "host": "https://worktree.targonos.targonglobal.com",
+  "host": "https://worktree.os.targonglobal.com",
   "apps": {
     "talos": "/talos",
     "kairos": "/kairos/forecasts",
