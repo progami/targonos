@@ -5,17 +5,28 @@ import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
+import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
 const UpdateLineSchema = z.object({
   skuCode: z.string().trim().min(1).optional(),
   skuDescription: z.string().optional(),
   batchLot: z.string().trim().min(1).optional(),
+  piNumber: z.string().trim().nullable().optional(),
+  productNumber: z.string().trim().nullable().optional(),
+  commodityCode: z.string().trim().nullable().optional(),
+  countryOfOrigin: z.string().trim().nullable().optional(),
+  netWeightKg: z.number().positive().nullable().optional(),
+  material: z.string().trim().nullable().optional(),
+  cartonSide1Cm: z.number().positive().nullable().optional(),
+  cartonSide2Cm: z.number().positive().nullable().optional(),
+  cartonSide3Cm: z.number().positive().nullable().optional(),
+  cartonWeightKg: z.number().positive().nullable().optional(),
   unitsOrdered: z.number().int().positive().optional(),
   unitsPerCarton: z.number().int().positive().optional(),
   totalCost: z.number().min(0).nullable().optional(),
   currency: z.string().optional(),
   notes: z.string().nullable().optional(),
-  quantityReceived: z.number().int().min(0).optional(),
+  quantityReceived: z.number().int().min(0).nullable().optional(),
 })
 
 function computeCartonsOrdered(input: {
@@ -86,6 +97,12 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
     batchLot: line.batchLot,
+    piNumber: line.piNumber ?? null,
+    productNumber: line.productNumber ?? null,
+    commodityCode: line.commodityCode ?? null,
+    countryOfOrigin: line.countryOfOrigin ?? null,
+    netWeightKg: toNumberOrNull(line.netWeightKg),
+    material: line.material ?? null,
     cartonDimensionsCm: line.cartonDimensionsCm ?? null,
     cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
     cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
@@ -99,7 +116,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     quantity: line.quantity,
     unitCost: line.unitCost ? Number(line.unitCost) : null,
     totalCost: line.totalCost ? Number(line.totalCost) : null,
-    currency: line.currency || tenant.currency,
+    currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
     quantityReceived: line.quantityReceived,
@@ -154,14 +171,21 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
+  const allowCommercialEdits = order.status === 'DRAFT'
+  const allowIssuedPackagingEdits = order.status === 'ISSUED'
+  const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
 
   // Core fields - only editable in DRAFT
-  if (order.status === 'DRAFT') {
+  if (allowCommercialEdits) {
     if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
       updateData.skuDescription = result.data.skuDescription
     if (result.data.currency !== undefined) updateData.currency = result.data.currency
     if (result.data.notes !== undefined) updateData.lineNotes = result.data.notes
+    if (result.data.piNumber !== undefined) {
+      const trimmed = typeof result.data.piNumber === 'string' ? result.data.piNumber.trim() : ''
+      updateData.piNumber = trimmed.length > 0 ? trimmed.toUpperCase() : null
+    }
 
     const unitsChanged =
       result.data.unitsOrdered !== undefined || result.data.unitsPerCarton !== undefined
@@ -217,11 +241,78 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     }
   }
 
-  // quantityReceived - editable in WAREHOUSE status
-  if (order.status === 'WAREHOUSE' && result.data.quantityReceived !== undefined) {
-    if (result.data.quantityReceived > line.quantity) {
-      return ApiResponses.badRequest('quantityReceived cannot exceed ordered quantity')
+  if (allowShippingMarkEdits) {
+    if (result.data.productNumber !== undefined) {
+      const trimmed = typeof result.data.productNumber === 'string' ? result.data.productNumber.trim() : ''
+      updateData.productNumber = trimmed.length > 0 ? trimmed : null
     }
+    if (result.data.commodityCode !== undefined) {
+      const trimmed = typeof result.data.commodityCode === 'string' ? result.data.commodityCode.trim() : ''
+      updateData.commodityCode = trimmed.length > 0 ? trimmed : null
+    }
+    if (result.data.countryOfOrigin !== undefined) {
+      const trimmed = typeof result.data.countryOfOrigin === 'string' ? result.data.countryOfOrigin.trim() : ''
+      updateData.countryOfOrigin = trimmed.length > 0 ? trimmed : null
+    }
+    if (result.data.material !== undefined) {
+      const trimmed = typeof result.data.material === 'string' ? result.data.material.trim() : ''
+      updateData.material = trimmed.length > 0 ? trimmed : null
+    }
+    if (result.data.netWeightKg !== undefined) {
+      updateData.netWeightKg =
+        typeof result.data.netWeightKg === 'number' && Number.isFinite(result.data.netWeightKg)
+          ? new Prisma.Decimal(result.data.netWeightKg.toFixed(3))
+          : null
+    }
+    if (result.data.cartonWeightKg !== undefined) {
+      updateData.cartonWeightKg =
+        typeof result.data.cartonWeightKg === 'number' && Number.isFinite(result.data.cartonWeightKg)
+          ? new Prisma.Decimal(result.data.cartonWeightKg.toFixed(3))
+          : null
+    }
+
+    const hasSideUpdate =
+      result.data.cartonSide1Cm !== undefined ||
+      result.data.cartonSide2Cm !== undefined ||
+      result.data.cartonSide3Cm !== undefined
+    if (hasSideUpdate) {
+      const nextTriplet = resolveDimensionTripletCm({
+        side1Cm: result.data.cartonSide1Cm ?? line.cartonSide1Cm,
+        side2Cm: result.data.cartonSide2Cm ?? line.cartonSide2Cm,
+        side3Cm: result.data.cartonSide3Cm ?? line.cartonSide3Cm,
+        legacy: line.cartonDimensionsCm,
+      })
+
+      if (!nextTriplet) {
+        return ApiResponses.badRequest('Carton size must include length, width, and height')
+      }
+
+      updateData.cartonSide1Cm = new Prisma.Decimal(nextTriplet.side1Cm.toFixed(2))
+      updateData.cartonSide2Cm = new Prisma.Decimal(nextTriplet.side2Cm.toFixed(2))
+      updateData.cartonSide3Cm = new Prisma.Decimal(nextTriplet.side3Cm.toFixed(2))
+      updateData.cartonDimensionsCm = formatDimensionTripletCm(nextTriplet)
+    }
+  }
+
+  // unitsPerCarton can be adjusted through ISSUED to support shipping marks inputs.
+  if (allowIssuedPackagingEdits && result.data.unitsPerCarton !== undefined) {
+    let cartonsOrdered: number
+    try {
+      cartonsOrdered = computeCartonsOrdered({
+        skuCode: line.skuCode,
+        unitsOrdered: line.unitsOrdered,
+        unitsPerCarton: result.data.unitsPerCarton,
+      })
+    } catch (error) {
+      return ApiResponses.badRequest(error instanceof Error ? error.message : 'Invalid units/carton inputs')
+    }
+
+    updateData.unitsPerCarton = result.data.unitsPerCarton
+    updateData.quantity = cartonsOrdered
+  }
+
+  // quantityReceived - editable in WAREHOUSE status
+  if (order.status === 'WAREHOUSE' && !order.postedAt && result.data.quantityReceived !== undefined) {
     updateData.quantityReceived = result.data.quantityReceived
   }
 
@@ -342,6 +433,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuCode: line.skuCode,
     skuDescription: line.skuDescription ?? null,
     batchLot: line.batchLot ?? null,
+    piNumber: line.piNumber ?? null,
+    productNumber: line.productNumber ?? null,
+    commodityCode: line.commodityCode ?? null,
+    countryOfOrigin: line.countryOfOrigin ?? null,
+    netWeightKg: toNumberOrNull(line.netWeightKg),
+    material: line.material ?? null,
     cartonDimensionsCm: line.cartonDimensionsCm ?? null,
     cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
     cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
@@ -364,6 +461,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription ?? null,
     batchLot: updated.batchLot ?? null,
+    piNumber: updated.piNumber ?? null,
+    productNumber: updated.productNumber ?? null,
+    commodityCode: updated.commodityCode ?? null,
+    countryOfOrigin: updated.countryOfOrigin ?? null,
+    netWeightKg: toNumberOrNull(updated.netWeightKg),
+    material: updated.material ?? null,
     cartonDimensionsCm: updated.cartonDimensionsCm ?? null,
     cartonSide1Cm: toNumberOrNull(updated.cartonSide1Cm),
     cartonSide2Cm: toNumberOrNull(updated.cartonSide2Cm),
@@ -408,6 +511,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription,
     batchLot: updated.batchLot,
+    piNumber: updated.piNumber ?? null,
+    productNumber: updated.productNumber ?? null,
+    commodityCode: updated.commodityCode ?? null,
+    countryOfOrigin: updated.countryOfOrigin ?? null,
+    netWeightKg: toNumberOrNull(updated.netWeightKg),
+    material: updated.material ?? null,
     cartonDimensionsCm: updated.cartonDimensionsCm ?? null,
     cartonSide1Cm: toNumberOrNull(updated.cartonSide1Cm),
     cartonSide2Cm: toNumberOrNull(updated.cartonSide2Cm),
