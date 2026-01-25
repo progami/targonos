@@ -22,7 +22,15 @@ export const GET = withAuthAndParams(async (_request, params) => {
     return ApiResponses.notFound('Purchase order not found')
   }
 
-  return ApiResponses.success(serializeWithStageData(order))
+  const serialized = serializeWithStageData(order)
+  return ApiResponses.success({
+    ...serialized,
+    proformaInvoices: order.proformaInvoices.map(pi => ({
+      id: pi.id,
+      piNumber: pi.piNumber,
+      invoiceDate: pi.invoiceDate ? pi.invoiceDate.toISOString() : null,
+    })),
+  })
 })
 
 const UpdateDetailsSchema = z.object({
@@ -73,7 +81,15 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       id: session.user.id,
       name: session.user.name ?? session.user.email ?? null,
     })
-    return ApiResponses.success(serializeWithStageData(updated))
+    const serialized = serializeWithStageData(updated)
+    return ApiResponses.success({
+      ...serialized,
+      proformaInvoices: updated.proformaInvoices.map(pi => ({
+        id: pi.id,
+        piNumber: pi.piNumber,
+        invoiceDate: pi.invoiceDate ? pi.invoiceDate.toISOString() : null,
+      })),
+    })
   } catch (error) {
     return ApiResponses.handleError(error)
   }

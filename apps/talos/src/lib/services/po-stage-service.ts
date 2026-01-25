@@ -2,6 +2,7 @@ import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import {
   CostCategory,
   PurchaseOrder,
+  PurchaseOrderProformaInvoice,
   PurchaseOrderLine,
   PurchaseOrderStatus,
   PurchaseOrderType,
@@ -21,8 +22,14 @@ import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
-type PurchaseOrderWithLines = PurchaseOrder & { lines: PurchaseOrderLine[] }
-type PurchaseOrderWithOptionalLines = PurchaseOrder & { lines?: PurchaseOrderLine[] }
+type PurchaseOrderWithLines = PurchaseOrder & {
+  lines: PurchaseOrderLine[]
+  proformaInvoices?: PurchaseOrderProformaInvoice[]
+}
+type PurchaseOrderWithOptionalLines = PurchaseOrder & {
+  lines?: PurchaseOrderLine[]
+  proformaInvoices?: PurchaseOrderProformaInvoice[]
+}
 
 type ManufacturingStageData = {
   proformaInvoiceNumber: PurchaseOrder['proformaInvoiceNumber']
@@ -120,7 +127,7 @@ function normalizeAuditValue(value: unknown): unknown {
 
 // Valid stage transitions for new 5-stage workflow
 export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
-  // Draft = editable PO shared with supplier (negotiation)
+  // RFQ = editable PO shared with supplier (negotiation)
   DRAFT: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.REJECTED, PurchaseOrderStatus.CANCELLED],
   ISSUED: [
     PurchaseOrderStatus.MANUFACTURING,
@@ -1445,6 +1452,33 @@ export async function transitionPurchaseOrderStage(
       include: { lines: true },
     })
 
+    if (filteredStageData.proformaInvoiceNumber !== undefined) {
+      const piNumber = filteredStageData.proformaInvoiceNumber?.trim()
+      if (piNumber) {
+        const invoiceDate =
+          filteredStageData.proformaInvoiceDate !== undefined
+            ? new Date(filteredStageData.proformaInvoiceDate)
+            : undefined
+
+        await tx.purchaseOrderProformaInvoice.upsert({
+          where: {
+            purchaseOrderId_piNumber: {
+              purchaseOrderId: nextOrder.id,
+              piNumber,
+            },
+          },
+          create: {
+            purchaseOrderId: nextOrder.id,
+            piNumber,
+            invoiceDate: invoiceDate ?? null,
+            createdById: user.id,
+            createdByName: user.name,
+          },
+          update: invoiceDate !== undefined ? { invoiceDate } : {},
+        })
+      }
+    }
+
     if (targetStatus === PurchaseOrderStatus.WAREHOUSE) {
       if (!nextOrder.warehouseCode || !nextOrder.warehouseName) {
         throw new ValidationError('Warehouse is required before receiving inventory')
@@ -1800,7 +1834,7 @@ export async function transitionPurchaseOrderStage(
 
     const refreshed = await tx.purchaseOrder.findUnique({
       where: { id: nextOrder.id },
-      include: { lines: true },
+      include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
     })
 
     if (!refreshed) {
@@ -1864,7 +1898,7 @@ export function getStageApprovalHistory(order: PurchaseOrder): {
 
   if (order.draftApprovedAt) {
     history.push({
-      stage: 'DRAFT → ISSUED',
+      stage: 'RFQ → ISSUED',
       approvedAt: order.draftApprovedAt,
       approvedBy: order.draftApprovedByName,
     })
@@ -2048,6 +2082,13 @@ export function serializePurchaseOrder(
 
     // Stage data - serialize dates to ISO strings
     stageData: serializeStageData(getStageData(order)),
+    proformaInvoices: order.proformaInvoices
+      ? order.proformaInvoices.map(pi => ({
+          id: pi.id,
+          piNumber: pi.piNumber,
+          invoiceDate: pi.invoiceDate ? pi.invoiceDate.toISOString() : null,
+        }))
+      : [],
     approvalHistory: getStageApprovalHistory(order).map(h => ({
       ...h,
       approvedAt: h.approvedAt?.toISOString() ?? null,

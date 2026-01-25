@@ -43,7 +43,7 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
  * Human-readable labels for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
-  DRAFT: 'Draft',
+  DRAFT: 'RFQ',
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'In Transit',
