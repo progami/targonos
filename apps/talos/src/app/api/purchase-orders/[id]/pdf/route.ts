@@ -79,14 +79,16 @@ function escapeHtml(str: string | null | undefined): string {
 
 function renderPurchaseOrderHtml(params: {
   poNumber: string
-  vendorPi?: string | null
+  vendorPiNumbers: string[]
   buyerName: string
   buyerAddress: string
   buyerPhone?: string | null
+  buyerCountryCode?: string | null
   buyerVatNumber?: string | null
   supplierName: string
   supplierAddress?: string | null
   supplierPhone?: string | null
+  supplierBankingDetails?: string | null
   createdAt: Date
   createdByName?: string | null
   expectedDate?: Date | null
@@ -118,13 +120,45 @@ function renderPurchaseOrderHtml(params: {
   const amountInWords = numberToWords(grandTotal)
 
   // Format addresses
-  const buyerAddressLines = params.buyerAddress.split(',').map(s => s.trim())
+  const buyerAddressLines = params.buyerAddress
+    .split(',')
+    .map(s => s.trim())
+    .filter(line => line.length > 0)
   const supplierAddressHtml = params.supplierAddress
     ? escapeHtml(params.supplierAddress).replace(/\n/g, '<br>')
     : ''
-  const shipToAddressHtml = params.shipToAddress
-    ? escapeHtml(params.shipToAddress).replace(/\n/g, '<br>')
-    : buyerAddressLines.join('<br>')
+  const supplierBankingHtml =
+    params.supplierBankingDetails && params.supplierBankingDetails.trim().length > 0
+      ? escapeHtml(params.supplierBankingDetails).replace(/\n/g, '<br>')
+      : ''
+
+  const shipToName = params.shipToName && params.shipToName.trim().length > 0
+    ? params.shipToName
+    : params.buyerName
+
+  const shipToAddressHtml = (() => {
+    if (params.shipToAddress && params.shipToAddress.trim().length > 0) {
+      return escapeHtml(params.shipToAddress).replace(/\n/g, '<br>')
+    }
+
+    const lines: string[] = []
+
+    const line1 = buyerAddressLines.slice(0, 2).join(', ')
+    if (line1) lines.push(line1)
+
+    const line2 = buyerAddressLines.slice(2).join(', ')
+    if (line2) lines.push(line2)
+
+    if (params.buyerCountryCode && params.buyerCountryCode.trim().length > 0) {
+      lines.push(params.buyerCountryCode.trim().toUpperCase())
+    }
+
+    if (params.buyerPhone && params.buyerPhone.trim().length > 0) {
+      lines.push(`Phone: ${params.buyerPhone.trim()}`)
+    }
+
+    return lines.map(escapeHtml).join('<br>')
+  })()
 
   // Build line items HTML
   const lineItemsHtml = params.lines.map(line => {
@@ -558,10 +592,10 @@ function renderPurchaseOrderHtml(params: {
               <span class="po-meta-label">Date:</span>
               <span class="po-meta-value">${formatDate(params.createdAt)}</span>
             </div>
-            ${params.vendorPi ? `
+            ${params.vendorPiNumbers.length > 0 ? `
             <div class="po-meta-row">
-              <span class="po-meta-label">Vendor PI:</span>
-              <span class="po-meta-value">${escapeHtml(params.vendorPi)}</span>
+              <span class="po-meta-label">Vendor PI${params.vendorPiNumbers.length === 1 ? '' : 's'}:</span>
+              <span class="po-meta-value">${escapeHtml(params.vendorPiNumbers.join(', '))}</span>
             </div>
             ` : ''}
             <div class="po-meta-row">
@@ -583,7 +617,7 @@ function renderPurchaseOrderHtml(params: {
         </div>
         <div class="party">
           <div class="party-label">Ship To</div>
-          <div class="party-name">${escapeHtml(params.shipToName || params.buyerName)}</div>
+          <div class="party-name">${escapeHtml(shipToName)}</div>
           <div class="party-address">${shipToAddressHtml}</div>
         </div>
       </div>
@@ -639,6 +673,12 @@ function renderPurchaseOrderHtml(params: {
           <div class="info-row">
             <span class="info-label">Payment Terms:</span><br>
             <span class="info-value">${escapeHtml(params.paymentTerms)}</span>
+          </div>
+          ` : ''}
+          ${supplierBankingHtml ? `
+          <div class="info-row">
+            <span class="info-label">Banking:</span><br>
+            <span class="info-value">${supplierBankingHtml}</span>
           </div>
           ` : ''}
           ${params.incoterms ? `
@@ -698,16 +738,18 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   // Prefer snapshot supplier address stored on the PO. Fall back to live supplier for older POs.
   let supplierAddress: string | null = order.counterpartyAddress ?? null
   let supplierPhone: string | null = null
+  let supplierBankingDetails: string | null = null
   if (order.counterpartyName) {
     const prisma = await getTenantPrisma()
     const supplier = await prisma.supplier.findFirst({
       where: { name: order.counterpartyName },
-      select: { address: true, phone: true },
+      select: { address: true, phone: true, bankingDetails: true },
     })
     if (!supplierAddress) {
       supplierAddress = supplier?.address ?? null
     }
     supplierPhone = supplier?.phone ?? null
+    supplierBankingDetails = supplier?.bankingDetails ?? null
   }
 
   const tenant = await getCurrentTenant()
@@ -715,8 +757,18 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
 
   const poNumber = order.poNumber ?? toPublicOrderNumber(order.orderNumber)
 
-  // Get proforma invoice number from stage data if available
-  const vendorPi = (order as { proformaInvoiceNumber?: string | null }).proformaInvoiceNumber ?? null
+  const vendorPiNumbers: string[] = []
+  for (const pi of order.proformaInvoices) {
+    const trimmed = pi.piNumber.trim()
+    if (trimmed.length === 0) continue
+    vendorPiNumbers.push(trimmed)
+  }
+  if (vendorPiNumbers.length === 0) {
+    const primary = (order as { proformaInvoiceNumber?: string | null }).proformaInvoiceNumber
+    if (primary && primary.trim().length > 0) {
+      vendorPiNumbers.push(primary.trim())
+    }
+  }
 
   const lines = order.lines.map(line => ({
     skuCode: line.skuCode,
@@ -730,14 +782,16 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
 
   const html = renderPurchaseOrderHtml({
     poNumber,
-    vendorPi,
+    vendorPiNumbers,
     buyerName: BUYER_LEGAL_ENTITY.name,
     buyerAddress: BUYER_LEGAL_ENTITY.address,
     buyerPhone: '785-370-3532',
+    buyerCountryCode: tenant.code,
     buyerVatNumber,
     supplierName: order.counterpartyName ?? '',
     supplierAddress,
     supplierPhone,
+    supplierBankingDetails,
     createdAt: order.createdAt,
     createdByName: order.createdByName,
     expectedDate: order.expectedDate,

@@ -46,8 +46,8 @@ type StatusConfig = {
 const PIPELINE_STAGES: StatusConfig[] = [
   {
     value: 'DRAFT',
-    label: 'Draft',
-    description: 'Editable draft shared with supplier for review',
+    label: 'RFQ',
+    description: 'Request for quote shared with supplier',
     icon: FileEdit,
   },
   {

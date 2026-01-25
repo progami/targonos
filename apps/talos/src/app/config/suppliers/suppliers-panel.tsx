@@ -21,6 +21,7 @@ interface SupplierRow {
   email: string | null
   phone: string | null
   address: string | null
+  bankingDetails: string | null
   notes: string | null
   defaultPaymentTerms: string | null
   defaultIncoterms: string | null
@@ -52,6 +53,7 @@ interface SupplierFormState {
   email: string
   phone: string
   address: string
+  bankingDetails: string
   notes: string
   defaultPaymentTerms: string
   defaultIncoterms: string
@@ -64,6 +66,7 @@ function buildSupplierFormState(supplier?: SupplierRow | null): SupplierFormStat
     email: supplier?.email ?? '',
     phone: supplier?.phone ?? '',
     address: supplier?.address ?? '',
+    bankingDetails: supplier?.bankingDetails ?? '',
     notes: supplier?.notes ?? '',
     defaultPaymentTerms: supplier?.defaultPaymentTerms ?? '',
     defaultIncoterms: supplier?.defaultIncoterms ?? '',
@@ -185,6 +188,10 @@ export default function SuppliersPanel({
       toast.error('Address is required')
       return
     }
+    if (!formState.bankingDetails.trim()) {
+      toast.error('Banking information is required')
+      return
+    }
 
     setIsSubmitting(true)
     try {
@@ -194,6 +201,7 @@ export default function SuppliersPanel({
         email: formState.email.trim(),
         phone: formState.phone.trim(),
         address: formState.address.trim(),
+        bankingDetails: formState.bankingDetails.trim(),
         notes: formState.notes.trim() ? formState.notes.trim() : null,
         defaultPaymentTerms: formState.defaultPaymentTerms.trim()
           ? formState.defaultPaymentTerms.trim()
@@ -458,6 +466,19 @@ export default function SuppliersPanel({
                     }
                     required
                     rows={2}
+                  />
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <Label htmlFor="supplier-banking-details">Banking Information</Label>
+                  <Textarea
+                    id="supplier-banking-details"
+                    value={formState.bankingDetails}
+                    onChange={event =>
+                      setFormState(prev => ({ ...prev, bankingDetails: event.target.value }))
+                    }
+                    required
+                    rows={3}
                   />
                 </div>
 
