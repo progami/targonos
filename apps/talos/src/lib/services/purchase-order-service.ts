@@ -72,7 +72,6 @@ export async function getPurchaseOrders() {
   return prisma.purchaseOrder.findMany({
     where: {
       isLegacy: false,
-      poNumber: { not: null },
       status: { in: VISIBLE_STATUSES },
     },
     orderBy: { createdAt: 'desc' },
@@ -87,7 +86,6 @@ export async function getPurchaseOrderById(id: string) {
     where: {
       id,
       isLegacy: false,
-      poNumber: { not: null },
       status: { in: VISIBLE_STATUSES },
     },
     include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
@@ -197,7 +195,7 @@ export async function updatePurchaseOrderDetails(
       entityType: 'PurchaseOrder',
       entityId: order.id,
       action: 'UPDATE_DETAILS',
-      userId: user?.id || 'SYSTEM',
+      userId: user?.id ?? 'SYSTEM',
       oldValue: auditOldValue,
       newValue: auditNewValue,
     })
