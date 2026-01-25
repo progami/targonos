@@ -2,7 +2,7 @@ export const site = {
   name: 'Targon',
   domain: 'targonglobal.com',
   description:
-    'AI-driven manufacturing & design. Home of Caelum Star.',
+    'AI-driven manufacturing & design.',
   contactEmail: 'support@targonglobal.com',
 
   // Primary retail link (requested: 6-pack is the main focus).
