@@ -29,7 +29,7 @@ export function Footer() {
           <div className="md:col-span-5">
             <div className="text-base font-semibold tracking-tightish text-white">{site.name}</div>
             <p className="mt-3 max-w-md text-sm text-white/70">
-              AI‑driven manufacturing &amp; design. Home of {site.productBrandName}.
+              AI‑driven manufacturing &amp; design.
             </p>
             <p className="mt-4 text-sm text-white/70">
               Contact:{' '}

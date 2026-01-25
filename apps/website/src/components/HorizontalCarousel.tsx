@@ -83,7 +83,7 @@ export function HorizontalCarousel({
           type="button"
           aria-label="Scroll left"
           onClick={() => scrollByViewport('left')}
-          className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-pill border border-white/15 bg-black/35 text-white shadow-softer backdrop-blur transition hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:inline-flex"
+          className="absolute left-2 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-pill border border-white/15 bg-black/35 text-white shadow-softer backdrop-blur transition hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:h-10 md:w-10"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -94,13 +94,18 @@ export function HorizontalCarousel({
           type="button"
           aria-label="Scroll right"
           onClick={() => scrollByViewport('right')}
-          className="absolute right-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-pill border border-white/15 bg-black/35 text-white shadow-softer backdrop-blur transition hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:inline-flex"
+          className="absolute right-2 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-pill border border-white/15 bg-black/35 text-white shadow-softer backdrop-blur transition hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:h-10 md:w-10"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
       ) : null}
 
-      <div ref={scrollerRef} className={cn(scrollerClassName)} onScroll={update}>
+      <div
+        ref={scrollerRef}
+        className={cn('touch-pan-x overscroll-x-contain', scrollerClassName)}
+        style={{ WebkitOverflowScrolling: 'touch' }}
+        onScroll={update}
+      >
         {children}
       </div>
 
