@@ -310,46 +310,47 @@ export default function SuppliersPanel({
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto text-sm">
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Contact</th>
-                  <th className="px-4 py-3 text-left font-semibold">Email</th>
-                  <th className="px-4 py-3 text-left font-semibold">Phone</th>
-                  <th className="px-4 py-3 text-left font-semibold">Default Terms</th>
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                  <th className="w-[28%] px-4 py-3 text-left font-semibold">Name</th>
+                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Contact</th>
+                  <th className="w-[20%] px-4 py-3 text-left font-semibold">Email</th>
+                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Phone</th>
+                  <th className="w-[16%] px-4 py-3 text-left font-semibold">Default Terms</th>
+                  <th className="w-[8%] px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredSuppliers.map(supplier => (
                   <tr key={supplier.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
                       <button
                         type="button"
                         onClick={() => openEdit(supplier)}
-                        className="text-left hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
+                        className="block w-full text-left truncate hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
+                        title={supplier.name}
                       >
                         {supplier.name}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 truncate" title={supplier.contactName ?? undefined}>
                       {supplier.contactName ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={supplier.email ?? undefined}>
                       {supplier.email ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={supplier.phone ?? undefined}>
                       {supplier.phone ?? '—'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-3">
                       {supplier.defaultPaymentTerms || supplier.defaultIncoterms ? (
                         <div className="flex flex-wrap gap-1">
                           {supplier.defaultIncoterms && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                              className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600"
                             >
                               {supplier.defaultIncoterms}
                             </Badge>
@@ -357,29 +358,28 @@ export default function SuppliersPanel({
                           {supplier.defaultPaymentTerms && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600"
+                              title={supplier.defaultPaymentTerms}
                             >
-                              {supplier.defaultPaymentTerms.length > 20
-                                ? `${supplier.defaultPaymentTerms.slice(0, 20)}…`
+                              {supplier.defaultPaymentTerms.length > 16
+                                ? `${supplier.defaultPaymentTerms.slice(0, 16)}…`
                                 : supplier.defaultPaymentTerms}
                             </Badge>
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-xs">Not set</span>
+                        <span className="text-slate-400 dark:text-slate-500 text-xs">Not set</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConfirmDelete(supplier)}
-                          className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDelete(supplier)}
+                        className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </td>
                   </tr>
                 ))}
