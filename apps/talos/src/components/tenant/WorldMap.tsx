@@ -89,28 +89,28 @@ export function WorldMap({ className }: WorldMapProps) {
   }
 
   return (
-    <div className={cn('relative min-h-screen bg-slate-950 overflow-hidden', className)}>
+    <div className={cn('relative h-screen bg-slate-950 overflow-y-auto', className)}>
       {/* Animated background grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]" />
+      <div className="fixed inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]" />
 
       {/* Glow effects */}
-      <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
-      <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
+      <div className="fixed top-1/3 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
+      <div className="fixed top-1/3 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
+      <div className="relative z-10 flex flex-col items-center px-4 py-8 min-h-full">
         {/* Header */}
-        <div className="text-center mb-4">
-          <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
+        <div className="text-center mb-2 lg:mb-4">
+          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-2 lg:mb-4 tracking-tight">
             Talos
           </h1>
-          <p className="text-xl text-slate-400">
+          <p className="text-lg lg:text-xl text-slate-400">
             Select your region to continue
           </p>
         </div>
 
         {/* World Map */}
-        <div className="relative w-full max-w-5xl">
+        <div className="relative w-full max-w-4xl lg:max-w-5xl">
           <ComposableMap
             projection="geoMercator"
             projectionConfig={{
@@ -216,7 +216,7 @@ export function WorldMap({ className }: WorldMapProps) {
         </div>
 
         {/* Region cards */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
+        <div className="mt-4 lg:mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 w-full max-w-2xl">
           {tenants.map((tenant) => {
             const hasAccess = canAccessTenant(tenant.code)
             const isDisabled = selecting !== null || !hasAccess
@@ -227,7 +227,7 @@ export function WorldMap({ className }: WorldMapProps) {
               onClick={() => handleSelectTenant(tenant)}
               disabled={isDisabled}
               className={cn(
-                'group relative overflow-hidden rounded-2xl p-6 text-left transition-all duration-300',
+                'group relative overflow-hidden rounded-2xl p-4 lg:p-6 text-left transition-all duration-300',
                 'bg-slate-900/50 border border-slate-800',
                 hasAccess && 'hover:bg-slate-900 hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-900/50',
                 'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950',
@@ -320,7 +320,7 @@ export function WorldMap({ className }: WorldMapProps) {
         )}
 
         {/* Footer */}
-        <p className="mt-8 text-sm text-slate-500">
+        <p className="mt-4 lg:mt-8 pb-4 text-sm text-slate-500">
           Each region operates as an independent warehouse system
         </p>
       </div>
