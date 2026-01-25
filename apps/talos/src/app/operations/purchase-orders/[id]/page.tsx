@@ -296,6 +296,12 @@ interface StageData {
   }
 }
 
+interface ProformaInvoiceSummary {
+  id: string
+  piNumber: string
+  invoiceDate: string | null
+}
+
 interface PurchaseOrderSummary {
   id: string
   orderNumber: string
@@ -315,6 +321,7 @@ interface PurchaseOrderSummary {
   createdByName: string | null
   lines: PurchaseOrderLineSummary[]
   stageData: StageData
+  proformaInvoices: ProformaInvoiceSummary[]
   approvalHistory: StageApproval[]
 }
 
@@ -424,7 +431,7 @@ function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: strin
 
 // Stage configuration
 const STAGES = [
-  { value: 'DRAFT', label: 'Draft', icon: FileEdit, color: 'slate' },
+  { value: 'DRAFT', label: 'RFQ', icon: FileEdit, color: 'slate' },
   { value: 'ISSUED', label: 'Issued', icon: Send, color: 'emerald' },
   { value: 'MANUFACTURING', label: 'Manufacturing', icon: Factory, color: 'amber' },
   { value: 'OCEAN', label: 'In Transit', icon: Ship, color: 'blue' },
@@ -710,6 +717,12 @@ export default function PurchaseOrderDetailPage() {
     incoterms: '',
     paymentTerms: '',
     notes: '',
+  })
+  const [addProformaInvoiceOpen, setAddProformaInvoiceOpen] = useState(false)
+  const [addProformaInvoiceSubmitting, setAddProformaInvoiceSubmitting] = useState(false)
+  const [newProformaInvoiceDraft, setNewProformaInvoiceDraft] = useState({
+    piNumber: '',
+    invoiceDate: '',
   })
 
   // Stage transition form data
@@ -1611,6 +1624,29 @@ export default function PurchaseOrderDetailPage() {
     )
   }, [documents, nextStage, order])
 
+  const hasIssuedProformaInvoiceNumber = useMemo(() => {
+    const draftValue = stageFormData.proformaInvoiceNumber
+    if (typeof draftValue === 'string' && draftValue.trim().length > 0) return true
+    if (!order) return false
+
+    const primary = order.stageData.manufacturing.proformaInvoiceNumber
+    if (typeof primary === 'string' && primary.trim().length > 0) return true
+
+    return order.proformaInvoices.some(pi => pi.piNumber.trim().length > 0)
+  }, [order, stageFormData.proformaInvoiceNumber])
+
+  const hasManufacturingStartDate = useMemo(() => {
+    const draftValue = stageFormData.manufacturingStartDate
+    if (typeof draftValue === 'string' && draftValue.trim().length > 0) return true
+    if (!order) return false
+
+    const existing = order.stageData.manufacturing.manufacturingStartDate
+    if (typeof existing === 'string' && existing.trim().length > 0) return true
+
+    const legacy = order.stageData.manufacturing.manufacturingStart
+    return typeof legacy === 'string' && legacy.trim().length > 0
+  }, [order, stageFormData.manufacturingStartDate])
+
   useEffect(() => {
     if (!advanceModalOpen || !order || !nextStage) return
     if (nextStage.value !== 'MANUFACTURING') return
@@ -1723,6 +1759,7 @@ export default function PurchaseOrderDetailPage() {
   const isTerminal =
     order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
   const canEdit = !isTerminal && order.status === 'DRAFT'
+  const canEditProformaInvoices = !isTerminal
   const canEditForwardingCosts =
     !isTerminal && (order.status === 'OCEAN' || order.status === 'WAREHOUSE')
 
@@ -1810,6 +1847,85 @@ export default function PurchaseOrderDetailPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to save order details')
     } finally {
       setOrderInfoSaving(false)
+    }
+  }
+
+  const handleAddProformaInvoice = async () => {
+    if (!order) return
+    const piNumber = newProformaInvoiceDraft.piNumber.trim()
+    if (!piNumber) {
+      toast.error('PI number is required')
+      return
+    }
+
+    setAddProformaInvoiceSubmitting(true)
+    try {
+      const invoiceDateValue = newProformaInvoiceDraft.invoiceDate.trim()
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/proforma-invoices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          piNumber,
+          invoiceDate: invoiceDateValue.length > 0 ? invoiceDateValue : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error ?? 'Failed to add PI number')
+      }
+
+      const created = (await response.json()) as unknown
+      if (!created || typeof created !== 'object' || Array.isArray(created)) {
+        throw new Error('Failed to add PI number')
+      }
+      const record = created as Record<string, unknown>
+      const createdId = record.id
+      const createdPiNumber = record.piNumber
+      const createdInvoiceDate = record.invoiceDate
+
+      if (typeof createdId !== 'string' || typeof createdPiNumber !== 'string') {
+        throw new Error('Failed to add PI number')
+      }
+
+      setOrder(prev => {
+        if (!prev) return prev
+
+        const nextInvoices: ProformaInvoiceSummary[] = [
+          ...prev.proformaInvoices,
+          {
+            id: createdId,
+            piNumber: createdPiNumber,
+            invoiceDate: typeof createdInvoiceDate === 'string' ? createdInvoiceDate : null,
+          },
+        ]
+
+        const currentPrimary = prev.stageData.manufacturing.proformaInvoiceNumber
+        const hasPrimary =
+          typeof currentPrimary === 'string' && currentPrimary.trim().length > 0
+
+        const nextStageData = hasPrimary
+          ? prev.stageData
+          : {
+              ...prev.stageData,
+              manufacturing: {
+                ...prev.stageData.manufacturing,
+                proformaInvoiceNumber: createdPiNumber,
+                proformaInvoiceDate:
+                  typeof createdInvoiceDate === 'string' ? createdInvoiceDate : null,
+              },
+            }
+
+        return { ...prev, proformaInvoices: nextInvoices, stageData: nextStageData }
+      })
+
+      toast.success('PI number added')
+      setAddProformaInvoiceOpen(false)
+      setNewProformaInvoiceDraft({ piNumber: '', invoiceDate: '' })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add PI number')
+    } finally {
+      setAddProformaInvoiceSubmitting(false)
     }
   }
 
@@ -2384,7 +2500,7 @@ export default function PurchaseOrderDetailPage() {
           {order.status === 'REJECTED' && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
               <p className="text-sm text-slate-700 dark:text-slate-300">
-                This PO was rejected by the supplier. Reopen it as a draft to revise and re-issue.
+                This PO was rejected by the supplier. Reopen it as an RFQ to revise and re-issue.
               </p>
               <Button
                 variant="outline"
@@ -2393,7 +2509,7 @@ export default function PurchaseOrderDetailPage() {
                 className="gap-2"
               >
                 <FileEdit className="h-4 w-4" />
-                Reopen Draft
+                Reopen RFQ
               </Button>
             </div>
           )}
@@ -3978,6 +4094,80 @@ export default function PurchaseOrderDetailPage() {
                   )}
                 </div>
 
+                {/* Proforma Invoices */}
+                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Proforma Invoices (PI)
+                    </h4>
+                    {canEditProformaInvoices && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setAddProformaInvoiceOpen(true)}
+                        disabled={addProformaInvoiceSubmitting}
+                      >
+                        Add PI
+                      </Button>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const direct = order.proformaInvoices
+                    if (direct.length > 0) {
+                      return (
+                        <div className="space-y-2">
+                          {direct.map(pi => (
+                            <div
+                              key={pi.id}
+                              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                                  {pi.piNumber}
+                                </p>
+                                {pi.invoiceDate ? (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Date: {formatDateOnly(pi.invoiceDate)}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    }
+
+                    const primary = order.stageData.manufacturing.proformaInvoiceNumber
+                    const hasPrimary = typeof primary === 'string' && primary.trim().length > 0
+                    if (hasPrimary) {
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                            <div className="min-w-0">
+                              <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                                {primary}
+                              </p>
+                              {order.stageData.manufacturing.proformaInvoiceDate ? (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  Date: {formatDateOnly(order.stageData.manufacturing.proformaInvoiceDate)}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        No PI numbers have been recorded yet.
+                      </p>
+                    )
+                  })()}
+                </div>
+
                 {/* Manufacturing Section */}
                 {(() => {
                   const mfg = order.stageData.manufacturing
@@ -4614,6 +4804,88 @@ export default function PurchaseOrderDetailPage() {
           </div>
         )}
 
+        {/* Add Proforma Invoice Modal */}
+        {addProformaInvoiceOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => !addProformaInvoiceSubmitting && setAddProformaInvoiceOpen(false)}
+            />
+
+            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    Add PI Number
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Record an additional proforma invoice reference for this PO.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !addProformaInvoiceSubmitting && setAddProformaInvoiceOpen(false)}
+                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
+                  disabled={addProformaInvoiceSubmitting}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    PI Number
+                  </label>
+                  <Input
+                    value={newProformaInvoiceDraft.piNumber}
+                    onChange={e =>
+                      setNewProformaInvoiceDraft(prev => ({ ...prev, piNumber: e.target.value }))
+                    }
+                    placeholder="e.g. PI-12345"
+                    disabled={addProformaInvoiceSubmitting}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    PI Date (Optional)
+                  </label>
+                  <Input
+                    type="date"
+                    value={newProformaInvoiceDraft.invoiceDate}
+                    onChange={e =>
+                      setNewProformaInvoiceDraft(prev => ({
+                        ...prev,
+                        invoiceDate: e.target.value,
+                      }))
+                    }
+                    disabled={addProformaInvoiceSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
+                <Button
+                  variant="outline"
+                  onClick={() => setAddProformaInvoiceOpen(false)}
+                  disabled={addProformaInvoiceSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleAddProformaInvoice()}
+                  disabled={addProformaInvoiceSubmitting || !newProformaInvoiceDraft.piNumber.trim()}
+                  className="gap-2"
+                >
+                  {addProformaInvoiceSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Add PI
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Advance Stage Modal */}
         {advanceModalOpen && nextStage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -4672,15 +4944,8 @@ export default function PurchaseOrderDetailPage() {
                       (!order.expectedDate ||
                         !order.incoterms ||
                         !order.paymentTerms ||
-                        !(
-                          stageFormData.proformaInvoiceNumber?.trim() ||
-                          order.stageData.manufacturing.proformaInvoiceNumber?.trim()
-                        ))) ||
-                    (nextStage.value === 'MANUFACTURING' &&
-                      !(
-                        stageFormData.manufacturingStartDate?.trim() ||
-                        order.stageData.manufacturing.manufacturingStartDate
-                      ))
+                        !hasIssuedProformaInvoiceNumber)) ||
+                    (nextStage.value === 'MANUFACTURING' && !hasManufacturingStartDate)
                   }
                   className="gap-2"
                 >

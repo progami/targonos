@@ -226,6 +226,7 @@ model Supplier {
   email         String?  @map("email")
   phone         String?  @map("phone")
   address       String?  @map("address")
+  bankingDetails String? @map("banking_details")
   notes         String?
   defaultPaymentTerms String?  @map("default_payment_terms")
   defaultIncoterms    String?  @map("default_incoterms")
@@ -451,6 +452,7 @@ model PurchaseOrder {
   lines         PurchaseOrderLine[]
   containers    PurchaseOrderContainer[]
   documents     PurchaseOrderDocument[]
+  proformaInvoices PurchaseOrderProformaInvoice[]
   transactions  InventoryTransaction[]   @relation("TransactionPurchaseOrder")
   movementNotes MovementNote[]
   invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLinePurchaseOrder")
@@ -569,6 +571,21 @@ model FulfillmentOrderLine {
   @@unique([fulfillmentOrderId, skuCode, batchLot])
   @@index([fulfillmentOrderId])
   @@map("fulfillment_order_lines")
+}
+
+model PurchaseOrderProformaInvoice {
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  piNumber        String        @map("pi_number")
+  invoiceDate     DateTime?     @map("invoice_date")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  createdById     String?       @map("created_by_id")
+  createdByName   String?       @map("created_by_name")
+
+  @@unique([purchaseOrderId, piNumber])
+  @@index([purchaseOrderId])
+  @@map("purchase_order_proforma_invoices")
 }
 
 model PurchaseOrderDocument {

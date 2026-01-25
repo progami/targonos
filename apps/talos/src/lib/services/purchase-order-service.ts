@@ -13,6 +13,10 @@ export type PurchaseOrderWithLines = Prisma.PurchaseOrderGetPayload<{
   include: { lines: true }
 }>
 
+export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetPayload<{
+  include: { lines: true; proformaInvoices: true }
+}>
+
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.DRAFT,
   PurchaseOrderStatus.ISSUED,
@@ -86,7 +90,7 @@ export async function getPurchaseOrderById(id: string) {
       poNumber: { not: null },
       status: { in: VISIBLE_STATUSES },
     },
-    include: { lines: true },
+    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
   })
 }
 
@@ -94,7 +98,7 @@ export async function updatePurchaseOrderDetails(
   id: string,
   input: UpdatePurchaseOrderInput,
   user?: UserContext
-): Promise<PurchaseOrderWithLines> {
+): Promise<PurchaseOrderWithLinesAndProformaInvoices> {
   const prisma = await getTenantPrisma()
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -185,7 +189,7 @@ export async function updatePurchaseOrderDetails(
       paymentTerms,
       notes,
     },
-    include: { lines: true },
+    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
   })
 
   if (Object.keys(auditNewValue).length > 0) {

@@ -11,6 +11,7 @@ const SupplierSchema = z.object({
   email: z.string().trim().email().optional().nullable(),
   phone: z.string().trim().optional().nullable(),
   address: z.string().trim().optional().nullable(),
+  bankingDetails: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
   defaultPaymentTerms: z.string().trim().optional().nullable(),
   defaultIncoterms: z.string().trim().optional().nullable(),
@@ -82,6 +83,7 @@ export const POST = withAuth(async (request, session) => {
       email: parsed.data.email ? sanitizeForDisplay(parsed.data.email).toLowerCase() : null,
       phone: parsed.data.phone ? sanitizeForDisplay(parsed.data.phone) : null,
       address: parsed.data.address ? sanitizeForDisplay(parsed.data.address) : null,
+      bankingDetails: parsed.data.bankingDetails ? sanitizeForDisplay(parsed.data.bankingDetails) : null,
       notes: parsed.data.notes ? sanitizeForDisplay(parsed.data.notes) : null,
       defaultPaymentTerms: parsed.data.defaultPaymentTerms
         ? sanitizeForDisplay(parsed.data.defaultPaymentTerms)
@@ -158,6 +160,12 @@ export const PATCH = withAuth(async (request, session) => {
           data.address !== undefined
             ? data.address
               ? sanitizeForDisplay(data.address)
+              : null
+            : undefined,
+        bankingDetails:
+          data.bankingDetails !== undefined
+            ? data.bankingDetails
+              ? sanitizeForDisplay(data.bankingDetails)
               : null
             : undefined,
         notes:
