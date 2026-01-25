@@ -69,10 +69,35 @@ export interface UpdatePurchaseOrderInput {
 export async function getPurchaseOrders() {
   const prisma = await getTenantPrisma()
 
+  const where: Prisma.PurchaseOrderWhereInput = {
+    isLegacy: false,
+    status: { in: VISIBLE_STATUSES },
+  }
+
+  return prisma.purchaseOrder.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: { lines: true },
+  })
+}
+
+export async function getPurchaseOrdersBySplitGroup(splitGroupId: string) {
+  const prisma = await getTenantPrisma()
+
+  const trimmed = splitGroupId.trim()
+  if (!trimmed) {
+    return []
+  }
+
+  const where: Prisma.PurchaseOrderWhereInput = {
+    isLegacy: false,
+    status: { in: VISIBLE_STATUSES },
+    splitGroupId: trimmed,
+  }
+
   return prisma.purchaseOrder.findMany({
     where: {
-      isLegacy: false,
-      status: { in: VISIBLE_STATUSES },
+      ...where,
     },
     orderBy: { createdAt: 'desc' },
     include: { lines: true },

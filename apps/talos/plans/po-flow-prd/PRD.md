@@ -39,7 +39,7 @@
 
 ## Required Inputs (shared across the flow)
 
-- Region is determined by the current Talos environment (US or UK)
+- Region is determined by the current Talos Region (US or UK)
 - Supplier selection (required to Issue)
 - Cargo lines (SKU + batch + quantities + packaging)
 - **PI**
@@ -47,7 +47,6 @@
   - PI document upload(s) for each PI number used across cargo lines (required to Issue)
 - Targeted product costs (entered in RFQ; become confirmed at Issued)
 - Shipping mark inputs (per cargo line; required to Issue + generate Shipping Marks)
-  - Product number
   - Commodity code (region-specific)
   - Country of origin
   - Units/carton (cartons derived; must divide units ordered)
@@ -83,7 +82,7 @@ Create a complete RFQ that can be issued into a PO with no ambiguity.
   - SKU + batch
   - units ordered + units/carton (cartons derived; must divide)
   - PI number
-  - Shipping Marks inputs (product number, commodity code, country of origin, carton size, net + gross weight, material)
+  - Shipping Marks inputs (commodity code, country of origin, carton size, net + gross weight, material)
   - targeted product cost
 - PI documents uploaded:
   - one PI document for each PI number used across cargo lines
@@ -203,7 +202,6 @@ Turn the RFQ into a PO (single source of truth) and generate all PO outputs befo
 ### Requirements to move to **Manufacturing** (blocking)
 
 - Shipping Marks inputs complete for all cargo lines:
-  - product number
   - commodity code (region-specific)
   - country of origin
   - carton size, units/carton, net + gross weight, material
@@ -307,7 +305,6 @@ Assumption (Tactical): cartons are homogeneous per cargo line (single SKU + batc
 **Each mark contains**
 
 - PI number
-- Product number
 - SKU + batch (shipping mark)
 - Carton dimensions (cm)
 - Units per carton
@@ -334,6 +331,9 @@ Track production start and ensure manufacturing artifacts (box artwork) are comp
 
 - Manufacturing start date filled
 - Box artwork uploaded
+- Split allocation confirmed:
+  - per cargo line: cartons shipping now (this PO)
+  - remaining cartons are either moved into a new Remainder PO (ships later) or explicitly cancelled (final variance)
 
 ### Manufacturing UI sketches (per tab)
 
@@ -341,9 +341,10 @@ Track production start and ensure manufacturing artifacts (box artwork) are comp
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │ Stage:  [RFQ]──[Issued]──[Manufacturing*]──[In Transit]──[At Warehouse]       │
-│ Actions: [Advance → In Transit]                                                │
+│ Actions: [Dispatch → In Transit]                                                │
 ├───────────────────────────────────────────────────────────────────────────────┤
-│ Tabs:  [Details* !] [Cargo] [Costs] [Documents !] [History]                   │
+│ Split: [ Create Remainder PO (if needed) ▾ ]                                    │
+│ Tabs:  [Details* !] [Cargo !] [Costs] [Documents !] [History]                  │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │ Manufacturing Start Date: [ yyyy-mm-dd ]  !                                    │
 │ Factory Name:             [ text... ]                                          │
@@ -354,11 +355,18 @@ Track production start and ensure manufacturing artifacts (box artwork) are comp
 #### Manufacturing → Cargo tab
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ Tabs:  [Details] [Cargo*] [Costs] [Documents !] [History]                      │
+│ Tabs:  [Details] [Cargo* !] [Costs] [Documents !] [History]                    │
 ├───────────────────────────────────────────────────────────────────────────────┤
-│ Cargo Summary (read-only)                                                       │
-│ - Lines, cartons, pallets, CBM, KG                                              │
-│ - PI numbers remain visible (read-only)                                         │
+│ Split: [ Create Remainder PO (if needed) ▾ ]                                    │
+│ Split Allocation (no modal)                                                     │
+│ - Confirm which cartons ship now vs later (or cancel remainder as final)        │
+│ ┌───────┬─────────┬──────────────┬───────────────┬──────────────┬───────────┐ │
+│ │ SKU   │ Batch   │ Total Cartons│ Ship Now Cartons│ Remaining    │ Cancel?   │ │
+│ ├───────┼─────────┼──────────────┼───────────────┼──────────────┼───────────┤ │
+│ │ CS007 │ B03     │ 555          │ [ 300 ]        │ 255          │ [  ]      │ │
+│ │ ...   │ ...     │ ...          │ [ ... ]        │ ...          │ [  ]      │ │
+│ └───────┴─────────┴──────────────┴───────────────┴──────────────┴───────────┘ │
+│ Notes: if Remaining is cancelled, require reason + create credit/debit when final │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -400,7 +408,52 @@ Track production start and ensure manufacturing artifacts (box artwork) are comp
 
 Record shipment identifiers + documents and record freight (required for receiving allocation).
 
-Assumption (Tactical): one PO represents a single shipment (single bill of lading). Split shipments require separate POs.
+### Split shipments & quantity variance (Tactical)
+
+This workflow must support **real-world divergence** after a PO is issued (and potentially paid) but before all goods are shipped.
+
+**Chosen approach (Tactical): split into separate POs (one shipment per PO)**
+
+- When the factory cannot load everything, we split the PO into:
+  - the **Shipping PO** (what ships now), and
+  - a new **Remainder PO** (what ships later)
+- Both POs are linked and show sibling navigation (Split Group).
+- Each split PO flows independently through **In Transit → At Warehouse → Receive** with its own docs and freight.
+
+**Key principles**
+
+- **Commercial quantities** must not be silently overwritten after issuance:
+  - post-issuance changes only happen via explicit actions (split/cancel) with a history record
+- **Physical quantities** (what is produced / loaded / shipped / received) can diverge and must be explicitly confirmed at the points where reality changes.
+- **Shipping Marks are locked** once the PO enters Manufacturing (they are a prerequisite for Manufacturing).
+- **Freight / forwarding costs are split-PO-scoped** (each split PO represents one shipment).
+- If a PO is **paid in full** but ships short / ships extra, the system must handle the financial reconciliation via **credit/debit notes** (tracked as financial entries, not by mutating history).
+
+**When manufacturing finishes but the factory cannot load everything**
+
+- At **Manufacturing → Dispatch → In Transit**, the user confirms how many cartons ship now per cargo line.
+- Talos then:
+  - advances the current PO to **In Transit** using the “ship now” cartons, and
+  - creates a new **Remainder PO** in **Manufacturing** for the remaining cartons (ready to dispatch later)
+- Shipping Marks **do not change**:
+  - Talos assigns a **carton range per cargo line** to each split PO (e.g., cartons 1–300 of 555 for PO-A, cartons 301–555 of 555 for PO-B)
+  - each split PO can download Shipping Marks filtered to its carton ranges
+  - the label format stays `Carton X / OriginalTotalCartons` so carton prints remain consistent
+
+**If supplier produces less or more than ordered**
+
+- Split POs do **not** create credit/debit notes by default.
+- Credit/debit notes are only created when the variance is explicitly treated as **final**, e.g.:
+  - the remainder PO is cancelled as “not producing / cancelled”, or
+  - a split PO is received short/over and the split group is closed with a confirmed variance.
+- System calculates the default credit/debit amount; user can override with a reason + supporting document.
+
+**Accounting safeguards**
+
+- Splitting moves quantities (and therefore product cost totals) between POs; it must not duplicate them.
+- Freight/forwarding is recorded per split PO (per shipment).
+- Inbound/outbound/storage costs attach to real ledger events (ship/receive), referencing the correct split PO.
+- If a future enhancement allows one shipment/container to include multiple POs, freight must be **allocated**, not duplicated (out of scope for Tactical MVP unless explicitly required).
 
 ### Requirements to move to **At Warehouse** (blocking)
 
@@ -596,7 +649,6 @@ Shipping marks generation depends on the system having:
 - Units per carton
 - Net weight and gross weight inputs
 - Material
-- Product number (user input)
 - Commodity code (user input; differs by region)
 - Country of origin (user input)
 
