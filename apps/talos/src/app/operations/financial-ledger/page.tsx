@@ -5,7 +5,6 @@ import { useSession } from '@/hooks/usePortalSession'
 import { useRouter } from 'next/navigation'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
 import { PageLoading } from '@/components/ui/loading-spinner'
-import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -51,7 +50,6 @@ export default function FinancialLedgerPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<FinancialLedgerEntryRow[]>([])
-  const [summary, setSummary] = useState<FinancialLedgerResponse['summary'] | null>(null)
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
 
   const [filters, setFilters] = useState({
@@ -117,23 +115,19 @@ export default function FinancialLedgerPage() {
       if (!response.ok) {
         toast.error('Failed to load financial ledger')
         setEntries([])
-        setSummary(null)
         return
       }
 
       const payload = (await response.json().catch(() => null)) as FinancialLedgerResponse | null
       if (!payload) {
         setEntries([])
-        setSummary(null)
         return
       }
 
       setEntries(Array.isArray(payload.data) ? payload.data : [])
-      setSummary(payload.summary ?? null)
     } catch {
       toast.error('Failed to load financial ledger')
       setEntries([])
-      setSummary(null)
     } finally {
       setLoading(false)
     }
@@ -232,12 +226,6 @@ export default function FinancialLedgerPage() {
               </PopoverContent>
             </Popover>
           </div>
-
-          <StatsCardGrid cols={3}>
-            <StatsCard title="Total" value={summary ? formatCurrency(summary.total) : '—'} icon={BarChart3} variant="info" />
-            <StatsCard title="Entries" value={entries.length} subtitle="Most recent 500" icon={BarChart3} variant="default" />
-            <StatsCard title="Categories" value={Object.keys(summary?.totals ?? {}).length} icon={BarChart3} variant="default" />
-          </StatsCardGrid>
 
           <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-x-auto flex-1">
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
