@@ -2917,10 +2917,11 @@ export async function receivePurchaseOrderInventory(params: {
     }
   }
 
+  const discrepancyNotesText =
+    typeof params.input.discrepancyNotes === 'string' ? params.input.discrepancyNotes.trim() : ''
+
   if (mismatch) {
-    const notes =
-      typeof params.input.discrepancyNotes === 'string' ? params.input.discrepancyNotes.trim() : ''
-    if (!notes) {
+    if (!discrepancyNotesText) {
       recordGateIssue(
         issues,
         'details.discrepancyNotes',
@@ -2939,6 +2940,51 @@ export async function receivePurchaseOrderInventory(params: {
   if (warehouseCode && !warehouse) {
     recordGateIssue(issues, 'details.warehouseCode', 'Warehouse code is invalid')
   }
+
+  const supplierDiscrepancyAdjustment = (() => {
+    if (!mismatch) return null
+    if (!discrepancyNotesText) return null
+
+    let rawAmount = new Prisma.Decimal(0)
+    for (const line of activeLines) {
+      const receivedCartons = receiptOverrides.has(line.id)
+        ? receiptOverrides.get(line.id)
+        : line.quantityReceived ?? line.quantity
+
+      if (receivedCartons === undefined) {
+        continue
+      }
+
+      const orderedUnits = new Prisma.Decimal(line.unitsOrdered)
+      const receivedUnits = new Prisma.Decimal(receivedCartons).mul(line.unitsPerCarton)
+      const diffUnits = orderedUnits.sub(receivedUnits)
+      if (diffUnits.isZero()) continue
+
+      if (!line.unitCost) continue
+      rawAmount = rawAmount.plus(line.unitCost.mul(diffUnits))
+    }
+
+    const rounded = rawAmount.toDecimalPlaces(2)
+    if (rounded.isZero()) return null
+
+    const sourceId = `po_receiving_discrepancy:${order.id}`
+
+    if (rounded.gt(0)) {
+      return {
+        sourceId,
+        category: FinancialLedgerCategory.SupplierCredit,
+        costName: 'Supplier Credit Note',
+        amount: rounded.neg(),
+      }
+    }
+
+    return {
+      sourceId,
+      category: FinancialLedgerCategory.SupplierDebit,
+      costName: 'Supplier Debit Note',
+      amount: rounded.abs(),
+    }
+  })()
 
   await requireDocuments({
     prisma,
@@ -3447,6 +3493,45 @@ export async function receivePurchaseOrderInventory(params: {
         postedAt: receivedAt,
       },
     })
+
+    if (supplierDiscrepancyAdjustment) {
+      await tx.financialLedgerEntry.upsert({
+        where: {
+          sourceType_sourceId: {
+            sourceType: FinancialLedgerSourceType.MANUAL,
+            sourceId: supplierDiscrepancyAdjustment.sourceId,
+          },
+        },
+        create: {
+          id: randomUUID(),
+          sourceType: FinancialLedgerSourceType.MANUAL,
+          sourceId: supplierDiscrepancyAdjustment.sourceId,
+          category: supplierDiscrepancyAdjustment.category,
+          costName: supplierDiscrepancyAdjustment.costName,
+          amount: supplierDiscrepancyAdjustment.amount,
+          currency: tenant.currency,
+          warehouseCode: warehouse!.code,
+          warehouseName: warehouse!.name,
+          purchaseOrderId: order.id,
+          effectiveAt: receivedAt,
+          createdAt: receivedAt,
+          createdByName: params.user.name,
+          notes: discrepancyNotesText,
+        },
+        update: {
+          category: supplierDiscrepancyAdjustment.category,
+          costName: supplierDiscrepancyAdjustment.costName,
+          amount: supplierDiscrepancyAdjustment.amount,
+          currency: tenant.currency,
+          warehouseCode: warehouse!.code,
+          warehouseName: warehouse!.name,
+          purchaseOrderId: order.id,
+          effectiveAt: receivedAt,
+          createdByName: params.user.name,
+          notes: discrepancyNotesText,
+        },
+      })
+    }
 
     const refreshed = await tx.purchaseOrder.findUnique({
       where: { id: order.id },
