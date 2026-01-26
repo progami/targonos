@@ -2,6 +2,7 @@ import { withAuth, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { sanitizeForDisplay, sanitizeSearchQuery } from '@/lib/security/input-sanitization'
+import { hasAnyPermission } from '@/lib/services/permission-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,8 @@ const SupplierSchema = z.object({
 const UpdateSupplierSchema = SupplierSchema.partial()
 
 export const GET = withAuth(async (request, session) => {
-  if (!['admin', 'staff'].includes(session.user.role)) {
+  const canViewSuppliers = await hasAnyPermission(session.user.id, ['po.create', 'po.edit'])
+  if (!canViewSuppliers) {
     return ApiResponses.forbidden('Insufficient permissions')
   }
 

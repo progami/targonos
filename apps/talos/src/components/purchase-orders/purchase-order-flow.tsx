@@ -434,6 +434,18 @@ type PurchaseOrderCostLedgerSummary = {
   }
 }
 
+type SupplierAdjustmentEntry = {
+  id: string
+  category: string
+  costName: string
+  amount: number
+  currency: string
+  effectiveAt: string
+  createdAt: string
+  createdByName: string
+  notes: string | null
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -874,6 +886,19 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     null
   )
   const [costLedgerLoading, setCostLedgerLoading] = useState(false)
+  const [supplierAdjustment, setSupplierAdjustment] = useState<SupplierAdjustmentEntry | null>(null)
+  const [supplierAdjustmentLoading, setSupplierAdjustmentLoading] = useState(false)
+  const [supplierAdjustmentEditing, setSupplierAdjustmentEditing] = useState(false)
+  const [supplierAdjustmentSaving, setSupplierAdjustmentSaving] = useState(false)
+  const [supplierAdjustmentDraft, setSupplierAdjustmentDraft] = useState<{
+    kind: 'credit' | 'debit'
+    amount: string
+    notes: string
+  }>({
+    kind: 'credit',
+    amount: '',
+    notes: '',
+  })
 
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
@@ -1239,6 +1264,157 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   useEffect(() => {
     void refreshCostLedgerSummary()
   }, [refreshCostLedgerSummary])
+
+  const refreshSupplierAdjustment = useCallback(async () => {
+    const orderId = order?.id
+    if (!orderId) {
+      setSupplierAdjustment(null)
+      return
+    }
+
+    try {
+      setSupplierAdjustmentLoading(true)
+      const response = await fetch(`/api/purchase-orders/${orderId}/supplier-adjustments`)
+      if (!response.ok) {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      const payload: unknown = await response.json().catch(() => null)
+      const dataCandidate =
+        payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload
+          ? (payload as { data?: unknown }).data
+          : null
+
+      if (!dataCandidate) {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      if (typeof dataCandidate !== 'object' || Array.isArray(dataCandidate)) {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      const record = dataCandidate as Record<string, unknown>
+      const id = record.id
+      const category = record.category
+      const costName = record.costName
+      const amount = record.amount
+      const currency = record.currency
+      const effectiveAt = record.effectiveAt
+      const createdAt = record.createdAt
+      const createdByName = record.createdByName
+      const notes = record.notes
+
+      if (typeof id !== 'string' || !id.trim()) {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      if (typeof category !== 'string' || typeof costName !== 'string') {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      if (typeof currency !== 'string' || typeof effectiveAt !== 'string' || typeof createdAt !== 'string') {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      if (typeof createdByName !== 'string') {
+        setSupplierAdjustment(null)
+        return
+      }
+
+      setSupplierAdjustment({
+        id,
+        category,
+        costName,
+        amount,
+        currency,
+        effectiveAt,
+        createdAt,
+        createdByName,
+        notes: typeof notes === 'string' ? notes : null,
+      })
+    } catch {
+      setSupplierAdjustment(null)
+    } finally {
+      setSupplierAdjustmentLoading(false)
+    }
+  }, [order?.id])
+
+  useEffect(() => {
+    void refreshSupplierAdjustment()
+  }, [refreshSupplierAdjustment])
+
+  useEffect(() => {
+    if (supplierAdjustmentEditing) return
+
+    if (!supplierAdjustment) {
+      setSupplierAdjustmentDraft({ kind: 'credit', amount: '', notes: '' })
+      return
+    }
+
+    const kind = supplierAdjustment.amount < 0 ? 'credit' : 'debit'
+    setSupplierAdjustmentDraft({
+      kind,
+      amount: Math.abs(supplierAdjustment.amount).toFixed(2),
+      notes: supplierAdjustment.notes ? supplierAdjustment.notes : '',
+    })
+  }, [supplierAdjustment, supplierAdjustmentEditing])
+
+  const saveSupplierAdjustment = useCallback(async () => {
+    if (!order) return
+    if (supplierAdjustmentSaving) return
+
+    const amount = Number(supplierAdjustmentDraft.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Amount must be a positive number')
+      return
+    }
+
+    try {
+      setSupplierAdjustmentSaving(true)
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/supplier-adjustments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: supplierAdjustmentDraft.kind,
+          amount,
+          notes: supplierAdjustmentDraft.notes.trim()
+            ? supplierAdjustmentDraft.notes.trim()
+            : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        toast.error(`Failed to save supplier adjustment (HTTP ${response.status})`)
+        return
+      }
+
+      setSupplierAdjustmentEditing(false)
+      void refreshSupplierAdjustment()
+      toast.success('Supplier adjustment saved')
+    } catch {
+      toast.error('Failed to save supplier adjustment')
+    } finally {
+      setSupplierAdjustmentSaving(false)
+    }
+  }, [
+    order,
+    refreshSupplierAdjustment,
+    supplierAdjustmentDraft.amount,
+    supplierAdjustmentDraft.kind,
+    supplierAdjustmentDraft.notes,
+    supplierAdjustmentSaving,
+  ])
 
   const selectedForwardingWarehouse = useMemo(() => {
     const code = forwardingWarehouseCode.trim()
@@ -2217,6 +2393,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setGateIssues(null)
       void refreshAuditLogs()
       void refreshCostLedgerSummary()
+      void refreshSupplierAdjustment()
       toast.success('Inventory received')
     } catch (_error) {
       toast.error('Failed to receive inventory')
@@ -2261,6 +2438,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const flowLines = order ? order.lines.filter(line => line.status !== 'CANCELLED') : draftLines
   const totalUnits = flowLines.reduce((sum, line) => sum + (line.unitsOrdered ?? 0), 0)
   const totalCartons = flowLines.reduce((sum, line) => sum + line.quantity, 0)
+  const productSubtotal = flowLines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0)
+  const supplierAdjustmentSubtotal = supplierAdjustment ? supplierAdjustment.amount : 0
+  const dutySubtotal = order?.stageData.warehouse?.dutyAmount ?? 0
+  const totalCostSummary =
+    productSubtotal + forwardingSubtotal + inboundSubtotal + dutySubtotal + supplierAdjustmentSubtotal
   const isTerminalStatus = order
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
@@ -5688,6 +5870,175 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
+                {/* Supplier Credit/Debit Section */}
+                {activeViewStage === 'WAREHOUSE' && (
+                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Supplier Credit/Debit
+                      </h4>
+                      {!supplierAdjustmentEditing && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSupplierAdjustmentEditing(true)}
+                          disabled={supplierAdjustmentLoading || supplierAdjustmentSaving || !order.warehouseCode || !order.warehouseName}
+                        >
+                          {supplierAdjustment ? 'Edit' : 'Add'}
+                        </Button>
+                      )}
+                    </div>
+
+                    {supplierAdjustmentLoading ? (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                        <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
+                      </div>
+                    ) : !order.warehouseCode || !order.warehouseName ? (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                        <p className="text-sm text-muted-foreground">
+                          Supplier credits/debits are recorded after the PO is received at warehouse.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                        {supplierAdjustment ? (
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Type
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Amount
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {supplierAdjustment.currency}{' '}
+                                {supplierAdjustment.amount.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Updated
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatDateOnly(supplierAdjustment.effectiveAt)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Updated By
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {supplierAdjustment.createdByName}
+                              </p>
+                            </div>
+                            <div className="space-y-1 col-span-2 md:col-span-4">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Notes
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {supplierAdjustment.notes ? supplierAdjustment.notes : '—'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No supplier adjustment recorded.</p>
+                        )}
+
+                        {supplierAdjustmentEditing && (
+                          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Kind
+                                </p>
+                                <select
+                                  value={supplierAdjustmentDraft.kind}
+                                  onChange={e =>
+                                    setSupplierAdjustmentDraft(prev => ({
+                                      ...prev,
+                                      kind: e.target.value as 'credit' | 'debit',
+                                    }))
+                                  }
+                                  disabled={supplierAdjustmentSaving}
+                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                >
+                                  <option value="credit">Credit</option>
+                                  <option value="debit">Debit</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Amount ({tenantCurrency})
+                                </p>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.01"
+                                  value={supplierAdjustmentDraft.amount}
+                                  onChange={e =>
+                                    setSupplierAdjustmentDraft(prev => ({
+                                      ...prev,
+                                      amount: e.target.value,
+                                    }))
+                                  }
+                                  disabled={supplierAdjustmentSaving}
+                                />
+                              </div>
+                              <div className="space-y-1 col-span-2 md:col-span-4">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Notes
+                                </p>
+                                <Input
+                                  value={supplierAdjustmentDraft.notes}
+                                  onChange={e =>
+                                    setSupplierAdjustmentDraft(prev => ({
+                                      ...prev,
+                                      notes: e.target.value,
+                                    }))
+                                  }
+                                  disabled={supplierAdjustmentSaving}
+                                  placeholder="Optional notes"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 mt-4">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSupplierAdjustmentEditing(false)}
+                                disabled={supplierAdjustmentSaving}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => void saveSupplierAdjustment()}
+                                disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
+                                className="gap-2"
+                              >
+                                {supplierAdjustmentSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Save
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Cost Summary */}
                 <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
@@ -5696,18 +6047,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <table className="w-full text-sm">
                       <tbody>
-                        <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums font-medium">
-                            {tenantCurrency}{' '}
-                            {flowLines
-                              .reduce((sum, line) => sum + (line.totalCost ?? 0), 0)
-                              .toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                          </td>
-                        </tr>
+	                        <tr className="border-b border-slate-100 dark:border-slate-700">
+	                          <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
+	                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                            {tenantCurrency}{' '}
+	                            {productSubtotal.toLocaleString(undefined, {
+	                                minimumFractionDigits: 2,
+	                                maximumFractionDigits: 2,
+	                              })}
+	                          </td>
+	                        </tr>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <td className="px-4 py-2 text-muted-foreground">Cargo Costs</td>
                           <td className="px-4 py-2 text-right tabular-nums font-medium">
@@ -5734,35 +6083,42 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <td className="px-4 py-2 text-muted-foreground">Storage Costs</td>
                           <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
                         </tr>
-                        <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <td className="px-4 py-2 text-muted-foreground">Outbound Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
-                        </tr>
-                        {order.stageData.warehouse?.dutyAmount != null && (
-                          <tr className="border-b border-slate-100 dark:border-slate-700">
-                            <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
-                            <td className="px-4 py-2 text-right tabular-nums font-medium">
-                              {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        )}
+	                        <tr className="border-b border-slate-100 dark:border-slate-700">
+	                          <td className="px-4 py-2 text-muted-foreground">Outbound Costs</td>
+	                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+	                        </tr>
+	                        <tr className="border-b border-slate-100 dark:border-slate-700">
+	                          <td className="px-4 py-2 text-muted-foreground">Supplier Adjustment</td>
+	                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                            {supplierAdjustment
+	                              ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
+	                                  minimumFractionDigits: 2,
+	                                  maximumFractionDigits: 2,
+	                                })}`
+	                              : '—'}
+	                          </td>
+	                        </tr>
+	                        {order.stageData.warehouse?.dutyAmount != null && (
+	                          <tr className="border-b border-slate-100 dark:border-slate-700">
+	                            <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
+	                            <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                              {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+	                            </td>
+	                          </tr>
+	                        )}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-slate-50 dark:bg-slate-800/50">
-                          <td className="px-4 py-3 font-semibold">Total Cost</td>
-                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
-                            {tenantCurrency} {(
-                              flowLines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0) +
-                              forwardingSubtotal +
-                              inboundSubtotal +
-                              (order.stageData.warehouse?.dutyAmount ?? 0)
-                            ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+	                        <tr className="bg-slate-50 dark:bg-slate-800/50">
+	                          <td className="px-4 py-3 font-semibold">Total Cost</td>
+	                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
+	                            {tenantCurrency}{' '}
+	                            {totalCostSummary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+	                          </td>
+	                        </tr>
+	                      </tfoot>
+	                    </table>
+	                  </div>
+	                </div>
               </div>
                 )}
 
