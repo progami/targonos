@@ -101,6 +101,14 @@ interface SkuSummary {
   description: string
 }
 
+interface SupplierOption {
+  id: string
+  name: string
+  phone: string | null
+  defaultIncoterms: string | null
+  defaultPaymentTerms: string | null
+}
+
 interface BatchOption {
   batchCode: string
   unitsPerCarton: number | null
@@ -785,6 +793,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     paymentTerms: '',
     notes: '',
   })
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
 
   useEffect(() => {
     if (!isCreate) return
@@ -1643,6 +1653,81 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setSkusLoading(false)
     }
   }, [skus.length, skusLoading])
+
+  const ensureSuppliersLoaded = useCallback(async () => {
+    if (suppliersLoading || suppliers.length > 0) return
+
+    try {
+      setSuppliersLoading(true)
+      const response = await fetch('/api/suppliers', { credentials: 'include' })
+      if (!response.ok) {
+        setSuppliers([])
+        return
+      }
+      const payload = await response.json().catch(() => null)
+      const rows = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+          ? payload
+          : []
+      setSuppliers(rows as SupplierOption[])
+    } catch {
+      setSuppliers([])
+    } finally {
+      setSuppliersLoading(false)
+    }
+  }, [suppliers.length, suppliersLoading])
+
+  useEffect(() => {
+    if (!orderInfoEditing) return
+    void ensureSuppliersLoaded()
+  }, [ensureSuppliersLoaded, orderInfoEditing])
+
+  const selectedSupplier = useMemo(() => {
+    const supplierName = orderInfoDraft.counterpartyName.trim()
+    if (!supplierName) return null
+    return suppliers.find(supplier => supplier.name === supplierName) ?? null
+  }, [orderInfoDraft.counterpartyName, suppliers])
+
+  const applySupplierSelection = useCallback(
+    (supplierName: string) => {
+      const selectedName = supplierName.trim()
+
+      setOrderInfoDraft(prev => {
+        if (!selectedName) {
+          return { ...prev, counterpartyName: '' }
+        }
+
+        const supplier = suppliers.find(item => item.name === selectedName) ?? null
+        if (!supplier) {
+          return { ...prev, counterpartyName: selectedName }
+        }
+
+        const supplierIncoterms =
+          typeof supplier.defaultIncoterms === 'string'
+            ? supplier.defaultIncoterms.trim().toUpperCase()
+            : ''
+        const supplierPaymentTerms =
+          typeof supplier.defaultPaymentTerms === 'string'
+            ? supplier.defaultPaymentTerms.trim()
+            : ''
+
+        const nextIncoterms =
+          supplierIncoterms && (INCOTERMS_OPTIONS as readonly string[]).includes(supplierIncoterms)
+            ? supplierIncoterms
+            : prev.incoterms
+        const nextPaymentTerms = supplierPaymentTerms ? supplierPaymentTerms : prev.paymentTerms
+
+        return {
+          ...prev,
+          counterpartyName: supplier.name,
+          incoterms: nextIncoterms,
+          paymentTerms: nextPaymentTerms,
+        }
+      })
+    },
+    [suppliers]
+  )
 
   const ensureSkuBatchesLoaded = useCallback(
     async (skuId: string) => {
@@ -5753,23 +5838,28 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         Supplier
                       </p>
                       {orderInfoEditing ? (
-                        <Input
+                        <select
                           value={orderInfoDraft.counterpartyName}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              counterpartyName: e.target.value,
-                            }))
-                          }
-                          placeholder="Supplier"
+                          onChange={e => applySupplierSelection(e.target.value)}
                           disabled={orderInfoSaving}
-                        />
+                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                        >
+                          <option value="">Select supplier</option>
+                          {suppliers.map(supplier => (
+                            <option key={supplier.id} value={supplier.name}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                           {orderInfoDraft.counterpartyName.trim()
                             ? orderInfoDraft.counterpartyName
                             : '—'}
                         </p>
+                      )}
+                      {selectedSupplier?.phone && selectedSupplier.phone.trim().length > 0 && (
+                        <p className="text-xs text-muted-foreground">Tel: {selectedSupplier.phone.trim()}</p>
                       )}
                     </div>
                     <div className="space-y-1">
@@ -5940,23 +6030,22 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         Supplier
                       </p>
                       {canEdit && orderInfoEditing ? (
-                        <Input
+                        <select
                           data-gate-key="details.counterpartyName"
                           value={orderInfoDraft.counterpartyName}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              counterpartyName: e.target.value,
-                            }))
-                          }
-                          placeholder="Supplier"
+                          onChange={e => applySupplierSelection(e.target.value)}
                           disabled={orderInfoSaving}
-                          className={
-                            gateIssues?.['details.counterpartyName']
-                              ? 'border-rose-500 focus-visible:ring-rose-500'
-                              : undefined
-                          }
-                        />
+                          className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                            gateIssues?.['details.counterpartyName'] ? 'border-rose-500' : ''
+                          }`}
+                        >
+                          <option value="">Select supplier</option>
+                          {suppliers.map(supplier => (
+                            <option key={supplier.id} value={supplier.name}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         <p
                           className="text-sm font-medium text-slate-900 dark:text-slate-100"
