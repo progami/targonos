@@ -1,4 +1,11 @@
-import { CostCategory, PurchaseOrderStatus, TransactionType } from '@targon/prisma-talos'
+import {
+  CostCategory,
+  FinancialLedgerCategory,
+  FinancialLedgerSourceType,
+  PurchaseOrderStatus,
+  Prisma,
+  TransactionType,
+} from '@targon/prisma-talos'
 import { ValidationError } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
@@ -39,6 +46,10 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
       select: {
         id: true,
         skuCode: true,
+        skuDescription: true,
+        batchLot: true,
+        purchaseOrderId: true,
+        purchaseOrderLineId: true,
         cartonsIn: true,
         cartonDimensionsCm: true,
         warehouseCode: true,
@@ -63,6 +74,13 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
       where: {
         transactionId: { in: transactionIds },
         costCategory: CostCategory.Forwarding,
+      },
+    })
+    await tx.financialLedgerEntry.deleteMany({
+      where: {
+        sourceType: FinancialLedgerSourceType.COST_LEDGER,
+        inventoryTransactionId: { in: transactionIds },
+        category: FinancialLedgerCategory.Forwarding,
       },
     })
 
@@ -94,6 +112,63 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
 
     if (forwardingEntries.length > 0) {
       await tx.costLedger.createMany({ data: forwardingEntries })
+
+      const inserted = await tx.costLedger.findMany({
+        where: {
+          transactionId: { in: transactionIds },
+          costCategory: CostCategory.Forwarding,
+        },
+        select: {
+          id: true,
+          transactionId: true,
+          costCategory: true,
+          costName: true,
+          quantity: true,
+          unitRate: true,
+          totalCost: true,
+          warehouseCode: true,
+          warehouseName: true,
+          createdAt: true,
+          createdByName: true,
+        },
+      })
+
+      const txById = new Map(transactions.map(row => [row.id, row]))
+      const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+        const txRow = txById.get(row.transactionId)
+        if (!txRow) {
+          throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+        }
+
+        return {
+          id: row.id,
+          sourceType: FinancialLedgerSourceType.COST_LEDGER,
+          sourceId: row.id,
+          category: FinancialLedgerCategory.Forwarding,
+          costName: row.costName,
+          quantity: row.quantity,
+          unitRate: row.unitRate,
+          amount: row.totalCost,
+          warehouseCode: row.warehouseCode,
+          warehouseName: row.warehouseName,
+          skuCode: txRow.skuCode,
+          skuDescription: txRow.skuDescription,
+          batchLot: txRow.batchLot,
+          inventoryTransactionId: row.transactionId,
+          purchaseOrderId: txRow.purchaseOrderId,
+          purchaseOrderLineId: txRow.purchaseOrderLineId,
+          effectiveAt: row.createdAt,
+          createdAt: row.createdAt,
+          createdByName: row.createdByName,
+        }
+      })
+
+      if (financialEntries.length > 0) {
+        await tx.financialLedgerEntry.createMany({
+          data: financialEntries,
+          skipDuplicates: true,
+        })
+      }
     }
   })
 }

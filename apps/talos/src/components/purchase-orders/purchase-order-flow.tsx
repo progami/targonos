@@ -47,6 +47,7 @@ import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
+import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 
@@ -67,7 +68,6 @@ interface PurchaseOrderLineSummary {
   skuDescription: string | null
   batchLot: string | null
   piNumber: string | null
-  productNumber: string | null
   commodityCode: string | null
   countryOfOrigin: string | null
   netWeightKg: number | null
@@ -335,6 +335,7 @@ interface PurchaseOrderSummary {
   warehouseCode: string | null
   warehouseName: string | null
   counterpartyName: string | null
+  supplier: { phone: string | null; bankingDetails: string | null } | null
   expectedDate: string | null
   incoterms: string | null
   paymentTerms: string | null
@@ -771,6 +772,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [splitGroupLoading, setSplitGroupLoading] = useState(false)
   const [draftLines, setDraftLines] = useState<PurchaseOrderLineSummary[]>([])
   const [tenantDestination, setTenantDestination] = useState<string>('')
+  const [tenantCode, setTenantCode] = useState<string>('')
   const [tenantCurrency, setTenantCurrency] = useState<string>('USD')
   const [transitioning, setTransitioning] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -968,14 +970,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         const payload = await response.json().catch(() => null)
         const currency = payload?.current?.currency
         const tenantName = payload?.current?.name
-        const tenantCode = payload?.current?.displayName ?? payload?.current?.code
+        const tenantShortCode = payload?.current?.displayName ?? payload?.current?.code
         if (typeof currency === 'string' && currency.trim()) {
           setTenantCurrency(currency.trim().toUpperCase())
         }
+        if (typeof tenantShortCode === 'string' && tenantShortCode.trim()) {
+          setTenantCode(tenantShortCode.trim().toUpperCase())
+        }
         if (typeof tenantName !== 'string' || !tenantName.trim()) return
         const label =
-          typeof tenantCode === 'string' && tenantCode.trim()
-            ? `${tenantName.trim()} (${tenantCode.trim().toUpperCase()})`
+          typeof tenantShortCode === 'string' && tenantShortCode.trim()
+            ? `${tenantName.trim()} (${tenantShortCode.trim().toUpperCase()})`
             : tenantName.trim()
         setTenantDestination(label)
       } catch {
@@ -2558,7 +2563,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         skuDescription: selectedSku.description,
         batchLot,
         piNumber: null,
-        productNumber: null,
         commodityCode: null,
         countryOfOrigin: null,
         netWeightKg: null,
@@ -5961,6 +5965,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           {order.counterpartyName ?? '—'}
                         </p>
                       )}
+                      {!orderInfoEditing && order.supplier?.phone && order.supplier.phone.trim().length > 0 && (
+                        <p className="text-xs text-muted-foreground">Tel: {order.supplier.phone.trim()}</p>
+                      )}
                       {gateIssues?.['details.counterpartyName'] && (
                         <p className="text-xs text-rose-600" data-gate-key="details.counterpartyName">
                           {gateIssues['details.counterpartyName']} <Link href="/config/suppliers" className="underline">Open Suppliers</Link>
@@ -6096,6 +6103,35 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         {order.createdByName ? ` by ${order.createdByName}` : ''}
                       </p>
                     </div>
+
+                    <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Ship To
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {(() => {
+                          const parts: string[] = []
+                          parts.push(BUYER_LEGAL_ENTITY.name)
+                          parts.push(BUYER_LEGAL_ENTITY.address)
+                          if (tenantCode.trim().length > 0) {
+                            parts.push(tenantCode.trim().toUpperCase())
+                          }
+                          parts.push(BUYER_LEGAL_ENTITY.phone)
+                          return parts.join(' • ')
+                        })()}
+                      </p>
+                    </div>
+
+                    {order.status !== 'DRAFT' && (
+                      <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Supplier Banking
+                        </p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">
+                          {formatTextOrDash(order.supplier?.bankingDetails)}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   {(order.notes || (canEdit && orderInfoEditing)) && (
                     <div className="mt-4">

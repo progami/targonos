@@ -1,5 +1,10 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma, TransactionType } from '@targon/prisma-talos'
+import {
+ FinancialLedgerCategory,
+ FinancialLedgerSourceType,
+ Prisma,
+ TransactionType,
+} from '@targon/prisma-talos'
 import { addMonths, eachDayOfInterval, endOfWeek, format, startOfWeek } from 'date-fns'
 import { randomUUID } from 'crypto'
 import {
@@ -345,54 +350,137 @@ export async function recordStorageCostEntry({
  }
 
  if (existing) {
- return prisma.storageLedger.update({
- where: { id: existing.id },
- data: {
- warehouseName,
- skuDescription,
- openingBalance,
- weeklyReceive,
- weeklyShip,
- weeklyAdjust,
- closingBalance: normalizedClosingBalance,
- averageBalance,
- dailyBalanceData,
- closingPallets,
- palletDays,
- storageRatePerPalletDay: ratePerPalletDay,
- totalStorageCost: totalCost,
- rateEffectiveDate,
- costRateId,
- isCostCalculated,
- },
+ const updated = await prisma.storageLedger.update({
+  where: { id: existing.id },
+  data: {
+   warehouseName,
+   skuDescription,
+   openingBalance,
+   weeklyReceive,
+   weeklyShip,
+   weeklyAdjust,
+   closingBalance: normalizedClosingBalance,
+   averageBalance,
+   dailyBalanceData,
+   closingPallets,
+   palletDays,
+   storageRatePerPalletDay: ratePerPalletDay,
+   totalStorageCost: totalCost,
+   rateEffectiveDate,
+   costRateId,
+   isCostCalculated,
+  },
  })
+
+ await upsertFinancialLedgerEntryForStorage(prisma, updated)
+ return updated
  }
 
- return prisma.storageLedger.create({
- data: {
- storageLedgerId: randomUUID(),
- warehouseCode,
- warehouseName,
- skuCode,
- skuDescription,
- batchLot,
- weekEndingDate,
- openingBalance,
- weeklyReceive,
- weeklyShip,
- weeklyAdjust,
- closingBalance: normalizedClosingBalance,
- averageBalance,
- dailyBalanceData,
- closingPallets,
- palletDays,
- storageRatePerPalletDay: ratePerPalletDay,
- totalStorageCost: totalCost,
- rateEffectiveDate,
- costRateId,
- isCostCalculated,
- createdByName: 'System',
- },
+ const created = await prisma.storageLedger.create({
+  data: {
+   storageLedgerId: randomUUID(),
+   warehouseCode,
+   warehouseName,
+   skuCode,
+   skuDescription,
+   batchLot,
+   weekEndingDate,
+   openingBalance,
+   weeklyReceive,
+   weeklyShip,
+   weeklyAdjust,
+   closingBalance: normalizedClosingBalance,
+   averageBalance,
+   dailyBalanceData,
+   closingPallets,
+   palletDays,
+   storageRatePerPalletDay: ratePerPalletDay,
+   totalStorageCost: totalCost,
+   rateEffectiveDate,
+   costRateId,
+   isCostCalculated,
+   createdByName: 'System',
+  },
+ })
+
+ await upsertFinancialLedgerEntryForStorage(prisma, created)
+ return created
+}
+
+async function upsertFinancialLedgerEntryForStorage(
+ prisma: Prisma.TransactionClient,
+ entry: {
+  id: string
+  storageLedgerId: string
+  warehouseCode: string
+  warehouseName: string
+  skuCode: string
+  skuDescription: string
+  batchLot: string
+  weekEndingDate: Date
+  palletDays: number
+  storageRatePerPalletDay: unknown
+  totalStorageCost: unknown
+  isCostCalculated: boolean
+  createdAt: Date
+  createdByName: string
+ }
+) {
+ const total = entry.totalStorageCost != null ? Number(entry.totalStorageCost) : null
+ if (!entry.isCostCalculated || total === null || !Number.isFinite(total)) {
+  await prisma.financialLedgerEntry.deleteMany({
+   where: {
+    sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+    sourceId: entry.storageLedgerId,
+   },
+  })
+  return
+ }
+
+ const unitRateRaw = entry.storageRatePerPalletDay != null ? Number(entry.storageRatePerPalletDay) : null
+ const unitRate = unitRateRaw !== null && Number.isFinite(unitRateRaw) ? unitRateRaw : null
+
+ await prisma.financialLedgerEntry.upsert({
+  where: {
+   sourceType_sourceId: {
+    sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+    sourceId: entry.storageLedgerId,
+   },
+  },
+  create: {
+   id: entry.id,
+   sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+   sourceId: entry.storageLedgerId,
+   category: FinancialLedgerCategory.Storage,
+   costName: 'Storage',
+   quantity: new Prisma.Decimal(entry.palletDays.toString()),
+   unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
+   amount: new Prisma.Decimal(total.toFixed(2)),
+   warehouseCode: entry.warehouseCode,
+   warehouseName: entry.warehouseName,
+   skuCode: entry.skuCode,
+   skuDescription: entry.skuDescription,
+   batchLot: entry.batchLot,
+   storageLedgerId: entry.id,
+   effectiveAt: entry.weekEndingDate,
+   createdAt: entry.createdAt,
+   createdByName: entry.createdByName,
+  },
+  update: {
+   category: FinancialLedgerCategory.Storage,
+   costName: 'Storage',
+   quantity: new Prisma.Decimal(entry.palletDays.toString()),
+   unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
+   amount: new Prisma.Decimal(total.toFixed(2)),
+   warehouseCode: entry.warehouseCode,
+   warehouseName: entry.warehouseName,
+   skuCode: entry.skuCode,
+   skuDescription: entry.skuDescription,
+   batchLot: entry.batchLot,
+   storageLedgerId: entry.id,
+   effectiveAt: entry.weekEndingDate,
+   createdByName: entry.createdByName,
+  },
  })
 }
 

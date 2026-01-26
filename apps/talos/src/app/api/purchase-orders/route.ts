@@ -11,7 +11,7 @@ import {
 } from '@/lib/services/po-stage-service'
 import type { UserContext } from '@/lib/services/po-stage-service'
 import { hasPermission } from '@/lib/services/permission-service'
-import { getCurrentTenant } from '@/lib/tenant/server'
+import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 
 export const GET = withAuth(async (request: NextRequest, _session) => {
   const splitGroupId = request.nextUrl.searchParams.get('splitGroupId')
@@ -33,7 +33,6 @@ const LineItemSchema = z.object({
     .min(1)
     .refine(value => value.trim().toUpperCase() !== 'DEFAULT', 'Batch is required'),
   piNumber: z.string().trim().optional(),
-  productNumber: z.string().trim().optional(),
   commodityCode: z.string().trim().optional(),
   countryOfOrigin: z.string().trim().optional(),
   netWeightKg: z.number().positive().optional(),
@@ -102,7 +101,6 @@ export const POST = withAuth(async (request: NextRequest, session) => {
           skuDescription: line.skuDescription,
           batchLot: line.batchLot,
           piNumber: line.piNumber,
-          productNumber: line.productNumber,
           commodityCode: line.commodityCode,
           countryOfOrigin: line.countryOfOrigin,
           netWeightKg: line.netWeightKg,
@@ -122,7 +120,20 @@ export const POST = withAuth(async (request: NextRequest, session) => {
     )
 
     const tenant = await getCurrentTenant()
-    return ApiResponses.success(serializeNewPO(order, { defaultCurrency: tenant.currency }))
+    const prisma = await getTenantPrisma()
+    const supplier = await prisma.supplier.findFirst({
+      where: { name: { equals: order.counterpartyName?.trim() ?? '', mode: 'insensitive' } },
+      select: { phone: true, bankingDetails: true },
+    })
+    return ApiResponses.success({
+      ...serializeNewPO(order, { defaultCurrency: tenant.currency }),
+      supplier: supplier
+        ? {
+            phone: supplier.phone ?? null,
+            bankingDetails: supplier.bankingDetails ?? null,
+          }
+        : null,
+    })
   } catch (error) {
     return ApiResponses.handleError(error)
   }

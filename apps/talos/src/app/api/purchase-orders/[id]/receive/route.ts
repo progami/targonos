@@ -2,6 +2,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { receivePurchaseOrderInventory, serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import type { ReceivePurchaseOrderInventoryInput, UserContext } from '@/lib/services/po-stage-service'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -85,7 +86,24 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       user: userContext,
     })
 
-    return ApiResponses.success(serializePurchaseOrder(updated))
+    const prisma = await getTenantPrisma()
+    const supplier =
+      updated.counterpartyName && updated.counterpartyName.trim().length > 0
+        ? await prisma.supplier.findFirst({
+            where: { name: { equals: updated.counterpartyName.trim(), mode: 'insensitive' } },
+            select: { phone: true, bankingDetails: true },
+          })
+        : null
+
+    return ApiResponses.success({
+      ...serializePurchaseOrder(updated),
+      supplier: supplier
+        ? {
+            phone: supplier.phone ?? null,
+            bankingDetails: supplier.bankingDetails ?? null,
+          }
+        : null,
+    })
   } catch (error) {
     return ApiResponses.handleError(error)
   }

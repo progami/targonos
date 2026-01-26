@@ -16,7 +16,6 @@ import {
   DollarSign,
   Building,
   BookOpen,
-  Calendar,
   Users,
   ChevronRight,
 } from '@/lib/lucide-icons'
@@ -78,8 +77,7 @@ const baseNavigation: NavSection[] = [
       { name: 'Purchase Orders', href: '/operations/purchase-orders', icon: FileText },
       { name: 'Fulfillment Orders', href: '/operations/fulfillment-orders', icon: Truck },
       { name: 'Inventory Ledger', href: '/operations/inventory', icon: BookOpen },
-      { name: 'Storage Ledger', href: '/operations/storage-ledger', icon: Calendar },
-      { name: 'Cost Ledger', href: '/operations/cost-ledger', icon: BarChart3 },
+      { name: 'Financial Ledger', href: '/operations/financial-ledger', icon: BarChart3 },
     ]
   },
   {
