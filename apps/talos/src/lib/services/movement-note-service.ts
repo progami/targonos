@@ -1,6 +1,9 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
   Prisma,
+  CostCategory,
+  FinancialLedgerCategory,
+  FinancialLedgerSourceType,
   PurchaseOrderType,
   MovementNoteStatus,
   PurchaseOrderLineStatus,
@@ -16,6 +19,14 @@ import {
 } from '@/lib/services/purchase-order-utils'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
+
+function toFinancialCategory(costCategory: CostCategory) {
+  if (costCategory === CostCategory.Inbound) return FinancialLedgerCategory.Inbound
+  if (costCategory === CostCategory.Storage) return FinancialLedgerCategory.Storage
+  if (costCategory === CostCategory.Outbound) return FinancialLedgerCategory.Outbound
+  if (costCategory === CostCategory.Forwarding) return FinancialLedgerCategory.Forwarding
+  return FinancialLedgerCategory.Other
+}
 
 export interface UserContext {
   id?: string | null
@@ -379,6 +390,8 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
     const created: Array<{
       id: string
+      purchaseOrderId: string
+      purchaseOrderLineId: string
       warehouseCode: string
       warehouseName: string
       skuCode: string
@@ -518,6 +531,8 @@ export async function postMovementNote(id: string, _user: UserContext) {
         },
         select: {
           id: true,
+          purchaseOrderId: true,
+          purchaseOrderLineId: true,
           warehouseCode: true,
           warehouseName: true,
           skuCode: true,
@@ -603,6 +618,61 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
       if (ledgerEntries.length > 0) {
         await tx.costLedger.createMany({ data: ledgerEntries })
+
+        const transactionIds = created.map(row => row.id)
+        const inserted = await tx.costLedger.findMany({
+          where: { transactionId: { in: transactionIds } },
+          select: {
+            id: true,
+            transactionId: true,
+            costCategory: true,
+            costName: true,
+            quantity: true,
+            unitRate: true,
+            totalCost: true,
+            warehouseCode: true,
+            warehouseName: true,
+            createdAt: true,
+            createdByName: true,
+          },
+        })
+
+        const txById = new Map(created.map(row => [row.id, row]))
+        const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+          const txRow = txById.get(row.transactionId)
+          if (!txRow) {
+            throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+          }
+
+          return {
+            id: row.id,
+            sourceType: FinancialLedgerSourceType.COST_LEDGER,
+            sourceId: row.id,
+            category: toFinancialCategory(row.costCategory),
+            costName: row.costName,
+            quantity: row.quantity,
+            unitRate: row.unitRate,
+            amount: row.totalCost,
+            warehouseCode: row.warehouseCode,
+            warehouseName: row.warehouseName,
+            skuCode: txRow.skuCode,
+            skuDescription: txRow.skuDescription,
+            batchLot: txRow.batchLot,
+            inventoryTransactionId: row.transactionId,
+            purchaseOrderId: txRow.purchaseOrderId,
+            purchaseOrderLineId: txRow.purchaseOrderLineId,
+            effectiveAt: row.createdAt,
+            createdAt: row.createdAt,
+            createdByName: row.createdByName,
+          }
+        })
+
+        if (financialEntries.length > 0) {
+          await tx.financialLedgerEntry.createMany({
+            data: financialEntries,
+            skipDuplicates: true,
+          })
+        }
       }
     }
 

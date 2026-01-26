@@ -7,6 +7,7 @@ import {
   getValidNextStages,
 } from '@/lib/services/po-stage-service'
 import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
+import { getTenantPrisma } from '@/lib/tenant/server'
 
 const DateInputSchema = z
   .string()
@@ -173,7 +174,23 @@ export const PATCH = withAuthAndParams(
         result.data.stageData as StageTransitionInput,
         userContext
       )
-      return ApiResponses.success(serializePurchaseOrder(order))
+      const prisma = await getTenantPrisma()
+      const supplier =
+        order.counterpartyName && order.counterpartyName.trim().length > 0
+          ? await prisma.supplier.findFirst({
+              where: { name: { equals: order.counterpartyName.trim(), mode: 'insensitive' } },
+              select: { phone: true, bankingDetails: true },
+            })
+          : null
+      return ApiResponses.success({
+        ...serializePurchaseOrder(order),
+        supplier: supplier
+          ? {
+              phone: supplier.phone ?? null,
+              bankingDetails: supplier.bankingDetails ?? null,
+            }
+          : null,
+      })
     } catch (error) {
       return ApiResponses.handleError(error)
     }
