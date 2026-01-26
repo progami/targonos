@@ -17,6 +17,7 @@ import {
   calculateSizeTierForTenant,
   getReferralFeePercentForTenant,
   normalizeReferralCategory2026,
+  UK_SIZE_TIER_DEFINITIONS_2026,
 } from '@/lib/amazon/fees'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { useSession } from '@/hooks/usePortalSession'
@@ -91,6 +92,8 @@ const AMAZON_SIZE_TIER_OPTIONS = [
   'Overmax 0 to 150 lb',
   'Small and Light',
 ] as const
+
+const UK_SIZE_TIER_OPTIONS = UK_SIZE_TIER_DEFINITIONS_2026.map(entry => entry.tier)
 
 interface SkuBatchRow {
   id: string
@@ -418,6 +421,8 @@ interface SkusPanelProps {
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
   const { data: session } = useSession()
   const tenantCode: TenantCode = session?.user?.region ?? 'US'
+  const referenceSizeTierOptions =
+    tenantCode === 'UK' ? UK_SIZE_TIER_OPTIONS : AMAZON_SIZE_TIER_OPTIONS
   const pageState = usePageState(PAGE_KEY)
   const [skus, setSkus] = useState<SkuRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -1395,7 +1400,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                     className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                                   >
                                     <option value="">Select size tier</option>
-                                    {AMAZON_SIZE_TIER_OPTIONS.map(sizeTier => (
+                                    {referenceSizeTierOptions.map(sizeTier => (
                                       <option key={sizeTier} value={sizeTier}>
                                         {sizeTier}
                                       </option>
