@@ -314,11 +314,11 @@ export default function SuppliersPanel({
             <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
-                  <th className="w-[28%] px-4 py-3 text-left font-semibold">Name</th>
-                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Contact</th>
-                  <th className="w-[20%] px-4 py-3 text-left font-semibold">Email</th>
+                  <th className="w-[22%] px-4 py-3 text-left font-semibold">Name</th>
+                  <th className="w-[10%] px-4 py-3 text-left font-semibold">Contact</th>
+                  <th className="w-[22%] px-4 py-3 text-left font-semibold">Email</th>
                   <th className="w-[14%] px-4 py-3 text-left font-semibold">Phone</th>
-                  <th className="w-[16%] px-4 py-3 text-left font-semibold">Default Terms</th>
+                  <th className="w-[24%] px-4 py-3 text-left font-semibold">Default Terms</th>
                   <th className="w-[8%] px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -338,10 +338,10 @@ export default function SuppliersPanel({
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300 truncate" title={supplier.contactName ?? undefined}>
                       {supplier.contactName ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={supplier.email ?? undefined}>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
                       {supplier.email ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={supplier.phone ?? undefined}>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {supplier.phone ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 truncate" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
