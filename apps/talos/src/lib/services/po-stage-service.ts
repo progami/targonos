@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import {
   CostCategory,
+  FinancialLedgerCategory,
+  FinancialLedgerSourceType,
   PurchaseOrder,
   PurchaseOrderProformaInvoice,
   PurchaseOrderLine,
@@ -477,6 +479,14 @@ function validateCustomsEntryNumberFormat(params: { tenantCode: string; customsE
   }
 
   return normalized.length > 0
+}
+
+function toFinancialCategory(costCategory: CostCategory): FinancialLedgerCategory {
+  if (costCategory === CostCategory.Inbound) return FinancialLedgerCategory.Inbound
+  if (costCategory === CostCategory.Storage) return FinancialLedgerCategory.Storage
+  if (costCategory === CostCategory.Outbound) return FinancialLedgerCategory.Outbound
+  if (costCategory === CostCategory.Forwarding) return FinancialLedgerCategory.Forwarding
+  return FinancialLedgerCategory.Other
 }
 
 async function validateTransitionGate(params: {
@@ -1138,7 +1148,6 @@ export interface CreatePurchaseOrderLineInput {
   skuDescription?: string
   batchLot: string
   piNumber?: string
-  productNumber?: string
   commodityCode?: string
   countryOfOrigin?: string
   netWeightKg?: number
@@ -1493,10 +1502,6 @@ export async function createPurchaseOrder(
                       piNumber:
                         typeof line.piNumber === 'string' && line.piNumber.trim().length > 0
                           ? normalizePiNumber(line.piNumber)
-                          : null,
-                      productNumber:
-                        typeof line.productNumber === 'string' && line.productNumber.trim().length > 0
-                          ? line.productNumber.trim()
                           : null,
                       commodityCode:
                         typeof line.commodityCode === 'string' && line.commodityCode.trim().length > 0
@@ -2014,7 +2019,6 @@ export async function transitionPurchaseOrderStage(
           skuDescription: line.skuDescription,
           batchLot: line.batchLot,
           piNumber: line.piNumber,
-          productNumber: line.productNumber,
           commodityCode: line.commodityCode,
           countryOfOrigin: line.countryOfOrigin,
           netWeightKg: line.netWeightKg,
@@ -2421,6 +2425,8 @@ export async function transitionPurchaseOrderStage(
           },
           select: {
             id: true,
+            purchaseOrderId: true,
+            purchaseOrderLineId: true,
             skuCode: true,
             cartonDimensionsCm: true,
             storagePalletsIn: true,
@@ -2436,6 +2442,8 @@ export async function transitionPurchaseOrderStage(
 
         createdTransactions.push({
           id: txRow.id,
+          purchaseOrderId: txRow.purchaseOrderId,
+          purchaseOrderLineId: txRow.purchaseOrderLineId,
           skuCode: txRow.skuCode,
           cartons,
           pallets: Number(txRow.storagePalletsIn ?? 0),
@@ -2518,6 +2526,64 @@ export async function transitionPurchaseOrderStage(
 
       if (inboundLedgerEntries.length > 0) {
         await tx.costLedger.createMany({ data: inboundLedgerEntries })
+
+        const transactionIds = createdTransactions.map(row => row.id)
+        const inserted = await tx.costLedger.findMany({
+          where: {
+            transactionId: { in: transactionIds },
+            costCategory: CostCategory.Inbound,
+          },
+          select: {
+            id: true,
+            transactionId: true,
+            costCategory: true,
+            costName: true,
+            quantity: true,
+            unitRate: true,
+            totalCost: true,
+            warehouseCode: true,
+            warehouseName: true,
+            createdAt: true,
+            createdByName: true,
+          },
+        })
+
+        const txById = new Map(createdTransactions.map(row => [row.id, row]))
+        const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+          const txRow = txById.get(row.transactionId)
+          if (!txRow) {
+            throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+          }
+
+          return {
+            id: row.id,
+            sourceType: FinancialLedgerSourceType.COST_LEDGER,
+            sourceId: row.id,
+            category: toFinancialCategory(row.costCategory),
+            costName: row.costName,
+            quantity: row.quantity,
+            unitRate: row.unitRate,
+            amount: row.totalCost,
+            warehouseCode: row.warehouseCode,
+            warehouseName: row.warehouseName,
+            skuCode: txRow.skuCode,
+            skuDescription: txRow.skuDescription,
+            batchLot: txRow.batchLot,
+            inventoryTransactionId: row.transactionId,
+            purchaseOrderId: txRow.purchaseOrderId,
+            purchaseOrderLineId: txRow.purchaseOrderLineId,
+            effectiveAt: row.createdAt,
+            createdAt: row.createdAt,
+            createdByName: row.createdByName,
+          }
+        })
+
+        if (financialEntries.length > 0) {
+          await tx.financialLedgerEntry.createMany({
+            data: financialEntries,
+            skipDuplicates: true,
+          })
+        }
       }
 
       const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
@@ -2537,6 +2603,13 @@ export async function transitionPurchaseOrderStage(
         where: {
           transactionId: { in: transactionIds },
           costCategory: CostCategory.Forwarding,
+        },
+      })
+      await tx.financialLedgerEntry.deleteMany({
+        where: {
+          sourceType: FinancialLedgerSourceType.COST_LEDGER,
+          inventoryTransactionId: { in: transactionIds },
+          category: FinancialLedgerCategory.Forwarding,
         },
       })
 
@@ -2568,6 +2641,63 @@ export async function transitionPurchaseOrderStage(
 
         if (forwardingLedgerEntries.length > 0) {
           await tx.costLedger.createMany({ data: forwardingLedgerEntries })
+
+          const inserted = await tx.costLedger.findMany({
+            where: {
+              transactionId: { in: transactionIds },
+              costCategory: CostCategory.Forwarding,
+            },
+            select: {
+              id: true,
+              transactionId: true,
+              costCategory: true,
+              costName: true,
+              quantity: true,
+              unitRate: true,
+              totalCost: true,
+              warehouseCode: true,
+              warehouseName: true,
+              createdAt: true,
+              createdByName: true,
+            },
+          })
+
+          const txById = new Map(createdTransactions.map(row => [row.id, row]))
+          const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+            const txRow = txById.get(row.transactionId)
+            if (!txRow) {
+              throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+            }
+
+            return {
+              id: row.id,
+              sourceType: FinancialLedgerSourceType.COST_LEDGER,
+              sourceId: row.id,
+              category: toFinancialCategory(row.costCategory),
+              costName: row.costName,
+              quantity: row.quantity,
+              unitRate: row.unitRate,
+              amount: row.totalCost,
+              warehouseCode: row.warehouseCode,
+              warehouseName: row.warehouseName,
+              skuCode: txRow.skuCode,
+              skuDescription: txRow.skuDescription,
+              batchLot: txRow.batchLot,
+              inventoryTransactionId: row.transactionId,
+              purchaseOrderId: txRow.purchaseOrderId,
+              purchaseOrderLineId: txRow.purchaseOrderLineId,
+              effectiveAt: row.createdAt,
+              createdAt: row.createdAt,
+              createdByName: row.createdByName,
+            }
+          })
+
+          if (financialEntries.length > 0) {
+            await tx.financialLedgerEntry.createMany({
+              data: financialEntries,
+              skipDuplicates: true,
+            })
+          }
         }
       }
 
@@ -2899,6 +3029,8 @@ export async function receivePurchaseOrderInventory(params: {
 
     const createdTransactions: Array<{
       id: string
+      purchaseOrderId: string
+      purchaseOrderLineId: string
       skuCode: string
       cartons: number
       pallets: number
@@ -3014,6 +3146,8 @@ export async function receivePurchaseOrderInventory(params: {
         },
         select: {
           id: true,
+          purchaseOrderId: true,
+          purchaseOrderLineId: true,
           skuCode: true,
           cartonDimensionsCm: true,
           storagePalletsIn: true,
@@ -3029,6 +3163,8 @@ export async function receivePurchaseOrderInventory(params: {
 
       createdTransactions.push({
         id: txRow.id,
+        purchaseOrderId: txRow.purchaseOrderId,
+        purchaseOrderLineId: txRow.purchaseOrderLineId,
         skuCode: txRow.skuCode,
         cartons,
         pallets: Number(txRow.storagePalletsIn ?? 0),
@@ -3108,6 +3244,64 @@ export async function receivePurchaseOrderInventory(params: {
 
     if (inboundLedgerEntries.length > 0) {
       await tx.costLedger.createMany({ data: inboundLedgerEntries })
+
+      const transactionIds = createdTransactions.map(row => row.id)
+      const inserted = await tx.costLedger.findMany({
+        where: {
+          transactionId: { in: transactionIds },
+          costCategory: CostCategory.Inbound,
+        },
+        select: {
+          id: true,
+          transactionId: true,
+          costCategory: true,
+          costName: true,
+          quantity: true,
+          unitRate: true,
+          totalCost: true,
+          warehouseCode: true,
+          warehouseName: true,
+          createdAt: true,
+          createdByName: true,
+        },
+      })
+
+      const txById = new Map(createdTransactions.map(row => [row.id, row]))
+      const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+        const txRow = txById.get(row.transactionId)
+        if (!txRow) {
+          throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+        }
+
+        return {
+          id: row.id,
+          sourceType: FinancialLedgerSourceType.COST_LEDGER,
+          sourceId: row.id,
+          category: toFinancialCategory(row.costCategory),
+          costName: row.costName,
+          quantity: row.quantity,
+          unitRate: row.unitRate,
+          amount: row.totalCost,
+          warehouseCode: row.warehouseCode,
+          warehouseName: row.warehouseName,
+          skuCode: txRow.skuCode,
+          skuDescription: txRow.skuDescription,
+          batchLot: txRow.batchLot,
+          inventoryTransactionId: row.transactionId,
+          purchaseOrderId: txRow.purchaseOrderId,
+          purchaseOrderLineId: txRow.purchaseOrderLineId,
+          effectiveAt: row.createdAt,
+          createdAt: row.createdAt,
+          createdByName: row.createdByName,
+        }
+      })
+
+      if (financialEntries.length > 0) {
+        await tx.financialLedgerEntry.createMany({
+          data: financialEntries,
+          skipDuplicates: true,
+        })
+      }
     }
 
     const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
@@ -3127,6 +3321,13 @@ export async function receivePurchaseOrderInventory(params: {
       where: {
         transactionId: { in: transactionIds },
         costCategory: CostCategory.Forwarding,
+      },
+    })
+    await tx.financialLedgerEntry.deleteMany({
+      where: {
+        sourceType: FinancialLedgerSourceType.COST_LEDGER,
+        inventoryTransactionId: { in: transactionIds },
+        category: FinancialLedgerCategory.Forwarding,
       },
     })
 
@@ -3158,6 +3359,63 @@ export async function receivePurchaseOrderInventory(params: {
 
       if (forwardingLedgerEntries.length > 0) {
         await tx.costLedger.createMany({ data: forwardingLedgerEntries })
+
+        const inserted = await tx.costLedger.findMany({
+          where: {
+            transactionId: { in: transactionIds },
+            costCategory: CostCategory.Forwarding,
+          },
+          select: {
+            id: true,
+            transactionId: true,
+            costCategory: true,
+            costName: true,
+            quantity: true,
+            unitRate: true,
+            totalCost: true,
+            warehouseCode: true,
+            warehouseName: true,
+            createdAt: true,
+            createdByName: true,
+          },
+        })
+
+        const txById = new Map(createdTransactions.map(row => [row.id, row]))
+        const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+          const txRow = txById.get(row.transactionId)
+          if (!txRow) {
+            throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+          }
+
+          return {
+            id: row.id,
+            sourceType: FinancialLedgerSourceType.COST_LEDGER,
+            sourceId: row.id,
+            category: toFinancialCategory(row.costCategory),
+            costName: row.costName,
+            quantity: row.quantity,
+            unitRate: row.unitRate,
+            amount: row.totalCost,
+            warehouseCode: row.warehouseCode,
+            warehouseName: row.warehouseName,
+            skuCode: txRow.skuCode,
+            skuDescription: txRow.skuDescription,
+            batchLot: txRow.batchLot,
+            inventoryTransactionId: row.transactionId,
+            purchaseOrderId: txRow.purchaseOrderId,
+            purchaseOrderLineId: txRow.purchaseOrderLineId,
+            effectiveAt: row.createdAt,
+            createdAt: row.createdAt,
+            createdByName: row.createdByName,
+          }
+        })
+
+        if (financialEntries.length > 0) {
+          await tx.financialLedgerEntry.createMany({
+            data: financialEntries,
+            skipDuplicates: true,
+          })
+        }
       }
     }
 
@@ -3718,7 +3976,6 @@ export function serializePurchaseOrder(
 	      skuDescription: line.skuDescription,
 	      batchLot: line.batchLot,
         piNumber: line.piNumber ?? null,
-        productNumber: line.productNumber ?? null,
         commodityCode: line.commodityCode ?? null,
         countryOfOrigin: line.countryOfOrigin ?? null,
         netWeightKg: toFiniteNumber(line.netWeightKg),

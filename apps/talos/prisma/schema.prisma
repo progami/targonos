@@ -308,6 +308,7 @@ model InventoryTransaction {
   fulfillmentOrder         FulfillmentOrder?  @relation("TransactionFulfillmentOrder", fields: [fulfillmentOrderId], references: [id], onDelete: SetNull)
   fulfillmentOrderLine     FulfillmentOrderLine? @relation("TransactionFulfillmentOrderLine", fields: [fulfillmentOrderLineId], references: [id], onDelete: SetNull)
   costLedger               CostLedger[]
+  financialLedgerEntries   FinancialLedgerEntry[] @relation("FinancialLedgerInventoryTransaction")
 
   @@index([transactionDate])
   @@index([warehouseCode, skuCode, batchLot])
@@ -468,6 +469,7 @@ model PurchaseOrder {
   movementNotes MovementNote[]
   invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLinePurchaseOrder")
   forwardingCosts PurchaseOrderForwardingCost[]
+  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrder")
 
   @@unique([orderNumber])
   @@index([status])
@@ -656,7 +658,6 @@ model PurchaseOrderLine {
   skuDescription    String?                 @map("sku_description")
   batchLot          String?                 @map("batch_lot")
   piNumber          String?                 @map("pi_number")
-  productNumber     String?                 @map("product_number")
   commodityCode     String?                 @map("commodity_code")
   countryOfOrigin   String?                 @map("country_of_origin")
   netWeightKg       Decimal?                @map("net_weight_kg") @db.Decimal(8, 3)
@@ -685,6 +686,7 @@ model PurchaseOrderLine {
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
   transactions      InventoryTransaction[]  @relation("TransactionPurchaseOrderLine")
+  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrderLine")
   movementNoteLines MovementNoteLine[]
   invoiceLines      WarehouseInvoiceLine[]
 
@@ -834,6 +836,7 @@ model StorageLedger {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   createdByName String   @map("created_by_name")
+  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerStorageLedger")
 
   @@unique([warehouseCode, skuCode, batchLot, weekEndingDate])
   @@index([warehouseCode, weekEndingDate])
@@ -858,6 +861,43 @@ model CostLedger {
   @@index([transactionId])
   @@index([warehouseCode])
   @@map("cost_ledger")
+}
+
+model FinancialLedgerEntry {
+  id                   String                   @id @default(uuid())
+  sourceType           FinancialLedgerSourceType @map("source_type")
+  sourceId             String                   @map("source_id")
+  category             FinancialLedgerCategory  @map("category")
+  costName             String                   @map("cost_name")
+  quantity             Decimal?                 @map("quantity") @db.Decimal(14, 4)
+  unitRate             Decimal?                 @map("unit_rate") @db.Decimal(14, 4)
+  amount               Decimal                  @map("amount") @db.Decimal(14, 2)
+  currency             String                   @default("USD") @map("currency")
+  warehouseCode        String                   @map("warehouse_code")
+  warehouseName        String                   @map("warehouse_name")
+  skuCode              String?                  @map("sku_code")
+  skuDescription       String?                  @map("sku_description")
+  batchLot             String?                  @map("batch_lot")
+  inventoryTransactionId String?                @map("inventory_transaction_id")
+  storageLedgerId      String?                  @map("storage_ledger_id")
+  purchaseOrderId      String?                  @map("purchase_order_id")
+  purchaseOrderLineId  String?                  @map("purchase_order_line_id")
+  effectiveAt          DateTime                 @map("effective_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  createdByName        String                   @map("created_by_name")
+  notes                String?
+
+  inventoryTransaction InventoryTransaction? @relation("FinancialLedgerInventoryTransaction", fields: [inventoryTransactionId], references: [id], onDelete: SetNull)
+  storageLedger        StorageLedger?        @relation("FinancialLedgerStorageLedger", fields: [storageLedgerId], references: [id], onDelete: SetNull)
+  purchaseOrder        PurchaseOrder?        @relation("FinancialLedgerPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  purchaseOrderLine    PurchaseOrderLine?    @relation("FinancialLedgerPurchaseOrderLine", fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceType, sourceId])
+  @@index([warehouseCode])
+  @@index([category])
+  @@index([effectiveAt])
+  @@index([purchaseOrderId])
+  @@map("financial_ledger")
 }
 
 model AuditLog {
@@ -916,6 +956,29 @@ enum CostCategory {
   Forwarding
 
   @@map("CostCategory")
+}
+
+enum FinancialLedgerSourceType {
+  COST_LEDGER
+  STORAGE_LEDGER
+  MANUAL
+
+  @@map("FinancialLedgerSourceType")
+}
+
+enum FinancialLedgerCategory {
+  Inbound
+  Storage
+  Outbound
+  Forwarding
+  Product
+  Duty
+  Adjustment
+  SupplierCredit
+  SupplierDebit
+  Other
+
+  @@map("FinancialLedgerCategory")
 }
 
 enum TransactionType {

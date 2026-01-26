@@ -1,6 +1,7 @@
 import { ApiResponses, withAuthAndParams, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { serializePurchaseOrder as serializeWithStageData } from '@/lib/services/po-stage-service'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import {
   getPurchaseOrderById,
   updatePurchaseOrderDetails,
@@ -22,9 +23,24 @@ export const GET = withAuthAndParams(async (_request, params) => {
     return ApiResponses.notFound('Purchase order not found')
   }
 
+  const prisma = await getTenantPrisma()
+  const supplier =
+    order.counterpartyName && order.counterpartyName.trim().length > 0
+      ? await prisma.supplier.findFirst({
+          where: { name: { equals: order.counterpartyName.trim(), mode: 'insensitive' } },
+          select: { phone: true, bankingDetails: true },
+        })
+      : null
+
   const serialized = serializeWithStageData(order)
   return ApiResponses.success({
     ...serialized,
+    supplier: supplier
+      ? {
+          phone: supplier.phone ?? null,
+          bankingDetails: supplier.bankingDetails ?? null,
+        }
+      : null,
     proformaInvoices: order.proformaInvoices.map(pi => ({
       id: pi.id,
       piNumber: pi.piNumber,
@@ -81,9 +97,23 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       id: session.user.id,
       name: session.user.name ?? session.user.email ?? null,
     })
+    const prisma = await getTenantPrisma()
+    const supplier =
+      updated.counterpartyName && updated.counterpartyName.trim().length > 0
+        ? await prisma.supplier.findFirst({
+            where: { name: { equals: updated.counterpartyName.trim(), mode: 'insensitive' } },
+            select: { phone: true, bankingDetails: true },
+          })
+        : null
     const serialized = serializeWithStageData(updated)
     return ApiResponses.success({
       ...serialized,
+      supplier: supplier
+        ? {
+            phone: supplier.phone ?? null,
+            bankingDetails: supplier.bankingDetails ?? null,
+          }
+        : null,
       proformaInvoices: updated.proformaInvoices.map(pi => ({
         id: pi.id,
         piNumber: pi.piNumber,

@@ -12,7 +12,6 @@ const UpdateLineSchema = z.object({
   skuDescription: z.string().optional(),
   batchLot: z.string().trim().min(1).optional(),
   piNumber: z.string().trim().nullable().optional(),
-  productNumber: z.string().trim().nullable().optional(),
   commodityCode: z.string().trim().nullable().optional(),
   countryOfOrigin: z.string().trim().nullable().optional(),
   netWeightKg: z.number().positive().nullable().optional(),
@@ -98,7 +97,6 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     skuDescription: line.skuDescription,
     batchLot: line.batchLot,
     piNumber: line.piNumber ?? null,
-    productNumber: line.productNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
     netWeightKg: toNumberOrNull(line.netWeightKg),
@@ -242,10 +240,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   if (allowShippingMarkEdits) {
-    if (result.data.productNumber !== undefined) {
-      const trimmed = typeof result.data.productNumber === 'string' ? result.data.productNumber.trim() : ''
-      updateData.productNumber = trimmed.length > 0 ? trimmed : null
-    }
     if (result.data.commodityCode !== undefined) {
       const trimmed = typeof result.data.commodityCode === 'string' ? result.data.commodityCode.trim() : ''
       updateData.commodityCode = trimmed.length > 0 ? trimmed : null
@@ -434,7 +428,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuDescription: line.skuDescription ?? null,
     batchLot: line.batchLot ?? null,
     piNumber: line.piNumber ?? null,
-    productNumber: line.productNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
     netWeightKg: toNumberOrNull(line.netWeightKg),
@@ -462,7 +455,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuDescription: updated.skuDescription ?? null,
     batchLot: updated.batchLot ?? null,
     piNumber: updated.piNumber ?? null,
-    productNumber: updated.productNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
     netWeightKg: toNumberOrNull(updated.netWeightKg),
@@ -512,7 +504,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     skuDescription: updated.skuDescription,
     batchLot: updated.batchLot,
     piNumber: updated.piNumber ?? null,
-    productNumber: updated.productNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
     netWeightKg: toNumberOrNull(updated.netWeightKg),

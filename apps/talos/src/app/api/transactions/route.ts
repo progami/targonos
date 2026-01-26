@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/auth-wrapper'
 import { ValidationError } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma, TransactionType, InboundReceiveType, OutboundShipMode } from '@targon/prisma-talos'
+import {
+  CostCategory,
+  FinancialLedgerCategory,
+  FinancialLedgerSourceType,
+  Prisma,
+  TransactionType,
+  InboundReceiveType,
+  OutboundShipMode,
+} from '@targon/prisma-talos'
 import { businessLogger, perfLogger } from '@/lib/logger/index'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import { parseLocalDateTime } from '@/lib/utils/date-helpers'
@@ -16,6 +24,14 @@ import {
 } from '@/lib/utils/pallet-calculations'
 import { checkRateLimit, rateLimitConfigs } from '@/lib/security/rate-limiter'
 export const dynamic = 'force-dynamic'
+
+function toFinancialCategory(costCategory: CostCategory) {
+  if (costCategory === CostCategory.Inbound) return FinancialLedgerCategory.Inbound
+  if (costCategory === CostCategory.Storage) return FinancialLedgerCategory.Storage
+  if (costCategory === CostCategory.Outbound) return FinancialLedgerCategory.Outbound
+  if (costCategory === CostCategory.Forwarding) return FinancialLedgerCategory.Forwarding
+  return FinancialLedgerCategory.Other
+}
 
 type MutableTransactionLine = {
   skuCode?: string
@@ -961,6 +977,59 @@ export const POST = withAuth(async (request, session) => {
 
         if (costLedgerEntries.length > 0) {
           await tx.costLedger.createMany({ data: costLedgerEntries })
+
+          const transactionIds = transactions.map(row => row.id)
+          const inserted = await tx.costLedger.findMany({
+            where: { transactionId: { in: transactionIds } },
+            select: {
+              id: true,
+              transactionId: true,
+              costCategory: true,
+              costName: true,
+              quantity: true,
+              unitRate: true,
+              totalCost: true,
+              warehouseCode: true,
+              warehouseName: true,
+              createdAt: true,
+              createdByName: true,
+            },
+          })
+
+          const txById = new Map(transactions.map(row => [row.id, row]))
+          const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
+            const txRow = txById.get(row.transactionId)
+            if (!txRow) {
+              throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
+            }
+
+            return {
+              id: row.id,
+              sourceType: FinancialLedgerSourceType.COST_LEDGER,
+              sourceId: row.id,
+              category: toFinancialCategory(row.costCategory),
+              costName: row.costName,
+              quantity: row.quantity,
+              unitRate: row.unitRate,
+              amount: row.totalCost,
+              warehouseCode: row.warehouseCode,
+              warehouseName: row.warehouseName,
+              skuCode: txRow.skuCode,
+              skuDescription: txRow.skuDescription,
+              batchLot: txRow.batchLot,
+              inventoryTransactionId: row.transactionId,
+              effectiveAt: row.createdAt,
+              createdAt: row.createdAt,
+              createdByName: row.createdByName,
+            }
+          })
+
+          if (financialEntries.length > 0) {
+            await tx.financialLedgerEntry.createMany({
+              data: financialEntries,
+              skipDuplicates: true,
+            })
+          }
         }
       }
 
