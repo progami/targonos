@@ -74,9 +74,56 @@ const AMAZON_REFERRAL_CATEGORIES_2026 = [
   'Watches',
 ] as const
 
-type AmazonReferralCategory = (typeof AMAZON_REFERRAL_CATEGORIES_2026)[number]
+const UK_REFERRAL_CATEGORIES_2026 = [
+  'Amazon Device Accessories',
+  'Automotive and Powersports',
+  'Baby Products',
+  'Rucksacks and Handbags',
+  'Beauty, Health, Personal Care',
+  'Beer, Wine, and Spirits',
+  'Books',
+  'Business, Industrial, Scientific',
+  'Compact Appliances',
+  'Clothing and Accessories',
+  'Commercial Electrical and Energy Supplies',
+  'Computers',
+  'Consumer Electronics',
+  'Cycling Accessories',
+  'Electronic Accessories',
+  'Eyewear',
+  'Footwear',
+  'Full-Size Appliances',
+  'Furniture',
+  'Grocery and Gourmet',
+  'Handmade',
+  'Home Products',
+  'Home and Kitchen',
+  'Jewellery',
+  'Lawn and Garden',
+  'Luggage',
+  'Mattresses',
+  'Music, Video and DVD',
+  'Musical Instruments and AV Production',
+  'Office Products',
+  'Pet Supplies',
+  'Pet Clothing and Food',
+  'Software',
+  'Sports and Outdoors',
+  'Tyres',
+  'Tools and Home Improvement',
+  'Toys and Games',
+  'Video Games and Gaming Accessories',
+  'Video Game Consoles',
+  'Vitamins, Minerals & Supplements',
+  'Watches',
+  'Everything Else',
+] as const
 
-function formatReferralCategoryLabel(category: AmazonReferralCategory): string {
+type ReferralCategory2026 =
+  | (typeof AMAZON_REFERRAL_CATEGORIES_2026)[number]
+  | (typeof UK_REFERRAL_CATEGORIES_2026)[number]
+
+function formatReferralCategoryLabel(category: ReferralCategory2026): string {
   return category
 }
 
@@ -421,6 +468,8 @@ interface SkusPanelProps {
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
   const { data: session } = useSession()
   const tenantCode: TenantCode = session?.user?.region ?? 'US'
+  const referenceCategoryOptions =
+    tenantCode === 'UK' ? UK_REFERRAL_CATEGORIES_2026 : AMAZON_REFERRAL_CATEGORIES_2026
   const referenceSizeTierOptions =
     tenantCode === 'UK' ? UK_SIZE_TIER_OPTIONS : AMAZON_SIZE_TIER_OPTIONS
   const pageState = usePageState(PAGE_KEY)
@@ -1373,7 +1422,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                     className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                                   >
                                     <option value="">Select category</option>
-                                    {AMAZON_REFERRAL_CATEGORIES_2026.map(category => (
+                                    {referenceCategoryOptions.map(category => (
                                       <option key={category} value={category}>
                                         {formatReferralCategoryLabel(category)}
                                       </option>
