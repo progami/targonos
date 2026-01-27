@@ -180,6 +180,18 @@ export class S3Service {
       .toLowerCase();
   }
 
+  private encodeMetadataValue(value: string): string {
+    return encodeURIComponent(value);
+  }
+
+  private sanitizeMetadata(metadata: Record<string, string>): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(metadata)) {
+      sanitized[key] = this.encodeMetadataValue(value);
+    }
+    return sanitized;
+  }
+
   async uploadFile(
     file: Buffer | Readable | File,
     key: string,
@@ -216,12 +228,14 @@ export class S3Service {
         metadata.expiresAt = options.expiresAt.toISOString();
       }
 
+      const sanitizedMetadata = this.sanitizeMetadata(metadata);
+
       const uploadParams: PutObjectCommandInput = {
         Bucket: this.bucket,
         Key: key,
         Body: uploadBody,
         ContentType: contentType as string,
-        Metadata: metadata,
+        Metadata: sanitizedMetadata,
         ServerSideEncryption: 'AES256',
         CacheControl: options.cacheControl || this.getCacheControl(key),
         ContentDisposition: options.contentDisposition || this.getContentDisposition(key),

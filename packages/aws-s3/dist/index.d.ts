@@ -71,6 +71,8 @@ export declare class S3Service {
     constructor();
     generateKey(context: FileContext, filename: string): string;
     private sanitizeFilename;
+    private encodeMetadataValue;
+    private sanitizeMetadata;
     uploadFile(file: Buffer | Readable | File, key: string, options?: S3UploadOptions, onProgress?: (progress: number) => void): Promise<S3UploadResult>;
     getPresignedUrl(key: string, operation?: 'get' | 'put', options?: S3DownloadOptions & {
         contentType?: string;
