@@ -45,10 +45,11 @@ The laptop keeps two long-lived working directories (“worktrees”) so `dev` a
 
 | Directory | Branch | Environment | App ports |
 | --- | --- | --- | --- |
-| `~/targonos-dev` | `dev` | Dev | `31xx` |
-| `~/targonos-main` | `main` | Main | `30xx` |
+| `$TARGONOS_DEV_DIR` | `dev` | Dev | `31xx` |
+| `$TARGONOS_MAIN_DIR` | `main` | Main | `30xx` |
 
 PM2 process definitions live in `ecosystem.config.js` and reference these directories via `TARGONOS_DEV_DIR` / `TARGONOS_MAIN_DIR`.
+Set both env vars to absolute paths (example: `/path/to/targonos-dev` and `/path/to/targonos-main`).
 
 ## Monorepo layout
 
@@ -166,7 +167,7 @@ Workflow: `.github/workflows/cd.yml`
 - Triggers on `push` to `dev` or `main` and runs deploy steps on a `self-hosted` GitHub Actions runner on the laptop (`~/actions-runner`).
 - Detects which apps/packages changed and deploys only what’s necessary.
 - Uses `scripts/deploy-app.sh` to:
-  - sync the correct worktree (`~/targonos-dev` or `~/targonos-main`)
+  - sync the correct worktree (`$TARGONOS_DEV_DIR` or `$TARGONOS_MAIN_DIR`)
   - run `pnpm install` (once per deploy run)
   - build the app(s)
   - restart the matching PM2 process(es)
