@@ -105,15 +105,26 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 
 # Determine directories based on environment
 if [[ "$environment" == "dev" ]]; then
-  REPO_DIR="${TARGONOS_DEV_DIR:-${TARGON_DEV_DIR:-/Users/jarraramjad/targonos-dev}}"
+  REPO_DIR="${TARGONOS_DEV_DIR:-${TARGON_DEV_DIR:-}}"
   PM2_PREFIX="dev"
   BRANCH="dev"
 elif [[ "$environment" == "main" ]]; then
-  REPO_DIR="${TARGONOS_MAIN_DIR:-${TARGON_MAIN_DIR:-/Users/jarraramjad/targonos-main}}"
+  REPO_DIR="${TARGONOS_MAIN_DIR:-${TARGON_MAIN_DIR:-}}"
   PM2_PREFIX="main"
   BRANCH="main"
 else
   echo "Unknown environment: $environment" >&2
+  exit 1
+fi
+
+if [[ -z "$REPO_DIR" ]]; then
+  echo "Missing repo directory for environment \"$environment\"." >&2
+  echo "Set TARGONOS_DEV_DIR/TARGONOS_MAIN_DIR (or legacy TARGON_DEV_DIR/TARGON_MAIN_DIR)." >&2
+  exit 1
+fi
+
+if [[ ! -d "$REPO_DIR" ]]; then
+  echo "Repo directory does not exist: $REPO_DIR" >&2
   exit 1
 fi
 
