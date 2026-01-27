@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Check,
   ChevronRight,
@@ -917,16 +916,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     unitsPerCarton: null as number | null,
     notes: '',
   })
-  const [editLineOpen, setEditLineOpen] = useState(false)
-  const [editLineSubmitting, setEditLineSubmitting] = useState(false)
-  const [editingLine, setEditingLine] = useState<PurchaseOrderLineSummary | null>(null)
-  const [editLineDraft, setEditLineDraft] = useState({
-    batchLot: '',
-    unitsOrdered: 1,
-    unitsPerCarton: null as number | null,
-    notes: '',
-  })
-
+  
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
@@ -1988,22 +1978,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   )
 
   useEffect(() => {
-    if (!editLineOpen || !editingLine) return
-
-    const skuRecord =
-      skus.find(
-        sku => sku.skuCode.trim().toUpperCase() === editingLine.skuCode.trim().toUpperCase()
-      ) ?? null
-
-    if (!skuRecord) {
-      void ensureSkusLoaded()
-      return
-    }
-
-    void ensureSkuBatchesLoaded(skuRecord.id)
-  }, [editLineOpen, editingLine, ensureSkuBatchesLoaded, ensureSkusLoaded, skus])
-
-  useEffect(() => {
     if (!newLineDraft.skuId) return
     const options = batchesBySkuId[newLineDraft.skuId]
     if (!options || options.length === 0) return
@@ -2656,115 +2630,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
   }
 
-  const openLineEditor = (line: PurchaseOrderLineSummary) => {
-    setEditingLine(line)
-    setEditLineDraft({
-      batchLot: line.batchLot ?? '',
-      unitsOrdered: line.unitsOrdered,
-      unitsPerCarton: line.unitsPerCarton,
-      notes: line.lineNotes ?? '',
-    })
-    setEditLineOpen(true)
-  }
-
-  const handleSaveLineEdit = async () => {
-    if (!editingLine) return
-
-    const batchLot = editLineDraft.batchLot.trim().toUpperCase()
-    if (!batchLot || batchLot === 'DEFAULT') {
-      toast.error('Batch is required')
-      return
-    }
-
-    const unitsOrdered = Number(editLineDraft.unitsOrdered)
-    if (!Number.isInteger(unitsOrdered) || unitsOrdered <= 0) {
-      toast.error('Please enter a valid units ordered value')
-      return
-    }
-
-    const unitsPerCarton = editLineDraft.unitsPerCarton
-    if (!unitsPerCarton || !Number.isInteger(unitsPerCarton) || unitsPerCarton <= 0) {
-      toast.error('Please enter a valid units per carton value')
-      return
-    }
-
-    if (isCreate) {
-      setDraftLines(prev =>
-        prev.map(line => {
-          if (line.id !== editingLine.id) return line
-          const quantity = Math.ceil(unitsOrdered / unitsPerCarton)
-          const normalizedTotal = line.totalCost !== null ? line.totalCost : null
-          const unitCost = normalizedTotal !== null && unitsOrdered > 0
-            ? Number((normalizedTotal / unitsOrdered).toFixed(4))
-            : null
-          return {
-            ...line,
-            batchLot,
-            unitsOrdered,
-            unitsPerCarton,
-            quantity,
-            unitCost,
-            lineNotes: editLineDraft.notes.trim().length > 0 ? editLineDraft.notes.trim() : null,
-            updatedAt: new Date().toISOString(),
-          }
-        })
-      )
-      setEditLineOpen(false)
-      setEditingLine(null)
-      toast.success('Line item updated')
-      return
-    }
-
-    if (!order) return
-
-    setEditLineSubmitting(true)
-    try {
-      const response = await fetchWithCSRF(
-        `/api/purchase-orders/${order.id}/lines/${editingLine.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batchLot,
-            unitsOrdered,
-            unitsPerCarton,
-            notes: editLineDraft.notes.trim().length ? editLineDraft.notes.trim() : null,
-          }),
-        }
-      )
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error ?? 'Failed to update line item')
-      }
-
-      const updatedLine = await response.json()
-      setOrder(prev =>
-        prev
-          ? {
-              ...prev,
-              lines: prev.lines.map(line => (line.id === updatedLine.id ? updatedLine : line)),
-            }
-          : prev
-      )
-      setEditLineOpen(false)
-      setEditingLine(null)
-      void refreshAuditLogs()
-      toast.success('Line item updated')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update line item')
-    } finally {
-      setEditLineSubmitting(false)
-    }
-  }
-
   const handleDeleteLine = async (lineId: string) => {
     if (isCreate) {
       setDraftLines(prev => prev.filter(line => line.id !== lineId))
-      if (editingLine?.id === lineId) {
-        setEditLineOpen(false)
-        setEditingLine(null)
-      }
       toast.success('Line item removed')
       return
     }
@@ -2784,10 +2652,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setOrder(prev =>
         prev ? { ...prev, lines: prev.lines.filter(line => line.id !== lineId) } : prev
       )
-      if (editingLine?.id === lineId) {
-        setEditLineOpen(false)
-        setEditingLine(null)
-      }
       void refreshAuditLogs()
       toast.success('Line item removed')
     } catch (error) {
@@ -3329,231 +3193,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     Total: {totalUnits.toLocaleString()} units · {totalCartons.toLocaleString()}{' '}
                     cartons
                   </span>
-                  {canEdit && (
-                    <Popover open={addLineOpen} onOpenChange={setAddLineOpen}>
-                      <PopoverTrigger asChild>
-                        <Button type="button" size="sm" variant="outline" className="gap-2">
-                          <Plus className="h-4 w-4" />
-                          Add SKU
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-[420px] space-y-4">
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            Add line item
-                          </h4>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            Add another SKU to this purchase order.
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            SKU
-                          </label>
-                          <select
-                            value={newLineDraft.skuId}
-                            onChange={e => {
-                              const skuId = e.target.value
-                              setNewLineDraft(prev => ({
-                                ...prev,
-                                skuId,
-                                batchLot: '',
-                                unitsOrdered: 1,
-                                unitsPerCarton: null,
-                                notes: '',
-                              }))
-                              void ensureSkuBatchesLoaded(skuId)
-                            }}
-                            disabled={skusLoading || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                          >
-                            <option value="">Select SKU</option>
-                            {skus.map(sku => (
-                              <option key={sku.id} value={sku.id}>
-                                {sku.skuCode}
-                              </option>
-                            ))}
-                          </select>
-                          {selectedSku?.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {selectedSku.description}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Batch
-                          </label>
-                          <select
-                            value={newLineDraft.batchLot}
-                            onChange={e => {
-                              const batchLot = e.target.value
-                              setNewLineDraft(prev => {
-                                const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
-                                const selected = batches.find(batch => batch.batchCode === batchLot)
-                                return {
-                                  ...prev,
-                                  batchLot,
-                                  unitsPerCarton: selected?.unitsPerCarton ?? null,
-                                }
-                              })
-                            }}
-                            disabled={!newLineDraft.skuId || addLineSubmitting}
-                            className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                          >
-                            {!newLineDraft.skuId ? (
-                              <option value="">Select SKU first</option>
-                            ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
-                              <option value="">Loading…</option>
-                            ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
-                              batchesBySkuId[newLineDraft.skuId].map(batch => (
-                                <option key={batch.batchCode} value={batch.batchCode}>
-                                  {batch.batchCode}
-                                </option>
-                              ))
-                            ) : (
-                              <option value="">No batches found</option>
-                            )}
-                          </select>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Units
-                            </label>
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              step="1"
-                              value={newLineDraft.unitsOrdered}
-                              onChange={e => {
-                                const parsed = Number.parseInt(e.target.value, 10)
-                                setNewLineDraft(prev => ({
-                                  ...prev,
-                                  unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
-                                }))
-                              }}
-                              disabled={addLineSubmitting}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Units/Ctn
-                            </label>
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              step="1"
-                              value={newLineDraft.unitsPerCarton ?? ''}
-                              onChange={e =>
-                                setNewLineDraft(prev => ({
-                                  ...prev,
-                                  unitsPerCarton: (() => {
-                                    const parsed = Number.parseInt(e.target.value, 10)
-                                    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-                                  })(),
-                                }))
-                              }
-                              disabled={
-                                !newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting
-                              }
-                              placeholder="—"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Cartons
-                            </label>
-                            <Input
-                              value={(() => {
-                                if (!newLineDraft.unitsPerCarton) return '—'
-                                if (newLineDraft.unitsOrdered <= 0) return '—'
-                                return String(
-                                  Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton)
-                                )
-                              })()}
-                              readOnly
-                              disabled
-                              className="bg-muted/30 text-muted-foreground"
-                            />
-                          </div>
-                        </div>
-                        {(() => {
-                          if (!newLineDraft.skuId || !newLineDraft.batchLot) return null
-                          const options = batchesBySkuId[newLineDraft.skuId] ?? []
-                          const batch =
-                            options.find(option => option.batchCode === newLineDraft.batchLot) ??
-                            null
-                          if (!batch) return null
-
-                          const meta = buildBatchPackagingMeta({
-                            batch,
-                            unitsOrdered: newLineDraft.unitsOrdered,
-                            unitsPerCarton: newLineDraft.unitsPerCarton,
-                          })
-
-                          if (!meta) return null
-
-                          return (
-                            <p
-                              className={`mt-1 text-[11px] ${
-                                meta.tone === 'warning' ? 'text-amber-600' : 'text-muted-foreground'
-                              }`}
-                            >
-                              {meta.text}
-                            </p>
-                          )
-                        })()}
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Notes
-                          </label>
-                          <Input
-                            value={newLineDraft.notes}
-                            onChange={e =>
-                              setNewLineDraft(prev => ({ ...prev, notes: e.target.value }))
-                            }
-                            placeholder="Optional"
-                            disabled={addLineSubmitting}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setAddLineOpen(false)}
-                            disabled={addLineSubmitting}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => void handleAddLineItem()}
-                            disabled={
-                              !newLineDraft.skuId ||
-                              !newLineDraft.batchLot ||
-                              !newLineDraft.unitsPerCarton ||
-                              newLineDraft.unitsOrdered <= 0 ||
-                              addLineSubmitting
-                            }
-                            className="gap-2"
-                          >
-                            {addLineSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Add
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  )}
                 </div>
               )}
             </div>
@@ -3680,148 +3319,279 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </tr>
                       </thead>
                       <tbody>
-                        {flowLines.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={(canEdit ? 10 : 9) + (canEditDispatchAllocation ? 1 : 0)}
-                              className="px-3 py-6 text-center text-muted-foreground"
-                            >
-                              No lines added to this order yet.
+                        {flowLines.map((line) => (
+                          <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
+                              {line.skuCode}
                             </td>
-                          </tr>
-                        ) : (
-                          flowLines.map((line) => (
-                            <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                {line.skuCode}
-                              </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                {line.batchLot ? line.batchLot : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
-                                {line.skuDescription ? line.skuDescription : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {line.unitsOrdered.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {line.unitsPerCarton.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {line.quantity.toLocaleString()}
-                              </td>
-                              {canEditDispatchAllocation && (
-                                <td
-                                  className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap"
-                                  data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
-                                >
-                                  {(() => {
-                                    const gateKey = `cargo.lines.${line.id}.shipNowCartons`
-                                    const issue = gateIssues ? gateIssues[gateKey] : null
-                                    return (
-                                      <div className="space-y-1" data-gate-key={gateKey}>
-                                        <Input
-                                          type="number"
-                                          inputMode="numeric"
-                                          min="0"
-                                          step="1"
-                                          max={line.quantity}
-                                          value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
-                                          onChange={e =>
-                                            setDispatchSplitAllocations(prev => ({
-                                              ...prev,
-                                              [line.id]: e.target.value,
-                                            }))
-                                          }
-                                          className={
-                                            issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                          }
-                                          data-gate-key={gateKey}
-                                        />
-                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                      </div>
-                                    )
-                                  })()}
-                                </td>
-                              )}
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                              {line.batchLot ? line.batchLot : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
+                              {line.skuDescription ? line.skuDescription : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                              {line.unitsOrdered.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {line.unitsPerCarton.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                              {line.quantity.toLocaleString()}
+                            </td>
+                            {canEditDispatchAllocation && (
+                              <td
+                                className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap"
+                                data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
+                              >
                                 {(() => {
-                                  const gateKey = `cargo.lines.${line.id}.piNumber`
+                                  const gateKey = `cargo.lines.${line.id}.shipNowCartons`
                                   const issue = gateIssues ? gateIssues[gateKey] : null
-                                  const canEditPiNumber =
-                                    canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
-
-                                  if (canEditPiNumber) {
-                                    return (
-                                      <div className="space-y-1" data-gate-key={gateKey}>
-                                        <Input
-                                          defaultValue={line.piNumber ?? ''}
-                                          placeholder="PI-..."
-                                          data-gate-key={gateKey}
-                                          onBlur={e => {
-                                            const trimmed = e.target.value.trim()
-                                            void patchOrderLine(line.id, {
-                                              piNumber: trimmed.length > 0 ? trimmed : null,
-                                            })
-                                          }}
-                                          className={
-                                            issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                          }
-                                        />
-                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                      </div>
-                                    )
-                                  }
-
                                   return (
-                                    <span data-gate-key={gateKey}>
-                                      {line.piNumber ? line.piNumber : '—'}
-                                    </span>
+                                    <div className="space-y-1" data-gate-key={gateKey}>
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="0"
+                                        step="1"
+                                        max={line.quantity}
+                                        value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
+                                        onChange={e =>
+                                          setDispatchSplitAllocations(prev => ({
+                                            ...prev,
+                                            [line.id]: e.target.value,
+                                          }))
+                                        }
+                                        className={
+                                          issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                        }
+                                        data-gate-key={gateKey}
+                                      />
+                                      {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                    </div>
                                   )
                                 })()}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
-                                {line.lineNotes ? line.lineNotes : '—'}
+                            )}
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                              {(() => {
+                                const gateKey = `cargo.lines.${line.id}.piNumber`
+                                const issue = gateIssues ? gateIssues[gateKey] : null
+                                const canEditPiNumber =
+                                  canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
+
+                                if (canEditPiNumber) {
+                                  return (
+                                    <div className="space-y-1" data-gate-key={gateKey}>
+                                      <Input
+                                        defaultValue={line.piNumber ?? ''}
+                                        placeholder="PI-..."
+                                        data-gate-key={gateKey}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          void patchOrderLine(line.id, {
+                                            piNumber: trimmed.length > 0 ? trimmed : null,
+                                          })
+                                        }}
+                                        className={
+                                          issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
+                                        }
+                                      />
+                                      {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                    </div>
+                                  )
+                                }
+
+                                return (
+                                  <span data-gate-key={gateKey}>
+                                    {line.piNumber ? line.piNumber : '—'}
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
+                              {line.lineNotes ? line.lineNotes : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
+                            </td>
+                            {canEdit && (
+                              <td className="px-2 py-2 whitespace-nowrap text-right">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                  onClick={() =>
+                                    setConfirmDialog({
+                                      open: true,
+                                      type: 'delete-line',
+                                      title: 'Remove line item',
+                                      message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                      lineId: line.id,
+                                    })
+                                  }
+                                  title="Remove line"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
-                              </td>
-                              {canEdit && (
-                                <td className="px-2 py-2 whitespace-nowrap text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0"
-                                      onClick={() => openLineEditor(line)}
-                                      title="Edit line"
-                                    >
-                                      <FileEdit className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                      onClick={() =>
-                                        setConfirmDialog({
-                                          open: true,
-                                          type: 'delete-line',
-                                          title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
-                                          lineId: line.id,
-                                        })
-                                      }
-                                      title="Remove line"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          ))
+                            )}
+                          </tr>
+                        ))}
+                        {/* Inline Add Row */}
+                        {canEdit && (
+                          <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                            <td className="px-3 py-2 min-w-[100px]">
+                              <select
+                                value={newLineDraft.skuId}
+                                onChange={e => {
+                                  const skuId = e.target.value
+                                  setNewLineDraft(prev => ({
+                                    ...prev,
+                                    skuId,
+                                    batchLot: '',
+                                    unitsOrdered: 1,
+                                    unitsPerCarton: null,
+                                    notes: '',
+                                  }))
+                                  void ensureSkuBatchesLoaded(skuId)
+                                }}
+                                disabled={skusLoading || addLineSubmitting}
+                                className="w-full h-8 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                              >
+                                <option value="">Select SKU</option>
+                                {skus.map(sku => (
+                                  <option key={sku.id} value={sku.id}>
+                                    {sku.skuCode}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 min-w-[100px]">
+                              <select
+                                value={newLineDraft.batchLot}
+                                onChange={e => {
+                                  const batchLot = e.target.value
+                                  setNewLineDraft(prev => {
+                                    const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
+                                    const selected = batches.find(batch => batch.batchCode === batchLot)
+                                    return {
+                                      ...prev,
+                                      batchLot,
+                                      unitsPerCarton: selected?.unitsPerCarton ?? null,
+                                    }
+                                  })
+                                }}
+                                disabled={!newLineDraft.skuId || addLineSubmitting}
+                                className="w-full h-8 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                              >
+                                {!newLineDraft.skuId ? (
+                                  <option value="">—</option>
+                                ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
+                                  <option value="">Loading…</option>
+                                ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
+                                  <>
+                                    <option value="">Select</option>
+                                    {batchesBySkuId[newLineDraft.skuId].map(batch => (
+                                      <option key={batch.batchCode} value={batch.batchCode}>
+                                        {batch.batchCode}
+                                      </option>
+                                    ))}
+                                  </>
+                                ) : (
+                                  <option value="">No batches</option>
+                                )}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground text-sm">
+                              {selectedSku?.description ? (
+                                <span className="truncate max-w-[180px] block">{selectedSku.description}</span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                step="1"
+                                value={newLineDraft.unitsOrdered}
+                                onChange={e => {
+                                  const parsed = Number.parseInt(e.target.value, 10)
+                                  setNewLineDraft(prev => ({
+                                    ...prev,
+                                    unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
+                                  }))
+                                }}
+                                disabled={addLineSubmitting}
+                                className="h-8 w-20 text-right"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                step="1"
+                                value={newLineDraft.unitsPerCarton ?? ''}
+                                onChange={e =>
+                                  setNewLineDraft(prev => ({
+                                    ...prev,
+                                    unitsPerCarton: (() => {
+                                      const parsed = Number.parseInt(e.target.value, 10)
+                                      return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+                                    })(),
+                                  }))
+                                }
+                                disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                                placeholder="—"
+                                className="h-8 w-20 text-right"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                              {(() => {
+                                if (!newLineDraft.unitsPerCarton) return '—'
+                                if (newLineDraft.unitsOrdered <= 0) return '—'
+                                return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
+                              })()}
+                            </td>
+                            {canEditDispatchAllocation && <td className="px-3 py-2">—</td>}
+                            <td className="px-3 py-2">—</td>
+                            <td className="px-3 py-2">
+                              <Input
+                                value={newLineDraft.notes}
+                                onChange={e =>
+                                  setNewLineDraft(prev => ({ ...prev, notes: e.target.value }))
+                                }
+                                placeholder="Notes"
+                                disabled={addLineSubmitting}
+                                className="h-8 w-24"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-2 py-2 whitespace-nowrap text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => void handleAddLineItem()}
+                                disabled={
+                                  !newLineDraft.skuId ||
+                                  !newLineDraft.batchLot ||
+                                  !newLineDraft.unitsPerCarton ||
+                                  newLineDraft.unitsOrdered <= 0 ||
+                                  addLineSubmitting
+                                }
+                                className="h-7 gap-1"
+                              >
+                                {addLineSubmitting ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Plus className="h-3.5 w-3.5" />
+                                )}
+                                Add
+                              </Button>
+                            </td>
+                          </tr>
                         )}
                       </tbody>
                     </table>
@@ -3830,312 +3600,224 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="p-4 space-y-4">
-                    {flowLines.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                    ) : (
-                      flowLines.map(line => {
-                        const canEditAttributes =
-                          !isReadOnly &&
-                          order.status === activeViewStage &&
-                          (order.status === 'DRAFT' || order.status === 'ISSUED')
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[1100px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size (cm)</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net (kg)</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross (kg)</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {flowLines.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          flowLines.map(line => {
+                            const canEditAttributes =
+                              !isReadOnly &&
+                              order.status === activeViewStage &&
+                              (order.status === 'DRAFT' || order.status === 'ISSUED')
 
-                        const issuePrefix = `cargo.lines.${line.id}`
-                        const issue = (suffix: string): string | null => {
-                          const key = `${issuePrefix}.${suffix}`
-                          return gateIssues ? gateIssues[key] ?? null : null
-                        }
+                            const issuePrefix = `cargo.lines.${line.id}`
+                            const issue = (suffix: string): string | null => {
+                              const key = `${issuePrefix}.${suffix}`
+                              return gateIssues ? gateIssues[key] ?? null : null
+                            }
 
-                        const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
+                            const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
 
-                        const cartonTriplet = resolveDimensionTripletCm({
-                          side1Cm: line.cartonSide1Cm ?? null,
-                          side2Cm: line.cartonSide2Cm ?? null,
-                          side3Cm: line.cartonSide3Cm ?? null,
-                          legacy: line.cartonDimensionsCm ?? null,
-                        })
+                            const cartonTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: line.cartonDimensionsCm ?? null,
+                            })
 
-                        const pkg = buildLinePackagingDetails(line)
-
-                        return (
-                          <div key={line.id} className="rounded-xl border bg-white dark:bg-slate-800 p-4 space-y-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-foreground truncate">
-                                  {line.skuCode}{' '}
-                                  <span className="text-muted-foreground font-medium">
-                                    • {line.batchLot ? line.batchLot : '—'}
-                                  </span>
-                                </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {line.unitsOrdered.toLocaleString()} units • {line.quantity.toLocaleString()} cartons
-                                </p>
-                              </div>
-                              {pkg && (
-                                <div className="text-xs text-muted-foreground">
-                                  {[
-                                    pkg.cartonDims ? `Carton: ${pkg.cartonDims}` : null,
-                                    pkg.kgPerCarton ? `KG/ctn: ${pkg.kgPerCarton}` : null,
-                                    pkg.cbmPerCarton ? `CBM/ctn: ${pkg.cbmPerCarton}` : null,
-                                  ]
-                                    .filter(value => typeof value === 'string' && value.length > 0)
-                                    .join(' • ')}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Commodity Code
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.commodityCode ?? ''}
-                                    data-gate-key={`${issuePrefix}.commodityCode`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, {
-                                        commodityCode: trimmed.length > 0 ? trimmed : null,
-                                      })
-                                    }}
-                                    className={
-                                      issue('commodityCode')
-                                        ? 'border-rose-500 focus-visible:ring-rose-500'
-                                        : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {line.commodityCode ? line.commodityCode : '—'}
-                                  </p>
-                                )}
-                                {issue('commodityCode') && (
-                                  <p className="text-xs text-rose-600">{issue('commodityCode')}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Country of Origin
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.countryOfOrigin ?? ''}
-                                    data-gate-key={`${issuePrefix}.countryOfOrigin`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, {
-                                        countryOfOrigin: trimmed.length > 0 ? trimmed : null,
-                                      })
-                                    }}
-                                    className={
-                                      issue('countryOfOrigin')
-                                        ? 'border-rose-500 focus-visible:ring-rose-500'
-                                        : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {line.countryOfOrigin ? line.countryOfOrigin : '—'}
-                                  </p>
-                                )}
-                                {issue('countryOfOrigin') && (
-                                  <p className="text-xs text-rose-600">{issue('countryOfOrigin')}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Units/Ctn
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    defaultValue={String(line.unitsPerCarton)}
-                                    data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) return
-                                      const parsed = Number.parseInt(trimmed, 10)
-                                      if (!Number.isInteger(parsed) || parsed <= 0) {
-                                        toast.error('Units per carton must be a positive integer')
-                                        return
-                                      }
-                                      void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                    }}
-                                    className={
-                                      issue('unitsPerCarton')
-                                        ? 'border-rose-500 focus-visible:ring-rose-500'
-                                        : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">{line.unitsPerCarton.toLocaleString()}</p>
-                                )}
-                                {issue('unitsPerCarton') && (
-                                  <p className="text-xs text-rose-600">{issue('unitsPerCarton')}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5 lg:col-span-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Carton Size (cm)
-                                </label>
-                                {canEditAttributes ? (
-                                  <div className="grid grid-cols-3 gap-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                            return (
+                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                  {canEditAttributes ? (
+                                    <Input
+                                      defaultValue={line.commodityCode ?? ''}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
+                                      }}
+                                      className={`h-8 w-28 ${issue('commodityCode') ? 'border-rose-500' : ''}`}
+                                    />
+                                  ) : (
+                                    <span className="text-foreground">{line.commodityCode ? line.commodityCode : '—'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                  {canEditAttributes ? (
+                                    <Input
+                                      defaultValue={line.countryOfOrigin ?? ''}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        void patchOrderLine(line.id, { countryOfOrigin: trimmed.length > 0 ? trimmed : null })
+                                      }}
+                                      className={`h-8 w-20 ${issue('countryOfOrigin') ? 'border-rose-500' : ''}`}
+                                    />
+                                  ) : (
+                                    <span className="text-foreground">{line.countryOfOrigin ? line.countryOfOrigin : '—'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
+                                  {canEditAttributes ? (
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={String(line.unitsPerCarton)}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) return
+                                        const parsed = Number.parseInt(trimmed, 10)
+                                        if (!Number.isInteger(parsed) || parsed <= 0) {
+                                          toast.error('Units per carton must be a positive integer')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                      }}
+                                      className={`h-8 w-16 text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
+                                    />
+                                  ) : (
+                                    <span className="text-foreground tabular-nums">{line.unitsPerCarton.toLocaleString()}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                  {canEditAttributes ? (
+                                    <div className="flex gap-1 justify-center">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="L"
+                                        defaultValue={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                        data-carton-side-line={line.id}
+                                        data-carton-side-axis="1"
+                                        onBlur={() => maybePatchCartonDimensions(line.id)}
+                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                      />
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="W"
+                                        defaultValue={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                        data-carton-side-line={line.id}
+                                        data-carton-side-axis="2"
+                                        onBlur={() => maybePatchCartonDimensions(line.id)}
+                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                      />
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="H"
+                                        defaultValue={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                        data-carton-side-line={line.id}
+                                        data-carton-side-axis="3"
+                                        onBlur={() => maybePatchCartonDimensions(line.id)}
+                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-foreground">{cartonTriplet ? formatDimensionTripletCm(cartonTriplet) : '—'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                  {canEditAttributes ? (
                                     <Input
                                       type="number"
                                       inputMode="decimal"
                                       min="0"
-                                      step="0.01"
-                                      placeholder="L"
-                                      defaultValue={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
-                                      data-carton-side-line={line.id}
-                                      data-carton-side-axis="1"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                      step="0.001"
+                                      defaultValue={line.netWeightKg != null ? String(line.netWeightKg) : ''}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) {
+                                          void patchOrderLine(line.id, { netWeightKg: null })
+                                          return
+                                        }
+                                        const parsed = Number(trimmed)
+                                        if (!Number.isFinite(parsed) || parsed <= 0) {
+                                          toast.error('Net weight must be a positive number')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { netWeightKg: parsed })
+                                      }}
+                                      className={`h-8 w-20 text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
                                     />
+                                  ) : (
+                                    <span className="text-foreground tabular-nums">{line.netWeightKg != null ? line.netWeightKg.toFixed(3) : '—'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                  {canEditAttributes ? (
                                     <Input
                                       type="number"
                                       inputMode="decimal"
                                       min="0"
-                                      step="0.01"
-                                      placeholder="W"
-                                      defaultValue={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
-                                      data-carton-side-line={line.id}
-                                      data-carton-side-axis="2"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                      step="0.001"
+                                      defaultValue={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) {
+                                          void patchOrderLine(line.id, { cartonWeightKg: null })
+                                          return
+                                        }
+                                        const parsed = Number(trimmed)
+                                        if (!Number.isFinite(parsed) || parsed <= 0) {
+                                          toast.error('Gross weight must be a positive number')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { cartonWeightKg: parsed })
+                                      }}
+                                      className={`h-8 w-20 text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
                                     />
+                                  ) : (
+                                    <span className="text-foreground tabular-nums">{line.cartonWeightKg != null ? line.cartonWeightKg.toFixed(3) : '—'}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.material`}>
+                                  {canEditAttributes ? (
                                     <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.01"
-                                      placeholder="H"
-                                      defaultValue={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
-                                      data-carton-side-line={line.id}
-                                      data-carton-side-axis="3"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cartonDimsIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined}
+                                      defaultValue={line.material ?? ''}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
+                                      }}
+                                      className={`h-8 w-24 ${issue('material') ? 'border-rose-500' : ''}`}
                                     />
-                                  </div>
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {cartonTriplet ? formatDimensionTripletCm(cartonTriplet) : '—'}
-                                  </p>
-                                )}
-                                {cartonDimsIssue && <p className="text-xs text-rose-600">{cartonDimsIssue}</p>}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.netWeightKg`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Net (kg)
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.001"
-                                    defaultValue={line.netWeightKg != null ? String(line.netWeightKg) : ''}
-                                    data-gate-key={`${issuePrefix}.netWeightKg`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) {
-                                        void patchOrderLine(line.id, { netWeightKg: null })
-                                        return
-                                      }
-                                      const parsed = Number(trimmed)
-                                      if (!Number.isFinite(parsed) || parsed <= 0) {
-                                        toast.error('Net weight must be a positive number')
-                                        return
-                                      }
-                                      void patchOrderLine(line.id, { netWeightKg: parsed })
-                                    }}
-                                    className={
-                                      issue('netWeightKg') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {line.netWeightKg != null ? line.netWeightKg.toFixed(3) : '—'}
-                                  </p>
-                                )}
-                                {issue('netWeightKg') && <p className="text-xs text-rose-600">{issue('netWeightKg')}</p>}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Gross (kg)
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.001"
-                                    defaultValue={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
-                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) {
-                                        void patchOrderLine(line.id, { cartonWeightKg: null })
-                                        return
-                                      }
-                                      const parsed = Number(trimmed)
-                                      if (!Number.isFinite(parsed) || parsed <= 0) {
-                                        toast.error('Gross weight must be a positive number')
-                                        return
-                                      }
-                                      void patchOrderLine(line.id, { cartonWeightKg: parsed })
-                                    }}
-                                    className={
-                                      issue('cartonWeightKg') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">
-                                    {line.cartonWeightKg != null ? line.cartonWeightKg.toFixed(3) : '—'}
-                                  </p>
-                                )}
-                                {issue('cartonWeightKg') && (
-                                  <p className="text-xs text-rose-600">{issue('cartonWeightKg')}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.material`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Material
-                                </label>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.material ?? ''}
-                                    data-gate-key={`${issuePrefix}.material`}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
-                                    }}
-                                    className={
-                                      issue('material') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                    }
-                                  />
-                                ) : (
-                                  <p className="text-sm text-foreground">{line.material ? line.material : '—'}</p>
-                                )}
-                                {issue('material') && <p className="text-xs text-rose-600">{issue('material')}</p>}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
+                                  ) : (
+                                    <span className="text-foreground">{line.material ? line.material : '—'}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
@@ -4417,36 +4099,24 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               </td>
                               {canEdit && (
                                 <td className="px-2 py-2 whitespace-nowrap text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0"
-                                      onClick={() => openLineEditor(line)}
-                                      title="Edit line"
-                                    >
-                                      <FileEdit className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                      onClick={() =>
-                                        setConfirmDialog({
-                                          open: true,
-                                          type: 'delete-line',
-                                          title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
-                                          lineId: line.id,
-                                        })
-                                      }
-                                      title="Remove line"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                    onClick={() =>
+                                      setConfirmDialog({
+                                        open: true,
+                                        type: 'delete-line',
+                                        title: 'Remove line item',
+                                        message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                        lineId: line.id,
+                                      })
+                                    }
+                                    title="Remove line"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
                                 </td>
                               )}
                             </tr>
@@ -4459,276 +4129,220 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="p-4 space-y-4">
-                    {draftLines.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                    ) : (
-                      draftLines.map(line => {
-                        const issuePrefix = `cargo.lines.${line.id}`
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[1100px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size (cm)</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net (kg)</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross (kg)</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftLines.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                              No lines added to this order yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          draftLines.map(line => {
+                            const issuePrefix = `cargo.lines.${line.id}`
 
-                        const cartonTriplet = resolveDimensionTripletCm({
-                          side1Cm: line.cartonSide1Cm ?? null,
-                          side2Cm: line.cartonSide2Cm ?? null,
-                          side3Cm: line.cartonSide3Cm ?? null,
-                          legacy: line.cartonDimensionsCm ?? null,
-                        })
+                            const cartonTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: line.cartonDimensionsCm ?? null,
+                            })
 
-                        const pkg = buildLinePackagingDetails(line)
+                            const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
+                              setDraftLines(prev =>
+                                prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
+                              )
+                            }
 
-                        const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
-                          setDraftLines(prev =>
-                            prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
-                          )
-                        }
-
-                        return (
-                          <div key={line.id} className="rounded-xl border bg-white dark:bg-slate-800 p-4 space-y-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-foreground truncate">
-                                  {line.skuCode}{' '}
-                                  <span className="text-muted-foreground font-medium">
-                                    • {line.batchLot ? line.batchLot : '—'}
-                                  </span>
-                                </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {line.unitsOrdered.toLocaleString()} units • {line.quantity.toLocaleString()} cartons
-                                </p>
-                              </div>
-                              {pkg && (
-                                <div className="text-xs text-muted-foreground">
-                                  {[
-                                    pkg.cartonDims ? `Carton: ${pkg.cartonDims}` : null,
-                                    pkg.kgPerCarton ? `KG/ctn: ${pkg.kgPerCarton}` : null,
-                                    pkg.cbmPerCarton ? `CBM/ctn: ${pkg.cbmPerCarton}` : null,
-                                  ]
-                                    .filter(value => typeof value === 'string' && value.length > 0)
-                                    .join(' • ')}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.commodityCode`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Commodity Code
-                                </label>
-                                <Input
-                                  value={line.commodityCode ?? ''}
-                                  data-gate-key={`${issuePrefix}.commodityCode`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.commodityCode`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.commodityCode`]}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Country of Origin
-                                </label>
-                                <Input
-                                  value={line.countryOfOrigin ?? ''}
-                                  data-gate-key={`${issuePrefix}.countryOfOrigin`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, countryOfOrigin: value.trim() ? value : null }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.countryOfOrigin`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.countryOfOrigin`]}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Units/Ctn
-                                </label>
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min="1"
-                                  step="1"
-                                  value={String(line.unitsPerCarton)}
-                                  data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                  onChange={e => {
-                                    const parsed = Number.parseInt(e.target.value, 10)
-                                    if (!Number.isInteger(parsed) || parsed <= 0) return
-                                    updateLine(current => ({
-                                      ...current,
-                                      unitsPerCarton: parsed,
-                                      quantity: Math.ceil(current.unitsOrdered / parsed),
-                                    }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.unitsPerCarton`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.unitsPerCarton`]}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5 lg:col-span-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Carton Size (cm)
-                                </label>
-                                <div className="grid grid-cols-3 gap-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                            return (
+                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    value={line.commodityCode ?? ''}
+                                    onChange={e => {
+                                      const value = e.target.value
+                                      updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                    }}
+                                    className="h-8 w-28"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    value={line.countryOfOrigin ?? ''}
+                                    onChange={e => {
+                                      const value = e.target.value
+                                      updateLine(current => ({ ...current, countryOfOrigin: value.trim() ? value : null }))
+                                    }}
+                                    className="h-8 w-20"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    value={String(line.unitsPerCarton)}
+                                    onChange={e => {
+                                      const parsed = Number.parseInt(e.target.value, 10)
+                                      if (!Number.isInteger(parsed) || parsed <= 0) return
+                                      updateLine(current => ({
+                                        ...current,
+                                        unitsPerCarton: parsed,
+                                        quantity: Math.ceil(current.unitsOrdered / parsed),
+                                      }))
+                                    }}
+                                    className="h-8 w-16 text-right"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-1 justify-center">
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="L"
+                                      value={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => {
+                                          const triplet = resolveDimensionTripletCm({
+                                            side1Cm: next,
+                                            side2Cm: current.cartonSide2Cm ?? null,
+                                            side3Cm: current.cartonSide3Cm ?? null,
+                                            legacy: current.cartonDimensionsCm ?? null,
+                                          })
+                                          return {
+                                            ...current,
+                                            cartonSide1Cm: next,
+                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                          }
+                                        })
+                                      }}
+                                      className="h-8 w-14 text-center"
+                                    />
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="W"
+                                      value={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => {
+                                          const triplet = resolveDimensionTripletCm({
+                                            side1Cm: current.cartonSide1Cm ?? null,
+                                            side2Cm: next,
+                                            side3Cm: current.cartonSide3Cm ?? null,
+                                            legacy: current.cartonDimensionsCm ?? null,
+                                          })
+                                          return {
+                                            ...current,
+                                            cartonSide2Cm: next,
+                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                          }
+                                        })
+                                      }}
+                                      className="h-8 w-14 text-center"
+                                    />
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="H"
+                                      value={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => {
+                                          const triplet = resolveDimensionTripletCm({
+                                            side1Cm: current.cartonSide1Cm ?? null,
+                                            side2Cm: current.cartonSide2Cm ?? null,
+                                            side3Cm: next,
+                                            legacy: current.cartonDimensionsCm ?? null,
+                                          })
+                                          return {
+                                            ...current,
+                                            cartonSide3Cm: next,
+                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
+                                          }
+                                        })
+                                      }}
+                                      className="h-8 w-14 text-center"
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2">
                                   <Input
                                     type="number"
                                     inputMode="decimal"
                                     min="0"
-                                    step="0.01"
-                                    placeholder="L"
-                                    value={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                    step="0.001"
+                                    value={line.netWeightKg != null ? String(line.netWeightKg) : ''}
                                     onChange={e => {
                                       const parsed = Number(e.target.value)
-                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: next,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide1Cm: next,
-                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
+                                      updateLine(current => ({
+                                        ...current,
+                                        netWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                      }))
                                     }}
+                                    className="h-8 w-20 text-right"
                                   />
+                                </td>
+                                <td className="px-3 py-2">
                                   <Input
                                     type="number"
                                     inputMode="decimal"
                                     min="0"
-                                    step="0.01"
-                                    placeholder="W"
-                                    value={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                    step="0.001"
+                                    value={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
                                     onChange={e => {
                                       const parsed = Number(e.target.value)
-                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: next,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide2Cm: next,
-                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
+                                      updateLine(current => ({
+                                        ...current,
+                                        cartonWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                      }))
                                     }}
+                                    className="h-8 w-20 text-right"
                                   />
+                                </td>
+                                <td className="px-3 py-2">
                                   <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="H"
-                                    value={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                    value={line.material ?? ''}
                                     onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: next,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide3Cm: next,
-                                          cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
+                                      const value = e.target.value
+                                      updateLine(current => ({ ...current, material: value.trim() ? value : null }))
                                     }}
+                                    className="h-8 w-24"
                                   />
-                                </div>
-                                {!cartonTriplet && (
-                                  <p className="text-xs text-muted-foreground">Enter length, width, and height.</p>
-                                )}
-                                {gateIssues?.[`${issuePrefix}.cartonDimensions`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.cartonDimensions`]}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.netWeightKg`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Net (kg)
-                                </label>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.netWeightKg != null ? String(line.netWeightKg) : ''}
-                                  data-gate-key={`${issuePrefix}.netWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    updateLine(current => ({
-                                      ...current,
-                                      netWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
-                                    }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.netWeightKg`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.netWeightKg`]}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Gross (kg)
-                                </label>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
-                                  data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    updateLine(current => ({
-                                      ...current,
-                                      cartonWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
-                                    }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.cartonWeightKg`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.cartonWeightKg`]}</p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1.5" data-gate-key={`${issuePrefix}.material`}>
-                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Material
-                                </label>
-                                <Input
-                                  value={line.material ?? ''}
-                                  data-gate-key={`${issuePrefix}.material`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
-                                  }}
-                                />
-                                {gateIssues?.[`${issuePrefix}.material`] && (
-                                  <p className="text-xs text-rose-600">{gateIssues[`${issuePrefix}.material`]}</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -5207,7 +4821,43 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
                                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                                    {unitCost !== null ? `${tenantCurrency} ${unitCost.toFixed(4)}` : '—'}
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.0001"
+                                      value={unitCost !== null ? String(unitCost) : ''}
+                                      placeholder="0.00"
+                                      onChange={e => {
+                                        const raw = e.target.value.trim()
+                                        if (!raw) {
+                                          setDraftLines(prev =>
+                                            prev.map(candidate =>
+                                              candidate.id === line.id
+                                                ? { ...candidate, totalCost: null, unitCost: null }
+                                                : candidate
+                                            )
+                                          )
+                                          return
+                                        }
+
+                                        const parsed = Number(raw)
+                                        if (!Number.isFinite(parsed) || parsed < 0) return
+
+                                        setDraftLines(prev =>
+                                          prev.map(candidate => {
+                                            if (candidate.id !== line.id) return candidate
+                                            const nextTotalCost = parsed * candidate.unitsOrdered
+                                            return {
+                                              ...candidate,
+                                              unitCost: parsed,
+                                              totalCost: Number(nextTotalCost.toFixed(2)),
+                                            }
+                                          })
+                                        )
+                                      }}
+                                      className="text-right w-24"
+                                    />
                                   </td>
                                   <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
                                     <div className="flex flex-col items-end gap-1">
@@ -5217,6 +4867,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         min="0"
                                         step="0.01"
                                         value={totalCost !== null ? String(totalCost) : ''}
+                                        placeholder="0.00"
                                         data-gate-key={gateKey}
                                         onChange={e => {
                                           const raw = e.target.value.trim()
@@ -5247,7 +4898,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             })
                                           )
                                         }}
-                                        className={issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'}
+                                        className={issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right w-28' : 'text-right w-28'}
                                       />
                                       {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                     </div>
@@ -5320,7 +4971,34 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
                                   <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                                    {unitCost !== null ? `${currencyLabel} ${unitCost.toFixed(4)}` : '—'}
+                                    {canEditProductCosts ? (
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.0001"
+                                        defaultValue={unitCost !== null ? String(unitCost) : ''}
+                                        placeholder="0.00"
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) {
+                                            void patchOrderLine(line.id, { totalCost: null })
+                                            return
+                                          }
+
+                                          const parsed = Number(trimmed)
+                                          if (!Number.isFinite(parsed) || parsed < 0) {
+                                            toast.error('Unit cost must be a positive number')
+                                            return
+                                          }
+                                          const nextTotalCost = parsed * line.unitsOrdered
+                                          void patchOrderLine(line.id, { totalCost: Number(nextTotalCost.toFixed(2)) })
+                                        }}
+                                        className="text-right w-24"
+                                      />
+                                    ) : (
+                                      <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toFixed(4)}` : '—'}</span>
+                                    )}
                                   </td>
                                   <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
                                     {canEditProductCosts ? (
@@ -5331,6 +5009,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           min="0"
                                           step="0.01"
                                           defaultValue={totalCost !== null ? String(totalCost) : ''}
+                                          placeholder="0.00"
                                           data-gate-key={gateKey}
                                           onBlur={e => {
                                             const trimmed = e.target.value.trim()
@@ -5347,7 +5026,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             void patchOrderLine(line.id, { totalCost: parsed })
                                           }}
                                           className={
-                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'
+                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right w-28' : 'text-right w-28'
                                           }
                                         />
                                         {issue && <p className="text-xs text-rose-600">{issue}</p>}
@@ -6198,7 +5877,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           value={orderInfoDraft.counterpartyName}
                           onChange={e => applySupplierSelection(e.target.value)}
                           disabled={orderInfoSaving}
-                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
                         >
                           <option value="">Select supplier</option>
                           {suppliers.map(supplier => (
@@ -6262,7 +5941,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             }))
                           }
                           disabled={orderInfoSaving}
-                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                          className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
                         >
                           <option value="">Select incoterms</option>
                           {INCOTERMS_OPTIONS.map(option => (
@@ -6391,7 +6070,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           value={orderInfoDraft.counterpartyName}
                           onChange={e => applySupplierSelection(e.target.value)}
                           disabled={orderInfoSaving}
-                          className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                          className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
                             gateIssues?.['details.counterpartyName'] ? 'border-rose-500' : ''
                           }`}
                         >
@@ -6478,7 +6157,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             }))
                           }
                           disabled={orderInfoSaving}
-                          className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                          className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
                             gateIssues?.['details.incoterms'] ? 'border-rose-500' : ''
                           }`}
                         >
@@ -7404,204 +7083,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
           </div>
         </div>
 
-        {editLineOpen && editingLine && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => {
-                if (editLineSubmitting) return
-                setEditLineOpen(false)
-                setEditingLine(null)
-              }}
-            />
-            <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 dark:bg-slate-700">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit line item</h2>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {editingLine.skuCode} • {formatTextOrDash(editingLine.batchLot)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (editLineSubmitting) return
-                    setEditLineOpen(false)
-                    setEditingLine(null)
-                  }}
-                  className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 dark:text-slate-300 transition-colors"
-                  disabled={editLineSubmitting}
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                {(() => {
-                  const skuRecord =
-                    skus.find(
-                      sku =>
-                        sku.skuCode.trim().toUpperCase() ===
-                        editingLine.skuCode.trim().toUpperCase()
-                    ) ?? null
-                  const skuId = skuRecord?.id ?? null
-                  const batchOptions = skuId ? (batchesBySkuId[skuId] ?? []) : []
-                  const batchesLoading = skuId ? Boolean(batchesLoadingBySkuId[skuId]) : false
-                  const batch =
-                    batchOptions.find(option => option.batchCode === editLineDraft.batchLot) ?? null
-
-                  return (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Batch
-                        </label>
-                        <select
-                          value={editLineDraft.batchLot}
-                          onChange={e => {
-                            const nextBatch = e.target.value
-                            setEditLineDraft(prev => ({
-                              ...prev,
-                              batchLot: nextBatch,
-                              unitsPerCarton:
-                                batchOptions.find(option => option.batchCode === nextBatch)
-                                  ?.unitsPerCarton ?? prev.unitsPerCarton,
-                            }))
-                          }}
-                          disabled={editLineSubmitting || batchesLoading || !skuId}
-                          className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                        >
-                          <option value="">{!skuId ? 'Select SKU first' : 'Select batch'}</option>
-                          {batchOptions.map(option => (
-                            <option key={option.batchCode} value={option.batchCode}>
-                              {option.batchCode}
-                            </option>
-                          ))}
-                        </select>
-                        {batch && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {buildBatchPackagingMeta({
-                              batch,
-                              unitsOrdered: editLineDraft.unitsOrdered,
-                              unitsPerCarton:
-                                editLineDraft.unitsPerCarton ?? batch.unitsPerCarton ?? null,
-                            })?.text ?? ''}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Units
-                          </label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            step="1"
-                            value={editLineDraft.unitsOrdered}
-                            onChange={e =>
-                              setEditLineDraft(prev => ({
-                                ...prev,
-                                unitsOrdered: (() => {
-                                  const parsed = Number.parseInt(e.target.value, 10)
-                                  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
-                                })(),
-                              }))
-                            }
-                            disabled={editLineSubmitting}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Units/Ctn
-                          </label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            step="1"
-                            value={editLineDraft.unitsPerCarton ?? ''}
-                            onChange={e =>
-                              setEditLineDraft(prev => ({
-                                ...prev,
-                                unitsPerCarton: (() => {
-                                  const parsed = Number.parseInt(e.target.value, 10)
-                                  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-                                })(),
-                              }))
-                            }
-                            disabled={editLineSubmitting}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Cartons
-                          </label>
-                          <Input
-                            value={(() => {
-                              const units = Number(editLineDraft.unitsOrdered)
-                              const per = editLineDraft.unitsPerCarton
-                              if (!per || units <= 0) return '—'
-                              return String(Math.ceil(units / per))
-                            })()}
-                            readOnly
-                            disabled
-                            className="bg-muted/30 text-muted-foreground"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Notes
-                        </label>
-                        <Input
-                          value={editLineDraft.notes}
-                          onChange={e =>
-                            setEditLineDraft(prev => ({ ...prev, notes: e.target.value }))
-                          }
-                          placeholder="Optional"
-                          disabled={editLineSubmitting}
-                        />
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50 dark:bg-slate-700">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (editLineSubmitting) return
-                    setEditLineOpen(false)
-                    setEditingLine(null)
-                  }}
-                  disabled={editLineSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => void handleSaveLineEdit()}
-                  disabled={
-                    editLineSubmitting ||
-                    !editLineDraft.batchLot.trim() ||
-                    editLineDraft.batchLot.trim().toUpperCase() === 'DEFAULT' ||
-                    !editLineDraft.unitsPerCarton ||
-                    editLineDraft.unitsOrdered <= 0
-                  }
-                  className="gap-2"
-                >
-                  {editLineSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Save changes
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
+        
         {/* Confirmation Dialog */}
         <ConfirmDialog
           isOpen={confirmDialog.open}
