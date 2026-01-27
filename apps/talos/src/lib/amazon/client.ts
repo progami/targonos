@@ -1047,6 +1047,37 @@ export async function getProductFees(asin: string, price: number, tenantCode?: T
   }
 }
 
+export async function getProductFeesForSku(sellerSku: string, price: number, tenantCode?: TenantCode) {
+  try {
+    const config = getAmazonSpApiConfigFromEnv(tenantCode)
+    const currencyCode = getMarketplaceCurrencyCode(tenantCode)
+    const response = await callAmazonApi<unknown>(tenantCode, {
+      operation: 'getMyFeesEstimateForSKU',
+      endpoint: 'productFees',
+      path: {
+        SellerSKU: sellerSku,
+      },
+      body: {
+        FeesEstimateRequest: {
+          MarketplaceId: config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID,
+          Identifier: `fee-estimate-${sellerSku}`,
+          IsAmazonFulfilled: true,
+          PriceToEstimateFees: {
+            ListingPrice: {
+              CurrencyCode: currencyCode,
+              Amount: price,
+            },
+          },
+        },
+      },
+    })
+    return response
+  } catch (_error) {
+    // console.error('Error fetching product fees:', _error)
+    throw _error
+  }
+}
+
 /**
  * Get the current listing price for an ASIN from Amazon's Pricing API.
  * Uses getPricing which returns the seller's own listing price.
