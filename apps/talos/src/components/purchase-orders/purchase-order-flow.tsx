@@ -4122,6 +4122,157 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </tr>
                           ))
                         )}
+                        {/* Inline Add Row for Create Mode */}
+                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                          <td className="px-3 py-2 min-w-[100px]">
+                            <select
+                              value={newLineDraft.skuId}
+                              onChange={e => {
+                                const skuId = e.target.value
+                                setNewLineDraft(prev => ({
+                                  ...prev,
+                                  skuId,
+                                  batchLot: '',
+                                  unitsOrdered: 1,
+                                  unitsPerCarton: null,
+                                  notes: '',
+                                }))
+                                void ensureSkuBatchesLoaded(skuId)
+                              }}
+                              disabled={skusLoading || addLineSubmitting}
+                              className="w-full h-8 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                            >
+                              <option value="">Select SKU</option>
+                              {skus.map(sku => (
+                                <option key={sku.id} value={sku.id}>
+                                  {sku.skuCode}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 min-w-[100px]">
+                            <select
+                              value={newLineDraft.batchLot}
+                              onChange={e => {
+                                const batchLot = e.target.value
+                                setNewLineDraft(prev => {
+                                  const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
+                                  const selected = batches.find(batch => batch.batchCode === batchLot)
+                                  return {
+                                    ...prev,
+                                    batchLot,
+                                    unitsPerCarton: selected?.unitsPerCarton ?? null,
+                                  }
+                                })
+                              }}
+                              disabled={!newLineDraft.skuId || addLineSubmitting}
+                              className="w-full h-8 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                            >
+                              {!newLineDraft.skuId ? (
+                                <option value="">—</option>
+                              ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
+                                <option value="">Loading…</option>
+                              ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
+                                <>
+                                  <option value="">Select</option>
+                                  {batchesBySkuId[newLineDraft.skuId].map(batch => (
+                                    <option key={batch.batchCode} value={batch.batchCode}>
+                                      {batch.batchCode}
+                                    </option>
+                                  ))}
+                                </>
+                              ) : (
+                                <option value="">No batches</option>
+                              )}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground text-sm">
+                            {selectedSku?.description ? (
+                              <span className="truncate max-w-[180px] block">{selectedSku.description}</span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min="1"
+                              step="1"
+                              value={newLineDraft.unitsOrdered}
+                              onChange={e => {
+                                const parsed = Number.parseInt(e.target.value, 10)
+                                setNewLineDraft(prev => ({
+                                  ...prev,
+                                  unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
+                                }))
+                              }}
+                              disabled={addLineSubmitting}
+                              className="h-8 w-20 text-right"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min="1"
+                              step="1"
+                              value={newLineDraft.unitsPerCarton ?? ''}
+                              onChange={e =>
+                                setNewLineDraft(prev => ({
+                                  ...prev,
+                                  unitsPerCarton: (() => {
+                                    const parsed = Number.parseInt(e.target.value, 10)
+                                    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+                                  })(),
+                                }))
+                              }
+                              disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                              placeholder="—"
+                              className="h-8 w-20 text-right"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                            {(() => {
+                              if (!newLineDraft.unitsPerCarton) return '—'
+                              if (newLineDraft.unitsOrdered <= 0) return '—'
+                              return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
+                            })()}
+                          </td>
+                          <td className="px-3 py-2">—</td>
+                          <td className="px-3 py-2">
+                            <Input
+                              value={newLineDraft.notes}
+                              onChange={e =>
+                                setNewLineDraft(prev => ({ ...prev, notes: e.target.value }))
+                              }
+                              placeholder="Notes"
+                              disabled={addLineSubmitting}
+                              className="h-8 w-24"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                          <td className="px-2 py-2 whitespace-nowrap text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handleAddLineItem()}
+                              disabled={
+                                !newLineDraft.skuId ||
+                                !newLineDraft.batchLot ||
+                                !newLineDraft.unitsPerCarton ||
+                                newLineDraft.unitsOrdered <= 0 ||
+                                addLineSubmitting
+                              }
+                              className="h-7 gap-1"
+                            >
+                              {addLineSubmitting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Plus className="h-3.5 w-3.5" />
+                              )}
+                              Add
+                            </Button>
+                          </td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
