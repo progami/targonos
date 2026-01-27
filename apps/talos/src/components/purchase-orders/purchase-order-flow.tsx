@@ -920,11 +920,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
-    type: 'cancel' | 'reject' | 'delete-line' | null
+    type: 'cancel' | 'reject' | 'delete-line' | 'delete-forwarding-cost' | null
     title: string
     message: string
     lineId?: string | null
-  }>({ open: false, type: null, title: '', message: '', lineId: null })
+    forwardingCostId?: string | null
+  }>({ open: false, type: null, title: '', message: '', lineId: null, forwardingCostId: null })
 
   // Stage-based navigation - which stage view is currently selected
   const [selectedStageView, setSelectedStageView] = useState<string | null>(null)
@@ -1820,6 +1821,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
   }, [skus.length, skusLoading])
 
+  useEffect(() => {
+    if (!session) return
+
+    if (isCreate || order?.status === 'DRAFT') {
+      void ensureSkusLoaded()
+    }
+  }, [ensureSkusLoaded, isCreate, order?.status, session])
+
   const ensureSuppliersLoaded = useCallback(async () => {
     if (suppliersLoading || suppliers.length > 0) return
 
@@ -2386,11 +2395,31 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (confirmDialog.type === 'delete-line' && confirmDialog.lineId) {
       await handleDeleteLine(confirmDialog.lineId)
     }
-    setConfirmDialog({ open: false, type: null, title: '', message: '', lineId: null })
+    if (confirmDialog.type === 'delete-forwarding-cost' && confirmDialog.forwardingCostId) {
+      const row = forwardingCosts.find(item => item.id === confirmDialog.forwardingCostId)
+      if (row) {
+        await deleteForwardingCost(row)
+      }
+    }
+    setConfirmDialog({
+      open: false,
+      type: null,
+      title: '',
+      message: '',
+      lineId: null,
+      forwardingCostId: null,
+    })
   }
 
   const handleConfirmDialogClose = () => {
-    setConfirmDialog({ open: false, type: null, title: '', message: '', lineId: null })
+    setConfirmDialog({
+      open: false,
+      type: null,
+      title: '',
+      message: '',
+      lineId: null,
+      forwardingCostId: null,
+    })
   }
 
   if (status === 'loading' || loading) {
@@ -5551,9 +5580,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           size="sm"
                                           variant="outline"
                                           onClick={() => {
-                                            const confirmed = window.confirm('Delete this cargo cost?')
-                                            if (!confirmed) return
-                                            void deleteForwardingCost(row)
+                                            setConfirmDialog({
+                                              open: true,
+                                              type: 'delete-forwarding-cost',
+                                              title: 'Delete cargo cost',
+                                              message: `Delete ${row.costName} from this order?`,
+                                              forwardingCostId: row.id,
+                                            })
                                           }}
                                           disabled={!canEditForwardingCosts || isDeleting}
                                           className="gap-2"
@@ -7250,7 +7283,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 ? 'Mark Rejected'
                 : confirmDialog.type === 'delete-line'
                   ? 'Remove Line'
-                  : 'Confirm'
+                  : confirmDialog.type === 'delete-forwarding-cost'
+                    ? 'Delete Cost'
+                    : 'Confirm'
           }
           cancelText="Go Back"
         />
