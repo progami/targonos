@@ -5,13 +5,13 @@ import {
   getListingsItems,
   getListingPrice,
   getProductFees,
+  getProductFeesForSku,
   testCompareApis,
   type AmazonCatalogListingType,
 } from '@/lib/amazon/client'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import {
-  normalizeReferralCategory2026,
   parseAmazonProductFees,
   calculateSizeTierForTenant,
   getReferralFeePercentForTenant,
@@ -212,7 +212,6 @@ function parseCatalogCategories(catalog: { summaries?: unknown }): { category: s
         typeof displayGroupRaw === 'string' && displayGroupRaw.trim()
           ? sanitizeForDisplay(displayGroupRaw.trim())
           : null
-      const normalizedCategory = displayGroup ? normalizeReferralCategory2026(displayGroup) : ''
 
       const browse = summaryRecord.browseClassification
       const browseDisplayRaw =
@@ -222,7 +221,7 @@ function parseCatalogCategories(catalog: { summaries?: unknown }): { category: s
           ? sanitizeForDisplay(browseDisplayRaw.trim())
           : null
 
-      return { category: normalizedCategory ? normalizedCategory : null, subcategory: browseDisplay ?? null }
+      return { category: displayGroup, subcategory: browseDisplay ?? null }
     }
   }
   return { category: null, subcategory: null }
@@ -659,7 +658,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     }
 
     try {
-      // Fetch actual listing price to get accurate Low-Price FBA rates for products under $10
+      // Fetch actual listing price to get accurate tenant-specific Low-Price FBA rates
       const fetchedListingPrice = await getListingPrice(asin, tenantCode)
       if (fetchedListingPrice === null) {
         throw new Error('Amazon listing price unavailable for fee estimation')
@@ -671,7 +670,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         amazonReferralFeePercent = getReferralFeePercentForTenant(tenantCode, amazonCategory, fetchedListingPrice)
       }
 
-      const fees = await getProductFees(asin, fetchedListingPrice, tenantCode)
+      const fees = await getProductFeesForSku(skuCode, fetchedListingPrice, tenantCode)
       const parsedFees = parseAmazonProductFees(fees)
       amazonFbaFulfillmentFee = roundToTwoDecimals(parsedFees.fbaFees ?? Number.NaN)
       if (amazonSizeTier === null && parsedFees.sizeTier) {
