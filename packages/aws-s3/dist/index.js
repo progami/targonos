@@ -103,6 +103,16 @@ export class S3Service {
             .replace(/^_+|_+$/g, '')
             .toLowerCase();
     }
+    encodeMetadataValue(value) {
+        return encodeURIComponent(value);
+    }
+    sanitizeMetadata(metadata) {
+        const sanitized = {};
+        for (const [key, value] of Object.entries(metadata)) {
+            sanitized[key] = this.encodeMetadataValue(value);
+        }
+        return sanitized;
+    }
     async uploadFile(file, key, options = {}, onProgress) {
         try {
             let uploadBody;
@@ -132,12 +142,13 @@ export class S3Service {
             if (options.expiresAt) {
                 metadata.expiresAt = options.expiresAt.toISOString();
             }
+            const sanitizedMetadata = this.sanitizeMetadata(metadata);
             const uploadParams = {
                 Bucket: this.bucket,
                 Key: key,
                 Body: uploadBody,
                 ContentType: contentType,
-                Metadata: metadata,
+                Metadata: sanitizedMetadata,
                 ServerSideEncryption: 'AES256',
                 CacheControl: options.cacheControl || this.getCacheControl(key),
                 ContentDisposition: options.contentDisposition || this.getContentDisposition(key),
