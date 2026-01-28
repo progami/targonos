@@ -11,6 +11,10 @@ export async function fetchSellerboardCsv(reportUrl: string): Promise<string> {
   return response.text();
 }
 
+export function normalizeSellerboardHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 /**
  * Generate SHA256 hash of content for change detection
  */
@@ -26,12 +30,50 @@ function normalizeCsvInput(content: string): string {
   return content.replace(/^\uFEFF/, '');
 }
 
-/**
- * Parse CSV content into rows and cells
- * Handles quoted fields and escaped quotes
- */
-export function parseCsv(content: string): string[][] {
-  const input = normalizeCsvInput(content);
+type CsvDelimiter = ',' | ';' | '\t';
+
+function detectCsvDelimiter(input: string): CsvDelimiter {
+  const firstNewline = input.indexOf('\n');
+  const firstLine = firstNewline === -1 ? input : input.slice(0, firstNewline);
+
+  const counts: Record<CsvDelimiter, number> = { ',': 0, ';': 0, '\t': 0 };
+  let inQuotes = false;
+
+  for (let index = 0; index < firstLine.length; index += 1) {
+    const char = firstLine[index];
+
+    if (char === '"') {
+      const next = firstLine[index + 1];
+      if (inQuotes && next === '"') {
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (inQuotes) continue;
+    if (char === ',' || char === ';' || char === '\t') {
+      counts[char] += 1;
+    }
+  }
+
+  const candidates: CsvDelimiter[] = [',', ';', '\t'];
+  let best: CsvDelimiter = ',';
+  let bestCount = counts[best];
+
+  for (const candidate of candidates) {
+    const candidateCount = counts[candidate];
+    if (candidateCount > bestCount) {
+      best = candidate;
+      bestCount = candidateCount;
+    }
+  }
+
+  return bestCount > 0 ? best : ',';
+}
+
+function parseCsvWithDelimiter(input: string, delimiter: CsvDelimiter): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -60,7 +102,7 @@ export function parseCsv(content: string): string[][] {
       continue;
     }
 
-    if (char === ',') {
+    if (char === delimiter) {
       row.push(field);
       field = '';
       continue;
@@ -89,6 +131,16 @@ export function parseCsv(content: string): string[][] {
   }
 
   return rows;
+}
+
+/**
+ * Parse CSV content into rows and cells
+ * Handles quoted fields and escaped quotes
+ */
+export function parseCsv(content: string): string[][] {
+  const input = normalizeCsvInput(content);
+  const delimiter = detectCsvDelimiter(input);
+  return parseCsvWithDelimiter(input, delimiter);
 }
 
 /**

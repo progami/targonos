@@ -13,6 +13,14 @@ describe('sellerboard orders parsing', () => {
     ]);
   });
 
+  it('parses semicolon-delimited CSV', () => {
+    const csv = 'a;b;c\n1;2;3\n';
+    expect(parseCsv(csv)).toEqual([
+      ['a', 'b', 'c'],
+      ['1', '2', '3'],
+    ]);
+  });
+
   it('parses Sellerboard PurchaseDate(UTC) as a UTC Date', () => {
     const parsed = parseSellerboardDateUtc('12/30/2025 6:07:04 PM');
     expect(parsed?.toISOString()).toBe('2025-12-30T18:07:04.000Z');
