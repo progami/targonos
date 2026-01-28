@@ -24,7 +24,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ## Testing
 
-- Test via Chrome browser at `https://os.targonglobal.com/<app>`
+- Test via Chrome browser at `https://dev-os.targonglobal.com/<app>`
 - Do not test on localhost
 - **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
@@ -72,4 +72,4 @@ When `dev` and `main` diverge with conflicts:
 
 ## Deployment & Caching
 
-Do not suggest hard refresh as a solution to an issue. If deployment is complete and the problem is still unsolved, investigate the root cause.
+Do **not** suggest "hard refresh" as a troubleshooting step. Instead, use the in-app version badge (bottom-right) to confirm the deployed version and wait for the deploy pipeline if the version hasn't updated yet. If deployment is complete and the problem is still unsolved, investigate the root cause.
