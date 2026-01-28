@@ -185,6 +185,7 @@ async function syncInventory(session: Session) {
         // Only sync SKUs that already exist in our system
         const sku = await prisma.sku.findFirst({
           where: {
+            isActive: true,
             OR: [{ asin: item.asin }, { skuCode: item.sellerSku }],
           },
         })
@@ -237,6 +238,7 @@ async function syncProducts(session: Session) {
     const skus = await prisma.sku.findMany({
       where: {
         asin: { not: null },
+        isActive: true,
       },
     })
 

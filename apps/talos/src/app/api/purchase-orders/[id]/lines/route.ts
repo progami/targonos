@@ -161,6 +161,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       id: true,
       skuCode: true,
       description: true,
+      isActive: true,
       packSize: true,
       unitsPerCarton: true,
       material: true,
@@ -180,6 +181,10 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
 
   if (!sku) {
     return ApiResponses.badRequest(`SKU ${skuCode} not found. Create the SKU first.`)
+  }
+
+  if (!sku.isActive) {
+    return ApiResponses.badRequest(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
   }
 
   const existingBatch = await prisma.skuBatch.findFirst({

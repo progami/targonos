@@ -195,6 +195,7 @@ const skuSchemaBase = z.object({
   cartonSide3Cm: optionalDimensionValueSchema,
   cartonWeightKg: z.number().positive().optional().nullable(),
   packagingType: packagingTypeSchema,
+  isActive: z.boolean().optional(),
 })
 
 type DimensionRefineShape = {
@@ -290,7 +291,9 @@ export const GET = withAuth(async (request, _session) => {
     ? sanitizeSearchQuery(searchParams.get('search')!)
     : null
 
-  const where: Prisma.SkuWhereInput = {}
+  const includeInactive = searchParams.get('includeInactive') === '1'
+
+  const where: Prisma.SkuWhereInput = includeInactive ? {} : { isActive: true }
 
   if (search) {
     const escapedSearch = escapeRegex(search)
@@ -453,7 +456,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         cartonSide3Cm: null,
         cartonWeightKg: null,
         packagingType: validatedData.initialBatch.packagingType ?? null,
-        isActive: true,
+        isActive: validatedData.isActive !== undefined ? validatedData.isActive : true,
       },
     })
 

@@ -38,6 +38,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     }
 
     const skus = await prisma.sku.findMany({
+      where: { isActive: true },
       orderBy: { skuCode: 'asc' },
       select: {
         id: true,

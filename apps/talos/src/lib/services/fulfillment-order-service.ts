@@ -179,13 +179,17 @@ export async function createFulfillmentOrder(
   const skuCodes = Array.from(new Set(normalizedLines.map(line => line.skuCode)))
   const skus = await prisma.sku.findMany({
     where: { skuCode: { in: skuCodes } },
-    select: { id: true, skuCode: true, description: true },
+    select: { id: true, skuCode: true, description: true, isActive: true },
   })
   const skuByCode = new Map(skus.map(sku => [sku.skuCode, sku]))
 
   for (const line of normalizedLines) {
-    if (!skuByCode.has(line.skuCode)) {
+    const sku = skuByCode.get(line.skuCode)
+    if (!sku) {
       throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
+    }
+    if (!sku.isActive) {
+      throw new ValidationError(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
     }
   }
 
