@@ -91,7 +91,7 @@ function printUsage() {
   console.log(`  ${script} --tenant UK --start 2025-12-01 --end 2026-01-01`)
   console.log('')
   console.log('Options:')
-  console.log('  --env-file <path>    Defaults to ../../../targonos-main/apps/talos/.env.local')
+  console.log('  --env-file <path>    Defaults to $TARGONOS_MAIN_DIR/apps/talos/.env.local (or ./apps/talos/.env.local)')
   console.log('  --tenant <US|UK>     Required (US or UK)')
   console.log('  --start <YYYY-MM-DD> Optional (defaults to last 60 days)')
   console.log('  --end <YYYY-MM-DD>   Optional (defaults to now-5min)')
@@ -108,7 +108,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const repoRoot = path.resolve(__dirname, '..')
 
-const defaultEnvFile = path.resolve(__dirname, '../../../targonos-main/apps/talos/.env.local')
+const mainRepoDir = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR ?? repoRoot
+const defaultEnvFile = path.join(mainRepoDir, 'apps/talos/.env.local')
 const envFilePath = String(args['env-file'] ?? defaultEnvFile)
 
 if (!fs.existsSync(envFilePath)) {
