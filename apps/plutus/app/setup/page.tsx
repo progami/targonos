@@ -47,6 +47,7 @@ type QboAccount = {
   id: string;
   name: string;
   fullyQualifiedName: string;
+  acctNum?: string | null;
   type: string;
   active: boolean;
 };
@@ -318,11 +319,14 @@ function AccountRow({
             <SelectValue placeholder="Select parent account…" />
           </SelectTrigger>
           <SelectContent>
-            {filtered.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.fullyQualifiedName}
-              </SelectItem>
-            ))}
+            {filtered.map((a) => {
+              const label = a.acctNum ? `${a.acctNum} · ${a.fullyQualifiedName}` : a.fullyQualifiedName;
+              return (
+                <SelectItem key={a.id} value={a.id}>
+                  {label}
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
       </TableCell>
