@@ -656,12 +656,22 @@ export const POST = withAuth(async (request, session) => {
     for (const item of validatedItems) {
       const sku = await prisma.sku.findFirst({
         where: { skuCode: item.skuCode },
+        select: { id: true, skuCode: true, isActive: true },
       })
 
       if (!sku) {
         return NextResponse.json(
           {
             error: `SKU ${item.skuCode} not found. Please create the SKU first.`,
+          },
+          { status: 400 }
+        )
+      }
+
+      if (!sku.isActive) {
+        return NextResponse.json(
+          {
+            error: `SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`,
           },
           { status: 400 }
         )

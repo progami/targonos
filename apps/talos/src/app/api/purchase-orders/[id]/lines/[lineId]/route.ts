@@ -351,6 +351,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
           id: true,
           skuCode: true,
           description: true,
+          isActive: true,
           cartonDimensionsCm: true,
           cartonSide1Cm: true,
           cartonSide2Cm: true,
@@ -362,6 +363,10 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
       if (!sku) {
         return ApiResponses.badRequest(`SKU ${nextSkuCode} not found. Create the SKU first.`)
+      }
+
+      if (!sku.isActive) {
+        return ApiResponses.badRequest(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
       }
 
       const existingBatch = await prisma.skuBatch.findFirst({
