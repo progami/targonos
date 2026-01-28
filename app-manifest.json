@@ -7,6 +7,7 @@
     "atlas": { "lifecycle": "active" },
     "xplan": { "lifecycle": "active" },
     "plutus": { "lifecycle": "active" },
+    "hermes": { "lifecycle": "dev" },
     "fcc": { "lifecycle": "archived" },
     "margin-master": { "lifecycle": "archived" },
     "legal-suite": { "lifecycle": "archived" },
