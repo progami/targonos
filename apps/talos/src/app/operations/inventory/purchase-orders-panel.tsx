@@ -236,8 +236,13 @@ export function PurchaseOrdersPanel({
       {
         key: 'created-by',
         header: 'Created by',
-        tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-        render: order => order.createdByName || '—',
+        thClassName: 'w-[clamp(6rem,10vw,9rem)]',
+        tdClassName: 'px-3 py-2 text-muted-foreground',
+        render: order => (
+          <span className="block truncate" title={order.createdByName || undefined}>
+            {order.createdByName || '—'}
+          </span>
+        ),
       },
       {
         key: 'lines',
