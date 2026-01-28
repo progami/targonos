@@ -61,7 +61,7 @@ export const GET = withAuth(async (request, session) => {
   const batchCodes = Array.from(new Set(available.map(row => row.batchLot)))
 
   const skus = await prisma.sku.findMany({
-    where: { skuCode: { in: skuCodes } },
+    where: { skuCode: { in: skuCodes }, isActive: true },
     select: { id: true, skuCode: true, description: true, unitsPerCarton: true },
   })
 
