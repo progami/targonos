@@ -1715,68 +1715,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
       try {
-        const presignResponse = await fetchWithCSRF(
-          `/api/purchase-orders/${orderId}/documents/presigned-url`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              stage,
-              documentType,
-              fileName: file.name,
-              fileType: file.type,
-              fileSize: file.size,
-            }),
-          }
-        )
-
-        if (!presignResponse.ok) {
-          const payload = await presignResponse.json().catch(() => null)
-          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
-          const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
-          if (errorMessage && detailsMessage) {
-            toast.error(`${errorMessage}: ${detailsMessage}`)
-          } else if (errorMessage) {
-            toast.error(errorMessage)
-          } else {
-            toast.error(`Failed to start document upload (HTTP ${presignResponse.status})`)
-          }
-          return
-        }
-
-        const presignPayload = await presignResponse.json().catch(() => null)
-        const uploadUrl = typeof presignPayload?.uploadUrl === 'string' ? presignPayload.uploadUrl : null
-        const s3Key = typeof presignPayload?.s3Key === 'string' ? presignPayload.s3Key : null
-
-        if (!uploadUrl || !s3Key) {
-          toast.error('Failed to start document upload')
-          return
-        }
-
-        const uploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-
-        if (!uploadResponse.ok) {
-          toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
-          return
-        }
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('stage', stage)
+        formData.append('documentType', documentType)
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
-          body: JSON.stringify({
-            stage,
-            documentType,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            s3Key,
-          }),
+          body: formData,
         })
 
+        const payload = await response.json().catch(() => null)
         if (!response.ok) {
-          const payload = await response.json().catch(() => null)
           const errorMessage = typeof payload?.error === 'string' ? payload.error : null
           const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
           if (errorMessage && detailsMessage) {
