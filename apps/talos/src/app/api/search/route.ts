@@ -29,6 +29,7 @@ export const GET = withAuth(async (request) => {
     // Search SKUs
     const skus = await prisma.sku.findMany({
       where: {
+        isActive: true,
         OR: [
           { skuCode: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
@@ -45,7 +46,7 @@ export const GET = withAuth(async (request) => {
         id: sku.id,
         title: sku.skuCode,
         subtitle: sku.description ?? undefined,
-        href: `/config/products?sku=${encodeURIComponent(sku.skuCode)}`,
+        href: `/config/products?editSkuId=${encodeURIComponent(sku.id)}`,
       })
     }
 

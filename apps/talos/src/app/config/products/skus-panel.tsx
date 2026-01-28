@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PortalModal } from '@/components/ui/portal-modal'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
@@ -170,6 +171,7 @@ interface SkuRow {
   id: string
   skuCode: string
   description: string
+  isActive: boolean
   asin: string | null
   category?: string | null
   subcategory?: string | null
@@ -217,6 +219,7 @@ interface SupplierOption {
 interface SkuFormState {
   skuCode: string
   description: string
+  isActive: boolean
   asin: string
   category: string
   subcategory: string
@@ -312,6 +315,7 @@ function buildFormState(sku?: SkuRow | null): SkuFormState {
   return {
     skuCode: sku?.skuCode ?? '',
     description: sku?.description ?? '',
+    isActive: sku ? sku.isActive : true,
     asin: sku?.asin ?? '',
     category,
     subcategory: sku?.subcategory ?? '',
@@ -479,6 +483,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const setSearchTerm = pageState.setSearch
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const [showInactiveSkus, setShowInactiveSkus] = useState(false)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -614,8 +619,9 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams()
     if (searchTerm.trim()) params.set('search', searchTerm.trim())
+    if (showInactiveSkus) params.set('includeInactive', '1')
     return params.toString()
-  }, [searchTerm])
+  }, [searchTerm, showInactiveSkus])
 
   const fetchSkus = useCallback(async () => {
     try {
@@ -718,11 +724,18 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     if (!externalEditSkuId) return
     if (externalEditOpened) return
     if (skus.length === 0) return
+
     const sku = skus.find(item => item.id === externalEditSkuId)
-    if (!sku) return
+    if (!sku) {
+      if (!showInactiveSkus) {
+        setShowInactiveSkus(true)
+      }
+      return
+    }
+
     openEdit(sku)
     setExternalEditOpened(true)
-  }, [externalEditOpened, externalEditSkuId, openEdit, skus])
+  }, [externalEditOpened, externalEditSkuId, openEdit, showInactiveSkus, skus])
 
   const closeModal = () => {
     if (isSubmitting) return
@@ -916,6 +929,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         skuCode,
         asin: asinValue,
         description,
+        isActive: formState.isActive,
         defaultSupplierId: formState.defaultSupplierId ? formState.defaultSupplierId : null,
         secondarySupplierId: formState.secondarySupplierId ? formState.secondarySupplierId : null,
         category: categoryValue,
@@ -1017,6 +1031,14 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
               />
             </div>
           </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-600 dark:text-slate-400">Show inactive</span>
+            <Switch
+              checked={showInactiveSkus}
+              onChange={event => setShowInactiveSkus(event.target.checked)}
+            />
+          </div>
         </div>
 
         {loading ? (
@@ -1090,13 +1112,20 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                           </button>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(sku)}
-                            className="text-cyan-700 dark:text-cyan-400 hover:underline"
-                          >
-                            {sku.skuCode}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(sku)}
+                              className="text-cyan-700 dark:text-cyan-400 hover:underline"
+                            >
+                              {sku.skuCode}
+                            </button>
+                            {!sku.isActive && (
+                              <Badge variant="neutral" className="uppercase tracking-wide text-[10px]">
+                                Inactive
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                           {sku.description}
@@ -1204,6 +1233,24 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     maxLength={SKU_FIELD_LIMITS.DESCRIPTION_MAX}
                     required
                   />
+                </div>
+
+                <div className="md:col-span-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="isActive">Active</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Inactive SKUs are hidden from operational workflows and discrepancies.
+                      </p>
+                    </div>
+                    <Switch
+                      id="isActive"
+                      checked={formState.isActive}
+                      onChange={event =>
+                        setFormState(prev => ({ ...prev, isActive: event.target.checked }))
+                      }
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
