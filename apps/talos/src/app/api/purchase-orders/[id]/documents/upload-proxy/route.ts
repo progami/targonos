@@ -3,11 +3,12 @@ import { withAuthAndParams } from '@/lib/api/auth-wrapper'
 import { apiLogger } from '@/lib/logger/server'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
 import { getS3Service } from '@/services/s3.service'
-import { validateFile } from '@/lib/security/file-upload'
+import { scanFileContent, validateFile } from '@/lib/security/file-upload'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // 60 seconds for file uploads
 
 const MAX_DOCUMENT_SIZE_MB = 50
 
@@ -64,8 +65,13 @@ function parseDocumentType(value: unknown): string | null {
   return trimmed
 }
 
-export const POST = withAuthAndParams(async (request, params, session) => {
+export const PUT = withAuthAndParams(async (request, params, session) => {
   let purchaseOrderId: string | null = null
+  let stage: PurchaseOrderDocumentStage | null = null
+  let documentType: string | null = null
+  let fileName: string | null = null
+  let fileType: string | null = null
+  let fileSize: number | null = null
 
   try {
     const { id } = params as { id: string }
@@ -74,37 +80,63 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: 'Purchase order ID is required' }, { status: 400 })
     }
 
-    const payload = await request.json().catch(() => null)
-    const fileName = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).fileName : null
-    const fileType = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).fileType : null
-    const fileSize = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).fileSize : null
-    const stageRaw = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).stage : null
-    const documentTypeRaw =
-      payload && typeof payload === 'object' ? (payload as Record<string, unknown>).documentType : null
+    const searchParams = request.nextUrl.searchParams
+    const stageRaw = searchParams.get('stage')
+    const documentTypeRaw = searchParams.get('documentType')
+    const fileNameRaw = searchParams.get('fileName')
+    const fileTypeRaw = searchParams.get('fileType')
+    const fileSizeRaw = searchParams.get('fileSize')
+    const s3KeyRaw = searchParams.get('s3Key')
 
-    if (typeof fileName !== 'string' || !fileName.trim()) {
-      return NextResponse.json({ error: 'fileName is required' }, { status: 400 })
-    }
-    if (typeof fileType !== 'string' || !fileType.trim()) {
-      return NextResponse.json({ error: 'fileType is required' }, { status: 400 })
-    }
-    if (typeof fileSize !== 'number' || !Number.isFinite(fileSize) || fileSize <= 0) {
-      return NextResponse.json({ error: 'fileSize must be a positive number' }, { status: 400 })
-    }
-
-    const stage = parseStage(stageRaw)
-    const documentType = parseDocumentType(documentTypeRaw)
-    if (!stage || !documentType) {
+    const parsedStage = parseStage(stageRaw)
+    const parsedDocumentType = parseDocumentType(documentTypeRaw)
+    stage = parsedStage
+    documentType = parsedDocumentType
+    if (!parsedStage || !parsedDocumentType) {
       return NextResponse.json({ error: 'stage and documentType are required' }, { status: 400 })
     }
 
+    if (typeof fileNameRaw !== 'string' || !fileNameRaw.trim()) {
+      return NextResponse.json({ error: 'fileName is required' }, { status: 400 })
+    }
+    if (typeof fileTypeRaw !== 'string' || !fileTypeRaw.trim()) {
+      return NextResponse.json({ error: 'fileType is required' }, { status: 400 })
+    }
+    if (typeof fileSizeRaw !== 'string' || !fileSizeRaw.trim()) {
+      return NextResponse.json({ error: 'fileSize is required' }, { status: 400 })
+    }
+    if (typeof s3KeyRaw !== 'string' || !s3KeyRaw.trim()) {
+      return NextResponse.json({ error: 's3Key is required' }, { status: 400 })
+    }
+
+    fileName = fileNameRaw
+    fileType = fileTypeRaw
+
+    const parsedFileSize = Number(fileSizeRaw)
+    if (!Number.isFinite(parsedFileSize) || parsedFileSize <= 0) {
+      return NextResponse.json({ error: 'fileSize must be a positive number' }, { status: 400 })
+    }
+    fileSize = parsedFileSize
+
+    const bytes = await request.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+
+    if (buffer.length !== parsedFileSize) {
+      return NextResponse.json({ error: 'Uploaded file is incomplete' }, { status: 400 })
+    }
+
     const validation = await validateFile(
-      { name: fileName, size: fileSize, type: fileType },
+      { name: fileNameRaw, size: buffer.length, type: fileTypeRaw },
       'purchase-order-document',
       { maxSizeMB: MAX_DOCUMENT_SIZE_MB }
     )
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
+    const scanResult = await scanFileContent(buffer, fileTypeRaw)
+    if (!scanResult.valid) {
+      return NextResponse.json({ error: scanResult.error }, { status: 400 })
     }
 
     const prisma = await getTenantPrisma()
@@ -129,7 +161,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     }
 
     const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
-    if (currentStage && DOCUMENT_STAGE_ORDER[stage] < DOCUMENT_STAGE_ORDER[currentStage]) {
+    if (currentStage && DOCUMENT_STAGE_ORDER[parsedStage] < DOCUMENT_STAGE_ORDER[currentStage]) {
       return NextResponse.json(
         { error: `Documents for completed stages are locked (current stage: ${order.status})` },
         { status: 409 }
@@ -138,45 +170,44 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
     const tenantCode = await getCurrentTenantCode()
     const purchaseOrderNumber = toPublicOrderNumber(order.orderNumber)
-    const s3Service = getS3Service()
+    const expectedPrefix = `purchase-orders/${tenantCode.toLowerCase()}/${purchaseOrderNumber.toLowerCase()}--${id}/${parsedStage}/${parsedDocumentType}/`
+    if (!s3KeyRaw.startsWith(expectedPrefix)) {
+      return NextResponse.json({ error: 'Invalid upload key' }, { status: 400 })
+    }
 
-    const s3Key = s3Service.generateKey(
-      {
-        type: 'purchase-order',
+    const s3Service = getS3Service()
+    await s3Service.uploadFile(buffer, s3KeyRaw, {
+      contentType: fileTypeRaw,
+      metadata: {
         purchaseOrderId: id,
         tenantCode,
         purchaseOrderNumber,
-        stage,
-        documentType,
+        stage: parsedStage,
+        documentType: parsedDocumentType,
+        uploadedBy: session.user.id,
       },
-      fileName
-    )
+    })
 
-    // Browsers cannot PUT directly to our S3 bucket (CORS). Return a same-origin upload URL that
-    // proxies the PUT through our API so older clients keep working.
-    const origin = request.nextUrl.origin
-    const uploadUrl = `${origin}/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
-      s3Key
-    )}&stage=${encodeURIComponent(stage)}&documentType=${encodeURIComponent(
-      documentType
-    )}&fileName=${encodeURIComponent(fileName)}&fileType=${encodeURIComponent(
-      fileType
-    )}&fileSize=${encodeURIComponent(String(fileSize))}`
-
-    return NextResponse.json({ uploadUrl, s3Key, expiresIn: 300 })
+    return new NextResponse(null, { status: 200 })
   } catch (_error) {
-    apiLogger.error('Failed to generate purchase order document presigned URL', {
+    apiLogger.error('Failed to proxy purchase order document upload', {
       purchaseOrderId,
+      stage,
+      documentType,
+      fileName,
+      fileType,
+      fileSize,
       userId: session.user.id,
       error: _error instanceof Error ? _error.message : 'Unknown error',
     })
 
     return NextResponse.json(
       {
-        error: 'Failed to generate upload URL',
+        error: 'Failed to upload purchase order document',
         details: _error instanceof Error ? _error.message : 'Unknown error',
       },
       { status: 500 }
     )
   }
 })
+
