@@ -10,7 +10,7 @@ import {
 } from '@/lib/strategy-region';
 import { parseSellerboardOrdersWeeklyUnits } from './orders';
 import { getUtcDateForTimeZone } from '@/lib/utils/dates';
-import { fetchSellerboardCsv, parseCsv } from './client';
+import { fetchSellerboardCsv, normalizeSellerboardHeader, parseCsv } from './client';
 import { getTalosPrisma } from '@/lib/integrations/talos-client';
 import type { SellerboardActualSalesSyncResult, SellerboardDashboardSyncResult } from './types';
 import {
@@ -371,8 +371,10 @@ export async function syncSellerboardDashboard(options: {
   const planning = await loadPlanningCalendar(weekStartsOn);
 
   const headerRow = parseCsv(csv)[0] ?? [];
-  const headerSet = new Set(headerRow.map((value) => value.trim()));
-  const isTotalsReport = headerSet.has('SalesOrganic') && !headerSet.has('Product');
+  const headerSet = new Set(headerRow.map((value) => normalizeSellerboardHeader(value)));
+  const isTotalsReport =
+    headerSet.has(normalizeSellerboardHeader('SalesOrganic')) &&
+    !headerSet.has(normalizeSellerboardHeader('Product'));
 
   if (isTotalsReport) {
     const parsed = parseSellerboardDashboardWeeklyTotals(csv, planning, { weekStartsOn });
