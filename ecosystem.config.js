@@ -1,8 +1,14 @@
 const path = require('path');
-const DEV_DIR =
-  process.env.TARGONOS_DEV_DIR || process.env.TARGON_DEV_DIR || '/Users/jarraramjad/targonos-dev';
-const MAIN_DIR =
-  process.env.TARGONOS_MAIN_DIR || process.env.TARGON_MAIN_DIR || '/Users/jarraramjad/targonos-main';
+const DEV_DIR = process.env.TARGONOS_DEV_DIR ?? process.env.TARGON_DEV_DIR;
+const MAIN_DIR = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR;
+
+if (!DEV_DIR) {
+  throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
+}
+
+if (!MAIN_DIR) {
+  throw new Error('Missing TARGONOS_MAIN_DIR (or legacy TARGON_MAIN_DIR).');
+}
 
 module.exports = {
   apps: [

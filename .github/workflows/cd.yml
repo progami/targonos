@@ -29,10 +29,6 @@ on:
           - dev
           - main
 
-env:
-  TARGONOS_DEV_DIR: /Users/jarraramjad/targonos-dev
-  TARGONOS_MAIN_DIR: /Users/jarraramjad/targonos-main
-
 permissions:
   contents: read
 
@@ -296,6 +292,12 @@ jobs:
 
           TARGET_ENV="${{ github.ref_name }}"
 
+          : "${TARGONOS_DEV_DIR:=${{ vars.TARGONOS_DEV_DIR }}}"
+          : "${TARGONOS_MAIN_DIR:=${{ vars.TARGONOS_MAIN_DIR }}}"
+          : "${TARGONOS_DEV_DIR:?Set TARGONOS_DEV_DIR on the self-hosted runner (or as a GitHub Actions repo variable)}"
+          : "${TARGONOS_MAIN_DIR:?Set TARGONOS_MAIN_DIR on the self-hosted runner (or as a GitHub Actions repo variable)}"
+          export TARGONOS_DEV_DIR TARGONOS_MAIN_DIR
+
           declare -a apps=()
           [[ "${{ needs.detect-changes.outputs.sso }}" == "true" ]] && apps+=(sso)
           [[ "${{ needs.detect-changes.outputs.talos }}" == "true" ]] && apps+=(talos)
@@ -396,6 +398,12 @@ jobs:
 
           requested_app="${{ inputs.app }}"
           target_env="${{ inputs.environment }}"
+
+          : "${TARGONOS_DEV_DIR:=${{ vars.TARGONOS_DEV_DIR }}}"
+          : "${TARGONOS_MAIN_DIR:=${{ vars.TARGONOS_MAIN_DIR }}}"
+          : "${TARGONOS_DEV_DIR:?Set TARGONOS_DEV_DIR on the self-hosted runner (or as a GitHub Actions repo variable)}"
+          : "${TARGONOS_MAIN_DIR:?Set TARGONOS_MAIN_DIR on the self-hosted runner (or as a GitHub Actions repo variable)}"
+          export TARGONOS_DEV_DIR TARGONOS_MAIN_DIR
 
           # Backwards compatibility: older workflows used "targon" for the portal key.
           if [[ "$requested_app" == "targon" ]]; then
