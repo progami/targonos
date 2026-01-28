@@ -1,7 +1,7 @@
 import { weekNumberForDate } from '@/lib/calculations/calendar';
 import type { PlanningCalendar } from '@/lib/planning';
 import { getUtcDateForTimeZone } from '@/lib/utils/dates';
-import { parseCsv, hashCsvContent, parseSellerboardDateUtc } from './client';
+import { parseCsv, hashCsvContent, normalizeSellerboardHeader, parseSellerboardDateUtc } from './client';
 import type { SellerboardWeeklyUnits, SellerboardOrdersParseResult } from './types';
 
 export type { SellerboardWeeklyUnits, SellerboardOrdersParseResult };
@@ -45,17 +45,22 @@ export function parseSellerboardOrdersWeeklyUnits(
 
   const headers = rows[0].map((header) => header.trim());
   const headerIndex = new Map<string, number>();
-  headers.forEach((header, index) => headerIndex.set(header, index));
+  headers.forEach((header, index) => {
+    const normalized = normalizeSellerboardHeader(header);
+    if (!headerIndex.has(normalized)) {
+      headerIndex.set(normalized, index);
+    }
+  });
 
   const required = [productCodeHeader, purchaseDateHeader, unitsHeader];
   for (const requiredHeader of required) {
-    if (!headerIndex.has(requiredHeader)) {
+    if (!headerIndex.has(normalizeSellerboardHeader(requiredHeader))) {
       throw new Error(`Sellerboard CSV missing required column "${requiredHeader}"`);
     }
   }
 
   const getCell = (record: string[], key: string): string => {
-    const index = headerIndex.get(key);
+    const index = headerIndex.get(normalizeSellerboardHeader(key));
     if (index == null) return '';
     return record[index] ?? '';
   };

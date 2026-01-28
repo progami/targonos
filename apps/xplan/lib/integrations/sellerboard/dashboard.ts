@@ -1,6 +1,6 @@
 import { weekNumberForDate } from '@/lib/calculations/calendar';
 import type { PlanningCalendar } from '@/lib/planning';
-import { parseCsv, hashCsvContent, parseSellerboardDateUtc } from './client';
+import { parseCsv, hashCsvContent, normalizeSellerboardHeader, parseSellerboardDateUtc } from './client';
 import type {
   SellerboardWeeklyFinancials,
   SellerboardWeeklyTotals,
@@ -80,17 +80,22 @@ export function parseSellerboardDashboardWeeklyFinancials(
 
   const headers = rows[0].map((header) => header.trim());
   const headerIndex = new Map<string, number>();
-  headers.forEach((header, index) => headerIndex.set(header, index));
+  headers.forEach((header, index) => {
+    const normalized = normalizeSellerboardHeader(header);
+    if (!headerIndex.has(normalized)) {
+      headerIndex.set(normalized, index);
+    }
+  });
 
   const required = [dateHeader, productHeader];
   for (const requiredHeader of required) {
-    if (!headerIndex.has(requiredHeader)) {
+    if (!headerIndex.has(normalizeSellerboardHeader(requiredHeader))) {
       throw new Error(`Sellerboard Dashboard CSV missing required column "${requiredHeader}"`);
     }
   }
 
   const getCell = (record: string[], key: string): string => {
-    const index = headerIndex.get(key);
+    const index = headerIndex.get(normalizeSellerboardHeader(key));
     if (index == null) return '';
     return record[index] ?? '';
   };
@@ -333,7 +338,12 @@ export function parseSellerboardDashboardWeeklyTotals(
 
   const headers = rows[0].map((header) => header.trim());
   const headerIndex = new Map<string, number>();
-  headers.forEach((header, index) => headerIndex.set(header, index));
+  headers.forEach((header, index) => {
+    const normalized = normalizeSellerboardHeader(header);
+    if (!headerIndex.has(normalized)) {
+      headerIndex.set(normalized, index);
+    }
+  });
 
   const required = [
     dateHeader,
@@ -345,29 +355,34 @@ export function parseSellerboardDashboardWeeklyTotals(
     estimatedPayoutHeader,
     grossProfitHeader,
     netProfitHeader,
-    productCostSalesHeader,
-    productCostUnsellableRefundsHeader,
-    productCostNonAmazonHeader,
-    productCostMissingFromInboundHeader,
-    sponsoredProductsSpendHeader,
-    sponsoredDisplaySpendHeader,
-    sponsoredBrandsSpendHeader,
-    sponsoredBrandsVideoSpendHeader,
-    googleAdsSpendHeader,
-    facebookAdsSpendHeader,
   ];
 
   for (const requiredHeader of required) {
-    if (!headerIndex.has(requiredHeader)) {
+    if (!headerIndex.has(normalizeSellerboardHeader(requiredHeader))) {
       throw new Error(`Sellerboard Dashboard CSV missing required column "${requiredHeader}"`);
     }
   }
 
   const getCell = (record: string[], key: string): string => {
-    const index = headerIndex.get(key);
+    const index = headerIndex.get(normalizeSellerboardHeader(key));
     if (index == null) return '';
     return record[index] ?? '';
   };
+
+  const cogsColumns = [
+    productCostSalesHeader,
+    productCostUnsellableRefundsHeader,
+    productCostNonAmazonHeader,
+    productCostMissingFromInboundHeader,
+  ];
+
+  if (!cogsColumns.some((header) => headerIndex.has(normalizeSellerboardHeader(header)))) {
+    throw new Error(
+      `Sellerboard Dashboard CSV missing required COGS column (expected one of: ${cogsColumns
+        .map((item) => `"${item}"`)
+        .join(', ')})`,
+    );
+  }
 
   const weeklyTotalsByWeek = new Map<number, WeeklyTotalsAccumulator>();
 
