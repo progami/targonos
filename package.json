@@ -18,6 +18,7 @@
     "refresh:xplan-dev": "bash scripts/refresh-dev-app.sh xplan",
     "refresh:atlas-dev": "bash scripts/refresh-dev-app.sh atlas",
     "refresh:plutus-dev": "bash scripts/refresh-dev-app.sh plutus",
+    "refresh:hermes-dev": "bash scripts/refresh-dev-app.sh hermes",
     "deploy:metadata": "bash scripts/update-deploy-metadata.sh"
   },
   "devDependencies": {
