@@ -118,7 +118,7 @@ function quoteIdent(name: string) {
 
 function expectedSchemas(tenant: TenantCode, tiers: SchemaTier[]) {
   const suffix = tenant.toLowerCase()
-  return tiers.map(tier => `${tier}_wms_${suffix}`)
+  return tiers.map(tier => `${tier}_talos_${suffix}`)
 }
 
 async function schemaExists(client: Client, schema: string): Promise<boolean> {

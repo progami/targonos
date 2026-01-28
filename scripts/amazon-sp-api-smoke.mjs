@@ -94,7 +94,7 @@ function printUsage() {
   console.log(`  ${script} --tenant US --report-type GET_FLAT_FILE_OPEN_LISTINGS_DATA`)
   console.log('')
   console.log('Options:')
-  console.log('  --env-file <path>        Defaults to ../../../targonos-main/apps/talos/.env.local')
+  console.log('  --env-file <path>        Defaults to $TARGONOS_MAIN_DIR/apps/talos/.env.local (or ./apps/talos/.env.local)')
   console.log('  --tenant <US|UK>         Required (US or UK)')
   console.log('  --start <YYYY-MM-DD>     Optional (defaults to last 2 days)')
   console.log('  --end <YYYY-MM-DD>       Optional (defaults to today)')
@@ -117,7 +117,8 @@ const __dirname = path.dirname(__filename)
 
 const repoRoot = path.resolve(__dirname, '..')
 
-const defaultEnvFile = path.resolve(__dirname, '../../../targonos-main/apps/talos/.env.local')
+const mainRepoDir = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR ?? repoRoot
+const defaultEnvFile = path.join(mainRepoDir, 'apps/talos/.env.local')
 const envFilePath = String(args['env-file'] ?? defaultEnvFile)
 
 if (!fs.existsSync(envFilePath)) {
