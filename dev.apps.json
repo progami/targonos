@@ -6,6 +6,7 @@
     "atlas": "/atlas",
     "website": "https://dev.targonglobal.com",
     "xplan": "/xplan",
-    "plutus": "/plutus"
+    "plutus": "/plutus",
+    "hermes": "/hermes"
   }
 }

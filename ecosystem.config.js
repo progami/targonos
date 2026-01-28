@@ -109,6 +109,18 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
+    {
+      name: 'dev-hermes',
+      cwd: path.join(DEV_DIR, 'apps/hermes'),
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3114',
+      interpreter: 'node',
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production', PORT: 3114, BASE_PATH: '/hermes', NEXT_PUBLIC_BASE_PATH: '/hermes' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
 
     // ===========================================
     // MAIN ENVIRONMENT (30xx ports) - os.targonglobal.com

@@ -1,0 +1,527 @@
+"use client";
+
+import * as React from "react";
+import { CalendarClock, RefreshCw, Send, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+
+import type { AmazonConnection } from "@/lib/types";
+import { PageHeader } from "@/components/hermes/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+type RecentOrder = {
+  orderId: string;
+  marketplaceId: string;
+  purchaseDate: string | null;
+  latestDeliveryDate: string | null;
+  orderStatus: string | null;
+  fulfillmentChannel: string | null;
+  dispatchState: string | null;
+  dispatchScheduledAt: string | null;
+  dispatchExpiresAt: string | null;
+  dispatchSentAt: string | null;
+};
+
+function fmtDateShort(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function stateBadge(state: string | null) {
+  if (!state) return <Badge variant="outline">Not queued</Badge>;
+  if (state === "sent") return <Badge variant="secondary">Sent</Badge>;
+  if (state === "queued") return <Badge variant="outline">Queued</Badge>;
+  if (state === "sending") return <Badge variant="outline">Sending</Badge>;
+  if (state === "failed") return <Badge variant="destructive">Failed</Badge>;
+  if (state === "skipped") return <Badge variant="outline">Skipped</Badge>;
+  return <Badge variant="outline">{state}</Badge>;
+}
+
+type BackfillPreset = { label: string; days: number };
+const presets: BackfillPreset[] = [
+  { label: "7d", days: 7 },
+  { label: "30d", days: 30 },
+  { label: "60d", days: 60 },
+  { label: "180d", days: 180 },
+  { label: "2y", days: 730 },
+];
+
+function isoDaysAgo(days: number): string {
+  const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return d.toISOString();
+}
+
+function toDateInputValue(iso: string): string {
+  // yyyy-mm-dd
+  return iso.slice(0, 10);
+}
+
+function fromDateInputValue(value: string): string {
+  // value is yyyy-mm-dd; interpret as start-of-day UTC
+  return new Date(`${value}T00:00:00Z`).toISOString();
+}
+
+function fromDateInputValueEnd(value: string): string {
+  // value is yyyy-mm-dd; interpret as end-of-day UTC
+  return new Date(`${value}T23:59:59Z`).toISOString();
+}
+
+export function OrdersClient({ connections }: { connections: AmazonConnection[] }) {
+  const [connectionId, setConnectionId] = React.useState(connections[0]?.id ?? "");
+  const connection = connections.find((c) => c.id === connectionId);
+
+  const [orders, setOrders] = React.useState<RecentOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = React.useState(true);
+
+  // Backfill dialog
+  const [open, setOpen] = React.useState(false);
+  const [presetDays, setPresetDays] = React.useState<number>(60);
+  const [createdAfter, setCreatedAfter] = React.useState<string>(isoDaysAgo(60));
+  const [createdBefore, setCreatedBefore] = React.useState<string>(new Date().toISOString());
+  const [enqueue, setEnqueue] = React.useState(true);
+
+  // Scheduling knobs (compact presets)
+  const [delayDays, setDelayDays] = React.useState(10);
+  const [windowEnabled, setWindowEnabled] = React.useState(true);
+  const [startHour, setStartHour] = React.useState(9);
+  const [endHour, setEndHour] = React.useState(18);
+  const [spreadEnabled, setSpreadEnabled] = React.useState(true);
+  const [spreadMaxMinutes, setSpreadMaxMinutes] = React.useState(90);
+
+  // Progress state
+  const [syncing, setSyncing] = React.useState(false);
+  const [pages, setPages] = React.useState(0);
+  const [imported, setImported] = React.useState(0);
+  const [enqueued, setEnqueued] = React.useState(0);
+  const [alreadyExists, setAlreadyExists] = React.useState(0);
+  const [skippedExpired, setSkippedExpired] = React.useState(0);
+  const cancelRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // Keep date inputs in sync with preset.
+    setCreatedAfter(isoDaysAgo(presetDays));
+    setCreatedBefore(new Date().toISOString());
+  }, [presetDays]);
+
+  async function loadRecent() {
+    if (!connectionId) return;
+    setLoadingOrders(true);
+    try {
+      const res = await fetch(`/api/orders/recent?connectionId=${encodeURIComponent(connectionId)}&limit=25`);
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setOrders(json.orders ?? []);
+    } catch (e: any) {
+      setOrders([]);
+      toast.error("Could not load orders", { description: e?.message ?? "" });
+    } finally {
+      setLoadingOrders(false);
+    }
+  }
+
+  React.useEffect(() => {
+    loadRecent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId]);
+
+  async function runBackfill() {
+    if (!connectionId || !connection?.marketplaceIds?.[0]) {
+      toast.error("Select an account");
+      return;
+    }
+
+    cancelRef.current = false;
+    setSyncing(true);
+    setPages(0);
+    setImported(0);
+    setEnqueued(0);
+    setAlreadyExists(0);
+    setSkippedExpired(0);
+
+    const marketplaceId = connection.marketplaceIds[0];
+
+    let nextToken: string | null = null;
+    let page = 0;
+    let importedTotal = 0;
+    let enqueuedTotal = 0;
+    let alreadyTotal = 0;
+    let expiredTotal = 0;
+    try {
+      do {
+        if (cancelRef.current) break;
+        page += 1;
+        setPages(page);
+
+        const body: any = {
+          connectionId,
+          marketplaceId,
+          enqueueReviewRequests: enqueue,
+          schedule: {
+            delayDays,
+            windowEnabled,
+            startHour,
+            endHour,
+            spreadEnabled,
+            spreadMaxMinutes,
+          },
+        };
+
+        if (nextToken) body.nextToken = nextToken;
+        else {
+          body.createdAfter = createdAfter;
+          body.createdBefore = createdBefore;
+          body.orderStatuses = ["Shipped", "PartiallyShipped", "Unshipped"]; // pragmatic default
+          body.maxResultsPerPage = 100;
+        }
+
+        const res = await fetch("/api/orders/backfill", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error ?? `HTTP ${res.status}`);
+        }
+
+        importedTotal += json.imported ?? 0;
+        enqueuedTotal += json.enqueue?.enqueued ?? 0;
+        alreadyTotal += json.enqueue?.alreadyExists ?? 0;
+        expiredTotal += json.enqueue?.skippedExpired ?? 0;
+
+        setImported(importedTotal);
+        setEnqueued(enqueuedTotal);
+        setAlreadyExists(alreadyTotal);
+        setSkippedExpired(expiredTotal);
+
+        nextToken = json.nextToken ?? null;
+      } while (nextToken);
+
+      if (cancelRef.current) {
+        toast.message("Sync stopped", {
+          description: `${importedTotal} imported • ${enqueuedTotal} queued`,
+        });
+      } else {
+        toast.success("Sync complete", {
+          description: `${importedTotal} imported • ${enqueuedTotal} queued`,
+        });
+      }
+      setOpen(false);
+      await loadRecent();
+    } catch (e: any) {
+      toast.error("Sync failed", { description: e?.message ?? "" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const progress = syncing ? Math.min(95, pages * 5) : 0;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Orders"
+        right={
+          <div className="flex items-center gap-2">
+            <Select value={connectionId} onValueChange={setConnectionId}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Select account" />
+              </SelectTrigger>
+              <SelectContent>
+                {connections.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.accountName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <RefreshCw className="h-4 w-4" />
+                  Sync
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Sync orders</DialogTitle>
+                </DialogHeader>
+
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Backfill window</Label>
+                      <div className="flex gap-1">
+                        {presets.map((p) => (
+                          <Button
+                            key={p.days}
+                            type="button"
+                            size="sm"
+                            variant={presetDays === p.days ? "default" : "outline"}
+                            onClick={() => setPresetDays(p.days)}
+                          >
+                            {p.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">After</Label>
+                        <Input
+                          type="date"
+                          value={toDateInputValue(createdAfter)}
+                          onChange={(e) => setCreatedAfter(fromDateInputValue(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Before</Label>
+                        <Input
+                          type="date"
+                          value={toDateInputValue(createdBefore)}
+                          onChange={(e) => setCreatedBefore(fromDateInputValueEnd(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Auto-send review requests</Label>
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                      <div className="flex items-center gap-2">
+                        <Send className="h-4 w-4" />
+                        <div className="text-sm font-medium">Queue eligible orders</div>
+                      </div>
+                      <Switch checked={enqueue} onCheckedChange={setEnqueue} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Timing preset</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <PresetTile
+                        title="Balanced"
+                        meta="D+10 • 9–18"
+                        active={delayDays === 10 && windowEnabled}
+                        onClick={() => {
+                          setDelayDays(10);
+                          setWindowEnabled(true);
+                          setStartHour(9);
+                          setEndHour(18);
+                          setSpreadEnabled(true);
+                          setSpreadMaxMinutes(90);
+                        }}
+                      />
+                      <PresetTile
+                        title="Early"
+                        meta="D+5 • 9–18"
+                        active={delayDays === 5 && windowEnabled}
+                        onClick={() => {
+                          setDelayDays(5);
+                          setWindowEnabled(true);
+                          setStartHour(9);
+                          setEndHour(18);
+                          setSpreadEnabled(true);
+                          setSpreadMaxMinutes(90);
+                        }}
+                      />
+                      <PresetTile
+                        title="Late"
+                        meta="D+20 • Any"
+                        active={delayDays === 20 && !windowEnabled}
+                        onClick={() => {
+                          setDelayDays(20);
+                          setWindowEnabled(false);
+                          setSpreadEnabled(true);
+                          setSpreadMaxMinutes(120);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {syncing ? (
+                    <div className="grid gap-3 rounded-lg border p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">Syncing</div>
+                        <Badge variant="outline">Page {pages}</Badge>
+                      </div>
+                      <Progress value={progress} />
+                      <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <div className="font-medium text-foreground">{imported}</div>
+                          Imported
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground">{enqueued}</div>
+                          Queued
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground">{alreadyExists}</div>
+                          Exists
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground">{skippedExpired}</div>
+                          Expired
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <DialogFooter>
+                  {syncing ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        cancelRef.current = true;
+                      }}
+                    >
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                      Close
+                    </Button>
+                  )}
+                  <Button type="button" disabled={syncing} onClick={runBackfill}>
+                    <Sparkles className="h-4 w-4" />
+                    Start
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        }
+      />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Recent orders</CardTitle>
+            <Button size="sm" variant="ghost" onClick={loadRecent} disabled={loadingOrders}>
+              <CalendarClock className="h-4 w-4" />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order</TableHead>
+                  <TableHead>Purchase</TableHead>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Review request</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.map((o) => (
+                  <TableRow key={o.orderId}>
+                    <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
+                    <TableCell>{fmtDateShort(o.purchaseDate)}</TableCell>
+                    <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                  </TableRow>
+                ))}
+
+                {(!loadingOrders && orders.length === 0) ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      No orders yet. Run a sync.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+
+                {loadingOrders ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      Loading…
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Guardrails</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <GuardrailTile icon={CalendarClock} title="Window" value="5–30d after delivery" />
+            <GuardrailTile icon={Send} title="Deduped" value="One request per order" />
+            <GuardrailTile icon={RefreshCw} title="Rate-safe" value="Auto backoff" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PresetTile({
+  title,
+  meta,
+  active,
+  onClick,
+}: {
+  title: string;
+  meta: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-lg border p-3 text-left transition-colors",
+        "hover:bg-accent hover:text-accent-foreground",
+        active ? "bg-accent text-accent-foreground" : "bg-card",
+      ].join(" ")}
+    >
+      <div className="text-sm font-medium">{title}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{meta}</div>
+    </button>
+  );
+}
+
+function GuardrailTile({
+  icon: Icon,
+  title,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border p-3">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border bg-card">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-medium">{title}</div>
+          <div className="text-xs text-muted-foreground">{value}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
