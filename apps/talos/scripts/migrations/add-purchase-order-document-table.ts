@@ -94,9 +94,17 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           WHERE n.nspname = current_schema()
             AND t.typname = 'PurchaseOrderDocumentStage'
         ) THEN
-          EXECUTE 'CREATE TYPE "PurchaseOrderDocumentStage" AS ENUM (''MANUFACTURING'', ''OCEAN'', ''WAREHOUSE'', ''SHIPPED'')';
+          EXECUTE 'CREATE TYPE "PurchaseOrderDocumentStage" AS ENUM (''DRAFT'', ''ISSUED'', ''MANUFACTURING'', ''OCEAN'', ''WAREHOUSE'', ''SHIPPED'')';
         END IF;
       END $$;
+    `,
+    `
+      ALTER TYPE "PurchaseOrderDocumentStage"
+        ADD VALUE IF NOT EXISTS 'DRAFT' BEFORE 'MANUFACTURING';
+    `,
+    `
+      ALTER TYPE "PurchaseOrderDocumentStage"
+        ADD VALUE IF NOT EXISTS 'ISSUED' BEFORE 'MANUFACTURING';
     `,
     `
       CREATE TABLE IF NOT EXISTS "purchase_order_documents" (
@@ -174,4 +182,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-
