@@ -129,6 +129,15 @@ const BASE_APPS: AppBase[] = [
     devPath: '/plutus',
     devUrl: 'http://localhost:3012',
   },
+  {
+    id: 'hermes',
+    name: 'Hermes',
+    description: 'Amazon Seller Central automations (messaging + solicitations).',
+    url: joinBaseUrl(PORTAL_BASE_URL, '/hermes'),
+    category: 'Account / Listing',
+    devPath: '/hermes',
+    devUrl: 'http://localhost:3014',
+  },
 ]
 
 let manifestCache: AppManifest | null | undefined

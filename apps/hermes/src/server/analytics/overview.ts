@@ -1,0 +1,278 @@
+import { getPgPool } from "../db/pool";
+
+export type AnalyticsOverview = {
+  rangeDays: number;
+  fromIso: string;
+  toIso: string;
+  summary: {
+    sentInRange: number;
+    attemptsInRange: {
+      sent: number;
+      ineligible: number;
+      throttled: number;
+      failed: number;
+    };
+    dispatchStateNow: {
+      queued: number;
+      sending: number;
+      sent: number;
+      skipped: number;
+      failed: number;
+    };
+    orders: {
+      total: number;
+      importedInRange: number;
+      withAnyDispatch: number;
+    };
+  };
+  series: Array<{
+    day: string; // YYYY-MM-DD (UTC)
+    sent: number;
+    ineligible: number;
+    throttled: number;
+    failed: number;
+  }>;
+};
+
+function dayKeyUtc(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfUtcDay(d: Date): Date {
+  const x = new Date(d);
+  x.setUTCHours(0, 0, 0, 0);
+  return x;
+}
+
+function addUtcDays(d: Date, days: number): Date {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + days);
+  return x;
+}
+
+function intOr0(v: any): number {
+  const n = typeof v === "number" ? v : Number.parseInt(String(v ?? "0"), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export async function getAnalyticsOverview(params: {
+  connectionId?: string;
+  rangeDays: number;
+}): Promise<AnalyticsOverview> {
+  const pool = getPgPool();
+
+  const rangeDays = Math.max(1, Math.min(params.rangeDays, 365));
+  const to = new Date();
+
+  // Inclusive day range (e.g. 30d => today + previous 29 days)
+  const from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+
+  const connectionId = params.connectionId;
+
+  // ---- Dispatch state snapshot ("now")
+  const dispatchStateRows = connectionId
+    ? await pool.query(
+        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 GROUP BY state;`,
+        [connectionId]
+      )
+    : await pool.query(
+        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches GROUP BY state;`
+      );
+
+  const stateNow = {
+    queued: 0,
+    sending: 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  for (const r of dispatchStateRows.rows as any[]) {
+    const s = String(r.state);
+    const n = intOr0(r.n);
+    if (s in stateNow) (stateNow as any)[s] = n;
+  }
+
+  // ---- Sent in range (dispatches)
+  const sentInRangeRow = connectionId
+    ? await pool.query(
+        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 AND sent_at >= $2 AND sent_at <= $3;`,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE sent_at >= $1 AND sent_at <= $2;`,
+        [from, to]
+      );
+
+  const sentInRange = intOr0((sentInRangeRow.rows[0] as any)?.n);
+
+  // ---- Attempts in range (joined to dispatches for connection scoping)
+  const attemptsByStatusRows = connectionId
+    ? await pool.query(
+        `
+        SELECT a.status, COUNT(1)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND a.created_at >= $2 AND a.created_at <= $3
+         GROUP BY a.status;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT a.status, COUNT(1)::int AS n
+          FROM hermes_dispatch_attempts a
+         WHERE a.created_at >= $1 AND a.created_at <= $2
+         GROUP BY a.status;
+        `,
+        [from, to]
+      );
+
+  const attemptsInRange = {
+    sent: 0,
+    ineligible: 0,
+    throttled: 0,
+    failed: 0,
+  };
+  for (const r of attemptsByStatusRows.rows as any[]) {
+    const s = String(r.status);
+    if (s in attemptsInRange) (attemptsInRange as any)[s] = intOr0(r.n);
+  }
+
+  // ---- Orders (synced)
+  const ordersTotalRow = connectionId
+    ? await pool.query(`SELECT COUNT(1)::int AS n FROM hermes_orders WHERE connection_id = $1;`, [connectionId])
+    : await pool.query(`SELECT COUNT(1)::int AS n FROM hermes_orders;`);
+
+  const ordersImportedRow = connectionId
+    ? await pool.query(
+        `SELECT COUNT(1)::int AS n FROM hermes_orders WHERE connection_id = $1 AND imported_at >= $2 AND imported_at <= $3;`,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `SELECT COUNT(1)::int AS n FROM hermes_orders WHERE imported_at >= $1 AND imported_at <= $2;`,
+        [from, to]
+      );
+
+  const ordersWithDispatchRow = connectionId
+    ? await pool.query(
+        `
+        SELECT COUNT(1)::int AS n
+          FROM hermes_orders o
+         WHERE o.connection_id = $1
+           AND EXISTS (
+             SELECT 1
+               FROM hermes_dispatches d
+              WHERE d.connection_id = o.connection_id
+                AND d.order_id = o.order_id
+                AND d.type = 'request_review'
+           );
+        `,
+        [connectionId]
+      )
+    : await pool.query(
+        `
+        SELECT COUNT(1)::int AS n
+          FROM hermes_orders o
+         WHERE EXISTS (
+             SELECT 1
+               FROM hermes_dispatches d
+              WHERE d.connection_id = o.connection_id
+                AND d.order_id = o.order_id
+                AND d.type = 'request_review'
+           );
+        `
+      );
+
+  const orders = {
+    total: intOr0((ordersTotalRow.rows[0] as any)?.n),
+    importedInRange: intOr0((ordersImportedRow.rows[0] as any)?.n),
+    withAnyDispatch: intOr0((ordersWithDispatchRow.rows[0] as any)?.n),
+  };
+
+  // ---- Series: initialize days to 0
+  const series: AnalyticsOverview["series"] = [];
+  for (let i = 0; i < rangeDays; i += 1) {
+    const day = dayKeyUtc(addUtcDays(from, i));
+    series.push({ day, sent: 0, ineligible: 0, throttled: 0, failed: 0 });
+  }
+  const byDay = new Map(series.map((d) => [d.day, d]));
+
+  // Sent series from dispatches
+  const sentSeriesRows = connectionId
+    ? await pool.query(
+        `
+        SELECT date_trunc('day', sent_at) AS day, COUNT(1)::int AS n
+          FROM hermes_dispatches
+         WHERE connection_id = $1
+           AND sent_at >= $2 AND sent_at <= $3
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT date_trunc('day', sent_at) AS day, COUNT(1)::int AS n
+          FROM hermes_dispatches
+         WHERE sent_at >= $1 AND sent_at <= $2
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [from, to]
+      );
+
+  for (const r of sentSeriesRows.rows as any[]) {
+    const day = dayKeyUtc(new Date(r.day));
+    const bucket = byDay.get(day);
+    if (bucket) bucket.sent = intOr0(r.n);
+  }
+
+  // Attempt series from attempts
+  const attemptSeriesRows = connectionId
+    ? await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, a.status, COUNT(1)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND a.created_at >= $2 AND a.created_at <= $3
+         GROUP BY 1, 2
+         ORDER BY 1;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, a.status, COUNT(1)::int AS n
+          FROM hermes_dispatch_attempts a
+         WHERE a.created_at >= $1 AND a.created_at <= $2
+         GROUP BY 1, 2
+         ORDER BY 1;
+        `,
+        [from, to]
+      );
+
+  for (const r of attemptSeriesRows.rows as any[]) {
+    const day = dayKeyUtc(new Date(r.day));
+    const status = String(r.status);
+    const bucket = byDay.get(day);
+    if (!bucket) continue;
+    if (status === "ineligible") bucket.ineligible += intOr0(r.n);
+    if (status === "throttled") bucket.throttled += intOr0(r.n);
+    if (status === "failed") bucket.failed += intOr0(r.n);
+  }
+
+  return {
+    rangeDays,
+    fromIso: from.toISOString(),
+    toIso: to.toISOString(),
+    summary: {
+      sentInRange,
+      attemptsInRange,
+      dispatchStateNow: stateNow,
+      orders,
+    },
+    series,
+  };
+}
