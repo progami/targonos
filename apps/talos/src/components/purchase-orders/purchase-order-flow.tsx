@@ -4918,21 +4918,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               <>
                 {isCreate && (
                   <div className="p-6">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Product Costs
-                    </h4>
                     {draftLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
                     ) : (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
-                              <th className="text-left px-4 py-2 font-medium">SKU</th>
-                              <th className="text-left px-4 py-2 font-medium">Batch</th>
-                              <th className="text-right px-4 py-2 font-medium">Units</th>
-                              <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
-                              <th className="text-right px-4 py-2 font-medium">Target Total</th>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Target Total</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4943,15 +4940,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               const issue = gateIssues ? gateIssues[gateKey] ?? null : null
 
                               return (
-                                <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
-                                  <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
-                                  <td className="px-4 py-2 text-muted-foreground">
+                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                                     {line.batchLot ? line.batchLot : '—'}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                                     <Input
                                       type="number"
                                       inputMode="decimal"
@@ -4990,7 +4987,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       className="text-right w-24"
                                     />
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
+                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
                                     <div className="flex flex-col items-end gap-1">
                                       <Input
                                         type="number"
@@ -5039,11 +5036,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             })}
                           </tbody>
                           <tfoot>
-                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
-                              <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                              <td colSpan={4} className="px-3 py-2 text-right font-medium text-muted-foreground">
                                 Product Subtotal
                               </td>
-                              <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold">
                                 {tenantCurrency}{' '}
                                 {draftLines
                                   .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
@@ -5059,21 +5056,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {!isCreate && order && (
                   <div className="p-6">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Product Costs
-                    </h4>
                     {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
-                              <th className="text-left px-4 py-2 font-medium">SKU</th>
-                              <th className="text-left px-4 py-2 font-medium">Batch</th>
-                              <th className="text-right px-4 py-2 font-medium">Units</th>
-                              <th className="text-right px-4 py-2 font-medium">Unit Cost</th>
-                              <th className="text-right px-4 py-2 font-medium">Total</th>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -5093,15 +5087,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               const issue = gateIssues ? gateIssues[gateKey] ?? null : null
 
                               return (
-                                <tr key={line.id} className="border-t border-slate-100 dark:border-slate-700">
-                                  <td className="px-4 py-2 font-medium text-foreground">{line.skuCode}</td>
-                                  <td className="px-4 py-2 text-muted-foreground">
+                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                                     {line.batchLot ? line.batchLot : '—'}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                                     {canEditProductCosts ? (
                                       <Input
                                         type="number"
@@ -5128,10 +5122,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         className="text-right w-24"
                                       />
                                     ) : (
-                                      <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toFixed(4)}` : '—'}</span>
+                                      <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
                                     )}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums font-medium" data-gate-key={gateKey}>
+                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
                                     {canEditProductCosts ? (
                                       <div className="flex flex-col items-end gap-1">
                                         <Input
@@ -5178,11 +5172,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             })}
                           </tbody>
                           <tfoot>
-                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
-                              <td colSpan={4} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                              <td colSpan={4} className="px-3 py-2 text-right font-medium text-muted-foreground">
                                 Product Subtotal
                               </td>
-                              <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold">
                                 {tenantCurrency}{' '}
                                 {flowLines
                                   .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
@@ -5356,11 +5350,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </p>
                       </div>
 
-                      {!canEditForwardingCosts && (
-                        <p className="text-xs text-muted-foreground">
-                          Cargo costs are editable during In Transit or At Warehouse stages.
-                        </p>
-                      )}
                     </div>
 
                     <table className="w-full text-sm">
@@ -5936,16 +5925,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               </div>
                 )}
 
-                {!isCreate &&
-                  order &&
-                  activeViewStage !== 'OCEAN' &&
-                  activeViewStage !== 'WAREHOUSE' && (
-                    <div className="p-6">
-                      <p className="text-sm text-muted-foreground">
-                        Forwarding (freight) costs are editable during In Transit or At Warehouse stages.
-                      </p>
-                    </div>
-                  )}
               </>
             )}
 
