@@ -1,11 +1,6 @@
-function getEnvOrThrow(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} is required`);
-  return v;
-}
-
 export function getHermesBasePath(): string {
-  const raw = getEnvOrThrow("NEXT_PUBLIC_BASE_PATH");
+  const raw = process.env.NEXT_PUBLIC_BASE_PATH;
+  if (!raw) throw new Error("NEXT_PUBLIC_BASE_PATH is required");
   if (!raw.startsWith("/")) {
     throw new Error(`NEXT_PUBLIC_BASE_PATH must start with "/": got ${raw}`);
   }
@@ -18,4 +13,3 @@ export function hermesApiUrl(path: string): string {
   }
   return `${getHermesBasePath()}${path}`;
 }
-
