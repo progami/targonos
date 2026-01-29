@@ -23,6 +23,7 @@ import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
 type PurchaseOrderWithLines = PurchaseOrder & {
@@ -503,6 +504,26 @@ async function validateTransitionGate(params: {
     const tenant = await getCurrentTenant()
     const tenantCode = tenant.code
 
+    let supplierCountry: string | null = null
+    if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
+      const supplierName = params.order.counterpartyName.trim()
+      const supplier = await params.prisma.supplier.findFirst({
+        where: { name: { equals: supplierName, mode: 'insensitive' } },
+        select: { address: true, bankingDetails: true },
+      })
+
+      supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+
+      const banking = supplier ? supplier.bankingDetails : null
+      if (!banking || banking.trim().length === 0) {
+        recordGateIssue(
+          issues,
+          'details.counterpartyName',
+          'Supplier banking information is required to issue a PO'
+        )
+      }
+    }
+
     if (!params.order.counterpartyName || params.order.counterpartyName.trim().length === 0) {
       recordGateIssue(issues, 'details.counterpartyName', 'Supplier is required')
     }
@@ -528,9 +549,8 @@ async function validateTransitionGate(params: {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
       }
 
-      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-      if (!origin) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      if (!supplierCountry) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
       }
 
       const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -575,27 +595,23 @@ async function validateTransitionGate(params: {
       }
     }
 
-    if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
-      const supplierName = params.order.counterpartyName.trim()
-      const supplier = await params.prisma.supplier.findFirst({
-        where: { name: { equals: supplierName, mode: 'insensitive' } },
-        select: { bankingDetails: true },
-      })
-      const banking = supplier?.bankingDetails
-      if (!banking || banking.trim().length === 0) {
-        recordGateIssue(
-          issues,
-          'details.counterpartyName',
-          'Supplier banking information is required to issue a PO'
-        )
-      }
-    }
 
   }
 
   if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
     const tenant = await getCurrentTenant()
     const tenantCode = tenant.code
+
+    let supplierCountry: string | null = null
+    if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
+      const supplierName = params.order.counterpartyName.trim()
+      const supplier = await params.prisma.supplier.findFirst({
+        where: { name: { equals: supplierName, mode: 'insensitive' } },
+        select: { address: true },
+      })
+
+      supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+    }
 
     const piNumbers: string[] = []
     for (const line of activeLines) {
@@ -629,9 +645,8 @@ async function validateTransitionGate(params: {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
       }
 
-      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-      if (!origin) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      if (!supplierCountry) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
       }
 
       const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -3666,6 +3681,17 @@ export async function generatePurchaseOrderShippingMarks(params: {
   const issues: Record<string, string> = {}
   const activeLines = order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
 
+  let supplierCountry: string | null = null
+  if (order.counterpartyName && order.counterpartyName.trim().length > 0) {
+    const supplierName = order.counterpartyName.trim()
+    const supplier = await prisma.supplier.findFirst({
+      where: { name: { equals: supplierName, mode: 'insensitive' } },
+      select: { address: true },
+    })
+
+    supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+  }
+
   if (activeLines.length === 0) {
     recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
   }
@@ -3683,9 +3709,8 @@ export async function generatePurchaseOrderShippingMarks(params: {
       recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
     }
 
-    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-    if (!origin) {
-      recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+    if (!supplierCountry) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
     }
 
     const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -3743,7 +3768,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const cartonRange = resolveLineCartonRange(line)
     const dimsLabel = resolveCartonDimensionsLabel(line) ?? ''
     const commodityLabel = typeof line.commodityCode === 'string' ? formatCommodityCode(line.commodityCode) : ''
-    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+    const origin = supplierCountry ? supplierCountry : ''
     const material = typeof line.material === 'string' ? line.material.trim() : ''
     const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
     const netWeightKg = Number(line.netWeightKg)

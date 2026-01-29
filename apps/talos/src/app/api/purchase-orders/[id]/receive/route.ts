@@ -3,6 +3,7 @@ import { hasPermission } from '@/lib/services/permission-service'
 import { receivePurchaseOrderInventory, serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import type { ReceivePurchaseOrderInventoryInput, UserContext } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -91,7 +92,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       updated.counterpartyName && updated.counterpartyName.trim().length > 0
         ? await prisma.supplier.findFirst({
             where: { name: { equals: updated.counterpartyName.trim(), mode: 'insensitive' } },
-            select: { phone: true, bankingDetails: true },
+            select: { phone: true, bankingDetails: true, address: true },
           })
         : null
 
@@ -101,6 +102,8 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
         ? {
             phone: supplier.phone ?? null,
             bankingDetails: supplier.bankingDetails ?? null,
+            address: supplier.address ?? null,
+            country: deriveSupplierCountry(supplier.address),
           }
         : null,
     })
