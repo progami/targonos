@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 
 import { hermesApiUrl } from "@/lib/base-path";
 import { useConnectionsStore } from "@/stores/connections-store";
+import type { AmazonConnection } from "@/lib/types";
 
 function HourSelect({
   value,
@@ -118,7 +119,7 @@ export default function NewCampaignPage() {
 
   const [creating, setCreating] = React.useState(false);
 
-  const connection = connections.find((c) => c.id === connectionId);
+  const connection = connections.find((c: AmazonConnection) => c.id === connectionId);
 
   const scheduleSummary = `${windowEnabled ? `${startHour}:00–${endHour}:00` : "Any time"} • D+${delayDays}`;
 
