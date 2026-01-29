@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { hermesApiUrl } from "@/lib/base-path";
 import { formatDate } from "@/lib/time";
 import type { AmazonConnection } from "@/lib/types";
 
@@ -68,7 +69,7 @@ const KIND_UI: Record<
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(hermesApiUrl(url), init);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (json as any)?.error ?? `Request failed (${res.status})`;

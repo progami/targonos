@@ -3,10 +3,11 @@ import { z } from "zod";
 
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { getAnalyticsOverview } from "@/server/analytics/overview";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGet(req: Request) {
   await maybeAutoMigrate();
 
   const url = new URL(req.url);
@@ -42,3 +43,5 @@ export async function GET(req: Request) {
     );
   }
 }
+
+export const GET = withApiLogging("GET /api/analytics/overview", handleGet);

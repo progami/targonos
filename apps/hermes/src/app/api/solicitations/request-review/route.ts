@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { queueRequestReview } from "@/server/dispatch/ledger";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export const runtime = "nodejs";
  * - call CreateProductReviewAndSellerFeedbackSolicitation only if action exists
  * - mark sent + append audit attempts
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   await maybeAutoMigrate();
 
   const schema = z.object({
@@ -64,3 +65,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export const POST = withApiLogging("POST /api/solicitations/request-review", handlePost);

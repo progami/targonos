@@ -11,6 +11,7 @@ import {
   upsertOrders,
   type ScheduleConfig,
 } from "@/server/orders/ingest";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,7 @@ function pickNextToken(body: any): string | null {
  * Fetches a single page from Orders API (getOrders) and upserts into hermes_orders.
  * Optionally enqueues request-a-review dispatches for each ingested order.
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   await maybeAutoMigrate();
 
   const schema = z.object({
@@ -160,3 +161,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export const POST = withApiLogging("POST /api/orders/backfill", handlePost);
