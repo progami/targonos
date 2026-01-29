@@ -50,12 +50,14 @@ export default function SettingsPage() {
 
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2">
-                <Label>Start</Label>
-                <Input value={qhStart} onChange={(e) => setQhStart(e.target.value)} disabled={!quietHoursEnabled} />
+                <Label>Start (hour)</Label>
+                <Input type="number" min={0} max={23} value={qhStart} onChange={(e) => setQhStart(e.target.value)} disabled={!quietHoursEnabled} />
+                <div className="text-xs text-muted-foreground">0–23, e.g. 21 = 9 PM</div>
               </div>
               <div className="space-y-2">
-                <Label>End</Label>
-                <Input value={qhEnd} onChange={(e) => setQhEnd(e.target.value)} disabled={!quietHoursEnabled} />
+                <Label>End (hour)</Label>
+                <Input type="number" min={0} max={23} value={qhEnd} onChange={(e) => setQhEnd(e.target.value)} disabled={!quietHoursEnabled} />
+                <div className="text-xs text-muted-foreground">0–23, e.g. 7 = 7 AM</div>
               </div>
               <div className="space-y-2">
                 <Label>TZ</Label>
