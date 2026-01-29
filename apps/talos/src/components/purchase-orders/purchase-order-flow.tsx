@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
-import { useTenantCode } from '@/lib/tenant'
+import type { TenantCode } from '@/lib/tenant/constants'
 import { toast } from 'react-hot-toast'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
@@ -787,7 +787,7 @@ export type PurchaseOrderFlowMode = 'detail' | 'create'
 export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
   const router = useRouter()
   const { data: session, status } = useSession()
-  const tenantRegion = useTenantCode()
+  const tenantRegion: TenantCode = session?.user?.region ?? 'US'
   const unitSystem = getDefaultUnitSystem(tenantRegion)
   const lengthUnit = getLengthUnitLabel(unitSystem)
   const weightUnit = getWeightUnitLabel(unitSystem)

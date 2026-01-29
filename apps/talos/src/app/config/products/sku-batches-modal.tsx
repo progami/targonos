@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label'
 
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { usePageState } from '@/lib/store/page-state'
-import { useTenantCode } from '@/lib/tenant'
+import { useSession } from '@/hooks/usePortalSession'
+import type { TenantCode } from '@/lib/tenant/constants'
 import { Boxes, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { cn } from '@/lib/utils'
@@ -244,7 +245,8 @@ function SkuBatchesManager({
   const [batches, setBatches] = useState<BatchRow[]>([])
   const [loading, setLoading] = useState(false)
 
-  const tenantCode = useTenantCode()
+  const { data: session } = useSession()
+  const tenantCode: TenantCode = session?.user?.region ?? 'US'
   const defaultUnitSystem = getDefaultUnitSystem(tenantCode)
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>(defaultUnitSystem)

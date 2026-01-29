@@ -23,7 +23,7 @@ import {
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { convertLengthToCm, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel, type UnitSystem } from '@/lib/measurements'
 import type { TenantCode } from '@/lib/tenant/constants'
-import { useTenantCode } from '@/lib/tenant'
+import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
 import { ChevronDown, ChevronRight, ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 import { SkuBatchesPanel } from './sku-batches-modal'
@@ -498,7 +498,8 @@ interface SkusPanelProps {
 }
 
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
-  const tenantCode = useTenantCode()
+  const { data: session } = useSession()
+  const tenantCode: TenantCode = session?.user?.region ?? 'US'
   const unitSystem = getDefaultUnitSystem(tenantCode)
   const lengthUnit = getLengthUnitLabel(unitSystem)
   const weightUnit = getWeightUnitLabel(unitSystem)
