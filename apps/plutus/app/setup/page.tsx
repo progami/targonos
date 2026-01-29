@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -510,6 +509,14 @@ function AccountsSection({
   );
 }
 
+// Marketplace to country mapping for Talos DB queries
+const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
+  'amazon.com': 'US',
+  'amazon.co.uk': 'UK',
+};
+
+type TalosSku = { skuCode: string; asin: string | null; description: string; country: 'US' | 'UK' };
+
 // SKUs Section
 function SkusSection({
   skus,
@@ -520,20 +527,69 @@ function SkusSection({
   onSkusChange: (skus: Sku[]) => void;
   brands: Brand[];
 }) {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newSku, setNewSku] = useState({ sku: '', productName: '', brand: '', asin: '' });
+  // Derive unique countries from brands
+  const countries = useMemo(() => {
+    const set = new Set<'US' | 'UK'>();
+    for (const b of brands) {
+      const country = MARKETPLACE_COUNTRY[b.marketplace];
+      if (country) set.add(country);
+    }
+    return Array.from(set);
+  }, [brands]);
 
-  const addSku = () => {
-    if (!newSku.sku.trim() || !newSku.brand) return;
-    if (skus.some((s) => s.sku === newSku.sku.trim())) return;
-    onSkusChange([...skus, { ...newSku, sku: newSku.sku.trim() }]);
-    setNewSku({ sku: '', productName: '', brand: '', asin: '' });
-    setIsDialogOpen(false);
-  };
+  // Fetch Talos SKUs for each country
+  const { data: talosSkus, isLoading: isLoadingTalos } = useQuery({
+    queryKey: ['talos-skus', countries],
+    queryFn: async () => {
+      const results: TalosSku[] = [];
+      for (const country of countries) {
+        const res = await fetch(`${basePath}/api/setup/talos-skus?country=${country}`);
+        if (!res.ok) throw new Error(`Failed to fetch ${country} SKUs`);
+        const data = await res.json() as { skus: { skuCode: string; asin: string | null; description: string }[] };
+        for (const s of data.skus) {
+          results.push({ ...s, country });
+        }
+      }
+      return results;
+    },
+    enabled: countries.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const removeSku = (index: number) => {
-    onSkusChange(skus.filter((_, i) => i !== index));
-  };
+  // Brand assignments: skuCode -> brand name
+  const [brandAssignments, setBrandAssignments] = useState<Record<string, string>>({});
+
+  // Initialize assignments from existing saved SKUs
+  useEffect(() => {
+    if (skus.length > 0 && talosSkus && talosSkus.length > 0) {
+      const initial: Record<string, string> = {};
+      for (const s of skus) {
+        initial[s.sku] = s.brand;
+      }
+      setBrandAssignments(initial);
+    }
+  }, [skus, talosSkus]);
+
+  // Get brands for a given country
+  const brandsForCountry = useCallback((country: 'US' | 'UK') => {
+    return brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] === country);
+  }, [brands]);
+
+  // Save assigned SKUs
+  const handleSave = useCallback(() => {
+    if (!talosSkus) return;
+    const skusToSave: Sku[] = talosSkus
+      .filter((s) => brandAssignments[s.skuCode])
+      .map((s) => ({
+        sku: s.skuCode,
+        productName: s.description,
+        asin: s.asin ?? undefined,
+        brand: brandAssignments[s.skuCode],
+      }));
+    onSkusChange(skusToSave);
+  }, [talosSkus, brandAssignments, onSkusChange]);
+
+  const assignedCount = Object.values(brandAssignments).filter(Boolean).length;
 
   if (brands.length === 0) {
     return (
@@ -543,19 +599,29 @@ function SkusSection({
     );
   }
 
+  if (countries.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500 dark:text-slate-400">No supported marketplaces found. Add US or UK brands first.</p>
+      </div>
+    );
+  }
+
+  if (isLoadingTalos) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500 dark:text-slate-400">Loading SKUs from Talos…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">SKUs</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Add product SKUs and assign them to brands. Costs come from bills.
-          </p>
-        </div>
-        <Button onClick={() => setIsDialogOpen(true)}>
-          <PlusIcon className="w-4 h-4 mr-1" />
-          Add SKU
-        </Button>
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">SKUs</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          SKUs imported from Talos. Assign each SKU to a brand for COGS tracking.
+        </p>
       </div>
 
       <Card className="border-slate-200/70 dark:border-white/10">
@@ -566,29 +632,50 @@ function SkusSection({
                 <TableRow>
                   <TableHead>SKU</TableHead>
                   <TableHead>Product name</TableHead>
+                  <TableHead>ASIN</TableHead>
+                  <TableHead>Country</TableHead>
                   <TableHead>Brand</TableHead>
-                  <TableHead className="w-12 text-right"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {skus.map((sku, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="font-mono text-sm text-slate-900 dark:text-white">{sku.sku}</TableCell>
-                    <TableCell className="text-sm text-slate-600 dark:text-slate-300">
-                      {sku.productName ? sku.productName : '—'}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-600 dark:text-slate-300">{sku.brand}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => removeSku(i)} aria-label={`Remove SKU ${sku.sku}`}>
-                        <XIcon className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {skus.length === 0 && (
+                {talosSkus && talosSkus.length > 0 ? (
+                  talosSkus.map((s) => (
+                    <TableRow key={`${s.country}-${s.skuCode}`}>
+                      <TableCell className="font-mono text-sm text-slate-900 dark:text-white">{s.skuCode}</TableCell>
+                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">{s.description}</TableCell>
+                      <TableCell className="font-mono text-sm text-slate-500 dark:text-slate-400">
+                        {s.asin ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          {s.country}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={brandAssignments[s.skuCode] ?? ''}
+                          onValueChange={(value) =>
+                            setBrandAssignments((prev) => ({ ...prev, [s.skuCode]: value }))
+                          }
+                        >
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder="Select brand…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {brandsForCountry(s.country).map((b) => (
+                              <SelectItem key={b.name} value={b.name}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No SKUs added yet.
+                    <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No SKUs found in Talos for {countries.join(', ')}.
                     </TableCell>
                   </TableRow>
                 )}
@@ -598,83 +685,14 @@ function SkusSection({
         </CardContent>
       </Card>
 
-      <p className="text-sm text-slate-500 dark:text-slate-400">Total: {skus.length} SKU{skus.length !== 1 ? 's' : ''}</p>
-
-      <Dialog
-        open={isDialogOpen}
-        onOpenChange={(open) => {
-          setIsDialogOpen(open);
-          if (!open) {
-            setNewSku({ sku: '', productName: '', brand: '', asin: '' });
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add SKU</DialogTitle>
-            <DialogDescription>Map each SKU to a brand so Plutus can build brand-level COGS.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4">
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                SKU
-              </div>
-              <Input
-                value={newSku.sku}
-                onChange={(e) => setNewSku({ ...newSku, sku: e.target.value })}
-                placeholder="CS-007"
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Product name
-              </div>
-              <Input
-                value={newSku.productName}
-                onChange={(e) => setNewSku({ ...newSku, productName: e.target.value })}
-                placeholder="6 Pack Drop Cloth 12x9ft"
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Brand
-              </div>
-              <Select value={newSku.brand} onValueChange={(value) => setNewSku({ ...newSku, brand: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select brand…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {brands.map((b) => (
-                    <SelectItem key={b.name} value={b.name}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                ASIN (optional)
-              </div>
-              <Input
-                value={newSku.asin}
-                onChange={(e) => setNewSku({ ...newSku, asin: e.target.value })}
-                placeholder="B08XYZ123"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={addSku} disabled={!newSku.sku.trim() || !newSku.brand}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {assignedCount} of {talosSkus?.length ?? 0} SKUs assigned to brands
+        </p>
+        <Button onClick={handleSave} disabled={assignedCount === 0}>
+          Save SKU Assignments
+        </Button>
+      </div>
     </div>
   );
 }
