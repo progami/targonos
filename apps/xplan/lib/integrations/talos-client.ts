@@ -2,6 +2,7 @@ import 'server-only';
 
 import { PrismaClient as TalosPrismaClient } from '@targon/prisma-talos';
 import type { StrategyRegion } from '@/lib/strategy-region';
+import { validateTalosDatabaseUrl } from './talos-url';
 
 type TalosRegion = Extract<StrategyRegion, 'US' | 'UK'>;
 
@@ -18,6 +19,8 @@ function talosDatabaseUrlForRegion(region: TalosRegion): string | null {
 export function getTalosPrisma(region: TalosRegion): TalosPrismaClient | null {
   const url = talosDatabaseUrlForRegion(region);
   if (!url) return null;
+
+  validateTalosDatabaseUrl(region, url);
 
   const globalForPrisma = globalThis as GlobalWithTalosPrisma;
   if (!globalForPrisma.__xplanTalosPrismaByRegion) {
