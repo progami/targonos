@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CalendarClock,
   KeyRound,
+  MessagesSquare,
   PackageCheck,
   PencilRuler,
   ShieldAlert,
@@ -221,8 +222,18 @@ export function MessagingClient(props: { connections: AmazonConnection[] }) {
 
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                      {isLoadingOrders ? "Loading…" : "No orders found"}
+                    <TableCell colSpan={5} className="py-12 text-center">
+                      {isLoadingOrders ? (
+                        <span className="text-sm text-muted-foreground">Loading…</span>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
+                            <PackageCheck className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="text-sm font-medium">No orders found</div>
+                          <div className="text-xs text-muted-foreground">Sync orders first from the Orders page.</div>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 )}
@@ -267,8 +278,18 @@ export function MessagingClient(props: { connections: AmazonConnection[] }) {
                   ))}
 
                   {history.length === 0 && (
-                    <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-                      {isLoadingHistory ? "Loading…" : "No messages yet"}
+                    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center">
+                      {isLoadingHistory ? (
+                        <span className="text-sm text-muted-foreground">Loading…</span>
+                      ) : (
+                        <>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
+                            <MessagesSquare className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="text-sm font-medium">No messages yet</div>
+                          <div className="text-xs text-muted-foreground">Messages you send will appear here.</div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

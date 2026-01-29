@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, RefreshCw, Send, Sparkles } from "lucide-react";
+import { CalendarClock, PackageSearch, RefreshCw, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
@@ -447,8 +447,14 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      No orders yet. Run a sync.
+                    <TableCell colSpan={5} className="py-12 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
+                          <PackageSearch className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div className="text-sm font-medium">No orders yet</div>
+                        <div className="text-xs text-muted-foreground">Run a sync to import orders from Amazon.</div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : null}
