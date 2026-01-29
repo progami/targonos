@@ -10,6 +10,7 @@ import {
 } from 'react-simple-maps'
 import { cn } from '@/lib/utils'
 import { getAllTenants, TenantCode, TenantConfig } from '@/lib/tenant/constants'
+import { FlatFlag } from './TenantIndicator'
 
 interface WorldMapProps {
   className?: string
@@ -171,15 +172,10 @@ export function WorldMap({ className }: WorldMapProps) {
                       stroke={tenant.color}
                       strokeWidth={2}
                     />
-                    {/* Flag text (emoji) */}
-                    <text
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fontSize={14}
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {tenant.flag}
-                    </text>
+                    {/* Flag */}
+                    <foreignObject x={-9} y={-6} width={18} height={12} style={{ pointerEvents: 'none' }}>
+                      <FlatFlag code={tenant.code} size={18} />
+                    </foreignObject>
                   </g>
                 </Marker>
               )
@@ -249,7 +245,7 @@ export function WorldMap({ className }: WorldMapProps) {
 
               <div className="relative">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-2xl lg:text-3xl">{tenant.flag}</span>
+                  <FlatFlag code={tenant.code} size={32} />
                   <div>
                     <h3 className="text-base lg:text-lg font-semibold text-white">
                       {tenant.displayName}
