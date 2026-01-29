@@ -4554,8 +4554,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                                 <div className="flex items-center gap-2">
                                   {meta.outOfDate && (
-                                    <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-                                      OUT OF DATE
+                                    <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                      Out of date
                                     </Badge>
                                   )}
                                   <Button
