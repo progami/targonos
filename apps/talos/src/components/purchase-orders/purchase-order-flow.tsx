@@ -1715,68 +1715,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
       try {
-        const presignedResponse = await fetchWithCSRF(
-          `/api/purchase-orders/${orderId}/documents/presigned-url`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              stage,
-              documentType,
-              fileName: file.name,
-              fileType: file.type,
-              fileSize: file.size,
-            }),
-          }
-        )
-
-        const presignedPayload = await presignedResponse.json().catch(() => null)
-        if (!presignedResponse.ok) {
-          const errorMessage = typeof presignedPayload?.error === 'string' ? presignedPayload.error : null
-          const detailsMessage =
-            typeof presignedPayload?.details === 'string' ? presignedPayload.details : null
-          if (errorMessage && detailsMessage) {
-            toast.error(`${errorMessage}: ${detailsMessage}`)
-          } else if (errorMessage) {
-            toast.error(errorMessage)
-          } else {
-            toast.error(`Failed to generate upload URL (HTTP ${presignedResponse.status})`)
-          }
-          return
-        }
-
-        const uploadUrl = typeof presignedPayload?.uploadUrl === 'string' ? presignedPayload.uploadUrl : null
-        const s3Key = typeof presignedPayload?.s3Key === 'string' ? presignedPayload.s3Key : null
-        if (!uploadUrl) {
-          toast.error('Failed to generate upload URL')
-          return
-        }
-        if (!s3Key) {
-          toast.error('Failed to generate upload URL')
-          return
-        }
-
-        const uploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          // Keep headers minimal so they match the presigned URL signature.
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-
-        if (!uploadResponse.ok) {
-          toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
-          return
-        }
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('stage', stage)
+        formData.append('documentType', documentType)
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
-          body: JSON.stringify({
-            stage,
-            documentType,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            s3Key,
-          }),
+          body: formData,
         })
 
         const payload = await response.json().catch(() => null)

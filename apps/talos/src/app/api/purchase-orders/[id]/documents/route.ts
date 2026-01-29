@@ -255,7 +255,6 @@ export const POST = withAuthAndParams(async (request, params, session) => {
           purchaseOrderNumber,
           stage: stage as PurchaseOrderDocumentStage,
           documentType: documentType as string,
-          originalName: (file as File).name,
           uploadedBy: session.user.id,
         },
       })

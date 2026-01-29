@@ -40,6 +40,46 @@ describe('sellerboard dashboard totals parsing', () => {
     expect(result.weeklyTotals.length).toBe(1);
   });
 
+  it('parses when optional cost and ad columns are missing', async () => {
+    const planning = await loadPlanningCalendar(1);
+
+    const headers = [
+      'Date',
+      'SalesOrganic',
+      'SalesPPC',
+      'UnitsOrganic',
+      'UnitsPPC',
+      'Orders',
+      'EstimatedPayout',
+      'GrossProfit',
+      'NetProfit',
+      'ProductCost Sales',
+      'SponsoredProducts',
+    ];
+
+    const valuesByHeader: Record<string, string> = {
+      Date: '01/22/2026',
+      SalesOrganic: '10',
+      SalesPPC: '0',
+      UnitsOrganic: '1',
+      UnitsPPC: '0',
+      Orders: '1',
+      EstimatedPayout: '0',
+      GrossProfit: '7',
+      NetProfit: '0',
+      'ProductCost Sales': '2',
+      SponsoredProducts: '0',
+    };
+
+    const row = headers.map((header) => valuesByHeader[header] ?? '0');
+    const csv = `${headers.join(',')}\n${row.join(',')}\n`;
+
+    const result = parseSellerboardDashboardWeeklyTotals(csv, planning, { weekStartsOn: 1 });
+    expect(result.rowsParsed).toBe(1);
+    expect(result.weeklyTotals).toHaveLength(1);
+    expect(result.weeklyTotals[0]?.amazonFees).toBeCloseTo(1);
+  });
+
   it('derives Amazon fees from GrossProfit', async () => {
     const planning = await loadPlanningCalendar(1);
 
