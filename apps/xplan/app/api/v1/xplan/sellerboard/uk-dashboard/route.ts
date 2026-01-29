@@ -53,14 +53,14 @@ export const POST = async (request: Request) => {
     );
   }
 
-  try {
-    const url = new URL(request.url);
-    const rawStrategyId = url.searchParams.get('strategyId');
-    const strategyId = rawStrategyId ? rawStrategyId.trim() : '';
-    if (!strategyId) {
-      return NextResponse.json({ error: 'Missing strategyId' }, { status: 400 });
-    }
+  const url = new URL(request.url);
+  const rawStrategyId = url.searchParams.get('strategyId');
+  const strategyId = rawStrategyId ? rawStrategyId.trim() : '';
+  if (!strategyId) {
+    return NextResponse.json({ error: 'Missing strategyId' }, { status: 400 });
+  }
 
+  try {
     const strategy = await prisma.strategy.findUnique({
       where: { id: strategyId },
       select: { region: true },
@@ -80,7 +80,8 @@ export const POST = async (request: Request) => {
       newestDateUtc: result.newestDateUtc?.toISOString() ?? null,
     });
   } catch (error) {
-    console.error('[POST /sellerboard/uk-dashboard] sync error:', error);
-    return NextResponse.json({ error: 'Sync failed' }, { status: 502 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[POST /sellerboard/uk-dashboard] sync error (strategyId=${strategyId}):`, error);
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 };
