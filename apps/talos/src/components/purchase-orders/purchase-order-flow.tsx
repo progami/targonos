@@ -49,6 +49,7 @@ import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 // 5-Stage State Machine Types
 type POStageStatus =
@@ -104,6 +105,7 @@ interface SupplierOption {
   id: string
   name: string
   phone: string | null
+  address: string | null
   defaultIncoterms: string | null
   defaultPaymentTerms: string | null
 }
@@ -342,7 +344,7 @@ interface PurchaseOrderSummary {
   warehouseCode: string | null
   warehouseName: string | null
   counterpartyName: string | null
-  supplier: { phone: string | null; bankingDetails: string | null } | null
+  supplier: { phone: string | null; bankingDetails: string | null; address: string | null; country: string | null } | null
   expectedDate: string | null
   incoterms: string | null
   paymentTerms: string | null
@@ -1878,6 +1880,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (!supplierName) return null
     return suppliers.find(supplier => supplier.name === supplierName) ?? null
   }, [orderInfoDraft.counterpartyName, suppliers])
+
+  const supplierCountry = useMemo(() => {
+    if (order?.supplier?.country) return order.supplier.country
+    const fromOrderAddress = deriveSupplierCountry(order?.supplier?.address)
+    if (fromOrderAddress) return fromOrderAddress
+    return deriveSupplierCountry(selectedSupplier?.address)
+  }, [order?.supplier?.address, order?.supplier?.country, selectedSupplier?.address])
 
   const applySupplierSelection = useCallback(
     (supplierName: string) => {
@@ -3707,18 +3716,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                  {canEditAttributes ? (
-                                    <Input
-                                      defaultValue={line.countryOfOrigin ?? ''}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, { countryOfOrigin: trimmed.length > 0 ? trimmed : null })
-                                      }}
-                                      className={`h-8 w-20 ${issue('countryOfOrigin') ? 'border-rose-500' : ''}`}
-                                    />
-                                  ) : (
-                                    <span className="text-foreground">{line.countryOfOrigin ? line.countryOfOrigin : '—'}</span>
-                                  )}
+                                  {(() => {
+                                    const countryIssue = issue('countryOfOrigin')
+                                    return (
+                                      <div className="space-y-1">
+                                        <span className={countryIssue ? 'text-rose-600' : 'text-foreground'}>
+                                          {supplierCountry ? supplierCountry : '—'}
+                                        </span>
+                                        {countryIssue && <p className="text-xs text-rose-600">{countryIssue}</p>}
+                                      </div>
+                                    )
+                                  })()}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
                                   {canEditAttributes ? (
@@ -4377,15 +4385,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     className="h-8 w-28"
                                   />
                                 </td>
-                                <td className="px-3 py-2">
-                                  <Input
-                                    value={line.countryOfOrigin ?? ''}
-                                    onChange={e => {
-                                      const value = e.target.value
-                                      updateLine(current => ({ ...current, countryOfOrigin: value.trim() ? value : null }))
-                                    }}
-                                    className="h-8 w-20"
-                                  />
+                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                  <span className="text-foreground">{supplierCountry ? supplierCountry : '—'}</span>
                                 </td>
                                 <td className="px-3 py-2">
                                   <Input
