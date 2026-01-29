@@ -80,7 +80,11 @@ export const POST = async (request: Request) => {
       newestPurchaseDateUtc: result.newestPurchaseDateUtc?.toISOString() ?? null,
     });
   } catch (error) {
-    console.error('[POST /sellerboard/us-actual-sales] sync error:', error);
-    return NextResponse.json({ error: 'Sync failed' }, { status: 502 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[POST /sellerboard/us-actual-sales] sync error (strategyId=${strategyId}):`,
+      error,
+    );
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 };

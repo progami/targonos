@@ -1717,14 +1717,79 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
 
       try {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('stage', stage)
-        formData.append('documentType', documentType)
+        const presignedResponse = await fetchWithCSRF(
+          `/api/purchase-orders/${orderId}/documents/presigned-url`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              stage,
+              documentType,
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+            }),
+          }
+        )
+
+        const presignedPayload = await presignedResponse.json().catch(() => null)
+        if (!presignedResponse.ok) {
+          const errorMessage =
+            typeof presignedPayload?.error === 'string' ? presignedPayload.error : null
+          const detailsMessage =
+            typeof presignedPayload?.details === 'string' ? presignedPayload.details : null
+          if (errorMessage && detailsMessage) {
+            toast.error(`${errorMessage}: ${detailsMessage}`)
+          } else if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to start upload (HTTP ${presignedResponse.status})`)
+          }
+          return
+        }
+
+        const uploadUrl =
+          typeof presignedPayload?.uploadUrl === 'string' ? presignedPayload.uploadUrl : null
+        const s3Key = typeof presignedPayload?.s3Key === 'string' ? presignedPayload.s3Key : null
+        if (!uploadUrl) {
+          toast.error('Failed to start upload')
+          return
+        }
+        if (!s3Key) {
+          toast.error('Failed to start upload')
+          return
+        }
+
+        const uploadResponse = await fetchWithCSRF(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        })
+
+        if (!uploadResponse.ok) {
+          const uploadPayload = await uploadResponse.json().catch(() => null)
+          const errorMessage = typeof uploadPayload?.error === 'string' ? uploadPayload.error : null
+          const detailsMessage =
+            typeof uploadPayload?.details === 'string' ? uploadPayload.details : null
+          if (errorMessage && detailsMessage) {
+            toast.error(`${errorMessage}: ${detailsMessage}`)
+          } else if (errorMessage) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+          }
+          return
+        }
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
-          body: formData,
+          body: JSON.stringify({
+            stage,
+            documentType,
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            s3Key,
+          }),
         })
 
         const payload = await response.json().catch(() => null)
@@ -3415,7 +3480,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       open: true,
                                       type: 'delete-line',
                                       title: 'Remove line item',
-                                      message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                      message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
                                       lineId: line.id,
                                     })
                                   }
@@ -4555,8 +4620,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                                 <div className="flex items-center gap-2">
                                   {meta.outOfDate && (
-                                    <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-                                      OUT OF DATE
+                                    <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                      Out of date
                                     </Badge>
                                   )}
                                   <Button

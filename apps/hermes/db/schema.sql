@@ -160,3 +160,51 @@ CREATE TABLE IF NOT EXISTS hermes_job_state (
 
 CREATE INDEX IF NOT EXISTS hermes_job_state_updated_idx
   ON hermes_job_state (connection_id, updated_at DESC);
+
+
+-- Campaigns
+CREATE TABLE IF NOT EXISTS hermes_campaigns (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  channel             TEXT NOT NULL DEFAULT 'amazon_solicitations',
+  status              TEXT NOT NULL DEFAULT 'draft',
+  connection_id       TEXT NOT NULL,
+  schedule            JSONB NOT NULL DEFAULT '{}',
+  control_holdout_pct INTEGER NOT NULL DEFAULT 5,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE IF EXISTS hermes_campaigns DROP CONSTRAINT IF EXISTS hermes_campaign_status_check;
+ALTER TABLE IF EXISTS hermes_campaigns
+  ADD CONSTRAINT hermes_campaign_status_check
+  CHECK (status IN ('draft','live','paused','archived'));
+
+CREATE INDEX IF NOT EXISTS hermes_campaigns_status_idx
+  ON hermes_campaigns (status);
+
+CREATE INDEX IF NOT EXISTS hermes_campaigns_connection_idx
+  ON hermes_campaigns (connection_id);
+
+
+-- Experiments
+CREATE TABLE IF NOT EXISTS hermes_experiments (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'draft',
+  campaign_id     TEXT NOT NULL,
+  allocations     JSONB NOT NULL DEFAULT '[]',
+  primary_metric  TEXT NOT NULL DEFAULT 'amazon_review_submitted_rate',
+  started_at      TIMESTAMPTZ,
+  ended_at        TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE IF EXISTS hermes_experiments DROP CONSTRAINT IF EXISTS hermes_experiment_status_check;
+ALTER TABLE IF EXISTS hermes_experiments
+  ADD CONSTRAINT hermes_experiment_status_check
+  CHECK (status IN ('draft','running','stopped'));
+
+CREATE INDEX IF NOT EXISTS hermes_experiments_campaign_idx
+  ON hermes_experiments (campaign_id);
