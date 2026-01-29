@@ -171,6 +171,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
   const allowCommercialEdits = order.status === 'DRAFT'
   const allowIssuedPackagingEdits = order.status === 'ISSUED'
+  const allowPiNumberEdits = order.status === 'ISSUED'
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
 
   // Core fields - only editable in DRAFT
@@ -180,10 +181,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       updateData.skuDescription = result.data.skuDescription
     if (result.data.currency !== undefined) updateData.currency = result.data.currency
     if (result.data.notes !== undefined) updateData.lineNotes = result.data.notes
-    if (result.data.piNumber !== undefined) {
-      const trimmed = typeof result.data.piNumber === 'string' ? result.data.piNumber.trim() : ''
-      updateData.piNumber = trimmed.length > 0 ? trimmed.toUpperCase() : null
-    }
 
     const unitsChanged =
       result.data.unitsOrdered !== undefined || result.data.unitsPerCarton !== undefined
@@ -236,6 +233,13 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       if (nextUnitsOrdered > 0) {
         updateData.unitCost = (nextTotalCost / nextUnitsOrdered).toFixed(4)
       }
+    }
+  }
+
+  if (allowPiNumberEdits) {
+    if (result.data.piNumber !== undefined) {
+      const trimmed = typeof result.data.piNumber === 'string' ? result.data.piNumber.trim() : ''
+      updateData.piNumber = trimmed.length > 0 ? trimmed.toUpperCase() : null
     }
   }
 
