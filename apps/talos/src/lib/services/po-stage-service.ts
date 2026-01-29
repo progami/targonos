@@ -520,15 +520,7 @@ async function validateTransitionGate(params: {
       recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
     }
 
-    const piNumbers: string[] = []
     for (const line of activeLines) {
-      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
-      if (!piNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
-      } else {
-        piNumbers.push(piNumber)
-      }
-
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
       if (!commodityCode) {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
@@ -599,24 +591,35 @@ async function validateTransitionGate(params: {
       }
     }
 
+  }
+
+  if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
+    const tenant = await getCurrentTenant()
+    const tenantCode = tenant.code
+
+    const piNumbers: string[] = []
+    for (const line of activeLines) {
+      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+      if (!piNumber) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+      } else {
+        piNumbers.push(piNumber)
+      }
+    }
+
     const uniquePiNumbers = Array.from(new Set(piNumbers))
     if (uniquePiNumbers.length > 0) {
       const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
       await requireDocuments({
         prisma: params.prisma,
         purchaseOrderId: params.order.id,
-        stage: PurchaseOrderDocumentStage.DRAFT,
+        stage: PurchaseOrderDocumentStage.ISSUED,
         documentTypes: requiredDocTypes,
         issues,
         issueKeyPrefix: 'documents.pi',
         issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
       })
     }
-  }
-
-  if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
-    const tenant = await getCurrentTenant()
-    const tenantCode = tenant.code
 
     for (const line of activeLines) {
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
@@ -2228,7 +2231,13 @@ export async function transitionPurchaseOrderStage(
           const documentsToCopy = await tx.purchaseOrderDocument.findMany({
             where: {
               purchaseOrderId: order.id,
-              stage: { in: [PurchaseOrderDocumentStage.DRAFT, PurchaseOrderDocumentStage.MANUFACTURING] },
+              stage: {
+                in: [
+                  PurchaseOrderDocumentStage.DRAFT,
+                  PurchaseOrderDocumentStage.ISSUED,
+                  PurchaseOrderDocumentStage.MANUFACTURING,
+                ],
+              },
             },
           })
 
