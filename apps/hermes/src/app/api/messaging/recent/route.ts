@@ -3,13 +3,14 @@ import { z } from "zod";
 
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { getPgPool } from "@/server/db/pool";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/messaging/recent?connectionId=...&limit=20
  */
-export async function GET(req: Request) {
+async function handleGet(req: Request) {
   await maybeAutoMigrate();
 
   const url = new URL(req.url);
@@ -56,3 +57,5 @@ export async function GET(req: Request) {
     );
   }
 }
+
+export const GET = withApiLogging("GET /api/messaging/recent", handleGet);

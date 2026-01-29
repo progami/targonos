@@ -5,6 +5,7 @@ import { Ban, MailCheck, ShieldAlert, Timer, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
+import { hermesApiUrl } from "@/lib/base-path";
 import { PageHeader } from "@/components/hermes/page-header";
 import { KpiCard } from "@/components/hermes/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +81,7 @@ export function InsightsClient({ connections }: { connections: AmazonConnection[
         qs.set("rangeDays", String(rangeDays));
         if (connectionId) qs.set("connectionId", connectionId);
 
-        const res = await fetch(`/api/analytics/overview?${qs.toString()}`);
+        const res = await fetch(hermesApiUrl(`/api/analytics/overview?${qs.toString()}`));
         const json = await res.json();
         if (!res.ok || !json?.ok) {
           throw new Error(json?.error ?? `HTTP ${res.status}`);

@@ -6,6 +6,7 @@ import { getPgPool } from "@/server/db/pool";
 import { queueBuyerMessage } from "@/server/dispatch/ledger";
 import { processBuyerMessageDispatch } from "@/server/messaging/dispatcher";
 import { MESSAGING_KINDS } from "@/server/sp-api/messaging";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
@@ -128,7 +129,7 @@ async function loadDispatchById(id: string) {
  * - queues idempotently: one per (order, kind)
  * - optional immediate send runs through the same claim+attempt recording as the worker
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   await maybeAutoMigrate();
 
   const schema = z.object({
@@ -210,3 +211,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export const POST = withApiLogging("POST /api/messaging/send", handlePost);
