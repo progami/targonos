@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label'
 
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { usePageState } from '@/lib/store/page-state'
+import { useTenantCode } from '@/lib/tenant'
 import { Boxes, Loader2, Plus, Trash2, X } from '@/lib/lucide-icons'
 import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { cn } from '@/lib/utils'
 import { coerceFiniteNumber, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { getDefaultUnitSystem } from '@/lib/measurements'
 
 interface SkuSummary {
   id: string
@@ -242,7 +244,10 @@ function SkuBatchesManager({
   const [batches, setBatches] = useState<BatchRow[]>([])
   const [loading, setLoading] = useState(false)
 
-  const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric')
+  const tenantCode = useTenantCode()
+  const defaultUnitSystem = getDefaultUnitSystem(tenantCode)
+
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>(defaultUnitSystem)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingBatch, setEditingBatch] = useState<BatchRow | null>(null)
@@ -250,7 +255,7 @@ function SkuBatchesManager({
     buildMeasurementState(null)
   )
   const [formState, setFormState] = useState<BatchFormState>(() =>
-    buildBatchFormState(null, 'metric', buildMeasurementState(null))
+    buildBatchFormState(null, defaultUnitSystem, buildMeasurementState(null))
   )
 
   const [confirmDelete, setConfirmDelete] = useState<BatchRow | null>(null)
@@ -623,8 +628,8 @@ function SkuBatchesManager({
                       <th className="px-3 py-2 text-left font-semibold">Packaging</th>
                       <th className="px-3 py-2 text-right font-semibold">Storage CPP</th>
                       <th className="px-3 py-2 text-right font-semibold">Ship CPP</th>
-                      <th className="px-3 py-2 text-right font-semibold">Carton Dims (cm)</th>
-                      <th className="px-3 py-2 text-right font-semibold">Carton Wt (kg)</th>
+                      <th className="px-3 py-2 text-right font-semibold">Carton Dims ({unitSystem === 'metric' ? 'cm' : 'in'})</th>
+                      <th className="px-3 py-2 text-right font-semibold">Carton Wt ({unitSystem === 'metric' ? 'kg' : 'lb'})</th>
                       <th className="px-3 py-2 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -639,10 +644,12 @@ function SkuBatchesManager({
 
                       const formatTriplet = (triplet: typeof cartonTriplet) => {
                         if (!triplet) return '—'
-                        return `${formatNumber(triplet.side1Cm, 2)}×${formatNumber(
-                          triplet.side2Cm,
-                          2
-                        )}×${formatNumber(triplet.side3Cm, 2)}`
+
+                        const side1 = unitSystem === 'imperial' ? triplet.side1Cm / CM_PER_INCH : triplet.side1Cm
+                        const side2 = unitSystem === 'imperial' ? triplet.side2Cm / CM_PER_INCH : triplet.side2Cm
+                        const side3 = unitSystem === 'imperial' ? triplet.side3Cm / CM_PER_INCH : triplet.side3Cm
+
+                        return `${formatNumber(side1, 2)}×${formatNumber(side2, 2)}×${formatNumber(side3, 2)}`
                       }
 
                       const batchCode = typeof batch.batchCode === 'string' ? batch.batchCode : '—'
@@ -681,7 +688,13 @@ function SkuBatchesManager({
                             {formatTriplet(cartonTriplet)}
                           </td>
                           <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
-                            {batch.cartonWeightKg != null ? formatNumber(Number(batch.cartonWeightKg), 2) : '—'}
+                            {(() => {
+                              if (batch.cartonWeightKg == null) return '—'
+                              const weightKg = Number(batch.cartonWeightKg)
+                              if (!Number.isFinite(weightKg)) return '—'
+                              const resolved = unitSystem === 'imperial' ? weightKg * LB_PER_KG : weightKg
+                              return formatNumber(resolved, 2)
+                            })()}
                           </td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
                             <Button

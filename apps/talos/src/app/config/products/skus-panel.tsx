@@ -21,8 +21,9 @@ import {
   UK_SIZE_TIER_DEFINITIONS_2026,
 } from '@/lib/amazon/fees'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
-import { useSession } from '@/hooks/usePortalSession'
+import { convertLengthToCm, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel, type UnitSystem } from '@/lib/measurements'
 import type { TenantCode } from '@/lib/tenant/constants'
+import { useTenantCode } from '@/lib/tenant'
 import { usePageState } from '@/lib/store/page-state'
 import { ChevronDown, ChevronRight, ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 import { SkuBatchesPanel } from './sku-batches-modal'
@@ -257,7 +258,7 @@ interface SkuFormState {
   }
 }
 
-function buildFormState(sku?: SkuRow | null): SkuFormState {
+function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem): SkuFormState {
   const latestBatch = sku?.batches && sku.batches.length > 0 ? sku.batches[0] : null
 
   const unitTriplet = resolveDimensionTripletCm({
@@ -312,6 +313,26 @@ function buildFormState(sku?: SkuRow | null): SkuFormState {
     if (normalizedAmazonCategory) category = normalizedAmazonCategory
   }
 
+
+
+  const formatLengthInput = (valueCm: number | null): string => {
+    if (valueCm === null) return ''
+    return formatLengthFromCm(valueCm, unitSystem)
+  }
+
+  const formatWeightInput = (valueKg: number | null): string => {
+    if (valueKg === null) return ''
+    return formatWeightFromKg(valueKg, unitSystem)
+  }
+
+  const unitWeightInput = formatWeightInput(parseFiniteNumber(sku?.unitWeightKg))
+  const amazonItemPackageWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonReferenceWeightKg))
+  const itemWeightInput = formatWeightInput(parseFiniteNumber(sku?.itemWeightKg))
+  const amazonItemWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonItemWeightKg))
+
+  const itemSide1Input = formatLengthInput(parseFiniteNumber(side1))
+  const itemSide2Input = formatLengthInput(parseFiniteNumber(side2))
+  const itemSide3Input = formatLengthInput(parseFiniteNumber(side3))
   return {
     skuCode: sku?.skuCode ?? '',
     description: sku?.description ?? '',
@@ -327,22 +348,22 @@ function buildFormState(sku?: SkuRow | null): SkuFormState {
     amazonSizeTier: latestBatch?.amazonSizeTier ?? '',
     amazonReferralFeePercent: sku?.amazonReferralFeePercent?.toString?.() ?? '',
     amazonFbaFulfillmentFee: latestBatch?.amazonFbaFulfillmentFee?.toString?.() ?? '',
-    unitSide1Cm: unitTriplet ? String(unitTriplet.side1Cm) : '',
-    unitSide2Cm: unitTriplet ? String(unitTriplet.side2Cm) : '',
-    unitSide3Cm: unitTriplet ? String(unitTriplet.side3Cm) : '',
-    unitWeightKg: sku?.unitWeightKg?.toString?.() ?? '',
-    amazonItemPackageSide1Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side1Cm) : '',
-    amazonItemPackageSide2Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side2Cm) : '',
-    amazonItemPackageSide3Cm: amazonItemPackageTriplet ? String(amazonItemPackageTriplet.side3Cm) : '',
-    amazonItemPackageWeightKg: sku?.amazonReferenceWeightKg?.toString?.() ?? '',
-    itemSide1Cm: side1,
-    itemSide2Cm: side2,
-    itemSide3Cm: side3,
-    itemWeightKg: sku?.itemWeightKg?.toString?.() ?? '',
-    amazonItemSide1Cm: amazonItemTriplet ? String(amazonItemTriplet.side1Cm) : '',
-    amazonItemSide2Cm: amazonItemTriplet ? String(amazonItemTriplet.side2Cm) : '',
-    amazonItemSide3Cm: amazonItemTriplet ? String(amazonItemTriplet.side3Cm) : '',
-    amazonItemWeightKg: sku?.amazonItemWeightKg?.toString?.() ?? '',
+    unitSide1Cm: unitTriplet ? formatLengthInput(unitTriplet.side1Cm) : '',
+    unitSide2Cm: unitTriplet ? formatLengthInput(unitTriplet.side2Cm) : '',
+    unitSide3Cm: unitTriplet ? formatLengthInput(unitTriplet.side3Cm) : '',
+    unitWeightKg: unitWeightInput,
+    amazonItemPackageSide1Cm: amazonItemPackageTriplet ? formatLengthInput(amazonItemPackageTriplet.side1Cm) : '',
+    amazonItemPackageSide2Cm: amazonItemPackageTriplet ? formatLengthInput(amazonItemPackageTriplet.side2Cm) : '',
+    amazonItemPackageSide3Cm: amazonItemPackageTriplet ? formatLengthInput(amazonItemPackageTriplet.side3Cm) : '',
+    amazonItemPackageWeightKg: amazonItemPackageWeightInput,
+    itemSide1Cm: itemSide1Input,
+    itemSide2Cm: itemSide2Input,
+    itemSide3Cm: itemSide3Input,
+    itemWeightKg: itemWeightInput,
+    amazonItemSide1Cm: amazonItemTriplet ? formatLengthInput(amazonItemTriplet.side1Cm) : '',
+    amazonItemSide2Cm: amazonItemTriplet ? formatLengthInput(amazonItemTriplet.side2Cm) : '',
+    amazonItemSide3Cm: amazonItemTriplet ? formatLengthInput(amazonItemTriplet.side3Cm) : '',
+    amazonItemWeightKg: amazonItemWeightInput,
     defaultSupplierId: sku?.defaultSupplierId ?? '',
     secondarySupplierId: sku?.secondarySupplierId ?? '',
     initialBatch: {
@@ -402,6 +423,7 @@ function computeReferenceFeesAutofill(
   category: string,
   sizeTier: string,
   tenantCode: TenantCode,
+  unitSystem: UnitSystem,
   referencePackage: ReferencePackageInput
 ): ReferenceFeesAutofill {
   const categoryTrimmed = category.trim()
@@ -420,13 +442,19 @@ function computeReferenceFeesAutofill(
     computedSizeTier = selectedSizeTier
   }
 
+  const side1Value = parseFiniteNumber(referencePackage.side1Cm)
+  const side2Value = parseFiniteNumber(referencePackage.side2Cm)
+  const side3Value = parseFiniteNumber(referencePackage.side3Cm)
+
   const unitTriplet = resolveDimensionTripletCm({
-    side1Cm: parseFiniteNumber(referencePackage.side1Cm),
-    side2Cm: parseFiniteNumber(referencePackage.side2Cm),
-    side3Cm: parseFiniteNumber(referencePackage.side3Cm),
+    side1Cm: side1Value === null ? null : convertLengthToCm(side1Value, unitSystem),
+    side2Cm: side2Value === null ? null : convertLengthToCm(side2Value, unitSystem),
+    side3Cm: side3Value === null ? null : convertLengthToCm(side3Value, unitSystem),
   })
-  const parsedUnitWeightKg = parseFiniteNumber(referencePackage.weightKg)
-  const unitWeightKg = parsedUnitWeightKg !== null && parsedUnitWeightKg > 0 ? parsedUnitWeightKg : null
+
+  const parsedUnitWeight = parseFiniteNumber(referencePackage.weightKg)
+  const unitWeightInput = parsedUnitWeight !== null && parsedUnitWeight > 0 ? parsedUnitWeight : null
+  const unitWeightKg = unitWeightInput === null ? null : convertWeightToKg(unitWeightInput, unitSystem)
 
   if (computedSizeTier === null) {
     if (unitTriplet && unitWeightKg !== null) {
@@ -470,8 +498,10 @@ interface SkusPanelProps {
 }
 
 export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExternalModalClose }: SkusPanelProps) {
-  const { data: session } = useSession()
-  const tenantCode: TenantCode = session?.user?.region ?? 'US'
+  const tenantCode = useTenantCode()
+  const unitSystem = getDefaultUnitSystem(tenantCode)
+  const lengthUnit = getLengthUnitLabel(unitSystem)
+  const weightUnit = getWeightUnitLabel(unitSystem)
   const referenceCategoryOptions =
     tenantCode === 'UK' ? UK_REFERRAL_CATEGORIES_2026 : AMAZON_REFERRAL_CATEGORIES_2026
   const referenceSizeTierOptions =
@@ -488,7 +518,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingSku, setEditingSku] = useState<SkuRow | null>(null)
-  const [formState, setFormState] = useState<SkuFormState>(() => buildFormState())
+  const [formState, setFormState] = useState<SkuFormState>(() => buildFormState(null, unitSystem))
 
   const [confirmDelete, setConfirmDelete] = useState<SkuRow | null>(null)
   const [expandedSkuIds, setExpandedSkuIds] = useState<Set<string>>(new Set())
@@ -496,7 +526,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [externalEditOpened, setExternalEditOpened] = useState(false)
 
   const autoFillReferenceFees = useCallback(() => {
-    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier, tenantCode, {
+    const computed = computeReferenceFeesAutofill(editingSku, formState.category, formState.sizeTier, tenantCode, unitSystem, {
       side1Cm: formState.unitSide1Cm,
       side2Cm: formState.unitSide2Cm,
       side3Cm: formState.unitSide3Cm,
@@ -539,13 +569,14 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     formState.unitSide3Cm,
     formState.unitWeightKg,
     tenantCode,
+    unitSystem,
   ])
 
   const handleReferenceCategoryChange = useCallback(
     (nextCategory: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, category: nextCategory }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, {
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, unitSystem, {
           side1Cm: next.unitSide1Cm,
           side2Cm: next.unitSide2Cm,
           side3Cm: next.unitSide3Cm,
@@ -575,14 +606,14 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return next
       })
     },
-    [editingSku, tenantCode]
+    [editingSku, tenantCode, unitSystem]
   )
 
   const handleReferenceSizeTierChange = useCallback(
     (nextSizeTier: string) => {
       setFormState(prev => {
         const next: SkuFormState = { ...prev, sizeTier: nextSizeTier }
-        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, {
+        const computed = computeReferenceFeesAutofill(editingSku, next.category, next.sizeTier, tenantCode, unitSystem, {
           side1Cm: next.unitSide1Cm,
           side2Cm: next.unitSide2Cm,
           side3Cm: next.unitSide3Cm,
@@ -600,17 +631,17 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return next
       })
     },
-    [editingSku, tenantCode]
+    [editingSku, tenantCode, unitSystem]
   )
 
   // Handle external modal open trigger
   useEffect(() => {
     if (externalModalOpen) {
       setEditingSku(null)
-      setFormState(buildFormState(null))
+      setFormState(buildFormState(null, unitSystem))
       setIsModalOpen(true)
     }
-  }, [externalModalOpen])
+  }, [externalModalOpen, unitSystem])
 
   useEffect(() => {
     setExternalEditOpened(false)
@@ -689,17 +720,17 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
   const openCreate = useCallback(() => {
     setEditingSku(null)
-    setFormState(buildFormState(null))
+    setFormState(buildFormState(null, unitSystem))
     setModalTab('reference')
     setIsModalOpen(true)
-  }, [])
+  }, [unitSystem])
 
   const openEdit = useCallback((sku: SkuRow) => {
     setEditingSku(sku)
-    setFormState(buildFormState(sku))
+    setFormState(buildFormState(sku, unitSystem))
     setModalTab('reference')
     setIsModalOpen(true)
-  }, [])
+  }, [unitSystem])
 
   useEffect(() => {
     if (!isModalOpen) return
@@ -741,7 +772,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     if (isSubmitting) return
     setIsModalOpen(false)
     setEditingSku(null)
-    setFormState(buildFormState(null))
+    setFormState(buildFormState(null, unitSystem))
     onExternalModalClose?.()
   }
 
@@ -791,33 +822,38 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return
       }
 
-      unitSide1Cm = Number.parseFloat(unitSide1Raw)
-      unitSide2Cm = Number.parseFloat(unitSide2Raw)
-      unitSide3Cm = Number.parseFloat(unitSide3Raw)
+      const unitSide1Input = Number.parseFloat(unitSide1Raw)
+      const unitSide2Input = Number.parseFloat(unitSide2Raw)
+      const unitSide3Input = Number.parseFloat(unitSide3Raw)
 
-      if (!Number.isFinite(unitSide1Cm) || unitSide1Cm <= 0) {
+      if (!Number.isFinite(unitSide1Input) || unitSide1Input <= 0) {
         toast.error('Item package length must be a positive number')
         return
       }
-      if (!Number.isFinite(unitSide2Cm) || unitSide2Cm <= 0) {
+      if (!Number.isFinite(unitSide2Input) || unitSide2Input <= 0) {
         toast.error('Item package width must be a positive number')
         return
       }
-      if (!Number.isFinite(unitSide3Cm) || unitSide3Cm <= 0) {
+      if (!Number.isFinite(unitSide3Input) || unitSide3Input <= 0) {
         toast.error('Item package height must be a positive number')
         return
       }
+
+      unitSide1Cm = convertLengthToCm(unitSide1Input, unitSystem)
+      unitSide2Cm = convertLengthToCm(unitSide2Input, unitSystem)
+      unitSide3Cm = convertLengthToCm(unitSide3Input, unitSystem)
     }
 
     let unitWeightKg: number | null = null
     if (unitWeightRaw) {
-      unitWeightKg = Number.parseFloat(unitWeightRaw)
-      if (!Number.isFinite(unitWeightKg) || unitWeightKg <= 0) {
-        toast.error('Item package weight (kg) must be a positive number')
+      const unitWeightInput = Number.parseFloat(unitWeightRaw)
+      if (!Number.isFinite(unitWeightInput) || unitWeightInput <= 0) {
+        toast.error(`Item package weight (${weightUnit}) must be a positive number`)
         return
       }
+      unitWeightKg = convertWeightToKg(unitWeightInput, unitSystem)
     } else if (isCreating) {
-      toast.error('Item package weight (kg) is required')
+      toast.error(`Item package weight (${weightUnit}) is required`)
       return
     }
 
@@ -839,31 +875,36 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         return
       }
 
-      itemSide1Cm = Number.parseFloat(side1Raw)
-      itemSide2Cm = Number.parseFloat(side2Raw)
-      itemSide3Cm = Number.parseFloat(side3Raw)
+      const itemSide1Input = Number.parseFloat(side1Raw)
+      const itemSide2Input = Number.parseFloat(side2Raw)
+      const itemSide3Input = Number.parseFloat(side3Raw)
 
-      if (!Number.isFinite(itemSide1Cm) || itemSide1Cm <= 0) {
+      if (!Number.isFinite(itemSide1Input) || itemSide1Input <= 0) {
         toast.error('Item length must be a positive number')
         return
       }
-      if (!Number.isFinite(itemSide2Cm) || itemSide2Cm <= 0) {
+      if (!Number.isFinite(itemSide2Input) || itemSide2Input <= 0) {
         toast.error('Item width must be a positive number')
         return
       }
-      if (!Number.isFinite(itemSide3Cm) || itemSide3Cm <= 0) {
+      if (!Number.isFinite(itemSide3Input) || itemSide3Input <= 0) {
         toast.error('Item height must be a positive number')
         return
       }
+
+      itemSide1Cm = convertLengthToCm(itemSide1Input, unitSystem)
+      itemSide2Cm = convertLengthToCm(itemSide2Input, unitSystem)
+      itemSide3Cm = convertLengthToCm(itemSide3Input, unitSystem)
     }
 
     let itemWeightKg: number | null = null
     if (itemWeightRaw) {
-      itemWeightKg = Number.parseFloat(itemWeightRaw)
-      if (!Number.isFinite(itemWeightKg) || itemWeightKg <= 0) {
-        toast.error('Item weight (kg) must be a positive number')
+      const itemWeightInput = Number.parseFloat(itemWeightRaw)
+      if (!Number.isFinite(itemWeightInput) || itemWeightInput <= 0) {
+        toast.error(`Item weight (${weightUnit}) must be a positive number`)
         return
       }
+      itemWeightKg = convertWeightToKg(itemWeightInput, unitSystem)
     }
 
     // Parse reference fee fields
@@ -972,7 +1013,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       toast.success(editingSku ? 'SKU updated' : 'SKU created')
       setIsModalOpen(false)
       setEditingSku(null)
-      setFormState(buildFormState(null))
+      setFormState(buildFormState(null, unitSystem))
       onExternalModalClose?.()
       await fetchSkus()
     } catch (error) {
@@ -1341,7 +1382,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 </div>
 
                                 <div className="space-y-1">
-                                  <Label>Item package dimensions (cm)</Label>
+                                  <Label>Item package dimensions ({lengthUnit})</Label>
                                   <div className="grid grid-cols-3 gap-2">
                                     <Input
                                       id="unitSide1Cm"
@@ -1383,7 +1424,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 </div>
 
                                 <div className="space-y-1">
-                                  <Label htmlFor="unitWeightKg">Item package weight (kg)</Label>
+                                  <Label htmlFor="unitWeightKg">Item package weight ({weightUnit})</Label>
                                   <Input
                                     id="unitWeightKg"
                                     type="number"
@@ -1399,7 +1440,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 </div>
 
                                 <div className="space-y-1">
-                                  <Label>Item dimensions (cm)</Label>
+                                  <Label>Item dimensions ({lengthUnit})</Label>
                                   <div className="grid grid-cols-3 gap-2">
                                     <Input
                                       id="itemSide1Cm"
@@ -1441,7 +1482,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                                 </div>
 
                                 <div className="space-y-1">
-                                  <Label htmlFor="itemWeightKg">Item weight (kg)</Label>
+                                  <Label htmlFor="itemWeightKg">Item weight ({weightUnit})</Label>
                                   <Input
                                     id="itemWeightKg"
                                     type="number"
@@ -1551,7 +1592,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
 
                             <div className="space-y-1">
-                              <Label>Item package dimensions (cm)</Label>
+                              <Label>Item package dimensions ({lengthUnit})</Label>
                               <div className="grid grid-cols-3 gap-2">
                                 <Input
                                   value={formState.amazonItemPackageSide1Cm}
@@ -1575,7 +1616,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
 
                             <div className="space-y-1">
-                              <Label>Item package weight (kg)</Label>
+                              <Label>Item package weight ({weightUnit})</Label>
                               <Input
                                 value={formState.amazonItemPackageWeightKg}
                                 disabled
@@ -1585,7 +1626,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
 
                             <div className="space-y-1">
-                              <Label>Item dimensions (cm)</Label>
+                              <Label>Item dimensions ({lengthUnit})</Label>
                               <div className="grid grid-cols-3 gap-2">
                                 <Input
                                   value={formState.amazonItemSide1Cm}
@@ -1609,7 +1650,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                             </div>
 
                             <div className="space-y-1">
-                              <Label>Item weight (kg)</Label>
+                              <Label>Item weight ({weightUnit})</Label>
                               <Input
                                 value={formState.amazonItemWeightKg}
                                 disabled
