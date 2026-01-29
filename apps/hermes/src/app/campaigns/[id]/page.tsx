@@ -9,7 +9,7 @@ import { CampaignDetail } from "@/app/campaigns/[id]/campaign-detail";
 import { EmptyState } from "@/components/hermes/empty-state";
 import { hermesApiUrl } from "@/lib/base-path";
 import { useConnectionsStore } from "@/stores/connections-store";
-import type { Campaign, Experiment, DispatchAttempt } from "@/lib/types";
+import type { AmazonConnection, Campaign, Experiment, DispatchAttempt } from "@/lib/types";
 
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
@@ -64,7 +64,7 @@ export default function CampaignDetailPage() {
     return <EmptyState icon={Megaphone} title="Campaign not found" />;
   }
 
-  const connection = connections.find((c) => c.id === campaign.connectionId);
+  const connection = connections.find((c: AmazonConnection) => c.id === campaign.connectionId);
 
   return (
     <CampaignDetail
