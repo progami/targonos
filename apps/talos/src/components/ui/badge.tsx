@@ -13,8 +13,8 @@ const badgeVariants = cva(
         outline: "border-border text-foreground",
         // Semantic variants - using theme-consistent colors
         success: "border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300",
-        warning: "border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300",
-        danger: "border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300",
+        warning: "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300",
+        danger: "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300",
         info: "border-primary/30 bg-primary/10 text-primary",
         neutral: "border-muted bg-muted/50 text-muted-foreground",
       },
