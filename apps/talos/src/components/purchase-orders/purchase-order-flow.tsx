@@ -3357,7 +3357,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 const gateKey = `cargo.lines.${line.id}.piNumber`
                                 const issue = gateIssues ? gateIssues[gateKey] : null
                                 const canEditPiNumber =
-                                  canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
+                                  canEdit && order.status === 'ISSUED' && activeViewStage === 'ISSUED'
 
                                 if (canEditPiNumber) {
                                   return (
@@ -4600,8 +4600,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   const canUpload = order.status === stage && !isReadOnly
                   const stageDocs = documents.filter(doc => doc.stage === stage)
                   const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                  const draftPiNumbers =
-                    stage === 'DRAFT'
+                  const issuedPiNumbers =
+                    stage === 'ISSUED'
                       ? Array.from(
                           new Set(
                             flowLines
@@ -4612,8 +4612,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       : []
 
                   const rows = (() => {
-                    if (stage === 'DRAFT') {
-                      const requiredPiDocs = draftPiNumbers
+                    if (stage === 'ISSUED') {
+                      const requiredPiDocs = issuedPiNumbers
                         .map(pi => ({ piNumber: pi, docType: buildPiDocumentType(pi) }))
                         .filter(entry => entry.docType.length > 0)
                         .map(entry => ({
@@ -4624,7 +4624,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           gateKey: `documents.pi.${entry.docType}`,
                         }))
 
-                      const otherDocs = stageDocs.filter(doc => !doc.documentType.startsWith('pi_'))
+                      const requiredDocTypes = new Set(requiredPiDocs.map(doc => doc.id))
+                      const otherDocs = stageDocs.filter(doc => !requiredDocTypes.has(doc.documentType))
                       return [
                         ...requiredPiDocs,
                         ...otherDocs.map(doc => ({
@@ -4659,15 +4660,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     ]
                   })()
 
-                  if (stage === 'DRAFT' && draftPiNumbers.length === 0) {
-                    return (
-                      <p className="text-sm text-muted-foreground">
-                        Add PI numbers to Cargo lines to unlock PI document uploads.
-                      </p>
-                    )
-                  }
-
                   if (rows.length === 0) {
+                    if (stage === 'ISSUED' && issuedPiNumbers.length === 0) {
+                      return (
+                        <p className="text-sm text-muted-foreground">
+                          Add PI numbers to Cargo lines to unlock PI document uploads.
+                        </p>
+                      )
+                    }
+
                     return (
                       <p className="text-sm text-muted-foreground">
                         No documents have been uploaded for this stage.
