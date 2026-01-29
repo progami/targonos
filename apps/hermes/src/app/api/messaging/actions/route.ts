@@ -8,6 +8,7 @@ import {
   getMessagingActionsForOrder,
   getMessagingOrderAttributes,
 } from "@/server/sp-api/messaging";
+import { withApiLogging } from "@/server/api-logging";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ function extractActions(body: any): Array<{ name?: string; href?: string }> {
  * - allowed message types (HAL _links.actions)
  * - buyer locale attributes (when available)
  */
-export async function GET(req: Request) {
+async function handleGet(req: Request) {
   await maybeAutoMigrate();
 
   const url = new URL(req.url);
@@ -83,3 +84,5 @@ export async function GET(req: Request) {
     );
   }
 }
+
+export const GET = withApiLogging("GET /api/messaging/actions", handleGet);

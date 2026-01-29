@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { hermesApiUrl } from "@/lib/base-path";
 
 type RecentOrder = {
   orderId: string;
@@ -117,7 +118,11 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     if (!connectionId) return;
     setLoadingOrders(true);
     try {
-      const res = await fetch(`/api/orders/recent?connectionId=${encodeURIComponent(connectionId)}&limit=25`);
+      const res = await fetch(
+        hermesApiUrl(
+          `/api/orders/recent?connectionId=${encodeURIComponent(connectionId)}&limit=25`
+        )
+      );
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
       setOrders(json.orders ?? []);
@@ -184,7 +189,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           body.maxResultsPerPage = 100;
         }
 
-        const res = await fetch("/api/orders/backfill", {
+        const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
