@@ -9,6 +9,7 @@ import { redirectToPortal } from '@/lib/portal'
 import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem, LB_PER_KG } from '@/lib/measurements'
 import { usePageState } from '@/lib/store/page-state'
 
 import { Button } from '@/components/ui/button'
@@ -70,9 +71,9 @@ const ALLOWED_ROLES = ['admin', 'staff'] as const
 type DimensionTriplet = { side1Cm: number; side2Cm: number; side3Cm: number }
 
 type ShippingWeights = {
-  unitWeightLb: number | null
-  dimensionalWeightLb: number | null
-  shippingWeightLb: number | null
+  unitWeightKg: number | null
+  dimensionalWeightKg: number | null
+  shippingWeightKg: number | null
 }
 
 type Comparison = {
@@ -94,13 +95,6 @@ type Comparison = {
   feeDifference: number | null
 }
 
-function stripTrailingZeros(value: string): string {
-  return value.includes('.') ? value.replace(/\.?0+$/, '') : value
-}
-
-function formatNumber(value: number, decimals: number): string {
-  return stripTrailingZeros(value.toFixed(decimals))
-}
 
 function parseDecimalNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
@@ -154,9 +148,32 @@ function computeDimensionalWeightLbWithMinWidthHeight(triplet: DimensionTriplet,
 function computeShippingWeights(
   triplet: DimensionTriplet | null,
   unitWeightKg: number | null,
-  sizeTier: string | null
+  sizeTier: string | null,
+  tenantCode: TenantCode
 ): ShippingWeights {
-  const unitWeightLb = unitWeightKg === null ? null : unitWeightKg * 2.20462
+  if (tenantCode === 'UK') {
+    const dimensionalWeightKg =
+      triplet === null
+        ? null
+        : (() => {
+            const dimsCm = [triplet.side1Cm, triplet.side2Cm, triplet.side3Cm].sort((a, b) => b - a)
+            const longestCm = dimsCm[0]
+            const medianCm = dimsCm[1]
+            const shortestCm = dimsCm[2]
+            return (longestCm * medianCm * shortestCm) / 5000
+          })()
+
+    const shippingWeightKg =
+      unitWeightKg !== null && dimensionalWeightKg !== null
+        ? Math.max(unitWeightKg, dimensionalWeightKg)
+        : unitWeightKg !== null
+          ? unitWeightKg
+          : dimensionalWeightKg
+
+    return { unitWeightKg, dimensionalWeightKg, shippingWeightKg }
+  }
+
+  const unitWeightLb = unitWeightKg === null ? null : unitWeightKg * LB_PER_KG
   const dimensionalWeightLb =
     triplet === null ? null : computeDimensionalWeightLbWithMinWidthHeight(triplet, usesMinWidthHeight(sizeTier))
 
@@ -176,7 +193,7 @@ function computeShippingWeights(
   }
 
   if (chargeableWeightLb === null) {
-    return { unitWeightLb, dimensionalWeightLb, shippingWeightLb: null }
+    return { unitWeightKg: unitWeightKg, dimensionalWeightKg: null, shippingWeightKg: null }
   }
 
   let roundedWeightLb = chargeableWeightLb
@@ -201,23 +218,10 @@ function computeShippingWeights(
     }
   }
 
-  return { unitWeightLb, dimensionalWeightLb, shippingWeightLb: roundedWeightLb }
-}
+  const dimensionalWeightKg = dimensionalWeightLb === null ? null : dimensionalWeightLb / LB_PER_KG
+  const shippingWeightKg = roundedWeightLb / LB_PER_KG
 
-function formatDimensionsIn(triplet: DimensionTriplet | null): string {
-  if (!triplet) return '—'
-  const s1 = formatNumber(triplet.side1Cm / 2.54, 2)
-  const s2 = formatNumber(triplet.side2Cm / 2.54, 2)
-  const s3 = formatNumber(triplet.side3Cm / 2.54, 2)
-  return `${s1} × ${s2} × ${s3} in`
-}
-
-function formatWeightLb(weightLb: number | null, decimals: number): string {
-  if (weightLb === null) return '—'
-  if (weightLb < 1) {
-    return `${formatNumber(weightLb * 16, decimals)} oz`
-  }
-  return `${formatNumber(weightLb, decimals)} lb`
+  return { unitWeightKg, dimensionalWeightKg, shippingWeightKg }
 }
 
 function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
@@ -238,7 +242,7 @@ function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
           referenceWeightKg
         )
       : null
-  const referenceShipping = computeShippingWeights(referenceTriplet, referenceWeightKg, referenceSizeTier)
+  const referenceShipping = computeShippingWeights(referenceTriplet, referenceWeightKg, referenceSizeTier, tenantCode)
 
   const amazonTriplet = resolveDimensionTripletCm({
     side1Cm: row.amazonItemPackageSide1Cm,
@@ -252,7 +256,7 @@ function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
     const trimmed = row.amazonSizeTier.trim()
     if (trimmed) amazonSizeTier = trimmed
   }
-  const amazonShipping = computeShippingWeights(amazonTriplet, amazonWeightKg, amazonSizeTier)
+  const amazonShipping = computeShippingWeights(amazonTriplet, amazonWeightKg, amazonSizeTier, tenantCode)
 
   const expectedFee = parseDecimalNumber(row.fbaFulfillmentFee)
   const amazonFee = parseDecimalNumber(row.amazonFbaFulfillmentFee)
@@ -261,14 +265,14 @@ function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
 
   const referenceMissingFields: string[] = []
   if (expectedFee === null) referenceMissingFields.push('Reference FBA fulfillment fee')
-  if (referenceTriplet === null) referenceMissingFields.push('Item package dimensions (cm)')
-  if (referenceWeightKg === null) referenceMissingFields.push('Item package weight (kg)')
+  if (referenceTriplet === null) referenceMissingFields.push('Item package dimensions')
+  if (referenceWeightKg === null) referenceMissingFields.push('Item package weight')
 
   const amazonMissingFields: string[] = []
   if (amazonFee === null) amazonMissingFields.push('Amazon FBA fulfillment fee')
   if (amazonSizeTier === null) amazonMissingFields.push('Amazon size tier')
-  if (amazonTriplet === null) amazonMissingFields.push('Amazon item package dimensions (cm)')
-  if (amazonWeightKg === null) amazonMissingFields.push('Amazon item package weight (kg)')
+  if (amazonTriplet === null) amazonMissingFields.push('Amazon item package dimensions')
+  if (amazonWeightKg === null) amazonMissingFields.push('Amazon item package weight')
 
   let status: AlertStatus = 'UNKNOWN'
   if (!row.asin) {
@@ -328,6 +332,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   const { data: session, status } = useSession()
   const pageState = usePageState(PAGE_KEY)
   const tenantCode: TenantCode = session?.user?.region ?? 'US'
+  const unitSystem = getDefaultUnitSystem(tenantCode)
 
   const [loading, setLoading] = useState(false)
   const [skus, setSkus] = useState<ApiSkuRow[]>([])
@@ -537,7 +542,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatDimensionsIn(row.comparison.reference.triplet)}
+                        {formatDimensionTripletDisplayFromCm(row.comparison.reference.triplet, unitSystem)}
                       </td>
                     ))}
                   </tr>
@@ -545,7 +550,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.reference.shipping.unitWeightLb, 3)}
+                        {formatWeightDisplayFromKg(row.comparison.reference.shipping.unitWeightKg, unitSystem, 3)}
                       </td>
                     ))}
                   </tr>
@@ -553,7 +558,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.reference.shipping.dimensionalWeightLb, 3)}
+                        {formatWeightDisplayFromKg(row.comparison.reference.shipping.dimensionalWeightKg, unitSystem, 3)}
                       </td>
                     ))}
                   </tr>
@@ -561,7 +566,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.reference.shipping.shippingWeightLb, 2)}
+                        {formatWeightDisplayFromKg(row.comparison.reference.shipping.shippingWeightKg, unitSystem, 2)}
                       </td>
                     ))}
                   </tr>
@@ -603,7 +608,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatDimensionsIn(row.comparison.amazon.triplet)}
+                        {formatDimensionTripletDisplayFromCm(row.comparison.amazon.triplet, unitSystem)}
                       </td>
                     ))}
                   </tr>
@@ -611,7 +616,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.amazon.shipping.unitWeightLb, 3)}
+                        {formatWeightDisplayFromKg(row.comparison.amazon.shipping.unitWeightKg, unitSystem, 3)}
                       </td>
                     ))}
                   </tr>
@@ -619,7 +624,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.amazon.shipping.dimensionalWeightLb, 3)}
+                        {formatWeightDisplayFromKg(row.comparison.amazon.shipping.dimensionalWeightKg, unitSystem, 3)}
                       </td>
                     ))}
                   </tr>
@@ -627,7 +632,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
                     {paginatedRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
-                        {formatWeightLb(row.comparison.amazon.shipping.shippingWeightLb, 2)}
+                        {formatWeightDisplayFromKg(row.comparison.amazon.shipping.shippingWeightKg, unitSystem, 2)}
                       </td>
                     ))}
                   </tr>

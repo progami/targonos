@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
+import type { TenantCode } from '@/lib/tenant/constants'
 import { toast } from 'react-hot-toast'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,7 @@ import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { convertLengthToCm, convertWeightFromKg, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel } from '@/lib/measurements'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 // 5-Stage State Machine Types
@@ -121,7 +123,7 @@ interface BatchOption {
   packagingType: string | null
 }
 
-function buildBatchPackagingMeta(options: {
+function _buildBatchPackagingMeta(options: {
   batch: BatchOption
   unitsOrdered: number
   unitsPerCarton: number | null
@@ -190,7 +192,7 @@ type LinePackagingDetails = {
   hasWarning: boolean
 }
 
-function buildLinePackagingDetails(line: PurchaseOrderLineSummary): LinePackagingDetails | null {
+function _buildLinePackagingDetails(line: PurchaseOrderLineSummary): LinePackagingDetails | null {
   if (!line.batchLot?.trim()) return null
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) return null
 
@@ -785,6 +787,10 @@ export type PurchaseOrderFlowMode = 'detail' | 'create'
 export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
   const router = useRouter()
   const { data: session, status } = useSession()
+  const tenantRegion: TenantCode = session?.user?.region ?? 'US'
+  const unitSystem = getDefaultUnitSystem(tenantRegion)
+  const lengthUnit = getLengthUnitLabel(unitSystem)
+  const weightUnit = getWeightUnitLabel(unitSystem)
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
   const [loading, setLoading] = useState(true)
@@ -793,7 +799,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [splitGroupLoading, setSplitGroupLoading] = useState(false)
   const [draftLines, setDraftLines] = useState<PurchaseOrderLineSummary[]>([])
   const [tenantDestination, setTenantDestination] = useState<string>('')
-  const [tenantCode, setTenantCode] = useState<string>('')
+  const [tenantDisplayCode, setTenantDisplayCode] = useState<string>('')
   const [tenantCurrency, setTenantCurrency] = useState<string>('USD')
   const [transitioning, setTransitioning] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -1003,7 +1009,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
           setTenantCurrency(currency.trim().toUpperCase())
         }
         if (typeof tenantShortCode === 'string' && tenantShortCode.trim()) {
-          setTenantCode(tenantShortCode.trim().toUpperCase())
+          setTenantDisplayCode(tenantShortCode.trim().toUpperCase())
         }
         if (typeof tenantName !== 'string' || !tenantName.trim()) return
         const label =
@@ -1186,12 +1192,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       }
 
       void patchOrderLine(lineId, {
-        cartonSide1Cm: side1,
-        cartonSide2Cm: side2,
-        cartonSide3Cm: side3,
+        cartonSide1Cm: convertLengthToCm(side1, unitSystem),
+        cartonSide2Cm: convertLengthToCm(side2, unitSystem),
+        cartonSide3Cm: convertLengthToCm(side3, unitSystem),
       })
     },
-    [patchOrderLine]
+    [patchOrderLine, unitSystem]
   )
 
   useEffect(() => {
@@ -3285,11 +3291,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Weight (kg)
+                        Total Weight ({weightUnit})
                       </p>
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {order.stageData.manufacturing?.totalWeightKg != null
-                          ? order.stageData.manufacturing.totalWeightKg.toLocaleString()
+                          ? convertWeightFromKg(order.stageData.manufacturing.totalWeightKg, unitSystem).toLocaleString(undefined, {
+                              maximumFractionDigits: 2,
+                            })
                           : '—'}
                       </p>
                     </div>
@@ -3662,9 +3670,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size (cm)</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net (kg)</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross (kg)</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size ({lengthUnit})</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net ({weightUnit})</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross ({weightUnit})</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
                         </tr>
                       </thead>
@@ -3761,7 +3769,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         min="0"
                                         step="0.01"
                                         placeholder="L"
-                                        defaultValue={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                        defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="1"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
@@ -3773,7 +3781,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         min="0"
                                         step="0.01"
                                         placeholder="W"
-                                        defaultValue={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                        defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="2"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
@@ -3785,7 +3793,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         min="0"
                                         step="0.01"
                                         placeholder="H"
-                                        defaultValue={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                        defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="3"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
@@ -3793,7 +3801,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       />
                                     </div>
                                   ) : (
-                                    <span className="text-foreground">{cartonTriplet ? formatDimensionTripletCm(cartonTriplet) : '—'}</span>
+                                    <span className="text-foreground">{cartonTriplet ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}` : '—'}</span>
                                   )}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.netWeightKg`}>
@@ -3803,7 +3811,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       inputMode="decimal"
                                       min="0"
                                       step="0.001"
-                                      defaultValue={line.netWeightKg != null ? String(line.netWeightKg) : ''}
+                                      defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
                                       onBlur={e => {
                                         const trimmed = e.target.value.trim()
                                         if (!trimmed) {
@@ -3815,12 +3823,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           toast.error('Net weight must be a positive number')
                                           return
                                         }
-                                        void patchOrderLine(line.id, { netWeightKg: parsed })
+                                        void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
                                       }}
                                       className={`h-8 w-20 text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
-                                    <span className="text-foreground tabular-nums">{line.netWeightKg != null ? line.netWeightKg.toFixed(3) : '—'}</span>
+                                    <span className="text-foreground tabular-nums">{line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}</span>
                                   )}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
@@ -3830,7 +3838,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       inputMode="decimal"
                                       min="0"
                                       step="0.001"
-                                      defaultValue={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
+                                      defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
                                       onBlur={e => {
                                         const trimmed = e.target.value.trim()
                                         if (!trimmed) {
@@ -3842,12 +3850,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           toast.error('Gross weight must be a positive number')
                                           return
                                         }
-                                        void patchOrderLine(line.id, { cartonWeightKg: parsed })
+                                        void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
                                       }}
                                       className={`h-8 w-20 text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
-                                    <span className="text-foreground tabular-nums">{line.cartonWeightKg != null ? line.cartonWeightKg.toFixed(3) : '—'}</span>
+                                    <span className="text-foreground tabular-nums">{line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}</span>
                                   )}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.material`}>
@@ -4007,7 +4015,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Weight (kg)
+                        Total Weight ({weightUnit})
                       </p>
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">—</p>
                     </div>
@@ -4341,9 +4349,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size (cm)</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net (kg)</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross (kg)</th>
+                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size ({lengthUnit})</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net ({weightUnit})</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross ({weightUnit})</th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
                         </tr>
                       </thead>
@@ -4357,13 +4365,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         ) : (
                           draftLines.map(line => {
                             const issuePrefix = `cargo.lines.${line.id}`
-
-                            const cartonTriplet = resolveDimensionTripletCm({
-                              side1Cm: line.cartonSide1Cm ?? null,
-                              side2Cm: line.cartonSide2Cm ?? null,
-                              side3Cm: line.cartonSide3Cm ?? null,
-                              legacy: line.cartonDimensionsCm ?? null,
-                            })
 
                             const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
                               setDraftLines(prev =>
@@ -4415,10 +4416,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       min="0"
                                       step="0.01"
                                       placeholder="L"
-                                      value={line.cartonSide1Cm != null ? String(line.cartonSide1Cm) : ''}
+                                      value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
                                       onChange={e => {
                                         const parsed = Number(e.target.value)
-                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
                                         updateLine(current => {
                                           const triplet = resolveDimensionTripletCm({
                                             side1Cm: next,
@@ -4441,10 +4443,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       min="0"
                                       step="0.01"
                                       placeholder="W"
-                                      value={line.cartonSide2Cm != null ? String(line.cartonSide2Cm) : ''}
+                                      value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
                                       onChange={e => {
                                         const parsed = Number(e.target.value)
-                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
                                         updateLine(current => {
                                           const triplet = resolveDimensionTripletCm({
                                             side1Cm: current.cartonSide1Cm ?? null,
@@ -4467,10 +4470,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       min="0"
                                       step="0.01"
                                       placeholder="H"
-                                      value={line.cartonSide3Cm != null ? String(line.cartonSide3Cm) : ''}
+                                      value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
                                       onChange={e => {
                                         const parsed = Number(e.target.value)
-                                        const next = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
                                         updateLine(current => {
                                           const triplet = resolveDimensionTripletCm({
                                             side1Cm: current.cartonSide1Cm ?? null,
@@ -4495,12 +4499,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     inputMode="decimal"
                                     min="0"
                                     step="0.001"
-                                    value={line.netWeightKg != null ? String(line.netWeightKg) : ''}
+                                    value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
                                     onChange={e => {
                                       const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
                                       updateLine(current => ({
                                         ...current,
-                                        netWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                        netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
                                       }))
                                     }}
                                     className="h-8 w-20 text-right"
@@ -4512,12 +4517,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     inputMode="decimal"
                                     min="0"
                                     step="0.001"
-                                    value={line.cartonWeightKg != null ? String(line.cartonWeightKg) : ''}
+                                    value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
                                     onChange={e => {
                                       const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
                                       updateLine(current => ({
                                         ...current,
-                                        cartonWeightKg: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                                        cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
                                       }))
                                     }}
                                     className="h-8 w-20 text-right"
@@ -6417,8 +6423,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           const parts: string[] = []
                           parts.push(BUYER_LEGAL_ENTITY.name)
                           parts.push(BUYER_LEGAL_ENTITY.address)
-                          if (tenantCode.trim().length > 0) {
-                            parts.push(tenantCode.trim().toUpperCase())
+                          if (tenantDisplayCode.trim().length > 0) {
+                            parts.push(tenantDisplayCode.trim().toUpperCase())
                           }
                           parts.push(BUYER_LEGAL_ENTITY.phone)
                           return parts.join(' • ')
@@ -6547,10 +6553,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Weight (kg)
+                            Weight ({weightUnit})
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalWeightKg?.toLocaleString() ?? '—'}
+                            {mfg?.totalWeightKg != null
+                              ? convertWeightFromKg(mfg.totalWeightKg, unitSystem).toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })
+                              : '—'}
                           </p>
                         </div>
                         <div className="space-y-1">
