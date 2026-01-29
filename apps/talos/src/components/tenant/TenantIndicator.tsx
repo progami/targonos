@@ -20,10 +20,11 @@ function formatTimezone(timezone: string): string {
   return city
 }
 
-function FlatFlag({ code }: { code: TenantCode }) {
+export function FlatFlag({ code, size = 24 }: { code: TenantCode; size?: number }) {
+  const h = Math.round(size * 2 / 3)
   if (code === 'US') {
     return (
-      <svg width="24" height="16" viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
+      <svg width={size} height={h} viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
         <rect width="24" height="16" fill="#B22234" />
         <rect y="1.23" width="24" height="1.23" fill="#FFF" />
         <rect y="3.69" width="24" height="1.23" fill="#FFF" />
@@ -36,7 +37,7 @@ function FlatFlag({ code }: { code: TenantCode }) {
     )
   }
   return (
-    <svg width="24" height="16" viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
+    <svg width={size} height={h} viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
       <rect width="24" height="16" fill="#012169" />
       <path d="M0,0 L24,16 M24,0 L0,16" stroke="#FFF" strokeWidth="2.5" />
       <path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" strokeWidth="1.5" />
