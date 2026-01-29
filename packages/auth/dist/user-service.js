@@ -54,6 +54,7 @@ function defaultPortalAdminApps() {
         { slug: 'website', name: 'Website', departments: [] },
         { slug: 'kairos', name: 'Kairos', departments: ['Product'] },
         { slug: 'xplan', name: 'xplan', departments: ['Product'] },
+        { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'] },
     ];
 }
 async function ensureBootstrapPortalAdminUser(normalizedEmail) {
@@ -161,6 +162,7 @@ function buildDemoUser() {
         website: { departments: [] },
         kairos: { departments: ['Product'] },
         'xplan': { departments: ['Product'] },
+        hermes: { departments: ['Account / Listing'] },
     };
     return {
         id: DEMO_ADMIN_UUID,
