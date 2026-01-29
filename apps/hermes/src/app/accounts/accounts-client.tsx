@@ -1,108 +1,133 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, Plus, PlugZap } from "lucide-react";
+import { Loader2, PlugZap } from "lucide-react";
 import { toast } from "sonner";
 
-import type { AmazonConnection } from "@/lib/types";
 import { PageHeader } from "@/components/hermes/page-header";
+import { EmptyState } from "@/components/hermes/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { hermesApiUrl } from "@/lib/base-path";
 
-function statusBadge(status: AmazonConnection["status"]) {
+type Account = {
+  id: string;
+  accountName: string;
+  region: string;
+  marketplaceIds: string[];
+  status: "connected" | "needs_reauth" | "disconnected";
+};
+
+function statusBadge(status: Account["status"]) {
   const label =
     status === "connected" ? "Connected" : status === "needs_reauth" ? "Reauth" : "Disconnected";
   const variant = status === "connected" ? "secondary" : status === "needs_reauth" ? "outline" : "destructive";
   return <Badge variant={variant as any}>{label}</Badge>;
 }
 
-export function AccountsClient({ connections }: { connections: AmazonConnection[] }) {
-  const [open, setOpen] = React.useState(false);
+export function AccountsClient() {
+  const [accounts, setAccounts] = React.useState<Account[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [testingId, setTestingId] = React.useState<string | null>(null);
 
-  function connect() {
-    setOpen(false);
-    toast.message("Not wired", { description: "Redirect to Amazon consent + store refresh token." });
+  async function loadAccounts() {
+    setLoading(true);
+    try {
+      const res = await fetch(hermesApiUrl("/api/accounts"));
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setAccounts(json.accounts ?? []);
+    } catch (e: any) {
+      toast.error("Failed to load accounts", { description: e?.message ?? "" });
+      setAccounts([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  async function testConnection(account: Account) {
+    const marketplaceId = account.marketplaceIds[0];
+    if (!marketplaceId) {
+      toast.error("No marketplace ID configured for this account");
+      return;
+    }
+
+    setTestingId(account.id);
+    try {
+      const res = await fetch(hermesApiUrl("/api/accounts/test"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectionId: account.id,
+          marketplaceId,
+        }),
+      });
+      const json = await res.json();
+      if (json?.ok) {
+        toast.success(json.message ?? "Connection healthy");
+      } else {
+        toast.error("Connection test failed", { description: json?.error ?? `HTTP ${res.status}` });
+      }
+    } catch (e: any) {
+      toast.error("Connection test failed", { description: e?.message ?? "" });
+    } finally {
+      setTestingId(null);
+    }
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Accounts"
-        right={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Amazon account</DialogTitle>
-              </DialogHeader>
+      <PageHeader title="Accounts" />
 
-              <div className="grid gap-4 py-2">
-                <div className="space-y-2">
-                  <Label>Display name</Label>
-                  <Input placeholder="e.g. US Seller" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Seller ID</Label>
-                  <Input placeholder="A1…" />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={connect}>Continue</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        }
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {connections.map((c) => (
-          <Card key={c.id} className="transition-shadow hover:shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{c.accountName}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {c.region} • {c.marketplaceIds.join(", ")}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : accounts.length === 0 ? (
+        <EmptyState
+          icon={PlugZap}
+          title="No accounts configured"
+        />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {accounts.map((c) => (
+            <Card key={c.id} className="transition-shadow hover:shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{c.accountName}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {c.region} • {c.marketplaceIds.join(", ")}
+                    </div>
                   </div>
+                  {statusBadge(c.status)}
                 </div>
-                {statusBadge(c.status)}
-              </div>
 
-              <div className="mt-4 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="justify-between"
-                  onClick={() => toast.message("Not wired")}
-                >
-                  Reauth <ExternalLink className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="justify-between"
-                  onClick={() => toast.message("Not wired")}
-                >
-                  Test <PlugZap className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={testingId === c.id}
+                    onClick={() => testConnection(c)}
+                  >
+                    {testingId === c.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlugZap className="h-4 w-4" />
+                    )}
+                    Test
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
