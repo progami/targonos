@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +10,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SplitButton } from '@/components/ui/split-button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useSettlementsListStore } from '@/lib/store/settlements';
@@ -110,21 +108,6 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   return <Badge variant="outline">Plutus: Pending</Badge>;
 }
 
-function SettlementActionButton({ settlementId }: { settlementId: string }) {
-  const router = useRouter();
-
-  return (
-    <SplitButton
-      onClick={() => router.push(`/settlements/${settlementId}`)}
-      dropdownItems={[
-        { label: 'View', onClick: () => router.push(`/settlements/${settlementId}`) },
-        { label: 'Upload Audit', onClick: () => router.push(`/settlements/${settlementId}?tab=analysis`) },
-      ]}
-    >
-      Action
-    </SplitButton>
-  );
-}
 
 
 
@@ -306,7 +289,6 @@ export default function SettlementsPage() {
                       <TableHead>Settlement Total</TableHead>
                       <TableHead>LMB</TableHead>
                       <TableHead>Plutus</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -343,19 +325,19 @@ export default function SettlementsPage() {
                       settlements.map((s) => (
                         <TableRow key={s.id}>
                           <TableCell className="align-top">
-                            <div className="flex items-center gap-2">
+                            <Link href={`/settlements/${s.id}`} className="flex items-center gap-2 group">
                               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
                                 {s.marketplace.region}
                               </span>
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
                                   {s.marketplace.label}
                                 </div>
                                 <div className="mt-0.5 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
                                   {s.docNumber}
                                 </div>
                               </div>
-                            </div>
+                            </Link>
                           </TableCell>
                           <TableCell className="align-top text-sm">
                             <div className="text-slate-700 dark:text-slate-200">
@@ -373,9 +355,6 @@ export default function SettlementsPage() {
                           </TableCell>
                           <TableCell className="align-top">
                             <PlutusPill status={s.plutusStatus} />
-                          </TableCell>
-                          <TableCell className="align-top text-right">
-                            <SettlementActionButton settlementId={s.id} />
                           </TableCell>
                         </TableRow>
                       ))}
