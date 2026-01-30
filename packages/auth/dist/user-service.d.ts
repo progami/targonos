@@ -6,7 +6,6 @@ export type AuthenticatedUser = {
     email: string;
     username: string | null;
     fullName: string | null;
-    roles: string[];
     entitlements: Record<string, {
         departments: string[];
     }>;
