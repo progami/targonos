@@ -372,9 +372,9 @@ export default function CostLedgerPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full table-auto text-sm">
-                <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold">
+                <thead>
+                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
                       <div className="flex items-center justify-between gap-1">
                         <span>Week Ending</span>
                         <Popover>
@@ -423,19 +423,19 @@ export default function CostLedgerPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Inbound</span>
                         {renderNumericFilter('Inbound', 'inboundMin', 'inboundMax')}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Outbound</span>
                         {renderNumericFilter('Outbound', 'outboundMin', 'outboundMax')}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Forwarding</span>
                         {renderNumericFilter(
@@ -445,19 +445,19 @@ export default function CostLedgerPage() {
                         )}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Storage</span>
                         {renderNumericFilter('Storage', 'storageMin', 'storageMax')}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Other</span>
                         {renderNumericFilter('Other', 'otherMin', 'otherMax')}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Total</span>
                         {renderNumericFilter('Total', 'totalMin', 'totalMax')}

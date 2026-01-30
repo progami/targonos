@@ -241,11 +241,11 @@ function InventoryPage() {
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
               <table className="w-full min-w-[1200px] table-auto text-sm">
                 <thead>
-                  <tr className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-3 py-2 text-left font-semibold w-48">
+                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-48">
                       <span>Source</span>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold w-56">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-56">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -310,7 +310,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold w-40">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -373,7 +373,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold w-64">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-64">
                       <div className="flex items-center gap-1">
                         <span>SKU Description</span>
                         <Popover>
@@ -417,7 +417,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold w-40">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -480,10 +480,10 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold w-40">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
                       <span>Reference ID</span>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -493,7 +493,7 @@ function InventoryPage() {
                         {getSortIcon('cartons')}
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -503,7 +503,7 @@ function InventoryPage() {
                         {getSortIcon('pallets')}
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-right font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -513,8 +513,8 @@ function InventoryPage() {
                         {getSortIcon('units')}
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Movement Type</th>
-                    <th className="px-3 py-2 text-left font-semibold">
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Movement Type</th>
+                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -632,7 +632,7 @@ function InventoryPage() {
                       : null
 
                     return (
-                      <tr key={balance.id} className="odd:bg-muted/20">
+                      <tr key={balance.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                         <td
                           className="px-3 py-2 text-sm font-semibold text-foreground whitespace-nowrap"
                           title={
@@ -717,13 +717,13 @@ function InventoryPage() {
               <div className="min-w-[1200px]">
                 <div className="grid grid-cols-[repeat(11,minmax(0,1fr))] text-xs uppercase tracking-wide text-muted-foreground">
                   <div className="col-span-6 px-3 py-2 font-semibold text-left">Totals</div>
-                  <div className="col-span-1 px-3 py-2 text-right font-semibold text-primary whitespace-nowrap">
+                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right text-primary whitespace-nowrap">
                     {tableTotals.cartons.toLocaleString()}
                   </div>
-                  <div className="col-span-1 px-3 py-2 text-right font-semibold whitespace-nowrap">
+                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right whitespace-nowrap">
                     {tableTotals.pallets.toLocaleString()}
                   </div>
-                  <div className="col-span-1 px-3 py-2 text-right font-semibold whitespace-nowrap">
+                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right whitespace-nowrap">
                     {tableTotals.units.toLocaleString()}
                   </div>
                   <div className="col-span-2" />

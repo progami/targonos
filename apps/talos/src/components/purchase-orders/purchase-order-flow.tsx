@@ -2506,10 +2506,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     editingForwardingQuantity > 0
       ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
       : null
-  const canDownloadPdf = !isCreate
-  const canDownloadShippingMarks =
-    !isCreate && Boolean(order) && !isTerminalStatus && flowStatus !== 'DRAFT'
-  const pdfLabel = flowStatus === 'DRAFT' ? 'RFQ PDF' : 'PO PDF'
+  const showRfqPdfDownload = !isCreate && activeViewStage === 'DRAFT' && order?.status === 'DRAFT'
+  const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED' && order?.status !== 'DRAFT'
+  const showShippingMarksDownload =
+    !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus && order?.status !== 'DRAFT'
   const displayOrderNumber = isCreate
     ? 'New RFQ'
     : flowStatus === 'DRAFT'
@@ -2908,7 +2908,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         backLabel="Back"
         actions={
           <>
-            {canDownloadPdf && (
+            {showRfqPdfDownload && (
               <Button
                 variant="outline"
                 size="sm"
@@ -2916,10 +2916,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
-                {pdfLabel}
+                RFQ PDF
               </Button>
             )}
-            {canDownloadShippingMarks && (
+            {showPoPdfDownload && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDownloadPdf()}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                PO PDF
+              </Button>
+            )}
+            {showShippingMarksDownload && (
               <Button
                 variant="outline"
                 size="sm"
@@ -4823,14 +4834,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 {false && (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-auto text-sm">
-                  <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-semibold">Stage</th>
-                      <th className="px-4 py-2 text-left font-semibold">Document Type</th>
-                      <th className="px-4 py-2 text-left font-semibold">File</th>
-                      <th className="px-4 py-2 text-left font-semibold">Uploaded</th>
-                      <th className="px-4 py-2 text-left font-semibold">Status</th>
-                      <th className="px-4 py-2 text-right font-semibold">Actions</th>
+                  <thead>
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Stage</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Document Type</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">File</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Uploaded</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Status</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -7194,13 +7205,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 ) : (
                   <table className="min-w-full table-auto text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="w-10 px-4 py-2"></th>
-                        <th className="px-4 py-2 text-left font-semibold">Action</th>
-                        <th className="px-4 py-2 text-left font-semibold">Changes</th>
-                        <th className="px-4 py-2 text-left font-semibold">By</th>
-                        <th className="px-4 py-2 text-left font-semibold">Date</th>
+                    <thead>
+                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                        <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Changes</th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -312,20 +312,20 @@ export default function SuppliersPanel({
         ) : (
           <div className="overflow-hidden">
             <table className="w-full table-fixed text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th className="w-[22%] px-4 py-3 text-left font-semibold">Name</th>
-                  <th className="w-[10%] px-4 py-3 text-left font-semibold">Contact</th>
-                  <th className="w-[22%] px-4 py-3 text-left font-semibold">Email</th>
-                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Phone</th>
-                  <th className="w-[24%] px-4 py-3 text-left font-semibold">Default Terms</th>
-                  <th className="w-[8%] px-4 py-3 text-right font-semibold">Actions</th>
+              <thead>
+                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
+                  <th className="w-[10%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Contact</th>
+                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Email</th>
+                  <th className="w-[14%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
+                  <th className="w-[24%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Default Terms</th>
+                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              <tbody>
                 {filteredSuppliers.map(supplier => (
-                  <tr key={supplier.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
+                  <tr key={supplier.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                    <td className="px-3 py-2 font-medium text-foreground">
                       <button
                         type="button"
                         onClick={() => openEdit(supplier)}
@@ -335,23 +335,23 @@ export default function SuppliersPanel({
                         {supplier.name}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 truncate" title={supplier.contactName ?? undefined}>
+                    <td className="px-3 py-2 text-muted-foreground truncate" title={supplier.contactName ?? undefined}>
                       {supplier.contactName ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {supplier.email ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                       {supplier.phone ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 truncate" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
+                    <td className="px-3 py-2 text-sm text-muted-foreground truncate" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
                       {supplier.defaultPaymentTerms || supplier.defaultIncoterms ? (
                         [supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ')
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-500">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-2 text-right">
                       <Button
                         variant="outline"
                         size="sm"
