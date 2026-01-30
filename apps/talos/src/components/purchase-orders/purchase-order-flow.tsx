@@ -18,6 +18,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Check,
@@ -3516,9 +3517,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             [line.id]: e.target.value,
                                           }))
                                         }
-                                        className={
-                                          issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                        }
+                                        className={cn(
+                                          'h-7 w-20 px-2 py-0 text-xs',
+                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                         data-gate-key={gateKey}
                                       />
                                       {issue && <p className="text-xs text-rose-600">{issue}</p>}
@@ -3547,9 +3549,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             piNumber: trimmed.length > 0 ? trimmed : null,
                                           })
                                         }}
-                                        className={
-                                          issue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                                        }
+                                        className={cn(
+                                          'h-7 px-2 py-0 text-xs',
+                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                       />
                                       {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                     </div>
@@ -3612,7 +3615,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   void ensureSkuBatchesLoaded(skuId)
                                 }}
                                 disabled={skusLoading || addLineSubmitting}
-                                className="w-full h-8 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
                               >
                                 <option value="">Select SKU</option>
                                 {skus.map(sku => (
@@ -3638,7 +3641,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   })
                                 }}
                                 disabled={!newLineDraft.skuId || addLineSubmitting}
-                                className="w-full h-8 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                                className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
                               >
                                 {!newLineDraft.skuId ? (
                                   <option value="">—</option>
@@ -3678,7 +3681,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   }))
                                 }}
                                 disabled={addLineSubmitting}
-                                className="h-8 w-20 text-right"
+                                className="h-7 w-20 px-2 py-0 text-xs text-right"
                               />
                             </td>
                             <td className="px-3 py-2">
@@ -3699,7 +3702,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 }
                                 disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
                                 placeholder="—"
-                                className="h-8 w-20 text-right"
+                                className="h-7 w-20 px-2 py-0 text-xs text-right"
                               />
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
@@ -3719,7 +3722,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 }
                                 placeholder="Notes"
                                 disabled={addLineSubmitting}
-                                className="h-8 w-24"
+                                className="h-7 w-24 px-2 py-0 text-xs"
                               />
                             </td>
                             <td className="px-3 py-2 text-right text-muted-foreground">—</td>
@@ -3818,7 +3821,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         const trimmed = e.target.value.trim()
                                         void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
                                       }}
-                                      className={`h-8 w-28 ${issue('commodityCode') ? 'border-rose-500' : ''}`}
+                                      className={`h-7 w-28 px-2 py-0 text-xs ${issue('commodityCode') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
                                     <span className="text-foreground" data-gate-key={`${issuePrefix}.commodityCode`}>
@@ -3859,7 +3862,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                           void patchOrderLine(line.id, { unitsPerCarton: parsed })
                                         }}
-                                        className={`h-8 w-16 text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-16 px-2 py-0 text-xs text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
                                       />
                                     </div>
                                   ) : (
@@ -3882,7 +3885,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="1"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
                                       />
                                       <Input
                                         type="number"
@@ -3894,7 +3897,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="2"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
                                       />
                                       <Input
                                         type="number"
@@ -3906,7 +3909,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="3"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-8 w-14 text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
                                       />
                                     </div>
                                   ) : (
@@ -3938,7 +3941,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                           void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
                                         }}
-                                        className={`h-8 w-20 text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-20 px-2 py-0 text-xs text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
                                       />
                                     </div>
                                   ) : (
@@ -3970,7 +3973,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                           void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
                                         }}
-                                        className={`h-8 w-20 text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
+                                        className={`h-7 w-20 px-2 py-0 text-xs text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
                                       />
                                     </div>
                                   ) : (
@@ -3988,7 +3991,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         const trimmed = e.target.value.trim()
                                         void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
                                       }}
-                                      className={`h-8 w-24 ${issue('material') ? 'border-rose-500' : ''}`}
+                                      className={`h-7 w-24 px-2 py-0 text-xs ${issue('material') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
                                     <span className="text-foreground" data-gate-key={`${issuePrefix}.material`}>
@@ -4079,9 +4082,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             }
                                             void patchOrderLine(line.id, { quantityReceived: parsed })
                                           }}
-                                          className={
-                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right' : 'text-right'
-                                          }
+                                          className={cn(
+                                            'h-7 w-20 px-2 py-0 text-xs text-right',
+                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                          )}
                                         />
                                         {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                       </div>
@@ -4335,7 +4339,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 void ensureSkuBatchesLoaded(skuId)
                               }}
                               disabled={skusLoading || addLineSubmitting}
-                              className="w-full h-8 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                              className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
                             >
                               <option value="">Select SKU</option>
                               {skus.map(sku => (
@@ -4361,7 +4365,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 })
                               }}
                               disabled={!newLineDraft.skuId || addLineSubmitting}
-                              className="w-full h-8 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
+                              className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
                             >
                               {!newLineDraft.skuId ? (
                                 <option value="">—</option>
@@ -4401,7 +4405,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 }))
                               }}
                               disabled={addLineSubmitting}
-                              className="h-8 w-20 text-right"
+                              className="h-7 w-20 px-2 py-0 text-xs text-right"
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -4422,7 +4426,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               }
                               disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
                               placeholder="—"
-                              className="h-8 w-20 text-right"
+                              className="h-7 w-20 px-2 py-0 text-xs text-right"
                             />
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
@@ -4441,7 +4445,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               }
                               placeholder="Notes"
                               disabled={addLineSubmitting}
-                              className="h-8 w-24"
+                              className="h-7 w-24 px-2 py-0 text-xs"
                             />
                           </td>
                           <td className="px-3 py-2 text-right text-muted-foreground">—</td>
@@ -4526,7 +4530,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       const value = e.target.value
                                       updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
                                     }}
-                                    className="h-8 w-28"
+                                    className="h-7 w-28 px-2 py-0 text-xs"
                                   />
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
@@ -4550,7 +4554,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           quantity: Math.ceil(current.unitsOrdered / parsed),
                                         }))
                                       }}
-                                      className="h-8 w-16 text-right"
+                                      className="h-7 w-16 px-2 py-0 text-xs text-right"
                                     />
                                   </div>
                                 </td>
@@ -4582,7 +4586,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                         })
                                       }}
-                                      className="h-8 w-14 text-center"
+                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
                                     />
                                     <Input
                                       type="number"
@@ -4609,7 +4613,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                         })
                                       }}
-                                      className="h-8 w-14 text-center"
+                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
                                     />
                                     <Input
                                       type="number"
@@ -4636,7 +4640,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
                                         })
                                       }}
-                                      className="h-8 w-14 text-center"
+                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
                                     />
                                   </div>
                                 </td>
@@ -4657,7 +4661,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
                                         }))
                                       }}
-                                      className="h-8 w-20 text-right"
+                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
                                     />
                                   </div>
                                 </td>
@@ -4678,7 +4682,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
                                         }))
                                       }}
-                                      className="h-8 w-20 text-right"
+                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
                                     />
                                   </div>
                                 </td>
@@ -4690,7 +4694,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       const value = e.target.value
                                       updateLine(current => ({ ...current, material: value.trim() ? value : null }))
                                     }}
-                                    className="h-8 w-24"
+                                    className="h-7 w-24 px-2 py-0 text-xs"
                                   />
                                 </td>
                               </tr>
@@ -5331,7 +5335,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           })
                                         )
                                       }}
-                                      className="text-right w-24"
+                                      className="h-7 px-2 py-0 text-xs text-right w-24"
                                     />
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
@@ -5373,7 +5377,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             })
                                           )
                                         }}
-                                        className={issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right w-28' : 'text-right w-28'}
+                                        className={cn(
+                                          'h-7 px-2 py-0 text-xs text-right w-28',
+                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                       />
                                       {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                     </div>
@@ -5772,6 +5779,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         }))
                                       }
                                       disabled={!canEditForwardingCosts || forwardingCostSubmitting}
+                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
                                     />
                                   ) : (
                                     row.quantity.toLocaleString(undefined, {
@@ -5819,6 +5827,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       }
                                       disabled={!canEditForwardingCosts || forwardingCostSubmitting}
                                       placeholder="Notes"
+                                      className="h-7 px-2 py-0 text-xs"
                                     />
                                   ) : (
                                     <p className="text-muted-foreground">{row.notes ? row.notes : '—'}</p>
