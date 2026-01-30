@@ -4046,7 +4046,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               const delta = received !== null ? received - line.quantity : null
 
                               return (
-                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700">
+                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                                   <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
                                     {line.skuCode}
                                   </td>
@@ -5165,14 +5165,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         const isUploading = Boolean(uploadingDoc[key])
 
                         return (
-                          <tr key={key} className="border-t hover:bg-muted/10">
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                          <tr key={key} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                               {row.stageLabel}
                             </td>
-                            <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                               {row.label}
                             </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap max-w-[200px]">
+                            <td className="px-3 py-2 whitespace-nowrap max-w-[200px]">
                               {existing ? (
                                 <button
                                   type="button"
@@ -5186,10 +5186,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                               {existing ? formatDateOnly(existing.uploadedAt) : '—'}
                             </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap">
+                            <td className="px-3 py-2 whitespace-nowrap">
                               <Badge
                                 variant="outline"
                                 className={
@@ -5201,7 +5201,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 {existing ? 'UPLOADED' : 'PENDING'}
                               </Badge>
                             </td>
-                            <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                            <td className="px-3 py-2 whitespace-nowrap text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {existing && (
                                   <Button
@@ -5701,25 +5701,25 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="bg-white dark:bg-slate-900 text-xs uppercase tracking-wide text-muted-foreground">
-                          <th className="text-left px-4 py-2 font-medium">Cost</th>
-                          <th className="text-right px-4 py-2 font-medium">Qty</th>
-                          <th className="text-right px-4 py-2 font-medium">Unit Rate</th>
-                          <th className="text-right px-4 py-2 font-medium">Total</th>
-                          <th className="text-left px-4 py-2 font-medium">Notes</th>
-                          <th className="text-right px-4 py-2 font-medium">Actions</th>
+                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Qty</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Rate</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {forwardingCostsLoading ? (
-                          <tr className="border-t border-slate-100 dark:border-slate-700">
-                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                          <tr className="border-t border-slate-200 dark:border-slate-700">
+                            <td colSpan={6} className="px-3 py-2 text-sm text-muted-foreground">
                               Loading cargo costs...
                             </td>
                           </tr>
                         ) : forwardingCosts.length === 0 ? (
-                          <tr className="border-t border-slate-100 dark:border-slate-700">
-                            <td colSpan={6} className="px-4 py-3 text-sm text-muted-foreground">
+                          <tr className="border-t border-slate-200 dark:border-slate-700">
+                            <td colSpan={6} className="px-3 py-2 text-sm text-muted-foreground">
                               No cargo costs added.
                             </td>
                           </tr>
@@ -5730,8 +5730,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             const isDeleting = forwardingCostDeletingId === row.id
 
                             return (
-                              <tr key={row.id} className="border-t border-slate-100 dark:border-slate-700">
-                                <td className="px-4 py-2">
+                              <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                <td className="px-3 py-2">
                                   {isEditing ? (
                                     <select
                                       value={editingForwardingCostDraft.costName}
@@ -5758,7 +5758,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
 
-                                <td className="px-4 py-2 text-right tabular-nums">
+                                <td className="px-3 py-2 text-right tabular-nums">
                                   {isEditing ? (
                                     <Input
                                       type="number"
@@ -5781,7 +5781,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
 
-                                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                                   {isEditing ? (
                                     editingForwardingUnitRate !== null
                                       ? `${currencyLabel} ${editingForwardingUnitRate.toFixed(4)}`
@@ -5791,7 +5791,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
 
-                                <td className="px-4 py-2 text-right tabular-nums font-medium">
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
                                   {isEditing ? (
                                     editingForwardingTotal !== null
                                       ? `${currencyLabel} ${editingForwardingTotal.toLocaleString(undefined, {
@@ -5807,7 +5807,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
 
-                                <td className="px-4 py-2">
+                                <td className="px-3 py-2">
                                   {isEditing ? (
                                     <Input
                                       value={editingForwardingCostDraft.notes}
@@ -5825,7 +5825,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   )}
                                 </td>
 
-                                <td className="px-4 py-2 text-right">
+                                <td className="px-3 py-2 text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     {isEditing ? (
                                       <>
@@ -5896,10 +5896,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
-                          <td colSpan={3} className="px-4 py-2 text-right font-medium text-muted-foreground">
+                          <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
                             Cargo Subtotal
                           </td>
-                          <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold">
                             {tenantCurrency}{' '}
                             {forwardingSubtotal.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
@@ -5934,21 +5934,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-muted-foreground">
-                            <th className="text-left px-4 py-2 font-medium">Cost</th>
-                            <th className="text-right px-4 py-2 font-medium">Total</th>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {inboundCostRows.map(row => (
                             <tr
                               key={row.costName}
-                              className="border-t border-slate-100 dark:border-slate-700"
+                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-4 py-2 font-medium text-foreground">
+                              <td className="px-3 py-2 font-medium text-foreground">
                                 {row.costName}
                               </td>
-                              <td className="px-4 py-2 text-right tabular-nums font-medium">
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">
                                 {tenantCurrency}{' '}
                                 {row.totalCost.toLocaleString(undefined, {
                                   minimumFractionDigits: 2,
@@ -5960,10 +5960,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
-                            <td className="px-4 py-2 text-right font-medium text-muted-foreground">
+                            <td className="px-3 py-2 text-right font-medium text-muted-foreground">
                               Inbound Subtotal
                             </td>
-                            <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                            <td className="px-3 py-2 text-right tabular-nums font-semibold">
                               {tenantCurrency}{' '}
                               {inboundSubtotal.toLocaleString(undefined, {
                                 minimumFractionDigits: 2,
@@ -6197,9 +6197,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <table className="w-full text-sm">
                       <tbody>
-	                        <tr className="border-b border-slate-100 dark:border-slate-700">
-	                          <td className="px-4 py-2 text-muted-foreground">Product Costs</td>
-	                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+	                          <td className="px-3 py-2 text-muted-foreground">Product Costs</td>
+	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
 	                            {tenantCurrency}{' '}
 	                            {productSubtotal.toLocaleString(undefined, {
 	                                minimumFractionDigits: 2,
@@ -6207,9 +6207,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	                              })}
 	                          </td>
 	                        </tr>
-                        <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <td className="px-4 py-2 text-muted-foreground">Cargo Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 text-muted-foreground">Cargo Costs</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium">
                             {forwardingSubtotal > 0
                               ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
                                   minimumFractionDigits: 2,
@@ -6218,9 +6218,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               : '—'}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <td className="px-4 py-2 text-muted-foreground">Inbound Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 text-muted-foreground">Inbound Costs</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium">
                             {inboundSubtotal > 0
                               ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
                                   minimumFractionDigits: 2,
@@ -6229,17 +6229,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               : '—'}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <td className="px-4 py-2 text-muted-foreground">Storage Costs</td>
-                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 text-muted-foreground">Storage Costs</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
                         </tr>
-	                        <tr className="border-b border-slate-100 dark:border-slate-700">
-	                          <td className="px-4 py-2 text-muted-foreground">Outbound Costs</td>
-	                          <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">—</td>
+	                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+	                          <td className="px-3 py-2 text-muted-foreground">Outbound Costs</td>
+	                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
 	                        </tr>
-	                        <tr className="border-b border-slate-100 dark:border-slate-700">
-	                          <td className="px-4 py-2 text-muted-foreground">Supplier Adjustment</td>
-	                          <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                        <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+	                          <td className="px-3 py-2 text-muted-foreground">Supplier Adjustment</td>
+	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
 	                            {supplierAdjustment
 	                              ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
 	                                  minimumFractionDigits: 2,
@@ -6249,9 +6249,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	                          </td>
 	                        </tr>
 	                        {order.stageData.warehouse?.dutyAmount != null && (
-	                          <tr className="border-b border-slate-100 dark:border-slate-700">
-	                            <td className="px-4 py-2 text-muted-foreground">Customs & Duty</td>
-	                            <td className="px-4 py-2 text-right tabular-nums font-medium">
+	                          <tr className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+	                            <td className="px-3 py-2 text-muted-foreground">Customs & Duty</td>
+	                            <td className="px-3 py-2 text-right tabular-nums font-medium">
 	                              {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 	                            </td>
 	                          </tr>
@@ -6259,8 +6259,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </tbody>
                       <tfoot>
 	                        <tr className="bg-slate-50 dark:bg-slate-800/50">
-	                          <td className="px-4 py-3 font-semibold">Total Cost</td>
-	                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-lg">
+	                          <td className="px-3 py-2 font-semibold">Total Cost</td>
+	                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-lg">
 	                            {tenantCurrency}{' '}
 	                            {totalCostSummary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 	                          </td>
@@ -7468,7 +7468,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     Loading history…
                   </div>
                 ) : (
-                  <table className="min-w-full table-auto text-sm">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                         <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
@@ -7488,14 +7488,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           const { Icon, iconClassName } = getAuditActionTheme(entry.action)
 
                           return (
-                            <tr key={entry.id} className="border-t hover:bg-muted/10">
-                              <td className="px-4 py-2.5">
+                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                              <td className="px-3 py-2">
                                 <Icon className={`h-4 w-4 ${iconClassName}`} />
                               </td>
-                              <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                                 {title}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground max-w-[300px]">
+                              <td className="px-3 py-2 text-muted-foreground max-w-[300px]">
                                 {changes.length > 0 ? (
                                   <span className="line-clamp-2" title={changes.join(', ')}>
                                     {changes.join(', ')}
@@ -7504,10 +7504,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   '—'
                                 )}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                                 {actor}
                               </td>
-                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                                 {formatDateOnly(entry.createdAt)}
                               </td>
                             </tr>
@@ -7515,18 +7515,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         })
                       ) : order.approvalHistory && order.approvalHistory.length > 0 ? (
                         order.approvalHistory.map((approval, index) => (
-                          <tr key={index} className="border-t hover:bg-muted/10">
-                            <td className="px-4 py-2.5">
+                          <tr key={index} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                            <td className="px-3 py-2">
                               <Check className="h-4 w-4 text-emerald-600" />
                             </td>
-                            <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                               {approval.stage}
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground">—</td>
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                            <td className="px-3 py-2 text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                               {approval.approvedBy || 'Unknown'}
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                               {approval.approvedAt ? formatDateOnly(approval.approvedAt) : '—'}
                             </td>
                           </tr>
