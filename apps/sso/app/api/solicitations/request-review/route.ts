@@ -1,15 +1,18 @@
-import { NextResponse } from 'next/server'
-
 export const runtime = 'nodejs'
 
-function targetUrl(req: Request): URL {
-  return new URL('/hermes/api/solicitations/request-review', req.url)
+function redirectToHermes(): Response {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      location: '/hermes/api/solicitations/request-review',
+    },
+  })
 }
 
-export function GET(req: Request) {
-  return NextResponse.redirect(targetUrl(req), { status: 307 })
+export function GET() {
+  return redirectToHermes()
 }
 
-export function POST(req: Request) {
-  return NextResponse.redirect(targetUrl(req), { status: 307 })
+export function POST() {
+  return redirectToHermes()
 }
