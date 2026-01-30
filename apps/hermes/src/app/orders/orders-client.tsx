@@ -83,6 +83,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
 
   const [orders, setOrders] = React.useState<RecentOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = React.useState(true);
+  const loadSeqRef = React.useRef(0);
 
   // Backfill dialog
   const [open, setOpen] = React.useState(false);
@@ -114,28 +115,57 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     setCreatedBefore(new Date().toISOString());
   }, [presetDays]);
 
-  async function loadRecent() {
+  async function loadAllOrders() {
     if (!connectionId) return;
+    const seq = loadSeqRef.current + 1;
+    loadSeqRef.current = seq;
+
     setLoadingOrders(true);
     try {
-      const res = await fetch(
-        hermesApiUrl(
-          `/api/orders/recent?connectionId=${encodeURIComponent(connectionId)}&limit=25`
-        )
-      );
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-      setOrders(json.orders ?? []);
+      const all: RecentOrder[] = [];
+      let cursor: string | null = null;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (loadSeqRef.current !== seq) return;
+
+        const qs = new URLSearchParams();
+        qs.set("connectionId", connectionId);
+        qs.set("limit", "500");
+        if (cursor) qs.set("cursor", cursor);
+
+        const res = await fetch(hermesApiUrl(`/api/orders/list?${qs.toString()}`));
+        const json = await res.json();
+        if (!res.ok || json?.ok !== true) {
+          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+        }
+        if (!Array.isArray(json.orders)) {
+          throw new Error("Invalid response (orders)");
+        }
+
+        all.push(...(json.orders as RecentOrder[]));
+
+        if (json.nextCursor === null) break;
+        if (typeof json.nextCursor !== "string") {
+          throw new Error("Invalid response (nextCursor)");
+        }
+        cursor = json.nextCursor;
+      }
+
+      if (loadSeqRef.current !== seq) return;
+      setOrders(all);
     } catch (e: any) {
+      if (loadSeqRef.current !== seq) return;
       setOrders([]);
       toast.error("Could not load orders", { description: e?.message ?? "" });
     } finally {
+      if (loadSeqRef.current !== seq) return;
       setLoadingOrders(false);
     }
   }
 
   React.useEffect(() => {
-    loadRecent();
+    loadAllOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionId]);
 
@@ -222,7 +252,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         });
       }
       setOpen(false);
-      await loadRecent();
+      await loadAllOrders();
     } catch (e: any) {
       toast.error("Sync failed", { description: e?.message ?? "" });
     } finally {
@@ -415,8 +445,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Recent orders</CardTitle>
-            <Button size="sm" variant="ghost" onClick={loadRecent} disabled={loadingOrders}>
+            <CardTitle className="text-base">Orders</CardTitle>
+            <Button size="sm" variant="ghost" onClick={loadAllOrders} disabled={loadingOrders}>
               <CalendarClock className="h-4 w-4" />
               Refresh
             </Button>
