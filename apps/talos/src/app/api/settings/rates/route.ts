@@ -11,9 +11,9 @@ export const dynamic = 'force-dynamic'
 let _placeholderPasswordHash: string | null = null
 function getPlaceholderPasswordHash(): string {
  if (!_placeholderPasswordHash) {
-  const password = process.env.WMS_SSO_PLACEHOLDER_PASSWORD
+  const password = process.env.TALOS_SSO_PLACEHOLDER_PASSWORD
   if (!password) {
-   throw new Error('WMS_SSO_PLACEHOLDER_PASSWORD environment variable is required')
+   throw new Error('TALOS_SSO_PLACEHOLDER_PASSWORD environment variable is required')
   }
   _placeholderPasswordHash = bcrypt.hashSync(password, 10)
  }
@@ -28,7 +28,7 @@ const normalizeRole = (role?: unknown): UserRole => {
  return 'staff'
 }
 
-const ensureWmsUser = async (session: Session, prisma: PrismaClient) => {
+const ensureTalosUser = async (session: Session, prisma: PrismaClient) => {
  const rawEmail = session.user?.email
 
  if (!rawEmail) {
@@ -183,11 +183,11 @@ export async function POST(request: NextRequest) {
     {
      error: `A rate named "${costName}" already exists for this warehouse on ${effectiveOn.toISOString().slice(0, 10)}.`,
     },
-    { status: 400 }
+   { status: 400 }
    )
   }
 
-  const wmsUser = await ensureWmsUser(session, prisma)
+  const talosUser = await ensureTalosUser(session, prisma)
 
   const newRate = await prisma.costRate.create({
    data: {
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
     unitOfMeasure,
     effectiveDate: effectiveOn,
     endDate: endOn,
-    createdById: wmsUser.id,
+    createdById: talosUser.id,
    },
    include: {
     warehouse: {

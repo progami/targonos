@@ -35,11 +35,6 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
       normalized = { ...normalized, atlas: (normalized as any)[legacyAtlasKey] }
     }
 
-    // Backwards-compat: Talos was previously keyed as WMS in entitlements.
-    if ('wms' in normalized && !('talos' in normalized)) {
-      normalized = { ...normalized, talos: (normalized as any).wms }
-    }
-
     if (legacyXplanKey in normalized && !('xplan' in normalized)) {
       normalized = { ...normalized, xplan: (normalized as any)[legacyXplanKey] }
     }

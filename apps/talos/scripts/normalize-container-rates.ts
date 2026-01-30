@@ -11,8 +11,7 @@ import { DEFAULT_TENANT, TENANTS, isValidTenantCode, type TenantCode } from '../
 import { CostCategory } from '@targon/prisma-talos'
 
 const resolveTenantCode = (): TenantCode => {
-  const candidate =
-    process.env.TENANT_CODE ?? process.env.WMS_TENANT ?? process.env.NEXT_PUBLIC_TENANT
+  const candidate = process.env.TENANT_CODE ?? process.env.NEXT_PUBLIC_TENANT
   return isValidTenantCode(candidate) ? candidate : DEFAULT_TENANT
 }
 
