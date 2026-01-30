@@ -307,3 +307,165 @@ export async function listRecentOrders(params: {
     dispatchSentAt: r.dispatch_sent_at ?? null,
   }));
 }
+
+export type HermesOrdersListCursor = {
+  purchaseDate: string | null;
+  importedAt: string;
+  orderId: string;
+};
+
+export async function listOrdersPage(params: {
+  connectionId: string;
+  limit: number;
+  cursor?: HermesOrdersListCursor | null;
+  marketplaceId?: string | null;
+}): Promise<{
+  orders: Array<{
+    orderId: string;
+    marketplaceId: string;
+    purchaseDate: string | null;
+    latestDeliveryDate: string | null;
+    orderStatus: string | null;
+    fulfillmentChannel: string | null;
+    dispatchState: string | null;
+    dispatchScheduledAt: string | null;
+    dispatchExpiresAt: string | null;
+    dispatchSentAt: string | null;
+  }>;
+  nextCursor: HermesOrdersListCursor | null;
+}> {
+  const pool = getPgPool();
+
+  if (!Number.isFinite(params.limit) || params.limit < 1 || params.limit > 500) {
+    throw new Error("limit must be between 1 and 500");
+  }
+  const limit = params.limit;
+  const cursor = params.cursor;
+
+  const values: any[] = [params.connectionId];
+  const where: string[] = ["o.connection_id = $1"];
+
+  if (params.marketplaceId) {
+    values.push(params.marketplaceId);
+    where.push(`o.marketplace_id = $${values.length}`);
+  }
+
+  if (cursor) {
+    const cursorHasPurchaseDate = cursor.purchaseDate !== null;
+
+    if (cursorHasPurchaseDate) {
+      values.push(cursor.purchaseDate);
+      const purchaseDateParam = `$${values.length}::timestamptz`;
+
+      values.push(cursor.importedAt);
+      const importedAtParam = `$${values.length}::timestamptz`;
+
+      values.push(cursor.orderId);
+      const orderIdParam = `$${values.length}`;
+
+      where.push(
+        `
+        (
+          o.purchase_date IS NULL
+          OR (
+            o.purchase_date IS NOT NULL
+            AND (
+              o.purchase_date < ${purchaseDateParam}
+              OR (o.purchase_date = ${purchaseDateParam} AND o.imported_at < ${importedAtParam})
+              OR (o.purchase_date = ${purchaseDateParam} AND o.imported_at = ${importedAtParam} AND o.order_id < ${orderIdParam})
+            )
+          )
+        )
+        `.trim()
+      );
+    } else {
+      values.push(cursor.importedAt);
+      const importedAtParam = `$${values.length}::timestamptz`;
+
+      values.push(cursor.orderId);
+      const orderIdParam = `$${values.length}`;
+
+      where.push(
+        `
+        (
+          o.purchase_date IS NULL
+          AND (
+            o.imported_at < ${importedAtParam}
+            OR (o.imported_at = ${importedAtParam} AND o.order_id < ${orderIdParam})
+          )
+        )
+        `.trim()
+      );
+    }
+  }
+
+  values.push(limit + 1);
+  const limitParam = `$${values.length}`;
+
+  const res = await pool.query(
+    `
+    SELECT
+      o.order_id,
+      o.marketplace_id,
+      o.purchase_date::text AS purchase_date,
+      o.latest_delivery_date::text AS latest_delivery_date,
+      o.order_status,
+      o.fulfillment_channel,
+      o.imported_at::text AS imported_at,
+      d.state AS dispatch_state,
+      d.scheduled_at::text AS dispatch_scheduled_at,
+      d.expires_at::text AS dispatch_expires_at,
+      d.sent_at::text AS dispatch_sent_at
+    FROM hermes_orders o
+    LEFT JOIN hermes_dispatches d
+      ON d.connection_id = o.connection_id
+     AND d.order_id = o.order_id
+     AND d.type = 'request_review'
+    WHERE ${where.join("\n      AND ")}
+    ORDER BY (o.purchase_date IS NULL) ASC, o.purchase_date DESC, o.imported_at DESC, o.order_id DESC
+    LIMIT ${limitParam};
+    `,
+    values
+  );
+
+  const rows = res.rows as Array<{
+    order_id: string;
+    marketplace_id: string;
+    purchase_date: string | null;
+    latest_delivery_date: string | null;
+    order_status: string | null;
+    fulfillment_channel: string | null;
+    imported_at: string;
+    dispatch_state: string | null;
+    dispatch_scheduled_at: string | null;
+    dispatch_expires_at: string | null;
+    dispatch_sent_at: string | null;
+  }>;
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const orders = pageRows.map((r) => ({
+    orderId: r.order_id,
+    marketplaceId: r.marketplace_id,
+    purchaseDate: r.purchase_date,
+    latestDeliveryDate: r.latest_delivery_date,
+    orderStatus: r.order_status,
+    fulfillmentChannel: r.fulfillment_channel,
+    dispatchState: r.dispatch_state,
+    dispatchScheduledAt: r.dispatch_scheduled_at,
+    dispatchExpiresAt: r.dispatch_expires_at,
+    dispatchSentAt: r.dispatch_sent_at,
+  }));
+
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor = (hasMore && last)
+    ? {
+        purchaseDate: last.purchase_date,
+        importedAt: last.imported_at,
+        orderId: last.order_id,
+      }
+    : null;
+
+  return { orders, nextCursor };
+}
