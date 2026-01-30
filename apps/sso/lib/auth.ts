@@ -152,7 +152,6 @@ const baseAuthOptions: NextAuthConfig = {
         token.sub = portal.id
         token.email = portal.email
         token.name = portal.fullName || user?.name || portal.email
-        token.role = portal.roles[0] ?? null
         token.apps = Object.keys(portal.entitlements)
         ;(token as any).roles = portal.entitlements
         ;(token as any).entitlements_ver = Date.now()
@@ -164,7 +163,6 @@ const baseAuthOptions: NextAuthConfig = {
         ;(session.user as any).id = token.sub as string
         session.user.email = (token.email as string | undefined) ?? session.user.email
         session.user.name = (token.name as string | undefined) ?? session.user.name
-        ;(session.user as any).role = (token as any).role as string | undefined
         ;(session.user as any).apps = (token as any).apps as string[] | undefined
       }
       ;(session as any).roles = (token as any).roles
