@@ -487,7 +487,11 @@ function AccountsSection({
       </Card>
 
       <div className="grid gap-4">
-        {renderAccountGroup('Inventory Asset', 'Select parent accounts where Plutus creates brand sub-accounts (e.g., "Inv Manufacturing - US-Dust Sheets")', INVENTORY_ACCOUNTS)}
+        {renderAccountGroup(
+          'Inventory Asset',
+          'For most setups, select your QBO "Inventory Asset" parent for all 4 rows. Plutus creates sub-accounts like "Inv Manufacturing - US-Dust Sheets" under it.',
+          INVENTORY_ACCOUNTS,
+        )}
         {renderAccountGroup('Cost of Goods Sold', 'Select parent accounts for COGS sub-accounts. Plutus posts here when inventory is sold.', COGS_ACCOUNTS)}
         {renderAccountGroup('Revenue & Fees (LMB)', 'Select LMB parent accounts. Plutus creates brand sub-accounts for fee allocation.', LMB_ACCOUNTS)}
       </div>
