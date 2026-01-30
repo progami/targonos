@@ -238,6 +238,8 @@ export default function FulfillmentOrderDetailPage() {
   const [documents, setDocuments] = useState<FulfillmentOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
+  const [inlinePreviewDocument, setInlinePreviewDocument] =
+    useState<FulfillmentOrderDocumentSummary | null>(null)
   const [previewDocument, setPreviewDocument] = useState<FulfillmentOrderDocumentSummary | null>(null)
 
   useEffect(() => {
@@ -357,6 +359,17 @@ export default function FulfillmentOrderDetailPage() {
     }
     return map
   }, [documents])
+
+  const inlineStageMeta = inlinePreviewDocument ? DOCUMENT_STAGE_META[inlinePreviewDocument.stage] : null
+  const InlineStageIcon = inlineStageMeta ? inlineStageMeta.icon : null
+  const inlineIsPdf = Boolean(
+    inlinePreviewDocument &&
+      (inlinePreviewDocument.contentType === 'application/pdf' ||
+        inlinePreviewDocument.fileName.toLowerCase().endsWith('.pdf'))
+  )
+  const inlineIsImage = Boolean(
+    inlinePreviewDocument && inlinePreviewDocument.contentType.startsWith('image/')
+  )
 
   const previewStageMeta = previewDocument ? DOCUMENT_STAGE_META[previewDocument.stage] : null
   const PreviewStageIcon = previewStageMeta ? previewStageMeta.icon : null
@@ -550,7 +563,7 @@ export default function FulfillmentOrderDetailPage() {
 
 
   const renderDocumentStage = (stage: FulfillmentOrderDocumentStage, title: string) => {
-    const required = DOCUMENT_REQUIREMENTS[stage] ?? []
+    const required = DOCUMENT_REQUIREMENTS[stage]
     if (required.length === 0) return null
 
     return (
@@ -583,7 +596,7 @@ export default function FulfillmentOrderDetailPage() {
                     {existing ? (
                       <button
                         type="button"
-                        onClick={() => setPreviewDocument(existing)}
+                        onClick={() => setInlinePreviewDocument(existing)}
                         className="block truncate text-xs text-primary hover:underline"
                         title={existing.fileName}
                       >
@@ -1347,6 +1360,95 @@ export default function FulfillmentOrderDetailPage() {
               <div className="space-y-6">
                 {renderDocumentStage('SHIPPING', 'Shipping Documents')}
                 {renderDocumentStage('DELIVERY', 'Delivery Documents')}
+                {inlinePreviewDocument && inlineStageMeta && (
+                  <div className="rounded-xl border bg-slate-50 dark:bg-slate-900 overflow-hidden">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {InlineStageIcon && <InlineStageIcon className="h-4 w-4" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                              {inlinePreviewDocument.fileName}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {inlineStageMeta.label} •{' '}
+                              {getDocumentLabel(inlinePreviewDocument.stage, inlinePreviewDocument.documentType)}{' '}
+                              • Uploaded {formatDateTimeDisplay(inlinePreviewDocument.uploadedAt)}
+                              {inlinePreviewDocument.uploadedByName
+                                ? ` by ${inlinePreviewDocument.uploadedByName}`
+                                : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPreviewDocument(inlinePreviewDocument)}
+                          title="Full screen preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button asChild variant="ghost" size="icon" title="Open in new tab">
+                          <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setInlinePreviewDocument(null)}
+                          aria-label="Close inline preview"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-700">
+                      <div className="h-[480px] w-full">
+                        {inlineIsImage ? (
+                          <div
+                            className="h-full w-full bg-center bg-no-repeat bg-contain"
+                            style={{ backgroundImage: `url(${inlinePreviewDocument.viewUrl})` }}
+                          />
+                        ) : inlineIsPdf ? (
+                          <iframe
+                            title={inlinePreviewDocument.fileName}
+                            src={inlinePreviewDocument.viewUrl}
+                            className="h-full w-full"
+                          />
+                        ) : (
+                          <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+                            <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                Preview not available
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Open the file in a new tab to view or download.
+                              </p>
+                            </div>
+                            <Button asChild className="gap-2">
+                              <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                                Open file
+                              </a>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
