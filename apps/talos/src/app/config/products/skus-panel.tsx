@@ -1110,17 +1110,17 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full table-auto text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th className="px-2 py-3 text-left font-semibold w-8"></th>
-                  <th className="px-4 py-3 text-left font-semibold">SKU</th>
-                  <th className="px-4 py-3 text-left font-semibold">Description</th>
-                  <th className="px-4 py-3 text-left font-semibold">ASIN</th>
-                  <th className="px-4 py-3 text-right font-semibold">Txns</th>
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
+              <thead>
+                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-8"></th>
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">SKU</th>
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Description</th>
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">ASIN</th>
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Txns</th>
+                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              <tbody>
                 {filteredSkus.map(sku => {
                   const isExpanded = expandedSkuIds.has(sku.id)
 

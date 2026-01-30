@@ -129,16 +129,16 @@ export function FulfillmentOrdersPanel({
       <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] table-auto text-sm">
-            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold">FO #</th>
-                <th className="px-3 py-2 text-left font-semibold">Warehouse</th>
-                <th className="px-3 py-2 text-left font-semibold">Destination</th>
-                <th className="px-3 py-2 text-right font-semibold">Lines</th>
-                <th className="px-3 py-2 text-right font-semibold">Quantity</th>
-                <th className="px-3 py-2 text-left font-semibold">Status</th>
-                <th className="px-3 py-2 text-left font-semibold">Created</th>
-                <th className="px-3 py-2 text-left font-semibold">Shipped</th>
+            <thead>
+              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">FO #</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Warehouse</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Destination</th>
+                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Lines</th>
+                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Quantity</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Status</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Created</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Shipped</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +166,7 @@ export function FulfillmentOrdersPanel({
                         : 'Customer')
 
                   return (
-                    <tr key={order.id} className="odd:bg-muted/20">
+                    <tr key={order.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                       <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                         <Link
                           href={`/operations/fulfillment-orders/${order.id}`}
