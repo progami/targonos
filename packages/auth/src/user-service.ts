@@ -20,7 +20,6 @@ export type AuthenticatedUser = {
   email: string
   username: string | null
   fullName: string | null
-  roles: string[]
   entitlements: Record<string, { departments: string[] }>
 }
 
@@ -31,15 +30,6 @@ const userSelect = {
   firstName: true,
   lastName: true,
   passwordHash: true,
-  roles: {
-    select: {
-      role: {
-        select: {
-          name: true,
-        },
-      },
-    },
-  },
   appAccess: {
     select: {
       departments: true,
@@ -59,7 +49,6 @@ type PortalUserRecord = {
   firstName: string | null
   lastName: string | null
   passwordHash: string
-  roles: Array<{ role: { name: string } }>
   appAccess: Array<{ departments: unknown; app: { slug: string } }>
 }
 
@@ -94,12 +83,6 @@ async function ensureBootstrapPortalAdminUser(normalizedEmail: string) {
   const prisma = getPortalAuthPrisma()
 
   await prisma.$transaction(async (tx) => {
-    const role = await tx.role.upsert({
-      where: { name: 'admin' },
-      update: {},
-      create: { name: 'admin', description: 'Bootstrap admin role' },
-    })
-
     const usernameBase = (normalizedEmail.split('@')[0] || 'admin')
       .trim()
       .toLowerCase()
@@ -136,12 +119,6 @@ async function ensureBootstrapPortalAdminUser(normalizedEmail: string) {
             select: { id: true },
           })
         ).id
-
-    await tx.userRole.upsert({
-      where: { userId_roleId: { userId, roleId: role.id } },
-      update: {},
-      create: { userId, roleId: role.id },
-    })
 
     for (const app of defaultPortalAdminApps()) {
       const appRecord = await tx.app.upsert({
@@ -227,7 +204,6 @@ function buildDemoUser(): AuthenticatedUser {
     email: process.env.DEMO_ADMIN_EMAIL || 'dev-admin@targonglobal.com',
     username: demoUsername,
     fullName: 'Development Admin',
-    roles: ['admin'],
     entitlements,
   }
 }
@@ -288,11 +264,10 @@ export async function getUserByEmail(email: string): Promise<AuthenticatedUser |
 
   if (portalBootstrapAdminEmailSet().has(normalizedEmail)) {
     const requiredSlugs = defaultPortalAdminApps().map((app) => app.slug)
-    const hasAdminRole = user?.roles.some((entry) => entry.role.name === 'admin') ?? false
-    const currentSlugs = new Set(user?.appAccess.map((entry) => entry.app.slug) ?? [])
-    const hasAllAppAccess = requiredSlugs.every((slug) => currentSlugs.has(slug))
+    const currentSlugs = user ? new Set(user.appAccess.map((entry) => entry.app.slug)) : new Set<string>()
+    const hasAllAppAccess = user ? requiredSlugs.every((slug) => currentSlugs.has(slug)) : false
 
-    if (!user || !hasAdminRole || !hasAllAppAccess) {
+    if (!user || !hasAllAppAccess) {
       await ensureBootstrapPortalAdminUser(normalizedEmail)
       user = await fetchUser()
     }
@@ -317,7 +292,6 @@ function mapPortalUser(user: PortalUserRecord): AuthenticatedUser {
     email: user.email,
     username: user.username,
     fullName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
-    roles: user.roles.map((role) => role.role.name),
     entitlements,
   }
 }

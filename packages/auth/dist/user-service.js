@@ -16,15 +16,6 @@ const userSelect = {
     firstName: true,
     lastName: true,
     passwordHash: true,
-    roles: {
-        select: {
-            role: {
-                select: {
-                    name: true,
-                },
-            },
-        },
-    },
     appAccess: {
         select: {
             departments: true,
@@ -60,11 +51,6 @@ function defaultPortalAdminApps() {
 async function ensureBootstrapPortalAdminUser(normalizedEmail) {
     const prisma = getPortalAuthPrisma();
     await prisma.$transaction(async (tx) => {
-        const role = await tx.role.upsert({
-            where: { name: 'admin' },
-            update: {},
-            create: { name: 'admin', description: 'Bootstrap admin role' },
-        });
         const usernameBase = (normalizedEmail.split('@')[0] || 'admin')
             .trim()
             .toLowerCase()
@@ -95,11 +81,6 @@ async function ensureBootstrapPortalAdminUser(normalizedEmail) {
                 },
                 select: { id: true },
             })).id;
-        await tx.userRole.upsert({
-            where: { userId_roleId: { userId, roleId: role.id } },
-            update: {},
-            create: { userId, roleId: role.id },
-        });
         for (const app of defaultPortalAdminApps()) {
             const appRecord = await tx.app.upsert({
                 where: { slug: app.slug },
@@ -169,7 +150,6 @@ function buildDemoUser() {
         email: process.env.DEMO_ADMIN_EMAIL || 'dev-admin@targonglobal.com',
         username: demoUsername,
         fullName: 'Development Admin',
-        roles: ['admin'],
         entitlements,
     };
 }
@@ -219,10 +199,9 @@ export async function getUserByEmail(email) {
     let user = await fetchUser();
     if (portalBootstrapAdminEmailSet().has(normalizedEmail)) {
         const requiredSlugs = defaultPortalAdminApps().map((app) => app.slug);
-        const hasAdminRole = user?.roles.some((entry) => entry.role.name === 'admin') ?? false;
-        const currentSlugs = new Set(user?.appAccess.map((entry) => entry.app.slug) ?? []);
-        const hasAllAppAccess = requiredSlugs.every((slug) => currentSlugs.has(slug));
-        if (!user || !hasAdminRole || !hasAllAppAccess) {
+        const currentSlugs = user ? new Set(user.appAccess.map((entry) => entry.app.slug)) : new Set();
+        const hasAllAppAccess = user ? requiredSlugs.every((slug) => currentSlugs.has(slug)) : false;
+        if (!user || !hasAllAppAccess) {
             await ensureBootstrapPortalAdminUser(normalizedEmail);
             user = await fetchUser();
         }
@@ -245,7 +224,6 @@ function mapPortalUser(user) {
         email: user.email,
         username: user.username,
         fullName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
-        roles: user.roles.map((role) => role.role.name),
         entitlements,
     };
 }
