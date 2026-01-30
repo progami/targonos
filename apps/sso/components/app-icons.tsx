@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
  * Each icon is designed at 24x24 with stroke-based styling using currentColor.
  */
 
-/** Talos (WMS): Hexagon with vertical slit - the watchful eye of the automaton */
+/** Talos: Hexagon with vertical slit - the watchful eye of the automaton */
 export const TalosIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
     {/* Hexagon with vertical slit cutout using evenodd fill-rule */}

@@ -362,14 +362,6 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
         if (decoded && typeof decoded === 'object') {
           const payload = decoded as PortalJwtPayload;
 
-          const roles = payload.roles;
-          if (roles && typeof roles === 'object') {
-            const roleMap = roles as Record<string, any>;
-            if (!roleMap.talos && roleMap.wms) {
-              roleMap.talos = roleMap.wms;
-            }
-          }
-
           return payload;
         }
       } catch (error) {

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const defaultPort = Number(process.env.PORT || process.env.WMS_PORT || 3001);
+const defaultPort = Number(process.env.PORT ?? '3001');
 const basePath = process.env.BASE_PATH ?? '';
 const defaultHost = process.env.HOST || 'localhost';
 const defaultProtocol = process.env.PROTOCOL || 'http';

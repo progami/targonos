@@ -264,13 +264,6 @@ export async function decodePortalSession(options = {}) {
                 });
                 if (decoded && typeof decoded === 'object') {
                     const payload = decoded;
-                    const roles = payload.roles;
-                    if (roles && typeof roles === 'object') {
-                        const roleMap = roles;
-                        if (!roleMap.talos && roleMap.wms) {
-                            roleMap.talos = roleMap.wms;
-                        }
-                    }
                     return payload;
                 }
             }
