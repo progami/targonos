@@ -782,6 +782,27 @@ function formatTextOrDash(value: string | null | undefined) {
   return value
 }
 
+type CargoSubTabKey = 'details' | 'attributes' | 'receiving'
+
+const isIssuedShippingMarksKey = (key: string): boolean => {
+  return (
+    key.includes('.commodityCode') ||
+    key.includes('.countryOfOrigin') ||
+    key.includes('.material') ||
+    key.includes('.netWeightKg') ||
+    key.includes('.cartonWeightKg') ||
+    key.includes('.cartonDimensions') ||
+    key.includes('.unitsPerCarton')
+  )
+}
+
+const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
+  if (!key.startsWith('cargo.')) return null
+  if (isIssuedShippingMarksKey(key)) return 'attributes'
+  if (key.includes('.quantityReceived')) return 'receiving'
+  return 'details'
+}
+
 export type PurchaseOrderFlowMode = 'detail' | 'create'
 
 export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
@@ -2200,6 +2221,40 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     return details
   }, [gateIssues])
 
+  const cargoSubTabIssues = useMemo(() => {
+    const issues: Record<CargoSubTabKey, boolean> = {
+      details: false,
+      attributes: false,
+      receiving: false,
+    }
+
+    if (!gateIssues) return issues
+
+    for (const key of Object.keys(gateIssues)) {
+      const target = resolveCargoSubTabForGateKey(key)
+      if (!target) continue
+      issues[target] = true
+    }
+
+    return issues
+  }, [gateIssues])
+
+  const cargoLineIssueCountById = useMemo(() => {
+    const counts: Record<string, number> = {}
+    if (!gateIssues) return counts
+
+    for (const key of Object.keys(gateIssues)) {
+      if (!key.startsWith('cargo.lines.')) continue
+      const rest = key.slice('cargo.lines.'.length)
+      const dotIndex = rest.indexOf('.')
+      if (dotIndex <= 0) continue
+      const lineId = rest.slice(0, dotIndex)
+      counts[lineId] = (counts[lineId] ?? 0) + 1
+    }
+
+    return counts
+  }, [gateIssues])
+
   const tabForGateKey = (
     key: string
   ): 'details' | 'cargo' | 'costs' | 'documents' | 'history' => {
@@ -2210,16 +2265,41 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     return 'details'
   }
 
-  const isIssuedShippingMarksKey = (key: string): boolean => {
-    return (
-      key.includes('.commodityCode') ||
-      key.includes('.countryOfOrigin') ||
-      key.includes('.material') ||
-      key.includes('.netWeightKg') ||
-      key.includes('.cartonWeightKg') ||
-      key.includes('.cartonDimensions') ||
-      key.includes('.unitsPerCarton')
-    )
+  const jumpToGateKey = (gateKey: string) => {
+    const targetTab = tabForGateKey(gateKey)
+    setActiveBottomTab(targetTab)
+
+    if (targetTab === 'cargo') {
+      const targetCargoSubTab = resolveCargoSubTabForGateKey(gateKey)
+      if (targetCargoSubTab) {
+        if (targetCargoSubTab === 'receiving' && activeViewStage !== 'WAREHOUSE') {
+          setCargoSubTab('details')
+        } else {
+          setCargoSubTab(targetCargoSubTab)
+        }
+      }
+    }
+
+    setTimeout(() => {
+      const element = document.querySelector(`[data-gate-key="${gateKey}"]`)
+      if (!(element instanceof HTMLElement)) return
+
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      if (
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement ||
+        element instanceof HTMLSelectElement
+      ) {
+        element.focus()
+        return
+      }
+
+      const focusTarget = element.querySelector('input, textarea, select')
+      if (focusTarget instanceof HTMLElement) {
+        focusTarget.focus()
+      }
+    }, 50)
   }
 
   // Can user click on a stage to view it?
@@ -2297,24 +2377,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         const payload = await response.json().catch(() => null)
         const details = payload?.details
         if (details && typeof details === 'object') {
-          setGateIssues(details as Record<string, string>)
-          const keys = Object.keys(details as Record<string, string>)
+          const record = details as Record<string, string>
+          setGateIssues(record)
+          const keys = Object.keys(record)
           const firstKey = keys.length > 0 ? keys[0] : null
           if (firstKey) {
-            const targetTab = tabForGateKey(firstKey)
-            setActiveBottomTab(targetTab)
-            if (targetTab === 'cargo' && isIssuedShippingMarksKey(firstKey)) {
-              setCargoSubTab('attributes')
-            }
-            setTimeout(() => {
-              const element = document.querySelector(`[data-gate-key="${firstKey}"]`)
-              if (element instanceof HTMLElement) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                if (element instanceof HTMLInputElement) {
-                  element.focus()
-                }
-              }
-            }, 50)
+            jumpToGateKey(firstKey)
           }
         }
 
@@ -2378,24 +2446,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         const payload = await response.json().catch(() => null)
         const details = payload?.details
         if (details && typeof details === 'object') {
-          setGateIssues(details as Record<string, string>)
-          const keys = Object.keys(details as Record<string, string>)
+          const record = details as Record<string, string>
+          setGateIssues(record)
+          const keys = Object.keys(record)
           const firstKey = keys.length > 0 ? keys[0] : null
           if (firstKey) {
-            const targetTab = tabForGateKey(firstKey)
-            setActiveBottomTab(targetTab)
-            if (targetTab === 'cargo' && firstKey.includes('.quantityReceived')) {
-              setCargoSubTab('details')
-            }
-            setTimeout(() => {
-              const element = document.querySelector(`[data-gate-key="${firstKey}"]`)
-              if (element instanceof HTMLElement) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                if (element instanceof HTMLInputElement) {
-                  element.focus()
-                }
-              }
-            }, 50)
+            jumpToGateKey(firstKey)
           }
         }
         toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to receive inventory')
@@ -2854,11 +2910,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         const payload = await response.json().catch(() => null)
         const details = payload?.details
         if (details && typeof details === 'object') {
-          setGateIssues(details as Record<string, string>)
-          const keys = Object.keys(details as Record<string, string>)
+          const record = details as Record<string, string>
+          setGateIssues(record)
+          const keys = Object.keys(record)
           const firstKey = keys.length > 0 ? keys[0] : null
           if (firstKey) {
-            setActiveBottomTab(tabForGateKey(firstKey))
+            jumpToGateKey(firstKey)
           }
         }
         toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate PDF')
@@ -2885,15 +2942,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         const payload = await response.json().catch(() => null)
         const details = payload?.details
         if (details && typeof details === 'object') {
-          setGateIssues(details as Record<string, string>)
-          const keys = Object.keys(details as Record<string, string>)
+          const record = details as Record<string, string>
+          setGateIssues(record)
+          const keys = Object.keys(record)
           const firstKey = keys.length > 0 ? keys[0] : null
           if (firstKey) {
-            const targetTab = tabForGateKey(firstKey)
-            setActiveBottomTab(targetTab)
-            if (targetTab === 'cargo' && isIssuedShippingMarksKey(firstKey)) {
-              setCargoSubTab('attributes')
-            }
+            jumpToGateKey(firstKey)
           }
         }
 
@@ -3352,6 +3406,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   >
                     <FileText className="h-4 w-4" />
                     Details
+                    {cargoSubTabIssues.details && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -3364,6 +3421,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   >
                     <Package2 className="h-4 w-4" />
                     Attributes
+                    {cargoSubTabIssues.attributes && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
                   </button>
                   {activeViewStage === 'WAREHOUSE' && (
                     <button
@@ -3377,13 +3437,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     >
                       <Warehouse className="h-4 w-4" />
                       Receiving
+                      {cargoSubTabIssues.receiving && (
+                        <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                      )}
                     </button>
                   )}
                 </div>
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto" data-gate-key="cargo.lines">
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -3408,7 +3471,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         {flowLines.map((line) => (
                           <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                             <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                              {line.skuCode}
+                              <div className="flex items-center gap-2">
+                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                  <span className="text-xs font-semibold text-rose-600">!</span>
+                                )}
+                                <span>{line.skuCode}</span>
+                              </div>
                             </td>
                             <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
                               {line.batchLot ? line.batchLot : '—'}
@@ -3732,12 +3800,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                             return (
                               <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                      <span className="text-xs font-semibold text-rose-600">!</span>
+                                    )}
+                                    <span>{line.skuCode}</span>
+                                  </div>
+                                </td>
                                 <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
                                     <Input
                                       defaultValue={line.commodityCode ?? ''}
+                                      data-gate-key={`${issuePrefix}.commodityCode`}
                                       onBlur={e => {
                                         const trimmed = e.target.value.trim()
                                         void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
@@ -3745,7 +3821,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       className={`h-8 w-28 ${issue('commodityCode') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
-                                    <span className="text-foreground">{line.commodityCode ? line.commodityCode : '—'}</span>
+                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                      {line.commodityCode ? line.commodityCode : '—'}
+                                    </span>
                                   )}
                                 </td>
                                 <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
@@ -3761,31 +3839,36 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     )
                                   })()}
                                 </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={String(line.unitsPerCarton)}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) return
-                                        const parsed = Number.parseInt(trimmed, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) {
-                                          toast.error('Units per carton must be a positive integer')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                      }}
-                                      className={`h-8 w-16 text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
-                                    />
+                                    <div className="flex justify-end">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="1"
+                                        step="1"
+                                        defaultValue={String(line.unitsPerCarton)}
+                                        data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) return
+                                          const parsed = Number.parseInt(trimmed, 10)
+                                          if (!Number.isInteger(parsed) || parsed <= 0) {
+                                            toast.error('Units per carton must be a positive integer')
+                                            return
+                                          }
+                                          void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                        }}
+                                        className={`h-8 w-16 text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
+                                      />
+                                    </div>
                                   ) : (
-                                    <span className="text-foreground tabular-nums">{line.unitsPerCarton.toLocaleString()}</span>
+                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
+                                      {line.unitsPerCarton.toLocaleString()}
+                                    </span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
                                     <div className="flex gap-1 justify-center">
                                       <Input
@@ -3795,6 +3878,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         step="0.01"
                                         placeholder="L"
                                         defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                        data-gate-key={`${issuePrefix}.cartonDimensions`}
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="1"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
@@ -3826,67 +3910,80 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       />
                                     </div>
                                   ) : (
-                                    <span className="text-foreground">{cartonTriplet ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}` : '—'}</span>
+                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                      {cartonTriplet ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}` : '—'}
+                                    </span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { netWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Net weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={`h-8 w-20 text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
-                                    />
+                                    <div className="flex justify-end">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.001"
+                                        defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                        data-gate-key={`${issuePrefix}.netWeightKg`}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) {
+                                            void patchOrderLine(line.id, { netWeightKg: null })
+                                            return
+                                          }
+                                          const parsed = Number(trimmed)
+                                          if (!Number.isFinite(parsed) || parsed <= 0) {
+                                            toast.error('Net weight must be a positive number')
+                                            return
+                                          }
+                                          void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                        }}
+                                        className={`h-8 w-20 text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
+                                      />
+                                    </div>
                                   ) : (
-                                    <span className="text-foreground tabular-nums">{line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}</span>
+                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                      {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
+                                    </span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { cartonWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Gross weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={`h-8 w-20 text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
-                                    />
+                                    <div className="flex justify-end">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.001"
+                                        defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                        data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) {
+                                            void patchOrderLine(line.id, { cartonWeightKg: null })
+                                            return
+                                          }
+                                          const parsed = Number(trimmed)
+                                          if (!Number.isFinite(parsed) || parsed <= 0) {
+                                            toast.error('Gross weight must be a positive number')
+                                            return
+                                          }
+                                          void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                        }}
+                                        className={`h-8 w-20 text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
+                                      />
+                                    </div>
                                   ) : (
-                                    <span className="text-foreground tabular-nums">{line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}</span>
+                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                      {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
+                                    </span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.material`}>
+                                <td className="px-3 py-2">
                                   {canEditAttributes ? (
                                     <Input
                                       defaultValue={line.material ?? ''}
+                                      data-gate-key={`${issuePrefix}.material`}
                                       onBlur={e => {
                                         const trimmed = e.target.value.trim()
                                         void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
@@ -3894,7 +3991,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       className={`h-8 w-24 ${issue('material') ? 'border-rose-500' : ''}`}
                                     />
                                   ) : (
-                                    <span className="text-foreground">{line.material ? line.material : '—'}</span>
+                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.material`}>
+                                      {line.material ? line.material : '—'}
+                                    </span>
                                   )}
                                 </td>
                               </tr>
@@ -4066,6 +4165,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   >
                     <FileText className="h-4 w-4" />
                     Details
+                    {cargoSubTabIssues.details && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -4078,12 +4180,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   >
                     <Package2 className="h-4 w-4" />
                     Attributes
+                    {cargoSubTabIssues.attributes && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
                   </button>
                 </div>
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto" data-gate-key="cargo.lines">
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -4134,7 +4239,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
                               <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                {line.skuCode}
+                                <div className="flex items-center gap-2">
+                                  {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                    <span className="text-xs font-semibold text-rose-600">!</span>
+                                  )}
+                                  <span>{line.skuCode}</span>
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
                                 {line.batchLot ? line.batchLot : '—'}
@@ -4399,11 +4509,19 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                             return (
                               <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
+                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                      <span className="text-xs font-semibold text-rose-600">!</span>
+                                    )}
+                                    <span>{line.skuCode}</span>
+                                  </div>
+                                </td>
                                 <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
                                 <td className="px-3 py-2">
                                   <Input
                                     value={line.commodityCode ?? ''}
+                                    data-gate-key={`${issuePrefix}.commodityCode`}
                                     onChange={e => {
                                       const value = e.target.value
                                       updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
@@ -4415,23 +4533,26 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   <span className="text-foreground">{supplierCountry ? supplierCountry : '—'}</span>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    value={String(line.unitsPerCarton)}
-                                    onChange={e => {
-                                      const parsed = Number.parseInt(e.target.value, 10)
-                                      if (!Number.isInteger(parsed) || parsed <= 0) return
-                                      updateLine(current => ({
-                                        ...current,
-                                        unitsPerCarton: parsed,
-                                        quantity: Math.ceil(current.unitsOrdered / parsed),
-                                      }))
-                                    }}
-                                    className="h-8 w-16 text-right"
-                                  />
+                                  <div className="flex justify-end">
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="1"
+                                      step="1"
+                                      value={String(line.unitsPerCarton)}
+                                      data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                      onChange={e => {
+                                        const parsed = Number.parseInt(e.target.value, 10)
+                                        if (!Number.isInteger(parsed) || parsed <= 0) return
+                                        updateLine(current => ({
+                                          ...current,
+                                          unitsPerCarton: parsed,
+                                          quantity: Math.ceil(current.unitsOrdered / parsed),
+                                        }))
+                                      }}
+                                      className="h-8 w-16 text-right"
+                                    />
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2">
                                   <div className="flex gap-1 justify-center">
@@ -4442,6 +4563,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       step="0.01"
                                       placeholder="L"
                                       value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                      data-gate-key={`${issuePrefix}.cartonDimensions`}
                                       onChange={e => {
                                         const parsed = Number(e.target.value)
                                         const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
@@ -4519,44 +4641,51 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   </div>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.001"
-                                    value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      updateLine(current => ({
-                                        ...current,
-                                        netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                      }))
-                                    }}
-                                    className="h-8 w-20 text-right"
-                                  />
+                                  <div className="flex justify-end">
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                      data-gate-key={`${issuePrefix}.netWeightKg`}
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => ({
+                                          ...current,
+                                          netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
+                                        }))
+                                      }}
+                                      className="h-8 w-20 text-right"
+                                    />
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.001"
-                                    value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      updateLine(current => ({
-                                        ...current,
-                                        cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                      }))
-                                    }}
-                                    className="h-8 w-20 text-right"
-                                  />
+                                  <div className="flex justify-end">
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                      data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => ({
+                                          ...current,
+                                          cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
+                                        }))
+                                      }}
+                                      className="h-8 w-20 text-right"
+                                    />
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2">
                                   <Input
                                     value={line.material ?? ''}
+                                    data-gate-key={`${issuePrefix}.material`}
                                     onChange={e => {
                                       const value = e.target.value
                                       updateLine(current => ({ ...current, material: value.trim() ? value : null }))
