@@ -3503,7 +3503,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   const gateKey = `cargo.lines.${line.id}.shipNowCartons`
                                   const issue = gateIssues ? gateIssues[gateKey] : null
                                   return (
-                                    <div className="space-y-1" data-gate-key={gateKey}>
+                                    <div className="flex flex-col items-end space-y-1" data-gate-key={gateKey}>
                                       <Input
                                         type="number"
                                         inputMode="numeric"
@@ -3518,7 +3518,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }))
                                         }
                                         className={cn(
-                                          'h-7 w-20 px-2 py-0 text-xs',
+                                          'h-7 w-20 px-2 py-0 text-xs text-right',
                                           issue && 'border-rose-500 focus-visible:ring-rose-500'
                                         )}
                                         data-gate-key={gateKey}
