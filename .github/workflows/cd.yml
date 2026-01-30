@@ -21,6 +21,7 @@ on:
           - kairos
           - atlas
           - plutus
+          - hermes
       environment:
         description: 'Environment to deploy to'
         required: true
@@ -47,6 +48,7 @@ jobs:
       kairos: ${{ steps.changes.outputs.kairos }}
       atlas: ${{ steps.changes.outputs.atlas }}
       plutus: ${{ steps.changes.outputs.plutus }}
+      hermes: ${{ steps.changes.outputs.hermes }}
       packages: ${{ steps.changes.outputs.packages }}
       any_app: ${{ steps.changes.outputs.any_app }}
     steps:
@@ -306,6 +308,7 @@ jobs:
           [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
           [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
           [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
+          [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
 
           if [[ ${#apps[@]} -eq 0 ]]; then
             echo "No deployable apps detected; exiting."
@@ -421,6 +424,7 @@ jobs:
             [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
             [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
             [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
+            [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
           fi
 
           if [[ ${#apps[@]} -eq 0 ]]; then
