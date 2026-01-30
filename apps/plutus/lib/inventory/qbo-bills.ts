@@ -71,26 +71,12 @@ export function parseSkuQuantityFromDescription(description: string): { sku: str
   return { sku, quantity: qty };
 }
 
-function isDescendantOf(accountId: string, ancestorId: string, accountsById: Map<string, QboAccount>): boolean {
-  let currentId: string | undefined = accountId;
-  while (currentId) {
-    if (currentId === ancestorId) return true;
-    const account = accountsById.get(currentId);
-    if (!account) return false;
-    currentId = account.ParentRef?.value;
-  }
-  return false;
-}
-
-function classifyInventoryComponent(
-  accountId: string,
-  mappings: InventoryAccountMappings,
-  accountsById: Map<string, QboAccount>,
-): InventoryComponent | null {
-  if (isDescendantOf(accountId, mappings.invManufacturing, accountsById)) return 'manufacturing';
-  if (isDescendantOf(accountId, mappings.invFreight, accountsById)) return 'freight';
-  if (isDescendantOf(accountId, mappings.invDuty, accountsById)) return 'duty';
-  if (isDescendantOf(accountId, mappings.invMfgAccessories, accountsById)) return 'mfgAccessories';
+function classifyInventoryComponentFromAccountName(accountName: string): InventoryComponent | null {
+  const trimmed = accountName.trim();
+  if (trimmed.startsWith('Inv Manufacturing')) return 'manufacturing';
+  if (trimmed.startsWith('Inv Freight')) return 'freight';
+  if (trimmed.startsWith('Inv Duty')) return 'duty';
+  if (trimmed.startsWith('Inv Mfg Accessories')) return 'mfgAccessories';
   return null;
 }
 
@@ -110,7 +96,7 @@ function addPoUnits(poUnitsBySku: Map<string, Map<string, number>>, poNumber: st
 export function parseQboBillsToInventoryEvents(
   bills: QboBill[],
   accountsById: Map<string, QboAccount>,
-  mappings: InventoryAccountMappings,
+  _mappings: InventoryAccountMappings,
 ): ParsedBills {
   const events: BillEvent[] = [];
   const poUnitsBySku = new Map<string, Map<string, number>>();
@@ -129,7 +115,11 @@ export function parseQboBillsToInventoryEvents(
     for (const line of bill.Line) {
       if (!line.AccountBasedExpenseLineDetail) continue;
       const accountId = line.AccountBasedExpenseLineDetail.AccountRef.value;
-      const component = classifyInventoryComponent(accountId, mappings, accountsById);
+      const account = accountsById.get(accountId);
+      if (!account) {
+        throw new Error(`Unknown QBO account referenced on bill line: billId=${bill.Id} accountId=${accountId}`);
+      }
+      const component = classifyInventoryComponentFromAccountName(account.Name);
       if (!component) continue;
       candidateLines.push({ line, component });
     }
