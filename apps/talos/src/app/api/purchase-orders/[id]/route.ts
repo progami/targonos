@@ -2,6 +2,7 @@ import { ApiResponses, withAuthAndParams, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { serializePurchaseOrder as serializeWithStageData } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import {
   getPurchaseOrderById,
   updatePurchaseOrderDetails,
@@ -28,7 +29,7 @@ export const GET = withAuthAndParams(async (_request, params) => {
     order.counterpartyName && order.counterpartyName.trim().length > 0
       ? await prisma.supplier.findFirst({
           where: { name: { equals: order.counterpartyName.trim(), mode: 'insensitive' } },
-          select: { phone: true, bankingDetails: true },
+          select: { phone: true, bankingDetails: true, address: true },
         })
       : null
 
@@ -39,6 +40,8 @@ export const GET = withAuthAndParams(async (_request, params) => {
       ? {
           phone: supplier.phone ?? null,
           bankingDetails: supplier.bankingDetails ?? null,
+          address: supplier.address ?? null,
+          country: deriveSupplierCountry(supplier.address),
         }
       : null,
     proformaInvoices: order.proformaInvoices.map(pi => ({
@@ -102,7 +105,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       updated.counterpartyName && updated.counterpartyName.trim().length > 0
         ? await prisma.supplier.findFirst({
             where: { name: { equals: updated.counterpartyName.trim(), mode: 'insensitive' } },
-            select: { phone: true, bankingDetails: true },
+            select: { phone: true, bankingDetails: true, address: true },
           })
         : null
     const serialized = serializeWithStageData(updated)

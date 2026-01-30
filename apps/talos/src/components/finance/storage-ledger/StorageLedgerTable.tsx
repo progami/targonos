@@ -168,15 +168,15 @@ export function StorageLedgerTable({
 
  <div className="overflow-x-auto">
  <table className="w-full table-auto text-sm">
- <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
- <tr>
- <th className="px-3 py-2 text-left font-semibold">
+ <thead>
+ <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>Week Ending</span>
  {renderTextFilter('Week ending', 'weekEnding')}
  </div>
  </th>
- <th className="px-3 py-2 text-left font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>Warehouse</span>
  <Popover>
@@ -223,7 +223,7 @@ export function StorageLedgerTable({
     </div>
   </th>
           
- <th className="px-3 py-2 text-left font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>SKU</span>
  <Popover>
@@ -269,37 +269,37 @@ export function StorageLedgerTable({
  </Popover>
  </div>
  </th>
- <th className="px-3 py-2 text-left font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>Description</span>
  {renderTextFilter('Description', 'description')}
  </div>
  </th>
- <th className="px-3 py-2 text-left font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>Batch</span>
  {renderTextFilter('Batch', 'batch')}
  </div>
  </th>
- <th className="px-3 py-2 text-right font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
  <div className="flex items-center justify-end gap-1">
  <span>Pallet Days</span>
  {renderNumericFilter('Pallet days', 'palletDaysMin', 'palletDaysMax')}
  </div>
  </th>
- <th className="px-3 py-2 text-right font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
  <div className="flex items-center justify-end gap-1">
  <span>Rate</span>
  {renderNumericFilter('Rate', 'rateMin', 'rateMax')}
  </div>
  </th>
- <th className="px-3 py-2 text-right font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
  <div className="flex items-center justify-end gap-1">
  <span>Total Cost</span>
  {renderNumericFilter('Total cost', 'totalCostMin', 'totalCostMax')}
  </div>
  </th>
- <th className="px-3 py-2 text-left font-semibold">
+ <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
  <span>Status</span>
  <Popover>
@@ -360,7 +360,7 @@ export function StorageLedgerTable({
  )}
 
       {entries.map(entry => (
-        <tr key={entry.id} className="odd:bg-muted/20">
+        <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
           <td className="px-3 py-2 text-sm text-foreground whitespace-nowrap">
             {format(new Date(entry.weekEndingDate), 'PP')}
           </td>

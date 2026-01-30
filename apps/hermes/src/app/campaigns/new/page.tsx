@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   ChevronLeft,
@@ -23,7 +24,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-import { connections } from "@/lib/mock-data";
+import { hermesApiUrl } from "@/lib/base-path";
+import { useConnectionsStore } from "@/stores/connections-store";
+import type { AmazonConnection } from "@/lib/types";
 
 function HourSelect({
   value,
@@ -76,12 +79,26 @@ function PresetTile({
 }
 
 export default function NewCampaignPage() {
+  const router = useRouter();
+  const { connections, fetch: fetchConnections } = useConnectionsStore();
+
+  React.useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
   const [tab, setTab] = React.useState<"basics" | "timing" | "experiment" | "review">("basics");
 
   // Basics
   const [name, setName] = React.useState("Review Request");
-  const [connectionId, setConnectionId] = React.useState(connections[0]?.id ?? "");
+  const [connectionId, setConnectionId] = React.useState("");
   const [startLive, setStartLive] = React.useState(true);
+
+  // Set default connection once loaded
+  React.useEffect(() => {
+    if (!connectionId && connections.length > 0) {
+      setConnectionId(connections[0].id);
+    }
+  }, [connections, connectionId]);
 
   // Timing
   const [delayDays, setDelayDays] = React.useState(10);
@@ -100,7 +117,9 @@ export default function NewCampaignPage() {
   const [abVariable, setAbVariable] = React.useState<"delay" | "window" | "spread">("delay");
   const [delayB, setDelayB] = React.useState(14);
 
-  const connection = connections.find((c) => c.id === connectionId);
+  const [creating, setCreating] = React.useState(false);
+
+  const connection = connections.find((c: AmazonConnection) => c.id === connectionId);
 
   const scheduleSummary = `${windowEnabled ? `${startHour}:00–${endHour}:00` : "Any time"} • D+${delayDays}`;
 
@@ -108,22 +127,47 @@ export default function NewCampaignPage() {
     return Math.max(5, Math.min(30, v));
   }
 
-  function next() {
-    const order: Array<typeof tab> = ["basics", "timing", "experiment", "review"];
-    const idx = order.indexOf(tab);
-    setTab(order[Math.min(order.length - 1, idx + 1)]);
-  }
+  async function create() {
+    setCreating(true);
+    try {
+      const schedule: Record<string, unknown> = {
+        delayDays,
+        sendTimeOptimization: sto ? "best_hour" : "off",
+      };
+      if (windowEnabled) {
+        schedule.timeWindow = {
+          startHourLocal: startHour,
+          endHourLocal: endHour,
+          timeZone: "America/Los_Angeles",
+        };
+      }
+      if (spreadEnabled) {
+        schedule.randomDelayMinutes = { minMinutes: 0, maxMinutes: spreadMaxMinutes };
+      }
 
-  function back() {
-    const order: Array<typeof tab> = ["basics", "timing", "experiment", "review"];
-    const idx = order.indexOf(tab);
-    setTab(order[Math.max(0, idx - 1)]);
-  }
-
-  function create() {
-    toast.success("Created (mock)", {
-      description: "Wire this to DB + worker enqueue.",
-    });
+      const res = await fetch(hermesApiUrl("/api/campaigns"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name,
+          connectionId,
+          status: startLive ? "live" : "draft",
+          schedule,
+          controlHoldoutPct: holdout,
+        }),
+      });
+      const json = await res.json();
+      if (!json?.ok) {
+        toast.error("Failed to create campaign", { description: json?.error ?? "" });
+        return;
+      }
+      toast.success("Campaign created");
+      router.push("/campaigns");
+    } catch (e: any) {
+      toast.error("Failed to create campaign", { description: e?.message ?? "" });
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -138,7 +182,7 @@ export default function NewCampaignPage() {
                 Back
               </Link>
             </Button>
-            <Button size="sm" onClick={create}>
+            <Button size="sm" onClick={create} disabled={creating}>
               Create
             </Button>
           </>
@@ -360,11 +404,11 @@ export default function NewCampaignPage() {
                   <div className="text-xs text-muted-foreground">Preview</div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                     <span className="rounded-md border px-2 py-1">Delivered</span>
-                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground">&rarr;</span>
                     <span className="rounded-md border px-2 py-1">Earliest D+5</span>
-                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground">&rarr;</span>
                     <span className="rounded-md border px-2 py-1 font-medium">Scheduled D+{delayDays}</span>
-                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground">&rarr;</span>
                     <span className="rounded-md border px-2 py-1">Latest D+30</span>
                   </div>
                 </div>
@@ -547,7 +591,7 @@ export default function NewCampaignPage() {
                 <Button variant="ghost" onClick={() => setTab("experiment")}>
                   Back
                 </Button>
-                <Button onClick={create}>Create</Button>
+                <Button onClick={create} disabled={creating}>Create</Button>
               </div>
             </CardContent>
           </Card>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 
 import type { Campaign, DispatchAttempt, Experiment, AmazonConnection } from "@/lib/types";
 import { CampaignStatusBadge, DispatchStatusBadge, ExperimentStatusBadge } from "@/components/hermes/status-badge";
@@ -47,6 +47,12 @@ export function CampaignDetail({
         </div>
 
         <div className="flex gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/campaigns">
+              <ChevronLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </Button>
           <Button
             variant="outline"
             onClick={() => toast.message("Not wired")}
@@ -302,7 +308,7 @@ export function CampaignDetail({
           <Card>
             <CardHeader>
               <CardTitle>Dispatch log</CardTitle>
-              <CardDescription>All attempts for this campaign (mock data).</CardDescription>
+              <CardDescription>All dispatch attempts for this campaign.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>

@@ -167,21 +167,21 @@ export default function WarehousesPanel() {
         ) : (
           <div className="overflow-hidden">
             <table className="w-full table-fixed text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th className="w-[12%] px-4 py-3 text-left font-semibold">Code</th>
-                  <th className="w-[22%] px-4 py-3 text-left font-semibold">Name</th>
-                  <th className="w-[10%] px-4 py-3 text-left font-semibold">Type</th>
-                  <th className="w-[26%] px-4 py-3 text-left font-semibold">Address</th>
-                  <th className="w-[14%] px-4 py-3 text-left font-semibold">Phone</th>
-                  <th className="w-[8%] px-4 py-3 text-right font-semibold">Rates</th>
-                  <th className="w-[8%] px-4 py-3 text-right font-semibold">Actions</th>
+              <thead>
+                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                  <th className="w-[12%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Code</th>
+                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
+                  <th className="w-[10%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Type</th>
+                  <th className="w-[26%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Address</th>
+                  <th className="w-[14%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
+                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Rates</th>
+                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              <tbody>
                 {filteredWarehouses.map(warehouse => (
-                  <tr key={warehouse.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
+                  <tr key={warehouse.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                    <td className="px-3 py-2 font-medium text-foreground">
                       <Link
                         href={`/config/warehouses/${warehouse.id}/rates`}
                         className="hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
@@ -189,22 +189,22 @@ export default function WarehousesPanel() {
                         {warehouse.code}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300 truncate" title={warehouse.name}>
+                    <td className="px-3 py-2 text-muted-foreground truncate" title={warehouse.name}>
                       {warehouse.name}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {getKindLabel(warehouse.kind)}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 truncate" title={warehouse.address || undefined}>
+                    <td className="px-3 py-2 text-muted-foreground truncate" title={warehouse.address || undefined}>
                       {warehouse.address || '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                       {warehouse.contactPhone || '—'}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">
+                    <td className="px-3 py-2 text-right font-medium text-foreground">
                       {warehouse._count.costRates}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-2 text-right">
                       <Button
                         asChild
                         variant="outline"

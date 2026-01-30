@@ -231,18 +231,18 @@ export default function FinancialLedgerPage() {
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
               <table className="w-full min-w-[1200px] table-auto text-sm">
                 <thead>
-                  <tr className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-3 py-2 text-left font-semibold w-36">Date</th>
-                    <th className="px-3 py-2 text-left font-semibold w-28">Category</th>
-                    <th className="px-3 py-2 text-left font-semibold w-56">Cost</th>
-                    <th className="px-3 py-2 text-left font-semibold w-52">Warehouse</th>
-                    <th className="px-3 py-2 text-left font-semibold w-44">SKU / Batch</th>
-                    <th className="px-3 py-2 text-right font-semibold w-32">Amount</th>
+                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-36">Date</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-28">Category</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-56">Cost</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-52">Warehouse</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-44">SKU / Batch</th>
+                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map(row => (
-                    <tr key={row.id} className="border-t border-border/50 hover:bg-muted/30">
+                    <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                       <td className="px-3 py-2 whitespace-nowrap">{row.effectiveAt.slice(0, 10)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{row.category}</td>
                       <td className="px-3 py-2">

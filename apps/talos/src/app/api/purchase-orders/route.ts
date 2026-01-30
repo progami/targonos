@@ -12,6 +12,7 @@ import {
 import type { UserContext } from '@/lib/services/po-stage-service'
 import { hasPermission } from '@/lib/services/permission-service'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 export const GET = withAuth(async (request: NextRequest, _session) => {
   const splitGroupId = request.nextUrl.searchParams.get('splitGroupId')
@@ -123,7 +124,7 @@ export const POST = withAuth(async (request: NextRequest, session) => {
     const prisma = await getTenantPrisma()
     const supplier = await prisma.supplier.findFirst({
       where: { name: { equals: order.counterpartyName?.trim() ?? '', mode: 'insensitive' } },
-      select: { phone: true, bankingDetails: true },
+      select: { phone: true, bankingDetails: true, address: true },
     })
     return ApiResponses.success({
       ...serializeNewPO(order, { defaultCurrency: tenant.currency }),
@@ -131,6 +132,8 @@ export const POST = withAuth(async (request: NextRequest, session) => {
         ? {
             phone: supplier.phone ?? null,
             bankingDetails: supplier.bankingDetails ?? null,
+            address: supplier.address ?? null,
+            country: deriveSupplierCountry(supplier.address),
           }
         : null,
     })

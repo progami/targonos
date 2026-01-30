@@ -1,6 +1,32 @@
 import { MessagingClient } from "@/app/messaging/messaging-client";
-import { connections } from "@/lib/mock-data";
+import { listConnectionTargets } from "@/server/sp-api/connection-list";
+import { loadSpApiConfigForConnection } from "@/server/sp-api/connection-config";
+import type { AmazonConnection } from "@/lib/types";
+
+function loadConnections(): AmazonConnection[] {
+  const targets = listConnectionTargets();
+  return targets.map((t) => {
+    let region = "NA" as AmazonConnection["region"];
+    let status: AmazonConnection["status"] = "connected";
+    try {
+      const cfg = loadSpApiConfigForConnection(t.connectionId);
+      region = cfg.region as AmazonConnection["region"];
+    } catch {
+      status = "disconnected";
+    }
+    return {
+      id: t.connectionId,
+      accountName: t.connectionId,
+      region,
+      marketplaceIds: t.marketplaceIds,
+      sellerId: "",
+      status,
+      createdAt: new Date().toISOString(),
+    };
+  });
+}
 
 export default function MessagingPage() {
+  const connections = loadConnections();
   return <MessagingClient connections={connections} />;
 }

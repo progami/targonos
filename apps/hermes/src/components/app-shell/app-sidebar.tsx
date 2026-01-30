@@ -54,8 +54,7 @@ export function AppSidebar() {
       </ScrollArea>
       <Separator />
       <div className="px-6 py-4 text-xs text-muted-foreground">
-        <div>Base path aware</div>
-        <div>Policy-first automation</div>
+        Hermes v0.1
       </div>
     </aside>
   );

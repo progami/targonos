@@ -8,6 +8,7 @@ import {
 } from '@/lib/services/po-stage-service'
 import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 const DateInputSchema = z
   .string()
@@ -179,7 +180,7 @@ export const PATCH = withAuthAndParams(
         order.counterpartyName && order.counterpartyName.trim().length > 0
           ? await prisma.supplier.findFirst({
               where: { name: { equals: order.counterpartyName.trim(), mode: 'insensitive' } },
-              select: { phone: true, bankingDetails: true },
+              select: { phone: true, bankingDetails: true, address: true },
             })
           : null
       return ApiResponses.success({
@@ -188,6 +189,8 @@ export const PATCH = withAuthAndParams(
           ? {
               phone: supplier.phone ?? null,
               bankingDetails: supplier.bankingDetails ?? null,
+              address: supplier.address ?? null,
+              country: deriveSupplierCountry(supplier.address),
             }
           : null,
       })

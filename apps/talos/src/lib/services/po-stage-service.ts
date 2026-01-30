@@ -23,6 +23,8 @@ import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem } from '@/lib/measurements'
+import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
 type PurchaseOrderWithLines = PurchaseOrder & {
@@ -503,6 +505,26 @@ async function validateTransitionGate(params: {
     const tenant = await getCurrentTenant()
     const tenantCode = tenant.code
 
+    let supplierCountry: string | null = null
+    if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
+      const supplierName = params.order.counterpartyName.trim()
+      const supplier = await params.prisma.supplier.findFirst({
+        where: { name: { equals: supplierName, mode: 'insensitive' } },
+        select: { address: true, bankingDetails: true },
+      })
+
+      supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+
+      const banking = supplier ? supplier.bankingDetails : null
+      if (!banking || banking.trim().length === 0) {
+        recordGateIssue(
+          issues,
+          'details.counterpartyName',
+          'Supplier banking information is required to issue a PO'
+        )
+      }
+    }
+
     if (!params.order.counterpartyName || params.order.counterpartyName.trim().length === 0) {
       recordGateIssue(issues, 'details.counterpartyName', 'Supplier is required')
     }
@@ -520,15 +542,7 @@ async function validateTransitionGate(params: {
       recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
     }
 
-    const piNumbers: string[] = []
     for (const line of activeLines) {
-      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
-      if (!piNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
-      } else {
-        piNumbers.push(piNumber)
-      }
-
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
       if (!commodityCode) {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code is required')
@@ -536,9 +550,8 @@ async function validateTransitionGate(params: {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
       }
 
-      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-      if (!origin) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      if (!supplierCountry) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
       }
 
       const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -548,12 +561,12 @@ async function validateTransitionGate(params: {
 
       const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
       if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight is required')
       }
 
       const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
       if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight is required')
       }
 
       const cartonVolumeCbm =
@@ -583,19 +596,31 @@ async function validateTransitionGate(params: {
       }
     }
 
+
+  }
+
+  if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
+    const tenant = await getCurrentTenant()
+    const tenantCode = tenant.code
+
+    let supplierCountry: string | null = null
     if (params.order.counterpartyName && params.order.counterpartyName.trim().length > 0) {
       const supplierName = params.order.counterpartyName.trim()
       const supplier = await params.prisma.supplier.findFirst({
         where: { name: { equals: supplierName, mode: 'insensitive' } },
-        select: { bankingDetails: true },
+        select: { address: true },
       })
-      const banking = supplier?.bankingDetails
-      if (!banking || banking.trim().length === 0) {
-        recordGateIssue(
-          issues,
-          'details.counterpartyName',
-          'Supplier banking information is required to issue a PO'
-        )
+
+      supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+    }
+
+    const piNumbers: string[] = []
+    for (const line of activeLines) {
+      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+      if (!piNumber) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+      } else {
+        piNumbers.push(piNumber)
       }
     }
 
@@ -605,18 +630,13 @@ async function validateTransitionGate(params: {
       await requireDocuments({
         prisma: params.prisma,
         purchaseOrderId: params.order.id,
-        stage: PurchaseOrderDocumentStage.DRAFT,
+        stage: PurchaseOrderDocumentStage.ISSUED,
         documentTypes: requiredDocTypes,
         issues,
         issueKeyPrefix: 'documents.pi',
         issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
       })
     }
-  }
-
-  if (params.targetStatus === PurchaseOrderStatus.MANUFACTURING) {
-    const tenant = await getCurrentTenant()
-    const tenantCode = tenant.code
 
     for (const line of activeLines) {
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
@@ -626,9 +646,8 @@ async function validateTransitionGate(params: {
         recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
       }
 
-      const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-      if (!origin) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+      if (!supplierCountry) {
+        recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
       }
 
       const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -638,12 +657,12 @@ async function validateTransitionGate(params: {
 
       const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
       if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+        recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight is required')
       }
 
       const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
       if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+        recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight is required')
       }
 
       const cartonVolumeCbm =
@@ -1118,6 +1137,7 @@ async function computeManufacturingCargoTotals(
  */
 export async function generateOrderNumber(): Promise<string> {
   const prisma = await getTenantPrisma()
+
   const tenant = await getCurrentTenant()
   const prefix = `TG-${tenant.code}-`
   const startingNumber = 2601
@@ -2228,7 +2248,13 @@ export async function transitionPurchaseOrderStage(
           const documentsToCopy = await tx.purchaseOrderDocument.findMany({
             where: {
               purchaseOrderId: order.id,
-              stage: { in: [PurchaseOrderDocumentStage.DRAFT, PurchaseOrderDocumentStage.MANUFACTURING] },
+              stage: {
+                in: [
+                  PurchaseOrderDocumentStage.DRAFT,
+                  PurchaseOrderDocumentStage.ISSUED,
+                  PurchaseOrderDocumentStage.MANUFACTURING,
+                ],
+              },
             },
           })
 
@@ -3604,25 +3630,6 @@ function formatCommodityCode(value: string): string {
   return groups.join(' ')
 }
 
-function formatDimensionCm(value: number): string {
-  const fixed = value.toFixed(2)
-  return fixed.replace(/\.?0+$/, '')
-}
-
-function resolveCartonDimensionsLabel(line: PurchaseOrderLine): string | null {
-  const side1 = toFiniteNumber(line.cartonSide1Cm)
-  const side2 = toFiniteNumber(line.cartonSide2Cm)
-  const side3 = toFiniteNumber(line.cartonSide3Cm)
-
-  if (side1 !== null && side2 !== null && side3 !== null) {
-    return `${formatDimensionCm(side1)}x${formatDimensionCm(side2)}x${formatDimensionCm(side3)}`
-  }
-
-  const parsed = parseDimensionsCm(line.cartonDimensionsCm)
-  if (!parsed) return null
-  const [a, b, c] = parsed
-  return `${formatDimensionCm(a)}x${formatDimensionCm(b)}x${formatDimensionCm(c)}`
-}
 
 export async function generatePurchaseOrderShippingMarks(params: {
   orderId: string
@@ -3653,9 +3660,21 @@ export async function generatePurchaseOrderShippingMarks(params: {
 
   const tenant = await getCurrentTenant()
   const tenantCode = tenant.code
+  const unitSystem = getDefaultUnitSystem(tenant.code)
 
   const issues: Record<string, string> = {}
   const activeLines = order.lines.filter(line => line.status !== PurchaseOrderLineStatus.CANCELLED)
+
+  let supplierCountry: string | null = null
+  if (order.counterpartyName && order.counterpartyName.trim().length > 0) {
+    const supplierName = order.counterpartyName.trim()
+    const supplier = await prisma.supplier.findFirst({
+      where: { name: { equals: supplierName, mode: 'insensitive' } },
+      select: { address: true },
+    })
+
+    supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
+  }
 
   if (activeLines.length === 0) {
     recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
@@ -3674,9 +3693,8 @@ export async function generatePurchaseOrderShippingMarks(params: {
       recordGateIssue(issues, `cargo.lines.${line.id}.commodityCode`, 'Commodity code format is invalid')
     }
 
-    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
-    if (!origin) {
-      recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Country of origin is required')
+    if (!supplierCountry) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.countryOfOrigin`, 'Supplier country is required')
     }
 
     const material = typeof line.material === 'string' ? line.material.trim() : ''
@@ -3686,12 +3704,12 @@ export async function generatePurchaseOrderShippingMarks(params: {
 
     const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
     if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
-      recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight (kg) is required')
+      recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight is required')
     }
 
     const grossWeightKg = line.cartonWeightKg ? Number(line.cartonWeightKg) : null
     if (grossWeightKg === null || !Number.isFinite(grossWeightKg) || grossWeightKg <= 0) {
-      recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight (kg) is required')
+      recordGateIssue(issues, `cargo.lines.${line.id}.cartonWeightKg`, 'Gross weight is required')
     }
 
     const cartonVolumeCbm =
@@ -3732,13 +3750,21 @@ export async function generatePurchaseOrderShippingMarks(params: {
 
   const labels = activeLines.flatMap(line => {
     const cartonRange = resolveLineCartonRange(line)
-    const dimsLabel = resolveCartonDimensionsLabel(line) ?? ''
+    const cartonTriplet = resolveDimensionTripletCm({
+      side1Cm: line.cartonSide1Cm,
+      side2Cm: line.cartonSide2Cm,
+      side3Cm: line.cartonSide3Cm,
+      legacy: line.cartonDimensionsCm,
+    })
+    const dimsLabel = cartonTriplet ? formatDimensionTripletDisplayFromCm(cartonTriplet, unitSystem) : ''
     const commodityLabel = typeof line.commodityCode === 'string' ? formatCommodityCode(line.commodityCode) : ''
-    const origin = typeof line.countryOfOrigin === 'string' ? line.countryOfOrigin.trim() : ''
+    const origin = supplierCountry ? supplierCountry : ''
     const material = typeof line.material === 'string' ? line.material.trim() : ''
     const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
     const netWeightKg = Number(line.netWeightKg)
     const grossWeightKg = Number(line.cartonWeightKg)
+    const netWeightLabel = formatWeightDisplayFromKg(netWeightKg, unitSystem, 1)
+    const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
     const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
 
     const perCarton: string[] = []
@@ -3750,9 +3776,9 @@ export async function generatePurchaseOrderShippingMarks(params: {
           <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
           <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
           <div class="label-row"><span class="k"># of Units</span><span class="v">${line.unitsPerCarton} sets</span></div>
-          <div class="label-row"><span class="k">Net Weight</span><span class="v">${netWeightKg.toFixed(1)} kg</span></div>
-          <div class="label-row"><span class="k">Gross Weight</span><span class="v">${grossWeightKg.toFixed(1)} kg</span></div>
-          <div class="label-row"><span class="k">Dimensions (cm)</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+          <div class="label-row"><span class="k">Net Weight</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
+          <div class="label-row"><span class="k">Gross Weight</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
+          <div class="label-row"><span class="k">Dimensions</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
           <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
           <div class="label-footer">${escapeHtml(origin)}</div>
         </div>

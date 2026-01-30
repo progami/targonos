@@ -123,14 +123,14 @@ export function DataTable<T extends Record<string, unknown>>({
  return (
  <div className={`overflow-x-auto ${className}`}>
  <table className="w-full table-auto text-sm">
- <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
- <tr>
+ <thead>
+ <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
  {columns.map((column) => (
  <th
  key={column.key as string}
  onClick={() => handleSort(column)}
  className={`
- px-3 py-2 text-left font-semibold border-b border-border/60
+ px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap text-xs
  ${column.sortable ? 'cursor-pointer text-foreground hover:text-primary' : ''}
  ${column.className || ''}
  `}
@@ -143,7 +143,7 @@ export function DataTable<T extends Record<string, unknown>>({
  ))}
  </tr>
  </thead>
- <tbody className="bg-white dark:bg-slate-800">
+ <tbody>
  {sortedData.map((row, rowIndex) => {
  const key = getRowKey(row, rowIndex)
  const isExpanded = expandable?.isExpanded(row) || false

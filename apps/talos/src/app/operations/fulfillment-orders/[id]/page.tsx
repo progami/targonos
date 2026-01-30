@@ -1,6 +1,6 @@
 'use client'
 
-import { ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
 import { toast } from 'react-hot-toast'
@@ -18,10 +18,13 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
+  Eye,
   FileText,
   Loader2,
   Truck,
   Upload,
+  X,
   XCircle,
 } from '@/lib/lucide-icons'
 import { format } from 'date-fns'
@@ -123,6 +126,28 @@ const DOCUMENT_REQUIREMENTS: Record<
   DELIVERY: [{ id: 'proof_of_delivery', label: 'Proof of Delivery (POD)' }],
 }
 
+const DOCUMENT_STAGE_META: Record<
+  FulfillmentOrderDocumentStage,
+  { label: string; icon: ComponentType<{ className?: string }> }
+> = {
+  PACKING: { label: 'Packing', icon: FileText },
+  SHIPPING: { label: 'Shipping', icon: Truck },
+  DELIVERY: { label: 'Delivery', icon: Check },
+}
+
+function formatDocumentTypeFallback(documentType: string) {
+  const cleaned = documentType.trim().replace(/[_-]+/g, ' ')
+  if (!cleaned) return 'Document'
+  return cleaned.replace(/\b\w/g, match => match.toUpperCase())
+}
+
+function getDocumentLabel(stage: FulfillmentOrderDocumentStage, documentType: string) {
+  const required = DOCUMENT_REQUIREMENTS[stage]
+  const match = required.find(candidate => candidate.id === documentType)
+  if (match) return match.label
+  return formatDocumentTypeFallback(documentType)
+}
+
 function formatDateTimeDisplay(value: string | null) {
   if (!value) return '—'
   const date = new Date(value)
@@ -213,6 +238,9 @@ export default function FulfillmentOrderDetailPage() {
   const [documents, setDocuments] = useState<FulfillmentOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
+  const [inlinePreviewDocument, setInlinePreviewDocument] =
+    useState<FulfillmentOrderDocumentSummary | null>(null)
+  const [previewDocument, setPreviewDocument] = useState<FulfillmentOrderDocumentSummary | null>(null)
 
   useEffect(() => {
     if (status === 'loading') return
@@ -331,6 +359,27 @@ export default function FulfillmentOrderDetailPage() {
     }
     return map
   }, [documents])
+
+  const inlineStageMeta = inlinePreviewDocument ? DOCUMENT_STAGE_META[inlinePreviewDocument.stage] : null
+  const InlineStageIcon = inlineStageMeta ? inlineStageMeta.icon : null
+  const inlineIsPdf = Boolean(
+    inlinePreviewDocument &&
+      (inlinePreviewDocument.contentType === 'application/pdf' ||
+        inlinePreviewDocument.fileName.toLowerCase().endsWith('.pdf'))
+  )
+  const inlineIsImage = Boolean(
+    inlinePreviewDocument && inlinePreviewDocument.contentType.startsWith('image/')
+  )
+
+  const previewStageMeta = previewDocument ? DOCUMENT_STAGE_META[previewDocument.stage] : null
+  const PreviewStageIcon = previewStageMeta ? previewStageMeta.icon : null
+
+  const previewIsPdf = Boolean(
+    previewDocument &&
+      (previewDocument.contentType === 'application/pdf' ||
+        previewDocument.fileName.toLowerCase().endsWith('.pdf'))
+  )
+  const previewIsImage = Boolean(previewDocument && previewDocument.contentType.startsWith('image/'))
 
   const isAmazonFBA = order?.destinationType === 'AMAZON_FBA'
   const canEdit = order?.status === 'DRAFT'
@@ -465,14 +514,14 @@ export default function FulfillmentOrderDetailPage() {
     setDocuments(Array.isArray(list) ? (list as FulfillmentOrderDocumentSummary[]) : [])
   }
 
-	  const handleDocumentUpload = async (
-	    event: ChangeEvent<HTMLInputElement>,
-	    stage: FulfillmentOrderDocumentStage,
-	    documentType: string
-	  ) => {
-	    const input = event.target
-	    const file = input.files?.[0]
-	    if (!order || !file) return
+  const handleDocumentUpload = async (
+    event: ChangeEvent<HTMLInputElement>,
+    stage: FulfillmentOrderDocumentStage,
+    documentType: string
+  ) => {
+    const input = event.target
+    const file = input.files?.[0]
+    if (!order || !file) return
 
     const key = `${stage}::${documentType}`
     setUploadingDoc(prev => ({ ...prev, [key]: true }))
@@ -506,14 +555,15 @@ export default function FulfillmentOrderDetailPage() {
       toast.success('Document uploaded')
     } catch {
       toast.error('Failed to upload document')
-	    } finally {
-	      setUploadingDoc(prev => ({ ...prev, [key]: false }))
-	      input.value = ''
-	    }
-	  }
+    } finally {
+      setUploadingDoc(prev => ({ ...prev, [key]: false }))
+      input.value = ''
+    }
+  }
+
 
   const renderDocumentStage = (stage: FulfillmentOrderDocumentStage, title: string) => {
-    const required = DOCUMENT_REQUIREMENTS[stage] ?? []
+    const required = DOCUMENT_REQUIREMENTS[stage]
     if (required.length === 0) return null
 
     return (
@@ -544,32 +594,58 @@ export default function FulfillmentOrderDetailPage() {
                   <div className="min-w-0">
                     <span className="text-sm font-medium text-foreground">{docType.label}</span>
                     {existing ? (
-                      <a
-                        href={existing.viewUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => setInlinePreviewDocument(existing)}
                         className="block truncate text-xs text-primary hover:underline"
                         title={existing.fileName}
                       >
                         {existing.fileName}
-                      </a>
+                      </button>
                     ) : (
                       <span className="block text-xs text-muted-foreground">Not uploaded yet</span>
                     )}
                   </div>
                 </div>
 
-                <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors flex-shrink-0">
-                  <Upload className="h-3.5 w-3.5" />
-                  {existing ? 'Replace' : 'Upload'}
-                  <input
-                    type="file"
-                    className="hidden"
-                    disabled={isUploading}
-                    onChange={e => handleDocumentUpload(e, stage, docType.id)}
-                  />
-                  {isUploading && <span className="text-xs text-muted-foreground ml-1">…</span>}
-                </label>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {existing && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPreviewDocument(existing)}
+                      className="h-8 w-8 p-0"
+                      title="Preview"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {existing && (
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      title="Open in new tab"
+                    >
+                      <a href={existing.viewUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  )}
+                  <label className="inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors">
+                    <Upload className="h-3.5 w-3.5" />
+                    {existing ? 'Replace' : 'Upload'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={e => handleDocumentUpload(e, stage, docType.id)}
+                    />
+                    {isUploading && <span className="text-xs text-muted-foreground ml-1">…</span>}
+                  </label>
+                </div>
               </div>
             )
           })}
@@ -1284,6 +1360,95 @@ export default function FulfillmentOrderDetailPage() {
               <div className="space-y-6">
                 {renderDocumentStage('SHIPPING', 'Shipping Documents')}
                 {renderDocumentStage('DELIVERY', 'Delivery Documents')}
+                {inlinePreviewDocument && inlineStageMeta && (
+                  <div className="rounded-xl border bg-slate-50 dark:bg-slate-900 overflow-hidden">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {InlineStageIcon && <InlineStageIcon className="h-4 w-4" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                              {inlinePreviewDocument.fileName}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {inlineStageMeta.label} •{' '}
+                              {getDocumentLabel(inlinePreviewDocument.stage, inlinePreviewDocument.documentType)}{' '}
+                              • Uploaded {formatDateTimeDisplay(inlinePreviewDocument.uploadedAt)}
+                              {inlinePreviewDocument.uploadedByName
+                                ? ` by ${inlinePreviewDocument.uploadedByName}`
+                                : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPreviewDocument(inlinePreviewDocument)}
+                          title="Full screen preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button asChild variant="ghost" size="icon" title="Open in new tab">
+                          <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setInlinePreviewDocument(null)}
+                          aria-label="Close inline preview"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-700">
+                      <div className="h-[480px] w-full">
+                        {inlineIsImage ? (
+                          <div
+                            className="h-full w-full bg-center bg-no-repeat bg-contain"
+                            style={{ backgroundImage: `url(${inlinePreviewDocument.viewUrl})` }}
+                          />
+                        ) : inlineIsPdf ? (
+                          <iframe
+                            title={inlinePreviewDocument.fileName}
+                            src={inlinePreviewDocument.viewUrl}
+                            className="h-full w-full"
+                          />
+                        ) : (
+                          <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+                            <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                Preview not available
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Open the file in a new tab to view or download.
+                              </p>
+                            </div>
+                            <Button asChild className="gap-2">
+                              <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                                Open file
+                              </a>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1369,6 +1534,84 @@ export default function FulfillmentOrderDetailPage() {
           </div>
         </PageContent>
       </PageContainer>
+
+      {previewDocument && previewStageMeta && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity"
+              onClick={() => setPreviewDocument(null)}
+            />
+
+            <div className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-xl">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b px-6 py-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      {PreviewStageIcon && <PreviewStageIcon className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{previewDocument.fileName}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {previewStageMeta.label} • {getDocumentLabel(previewDocument.stage, previewDocument.documentType)} • Uploaded{' '}
+                        {formatDateTimeDisplay(previewDocument.uploadedAt)}
+                        {previewDocument.uploadedByName ? ` by ${previewDocument.uploadedByName}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button asChild variant="outline" size="sm" className="gap-2">
+                    <a href={previewDocument.viewUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                      Open
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPreviewDocument(null)}
+                    aria-label="Close preview"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-700">
+                <div className="h-[75vh] w-full">
+                  {previewIsImage ? (
+                    <div
+                      className="h-full w-full bg-center bg-no-repeat bg-contain"
+                      style={{ backgroundImage: `url(${previewDocument.viewUrl})` }}
+                    />
+                  ) : previewIsPdf ? (
+                    <iframe title={previewDocument.fileName} src={previewDocument.viewUrl} className="h-full w-full" />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+                      <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Preview not available</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Open the file in a new tab to view or download.</p>
+                      </div>
+                      <Button asChild className="gap-2">
+                        <a href={previewDocument.viewUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                          Open file
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={showCancelConfirm}
