@@ -2506,10 +2506,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     editingForwardingQuantity > 0
       ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
       : null
-  const canDownloadPdf = !isCreate
-  const canDownloadShippingMarks =
-    !isCreate && Boolean(order) && !isTerminalStatus && flowStatus !== 'DRAFT'
-  const pdfLabel = flowStatus === 'DRAFT' ? 'RFQ PDF' : 'PO PDF'
+  const showRfqPdfDownload = !isCreate && activeViewStage === 'DRAFT' && order?.status === 'DRAFT'
+  const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED' && order?.status !== 'DRAFT'
+  const showShippingMarksDownload =
+    !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus && order?.status !== 'DRAFT'
   const displayOrderNumber = isCreate
     ? 'New RFQ'
     : flowStatus === 'DRAFT'
@@ -2908,7 +2908,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         backLabel="Back"
         actions={
           <>
-            {canDownloadPdf && (
+            {showRfqPdfDownload && (
               <Button
                 variant="outline"
                 size="sm"
@@ -2916,10 +2916,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 className="gap-2"
               >
                 <Download className="h-4 w-4" />
-                {pdfLabel}
+                RFQ PDF
               </Button>
             )}
-            {canDownloadShippingMarks && (
+            {showPoPdfDownload && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDownloadPdf()}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                PO PDF
+              </Button>
+            )}
+            {showShippingMarksDownload && (
               <Button
                 variant="outline"
                 size="sm"
