@@ -186,6 +186,13 @@ case "$app_key" in
     migrate_cmd="pnpm --filter $workspace db:push"
     build_cmd="pnpm --filter $workspace build"
     ;;
+  hermes)
+    workspace="@targon/hermes"
+    app_dir="$REPO_DIR/apps/hermes"
+    pm2_name="${PM2_PREFIX}-hermes"
+    prisma_cmd=""
+    build_cmd="pnpm --filter $workspace build"
+    ;;
   *)
     echo "Unknown app key: $app_key" >&2
     exit 1
