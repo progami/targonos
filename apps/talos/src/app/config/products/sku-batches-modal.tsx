@@ -621,18 +621,18 @@ function SkuBatchesManager({
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full table-auto text-sm">
-                  <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Batch</th>
-                      <th className="px-3 py-2 text-right font-semibold">Pack</th>
-                      <th className="px-3 py-2 text-right font-semibold">Units/Ctn</th>
-                      <th className="px-3 py-2 text-left font-semibold">Material</th>
-                      <th className="px-3 py-2 text-left font-semibold">Packaging</th>
-                      <th className="px-3 py-2 text-right font-semibold">Storage CPP</th>
-                      <th className="px-3 py-2 text-right font-semibold">Ship CPP</th>
-                      <th className="px-3 py-2 text-right font-semibold">Carton Dims ({unitSystem === 'metric' ? 'cm' : 'in'})</th>
-                      <th className="px-3 py-2 text-right font-semibold">Carton Wt ({unitSystem === 'metric' ? 'kg' : 'lb'})</th>
-                      <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                  <thead>
+                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Batch</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Pack</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Units/Ctn</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Material</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Packaging</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Storage CPP</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Ship CPP</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Carton Dims ({unitSystem === 'metric' ? 'cm' : 'in'})</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Carton Wt ({unitSystem === 'metric' ? 'kg' : 'lb'})</th>
+                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -658,7 +658,7 @@ function SkuBatchesManager({
                       const canDelete = batches.length > 1
 
                       return (
-                        <tr key={batch.id} className="odd:bg-muted/20">
+                        <tr key={batch.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                           <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                             <button
                               type="button"

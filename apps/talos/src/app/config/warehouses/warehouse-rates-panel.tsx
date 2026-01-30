@@ -318,7 +318,7 @@ export function WarehouseRatesPanel({
     const isAddingNew = isEditingThis && editState?.field === 'new'
 
     return (
-      <tr key={template.costName} className="odd:bg-muted/20 hover:bg-primary/5 transition-colors">
+      <tr key={template.costName} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
         <td className="px-3 py-2 text-foreground whitespace-nowrap w-[40%]">
           {template.costName}
           {showCategory && (
@@ -595,12 +595,12 @@ function InboundTab({ templates, renderRateRow }: TabProps) {
           delivery arrangement.
         </p>
         <table className="w-full table-fixed text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold w-[45%]">Container Type</th>
-              <th className="px-3 py-2 text-right font-semibold w-[20%]">Rate</th>
-              <th className="px-3 py-2 text-left font-semibold w-[20%]">Effective</th>
-              <th className="px-3 py-2 text-left font-semibold w-[15%]">Unit</th>
+          <thead>
+            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Container Type</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
             </tr>
           </thead>
           <tbody>
@@ -647,12 +647,12 @@ function StorageTab({ templates, renderRateRow, warehouseName }: StorageTabProps
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Warehouse Storage</h3>
         <table className="w-full table-fixed text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold w-[45%]">Description</th>
-              <th className="px-3 py-2 text-right font-semibold w-[20%]">Rate</th>
-              <th className="px-3 py-2 text-left font-semibold w-[20%]">Effective</th>
-              <th className="px-3 py-2 text-left font-semibold w-[15%]">Unit</th>
+          <thead>
+            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Description</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>
@@ -680,12 +680,12 @@ function OutboundTab({ templates, renderRateRow }: TabProps) {
           Tactical Logistics will schedule appointments and handle delivery to Amazon.
         </p>
         <table className="w-full table-fixed text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold w-[45%]">Pallet Range</th>
-              <th className="px-3 py-2 text-right font-semibold w-[20%]">Rate</th>
-              <th className="px-3 py-2 text-left font-semibold w-[20%]">Effective</th>
-              <th className="px-3 py-2 text-left font-semibold w-[15%]">Unit</th>
+          <thead>
+            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Pallet Range</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
             </tr>
           </thead>
           <tbody>{truckingRates.map(t => renderRateRow(t))}</tbody>
@@ -726,12 +726,12 @@ function ForwardingTab({ templates, renderRateRow }: TabProps) {
           Covers drayage to Tactical warehouse and includes all chassis fees.
         </p>
         <table className="w-full table-fixed text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold w-[45%]">Service</th>
-              <th className="px-3 py-2 text-right font-semibold w-[20%]">Rate</th>
-              <th className="px-3 py-2 text-left font-semibold w-[20%]">Effective</th>
-              <th className="px-3 py-2 text-left font-semibold w-[15%]">Unit</th>
+          <thead>
+            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Service</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>

@@ -495,12 +495,12 @@ export function PurchaseOrdersPanel({
 	      <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-soft">
 	        <div className="overflow-hidden">
 	          <table className="w-full table-fixed text-sm">
-	            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-	              <tr>
+	            <thead>
+	              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
 	                {columns.map(column => (
 	                  <th
 	                    key={column.key}
-	                    className={`px-3 py-2 text-left font-semibold ${column.thClassName ?? ''}`}
+	                    className={`px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap text-xs ${column.thClassName ?? ''}`}
 	                  >
 	                    {column.header}
 	                  </th>
@@ -523,7 +523,7 @@ export function PurchaseOrdersPanel({
 	              ) : (
 	                visibleOrders.map(order => {
 	                  return (
-	                    <tr key={order.id} className="odd:bg-muted/20">
+	                    <tr key={order.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
 	                      {columns.map(column => (
 	                        <td
 	                          key={`${order.id}-${column.key}`}
