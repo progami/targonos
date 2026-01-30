@@ -15,6 +15,10 @@ PSQL_BIN="${PSQL_BIN:-}"
 if [[ -z "${PSQL_BIN}" ]]; then
   if command -v psql >/dev/null 2>&1; then
     PSQL_BIN="$(command -v psql)"
+  elif [[ -x "/opt/homebrew/bin/psql" ]]; then
+    PSQL_BIN="/opt/homebrew/bin/psql"
+  elif [[ -x "/usr/local/bin/psql" ]]; then
+    PSQL_BIN="/usr/local/bin/psql"
   else
     log "Missing psql in PATH. Set PSQL_BIN=/path/to/psql"
     exit 1
@@ -56,27 +60,32 @@ SELLERBOARD_SYNC_TOKEN="$(read_env_var "SELLERBOARD_SYNC_TOKEN")"
 DATABASE_URL="$(read_env_var "DATABASE_URL")"
 
 read -r PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSCHEMA <<EOF_PG
-$(DATABASE_URL="$DATABASE_URL" node - <<'NODE'
-const raw = process.env.DATABASE_URL;
-if (!raw) process.exit(1);
+$(DATABASE_URL="$DATABASE_URL" /usr/bin/python3 - <<'PY'
+import os
+import sys
+from urllib.parse import urlparse, parse_qs, unquote
 
-let url;
-try {
-  url = new URL(raw);
-} catch {
-  process.exit(1);
-}
+raw = os.environ.get("DATABASE_URL", "")
+if not raw:
+    sys.exit(1)
 
-const schema = (url.searchParams.get('schema') || '').trim();
-const host = url.hostname || 'localhost';
-const port = url.port || '5432';
-const user = decodeURIComponent(url.username || '');
-const password = decodeURIComponent(url.password || '');
-const database = (url.pathname || '').replace(/^\//, '') || 'postgres';
+try:
+    url = urlparse(raw)
+except Exception:
+    sys.exit(1)
 
-if (!user || !password || !database || !schema) process.exit(1);
-process.stdout.write([host, port, user, password, database, schema].join(' '));
-NODE
+schema = (parse_qs(url.query).get("schema", [""])[0] or "").strip()
+host = url.hostname or "localhost"
+port = str(url.port or 5432)
+user = unquote(url.username or "")
+password = unquote(url.password or "")
+database = (url.path or "").lstrip("/") or "postgres"
+
+if not user or not password or not database or not schema:
+    sys.exit(1)
+
+sys.stdout.write(" ".join([host, port, user, password, database, schema]))
+PY
 )
 EOF_PG
 

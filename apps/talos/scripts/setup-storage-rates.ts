@@ -10,8 +10,7 @@ import { getTenantPrismaClient } from '../src/lib/tenant/prisma-factory'
 import { DEFAULT_TENANT, isValidTenantCode, type TenantCode } from '../src/lib/tenant/constants'
 
 const resolveTenantCode = (): TenantCode => {
-  const candidate =
-    process.env.TENANT_CODE ?? process.env.WMS_TENANT ?? process.env.NEXT_PUBLIC_TENANT
+  const candidate = process.env.TENANT_CODE ?? process.env.NEXT_PUBLIC_TENANT
   return isValidTenantCode(candidate) ? candidate : DEFAULT_TENANT
 }
 

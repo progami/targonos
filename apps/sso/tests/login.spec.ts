@@ -4,10 +4,7 @@ const portalBaseUrl = process.env.PORTAL_BASE_URL
 if (!portalBaseUrl) {
   throw new Error('PORTAL_BASE_URL must be defined for TargonOS login tests.')
 }
-const wmsBaseUrl = process.env.WMS_BASE_URL
-if (!wmsBaseUrl) {
-  throw new Error('WMS_BASE_URL must be defined for TargonOS login tests.')
-}
+const talosBaseUrl = new URL('/talos', portalBaseUrl).toString()
 const DEMO_USERNAMES = ['jarraramjad']
 const DEMO_PASS = 'xUh2*KC2%tZYNzV'
 
@@ -24,7 +21,7 @@ test('portal login redirects to portal home', async ({ page }) => {
 })
 
 test('portal login with callback still lands on portal home (tile page)', async ({ page }) => {
-  await page.goto(`${portalBaseUrl}/login?callbackUrl=${encodeURIComponent(wmsBaseUrl)}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${portalBaseUrl}/login?callbackUrl=${encodeURIComponent(talosBaseUrl)}`, { waitUntil: 'domcontentloaded' })
   await page.fill('input[name="emailOrUsername"]', DEMO_USERNAMES[0])
   await page.fill('input[name="password"]', DEMO_PASS)
   await page.waitForSelector('button.submit-button:not([disabled])', { timeout: 15000 })
