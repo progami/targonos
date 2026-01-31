@@ -3447,7 +3447,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="overflow-x-auto" data-gate-key="cargo.lines">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto" data-gate-key="cargo.lines">
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -3757,7 +3757,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="overflow-x-auto">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                     <table className="w-full text-sm min-w-[1100px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -4192,7 +4192,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="overflow-x-auto" data-gate-key="cargo.lines">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto" data-gate-key="cargo.lines">
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -4479,7 +4479,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="overflow-x-auto">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                     <table className="w-full text-sm min-w-[1100px]">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -5272,7 +5272,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     {draftLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -5413,7 +5413,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -5706,6 +5706,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                     </div>
 
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
@@ -5919,6 +5920,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         </tr>
                       </tfoot>
                     </table>
+                    </div>
                   </div>
                 </div>
 
@@ -7470,7 +7472,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 ) : null}
 
                 {!isCreate && order && (
-                  <div className="overflow-x-auto">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                 {auditLogsLoading ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />
