@@ -68,6 +68,13 @@ export type SpApiRequestOpts = {
 
   /** Default limiter config if we don't yet know the dynamic rate. */
   defaultRateLimit?: TokenBucketConfig;
+
+  /**
+   * If set, limit how long we will wait for the in-process rate limiter.
+   * When exceeded, the request short-circuits with a synthetic 429 response:
+   * `{ error: "rate_limited", retryAfterMs }`.
+   */
+  maxLimiterWaitMs?: number;
 };
 
 type LwaTokenCacheEntry = {
@@ -321,8 +328,19 @@ export class SpApiClient {
     // Ensure limiter exists for this operation+seller.
     spApiLimiter.ensure(limiterKey, defaultCfg);
 
-    // Wait for a token.
-    await spApiLimiter.acquire(limiterKey);
+    // Wait for a token (optionally bounded).
+    if (typeof opts.maxLimiterWaitMs === "number") {
+      const acquired = await spApiLimiter.acquireOrReturnWaitMs(limiterKey, opts.maxLimiterWaitMs);
+      if (!acquired.ok) {
+        return {
+          status: 429,
+          body: { error: "rate_limited", retryAfterMs: acquired.waitMs },
+          headers: { "retry-after": String(Math.ceil(acquired.waitMs / 1000)) },
+        };
+      }
+    } else {
+      await spApiLimiter.acquire(limiterKey);
+    }
 
     // LWA access token
     const accessToken = await this.getLwaAccessToken();
