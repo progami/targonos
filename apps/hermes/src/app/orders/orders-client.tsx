@@ -175,6 +175,14 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       return;
     }
 
+    async function waitWithCancel(ms: number) {
+      const endMs = Date.now() + ms;
+      while (!cancelRef.current && Date.now() < endMs) {
+        const remaining = endMs - Date.now();
+        await new Promise((resolve) => setTimeout(resolve, Math.min(500, remaining)));
+      }
+    }
+
     cancelRef.current = false;
     setSyncing(true);
     setPages(0);
@@ -192,10 +200,9 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     let alreadyTotal = 0;
     let expiredTotal = 0;
     try {
-      do {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
         if (cancelRef.current) break;
-        page += 1;
-        setPages(page);
 
         const body: any = {
           connectionId,
@@ -224,10 +231,33 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         });
-        const json = await res.json();
-        if (!res.ok || !json?.ok) {
-          throw new Error(json?.error ?? `HTTP ${res.status}`);
+
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = text ? JSON.parse(text) : null;
+        } catch {
+          const snippet = text.trim();
+          throw new Error(
+            `HTTP ${res.status} (non-JSON)${snippet ? `: ${snippet.slice(0, 200)}` : ""}`
+          );
         }
+
+        if (res.status === 429) {
+          const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
+          if (retryAfterMs && retryAfterMs > 0) {
+            await waitWithCancel(retryAfterMs + Math.floor(Math.random() * 250));
+            continue;
+          }
+          throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
+        }
+
+        if (!res.ok || !json?.ok) {
+          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+        }
+
+        page += 1;
+        setPages(page);
 
         importedTotal += json.imported ?? 0;
         enqueuedTotal += json.enqueue?.enqueued ?? 0;
@@ -240,7 +270,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         setSkippedExpired(expiredTotal);
 
         nextToken = json.nextToken ?? null;
-      } while (nextToken);
+        if (!nextToken) break;
+      }
 
       if (cancelRef.current) {
         toast.message("Sync stopped", {

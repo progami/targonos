@@ -116,7 +116,27 @@ async function handlePost(req: Request) {
       orderStatuses,
       fulfillmentChannels,
       maxResultsPerPage,
+      // Avoid gateway timeouts by never waiting too long for a limiter token.
+      maxLimiterWaitMs: 25_000,
     });
+
+    if (
+      sp.status === 429 &&
+      sp.body &&
+      typeof sp.body === "object" &&
+      "error" in sp.body &&
+      (sp.body as any).error === "rate_limited"
+    ) {
+      const retryAfterMs = (sp.body as any).retryAfterMs;
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Rate limited",
+          retryAfterMs: typeof retryAfterMs === "number" ? retryAfterMs : null,
+        },
+        { status: 429 }
+      );
+    }
 
     if (sp.status !== 200) {
       return NextResponse.json(

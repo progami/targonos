@@ -118,6 +118,71 @@ export class TokenBucketRateLimiter {
       if (this.queues.get(key) === run) this.queues.delete(key);
     }
   }
+
+  /**
+   * Acquire a token, but never wait longer than `maxWaitMs`.
+   *
+   * When not acquired, returns the computed wait time until the next token is available.
+   */
+  async acquireOrReturnWaitMs(
+    key: string,
+    maxWaitMs: number
+  ): Promise<{ ok: true } | { ok: false; waitMs: number }> {
+    const prev = this.queues.get(key) ?? Promise.resolve();
+
+    let result: { ok: true } | { ok: false; waitMs: number } = { ok: true };
+
+    const run = prev
+      .catch(() => {
+        // keep chain healthy
+      })
+      .then(async () => {
+        const b = this.buckets.get(key);
+        if (!b) {
+          // If caller forgot to ensure(), allow 1 rps burst 1 as safe default.
+          this.ensure(key, { ratePerSecond: 1, burst: 1 });
+        }
+        const bucket = this.buckets.get(key)!;
+
+        const startMs = Date.now();
+        // We measure elapsed time to keep the total wait bounded by maxWaitMs.
+        // (Uses wall clock; good enough for user-facing API calls.)
+        while (true) {
+          const nowMs = Date.now();
+          this.refill(bucket, nowMs);
+
+          if (bucket.tokens >= 1) {
+            bucket.tokens -= 1;
+            result = { ok: true };
+            return;
+          }
+
+          const elapsedMs = nowMs - startMs;
+          const remainingMs = Math.max(0, maxWaitMs - elapsedMs);
+
+          const needed = 1 - bucket.tokens;
+          const waitSeconds = needed / bucket.cfg.ratePerSecond;
+          const waitMs = Math.ceil(waitSeconds * 1000);
+
+          if (waitMs > remainingMs) {
+            result = { ok: false, waitMs };
+            return;
+          }
+
+          await sleep(waitMs);
+        }
+      });
+
+    this.queues.set(key, run);
+
+    try {
+      await run;
+      return result;
+    } finally {
+      // Cleanup if nothing else is chained after us.
+      if (this.queues.get(key) === run) this.queues.delete(key);
+    }
+  }
 }
 
 // A process-global limiter instance. Safe for Next.js hot-reload and worker reuse.

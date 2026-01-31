@@ -33,6 +33,12 @@ type GetOrdersParams = {
 
   /** 1..100 (per Amazon docs). */
   maxResultsPerPage?: number;
+
+  /**
+   * Optional bound for the in-process limiter wait. Useful for user-facing API routes
+   * that sit behind a gateway with timeouts.
+   */
+  maxLimiterWaitMs?: number;
 };
 
 function joinCsv(values?: string[]): string | undefined {
@@ -52,6 +58,7 @@ export async function getOrders(params: GetOrdersParams) {
     fulfillmentChannels,
     nextToken,
     maxResultsPerPage,
+    maxLimiterWaitMs,
   } = params;
 
   const query: Record<string, string | undefined> = nextToken
@@ -78,5 +85,6 @@ export async function getOrders(params: GetOrdersParams) {
     // SP-API may return dynamic rates via `x-amzn-RateLimit-Limit`.
     rateLimitKey: "orders.getOrders",
     defaultRateLimit: { ratePerSecond: 0.0167, burst: 20 },
+    maxLimiterWaitMs,
   });
 }
