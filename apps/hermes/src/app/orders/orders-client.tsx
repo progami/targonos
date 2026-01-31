@@ -38,15 +38,38 @@ function fmtDateShort(iso: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function fmtInt(n: number): string {
+  return n.toLocaleString();
+}
+
 function shortMarketplace(id: string) {
   if (!id) return "";
   return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-3)}` : id;
 }
 
+const marketplaceCountryById: Record<string, string> = {
+  ATVPDKIKX0DER: "US", // Amazon.com
+  A1F83G8C2ARO7P: "UK", // Amazon.co.uk
+};
+
+function marketplaceCountry(id: string): string | null {
+  if (!id) return null;
+  const code = marketplaceCountryById[id];
+  if (typeof code === "string") return code;
+  return null;
+}
+
+function marketplaceDisplay(id: string): string {
+  const code = marketplaceCountry(id);
+  if (code) return code;
+  return shortMarketplace(id);
+}
+
 function connectionLabel(c: AmazonConnection): string {
   const firstMarketplace = c.marketplaceIds[0];
-  const suffix = c.marketplaceIds.length > 1 ? ` +${c.marketplaceIds.length - 1}` : "";
-  const marketplacePart = firstMarketplace ? ` • ${shortMarketplace(firstMarketplace)}${suffix}` : "";
+  const suffixCount = c.marketplaceIds.length > 1 ? c.marketplaceIds.length - 1 : 0;
+  const suffix = suffixCount > 0 ? ` +${suffixCount}` : "";
+  const marketplacePart = firstMarketplace ? ` • ${marketplaceDisplay(firstMarketplace)}${suffix}` : "";
   return `${c.accountName} • ${c.region}${marketplacePart}`;
 }
 
@@ -96,16 +119,20 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   const [orders, setOrders] = React.useState<RecentOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = React.useState(true);
   const loadSeqRef = React.useRef(0);
+  const [pageSize, setPageSize] = React.useState<number>(50);
   const [ordersCursor, setOrdersCursor] = React.useState<string | null>(null);
   const [ordersNextCursor, setOrdersNextCursor] = React.useState<string | null>(null);
   const [ordersCursorStack, setOrdersCursorStack] = React.useState<(string | null)[]>([]);
+  const [ordersTotalCount, setOrdersTotalCount] = React.useState<number | null>(null);
+  const [loadingOrdersTotal, setLoadingOrdersTotal] = React.useState(false);
+  const totalSeqRef = React.useRef(0);
 
   // Backfill dialog
   const [open, setOpen] = React.useState(false);
   const [presetDays, setPresetDays] = React.useState<number>(60);
   const [createdAfter, setCreatedAfter] = React.useState<string>(isoDaysAgo(60));
   const [createdBefore, setCreatedBefore] = React.useState<string>(new Date().toISOString());
-  const [enqueue, setEnqueue] = React.useState(true);
+  const [enqueue, setEnqueue] = React.useState(false);
 
   // Scheduling knobs (compact presets)
   const [delayDays, setDelayDays] = React.useState(10);
@@ -131,6 +158,36 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     setCreatedBefore(new Date().toISOString());
   }, [presetDays]);
 
+  async function loadOrdersTotal() {
+    if (!connectionId) return;
+    const seq = totalSeqRef.current + 1;
+    totalSeqRef.current = seq;
+
+    setLoadingOrdersTotal(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("connectionId", connectionId);
+
+      const res = await fetch(hermesApiUrl(`/api/orders/count?${qs.toString()}`));
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+      if (typeof json.total !== "number") {
+        throw new Error("Invalid response (total)");
+      }
+
+      if (totalSeqRef.current !== seq) return;
+      setOrdersTotalCount(json.total);
+    } catch {
+      if (totalSeqRef.current !== seq) return;
+      setOrdersTotalCount(null);
+    } finally {
+      if (totalSeqRef.current !== seq) return;
+      setLoadingOrdersTotal(false);
+    }
+  }
+
   async function loadOrdersPage(opts: { cursor: string | null; stack: (string | null)[] }) {
     if (!connectionId) return;
     const seq = loadSeqRef.current + 1;
@@ -140,7 +197,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     try {
       const qs = new URLSearchParams();
       qs.set("connectionId", connectionId);
-      qs.set("limit", "50");
+      qs.set("limit", String(pageSize));
       if (opts.cursor) qs.set("cursor", opts.cursor);
 
       if (loadSeqRef.current !== seq) return;
@@ -177,8 +234,9 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
 
   React.useEffect(() => {
     loadOrdersPage({ cursor: null, stack: [] });
+    loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId]);
+  }, [connectionId, pageSize]);
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -354,6 +412,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       }
       setOpen(false);
       await loadOrdersPage({ cursor: null, stack: [] });
+      await loadOrdersTotal();
     } catch (e: any) {
       toast.error("Sync failed", { description: e?.message ?? "" });
     } finally {
@@ -366,6 +425,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   const pageNumber = ordersCursorStack.length + 1;
   const canPrev = ordersCursorStack.length > 0;
   const canNext = ordersNextCursor !== null;
+  const totalPages = ordersTotalCount !== null ? Math.ceil(ordersTotalCount / pageSize) : null;
+  const pageLabel = totalPages !== null && totalPages > 0 ? `Page ${pageNumber} of ${totalPages}` : `Page ${pageNumber}`;
 
   return (
     <div className="space-y-6">
@@ -553,7 +614,21 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Orders</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">Page {pageNumber}</Badge>
+              {ordersTotalCount !== null ? (
+                <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
+              ) : null}
+              <Badge variant="outline">{pageLabel}</Badge>
+              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                <SelectTrigger className="h-9 w-[110px]">
+                  <SelectValue placeholder="Rows" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="25">25 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                  <SelectItem value="100">100 / page</SelectItem>
+                  <SelectItem value="200">200 / page</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
                 variant="ghost"
@@ -582,8 +657,11 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack })}
-                disabled={loadingOrders}
+                onClick={() => {
+                  loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
+                  loadOrdersTotal();
+                }}
+                disabled={loadingOrders || loadingOrdersTotal}
               >
                 <CalendarClock className="h-4 w-4" />
                 Refresh
@@ -603,22 +681,27 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((o) => (
-                  <TableRow key={o.orderId}>
-                    <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Badge variant="secondary" title={o.marketplaceId}>
-                        {shortMarketplace(o.marketplaceId)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{fmtDateShort(o.purchaseDate)}</TableCell>
-                    <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
-                  </TableRow>
-                ))}
+                {orders.map((o) => {
+                  const country = marketplaceCountry(o.marketplaceId);
+                  const marketplaceTitle = country ? `${country} • ${o.marketplaceId}` : o.marketplaceId;
+
+                  return (
+                    <TableRow key={o.orderId}>
+                      <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Badge variant="secondary" title={marketplaceTitle}>
+                          {marketplaceDisplay(o.marketplaceId)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{fmtDateShort(o.purchaseDate)}</TableCell>
+                      <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                    </TableRow>
+                  );
+                })}
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
