@@ -175,6 +175,19 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       return;
     }
 
+    function isRetryableGatewayStatus(status: number): boolean {
+      // Cloudflare/origin transient gateway errors
+      if (status === 502) return true;
+      if (status === 503) return true;
+      if (status === 504) return true;
+      if (status === 520) return true;
+      if (status === 521) return true;
+      if (status === 522) return true;
+      if (status === 523) return true;
+      if (status === 524) return true;
+      return false;
+    }
+
     async function waitWithCancel(ms: number) {
       const endMs = Date.now() + ms;
       while (!cancelRef.current && Date.now() < endMs) {
@@ -198,7 +211,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     let importedTotal = 0;
     let enqueuedTotal = 0;
     let alreadyTotal = 0;
-    let expiredTotal = 0;
+      let expiredTotal = 0;
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -226,50 +239,70 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           body.maxResultsPerPage = 100;
         }
 
-        const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        let attempt = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          if (cancelRef.current) break;
+          attempt += 1;
 
-        const text = await res.text();
-        let json: any = null;
-        try {
-          json = text ? JSON.parse(text) : null;
-        } catch {
-          const snippet = text.trim();
-          throw new Error(
-            `HTTP ${res.status} (non-JSON)${snippet ? `: ${snippet.slice(0, 200)}` : ""}`
-          );
-        }
+          const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
 
-        if (res.status === 429) {
-          const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
-          if (retryAfterMs && retryAfterMs > 0) {
-            await waitWithCancel(retryAfterMs + Math.floor(Math.random() * 250));
+          const text = await res.text();
+          let json: any = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            if (isRetryableGatewayStatus(res.status) && attempt <= 5) {
+              await waitWithCancel(500 * attempt + Math.floor(Math.random() * 250));
+              continue;
+            }
+
+            const snippet = text.trim();
+            throw new Error(
+              `HTTP ${res.status} (non-JSON)${snippet ? `: ${snippet.slice(0, 200)}` : ""}`
+            );
+          }
+
+          if (res.status === 429) {
+            const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
+            if (retryAfterMs && retryAfterMs > 0) {
+              await waitWithCancel(retryAfterMs + Math.floor(Math.random() * 250));
+              continue;
+            }
+            throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
+          }
+
+          if (isRetryableGatewayStatus(res.status) && attempt <= 5) {
+            await waitWithCancel(500 * attempt + Math.floor(Math.random() * 250));
             continue;
           }
-          throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
+
+          if (!res.ok || !json?.ok) {
+            throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+          }
+
+          page += 1;
+          setPages(page);
+
+          importedTotal += json.imported ?? 0;
+          enqueuedTotal += json.enqueue?.enqueued ?? 0;
+          alreadyTotal += json.enqueue?.alreadyExists ?? 0;
+          expiredTotal += json.enqueue?.skippedExpired ?? 0;
+
+          setImported(importedTotal);
+          setEnqueued(enqueuedTotal);
+          setAlreadyExists(alreadyTotal);
+          setSkippedExpired(expiredTotal);
+
+          nextToken = json.nextToken ?? null;
+          break;
         }
 
-        if (!res.ok || !json?.ok) {
-          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
-        }
-
-        page += 1;
-        setPages(page);
-
-        importedTotal += json.imported ?? 0;
-        enqueuedTotal += json.enqueue?.enqueued ?? 0;
-        alreadyTotal += json.enqueue?.alreadyExists ?? 0;
-        expiredTotal += json.enqueue?.skippedExpired ?? 0;
-
-        setImported(importedTotal);
-        setEnqueued(enqueuedTotal);
-        setAlreadyExists(alreadyTotal);
-        setSkippedExpired(expiredTotal);
-
-        nextToken = json.nextToken ?? null;
+        if (cancelRef.current) break;
         if (!nextToken) break;
       }
 
