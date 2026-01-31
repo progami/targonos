@@ -94,7 +94,7 @@ function UsernameCell({ username }: { username: string }) {
 
   return (
     <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-      <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs max-w-[220px] truncate">
+      <code className="min-w-0 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs max-w-[220px] truncate">
         {username}
       </code>
       <button
@@ -248,11 +248,11 @@ export default function PasswordsPage() {
         header: 'Title',
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 flex items-center justify-center">
+            <div className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 flex items-center justify-center">
               <LockClosedIcon className="h-4 w-4 text-white" />
             </div>
-            <div>
-              <p className="font-semibold text-foreground">{row.original.title}</p>
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground truncate">{row.original.title}</p>
             </div>
           </div>
         ),
@@ -347,7 +347,7 @@ export default function PasswordsPage() {
   return (
     <>
       <ListPageHeader
-        title="Passwords"
+        title="Secrets"
         description="Shared passwords, credentials, and cards"
         icon={<LockClosedIcon className="h-6 w-6 text-white" />}
         showBack
@@ -362,10 +362,10 @@ export default function PasswordsPage() {
         <Tabs value="passwords">
           <TabsList>
             <TabsTrigger value="passwords" asChild>
-              <Link href="/passwords">Passwords</Link>
+              <Link href="/secrets">Passwords</Link>
             </TabsTrigger>
             <TabsTrigger value="credit-cards" asChild>
-              <Link href="/passwords/credit-cards">Credit Cards</Link>
+              <Link href="/secrets/credit-cards">Credit Cards</Link>
             </TabsTrigger>
           </TabsList>
         </Tabs>
