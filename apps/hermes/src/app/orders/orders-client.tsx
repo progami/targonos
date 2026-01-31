@@ -38,6 +38,17 @@ function fmtDateShort(iso: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function fmtDateTimeShort(iso: string | null): { date: string; time: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+
+  return {
+    date: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    time: d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+  };
+}
+
 function fmtInt(n: number): string {
   return n.toLocaleString();
 }
@@ -609,8 +620,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid gap-4">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Orders</CardTitle>
             <div className="flex items-center gap-2">
@@ -684,6 +695,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
                 {orders.map((o) => {
                   const country = marketplaceCountry(o.marketplaceId);
                   const marketplaceTitle = country ? `${country} • ${o.marketplaceId}` : o.marketplaceId;
+                  const purchase = fmtDateTimeShort(o.purchaseDate);
 
                   return (
                     <TableRow key={o.orderId}>
@@ -693,7 +705,16 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
                           {marketplaceDisplay(o.marketplaceId)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{fmtDateShort(o.purchaseDate)}</TableCell>
+                      <TableCell>
+                        {purchase ? (
+                          <div className="leading-tight">
+                            <div>{purchase.date}</div>
+                            <div className="text-xs text-muted-foreground">{purchase.time}</div>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                       <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
@@ -728,17 +749,6 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
             </Table>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Guardrails</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <GuardrailTile icon={CalendarClock} title="Window" value="5–30d after delivery" />
-            <GuardrailTile icon={Send} title="Deduped" value="One request per order" />
-            <GuardrailTile icon={RefreshCw} title="Rate-safe" value="Auto backoff" />
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
@@ -768,29 +778,5 @@ function PresetTile({
       <div className="text-sm font-medium">{title}</div>
       <div className="mt-1 text-xs text-muted-foreground">{meta}</div>
     </button>
-  );
-}
-
-function GuardrailTile({
-  icon: Icon,
-  title,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md border bg-card">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div>
-          <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">{value}</div>
-        </div>
-      </div>
-    </div>
   );
 }
