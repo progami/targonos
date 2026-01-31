@@ -175,6 +175,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       return;
     }
 
+    const maxGatewayAttempts = 20;
+
     function isRetryableGatewayStatus(status: number): boolean {
       // Cloudflare/origin transient gateway errors
       if (status === 502) return true;
@@ -186,6 +188,11 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       if (status === 523) return true;
       if (status === 524) return true;
       return false;
+    }
+
+    function gatewayRetryDelayMs(attempt: number): number {
+      const base = Math.min(10_000, 500 * attempt);
+      return base + Math.floor(Math.random() * 250);
     }
 
     async function waitWithCancel(ms: number) {
@@ -211,7 +218,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     let importedTotal = 0;
     let enqueuedTotal = 0;
     let alreadyTotal = 0;
-      let expiredTotal = 0;
+    let expiredTotal = 0;
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -256,15 +263,12 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           try {
             json = text ? JSON.parse(text) : null;
           } catch {
-            if (isRetryableGatewayStatus(res.status) && attempt <= 5) {
-              await waitWithCancel(500 * attempt + Math.floor(Math.random() * 250));
+            if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
+              await waitWithCancel(gatewayRetryDelayMs(attempt));
               continue;
             }
 
-            const snippet = text.trim();
-            throw new Error(
-              `HTTP ${res.status} (non-JSON)${snippet ? `: ${snippet.slice(0, 200)}` : ""}`
-            );
+            throw new Error(`HTTP ${res.status} (non-JSON)`);
           }
 
           if (res.status === 429) {
@@ -276,8 +280,8 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
             throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
           }
 
-          if (isRetryableGatewayStatus(res.status) && attempt <= 5) {
-            await waitWithCancel(500 * attempt + Math.floor(Math.random() * 250));
+          if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
+            await waitWithCancel(gatewayRetryDelayMs(attempt));
             continue;
           }
 
