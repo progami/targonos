@@ -108,6 +108,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   const [alreadyExists, setAlreadyExists] = React.useState(0);
   const [skippedExpired, setSkippedExpired] = React.useState(0);
   const cancelRef = React.useRef(false);
+  const [syncNote, setSyncNote] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     // Keep date inputs in sync with preset.
@@ -195,11 +196,19 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       return base + Math.floor(Math.random() * 250);
     }
 
-    async function waitWithCancel(ms: number) {
+    async function waitWithCancel(ms: number, label?: (remainingMs: number) => string) {
       const endMs = Date.now() + ms;
+      let lastSecond = -1;
       while (!cancelRef.current && Date.now() < endMs) {
-        const remaining = endMs - Date.now();
-        await new Promise((resolve) => setTimeout(resolve, Math.min(500, remaining)));
+        const remainingMs = endMs - Date.now();
+        if (label) {
+          const remainingSec = Math.ceil(remainingMs / 1000);
+          if (remainingSec !== lastSecond) {
+            lastSecond = remainingSec;
+            setSyncNote(label(remainingMs));
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(500, remainingMs)));
       }
     }
 
@@ -210,6 +219,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     setEnqueued(0);
     setAlreadyExists(0);
     setSkippedExpired(0);
+    setSyncNote(null);
 
     const marketplaceId = connection.marketplaceIds[0];
 
@@ -252,6 +262,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           if (cancelRef.current) break;
           attempt += 1;
 
+          setSyncNote(`Fetching page ${page + 1}…`);
           const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -264,7 +275,11 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
             json = text ? JSON.parse(text) : null;
           } catch {
             if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
-              await waitWithCancel(gatewayRetryDelayMs(attempt));
+              const waitMs = gatewayRetryDelayMs(attempt);
+              await waitWithCancel(waitMs, (remainingMs) => {
+                const remainingSec = Math.ceil(remainingMs / 1000);
+                return `Gateway error (${res.status}) — retrying in ${remainingSec}s (${attempt}/${maxGatewayAttempts})…`;
+              });
               continue;
             }
 
@@ -274,14 +289,22 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
           if (res.status === 429) {
             const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
             if (retryAfterMs && retryAfterMs > 0) {
-              await waitWithCancel(retryAfterMs + Math.floor(Math.random() * 250));
+              const waitMs = retryAfterMs + Math.floor(Math.random() * 250);
+              await waitWithCancel(waitMs, (remainingMs) => {
+                const remainingSec = Math.ceil(remainingMs / 1000);
+                return `Rate limited — retrying in ${remainingSec}s…`;
+              });
               continue;
             }
             throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
           }
 
           if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
-            await waitWithCancel(gatewayRetryDelayMs(attempt));
+            const waitMs = gatewayRetryDelayMs(attempt);
+            await waitWithCancel(waitMs, (remainingMs) => {
+              const remainingSec = Math.ceil(remainingMs / 1000);
+              return `Gateway error (${res.status}) — retrying in ${remainingSec}s (${attempt}/${maxGatewayAttempts})…`;
+            });
             continue;
           }
 
@@ -324,6 +347,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     } catch (e: any) {
       toast.error("Sync failed", { description: e?.message ?? "" });
     } finally {
+      setSyncNote(null);
       setSyncing(false);
     }
   }
@@ -461,6 +485,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
                         <Badge variant="outline">Page {pages}</Badge>
                       </div>
                       <Progress value={progress} />
+                      {syncNote ? <div className="text-xs text-muted-foreground">{syncNote}</div> : null}
                       <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground">
                         <div>
                           <div className="font-medium text-foreground">{imported}</div>
