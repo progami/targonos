@@ -38,6 +38,18 @@ function fmtDateShort(iso: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function shortMarketplace(id: string) {
+  if (!id) return "";
+  return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-3)}` : id;
+}
+
+function connectionLabel(c: AmazonConnection): string {
+  const firstMarketplace = c.marketplaceIds[0];
+  const suffix = c.marketplaceIds.length > 1 ? ` +${c.marketplaceIds.length - 1}` : "";
+  const marketplacePart = firstMarketplace ? ` • ${shortMarketplace(firstMarketplace)}${suffix}` : "";
+  return `${c.accountName} • ${c.region}${marketplacePart}`;
+}
+
 function stateBadge(state: string | null) {
   if (!state) return <Badge variant="outline">Not queued</Badge>;
   if (state === "sent") return <Badge variant="secondary">Sent</Badge>;
@@ -84,6 +96,9 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   const [orders, setOrders] = React.useState<RecentOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = React.useState(true);
   const loadSeqRef = React.useRef(0);
+  const [ordersCursor, setOrdersCursor] = React.useState<string | null>(null);
+  const [ordersNextCursor, setOrdersNextCursor] = React.useState<string | null>(null);
+  const [ordersCursorStack, setOrdersCursorStack] = React.useState<(string | null)[]>([]);
 
   // Backfill dialog
   const [open, setOpen] = React.useState(false);
@@ -116,48 +131,43 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     setCreatedBefore(new Date().toISOString());
   }, [presetDays]);
 
-  async function loadAllOrders() {
+  async function loadOrdersPage(opts: { cursor: string | null; stack: (string | null)[] }) {
     if (!connectionId) return;
     const seq = loadSeqRef.current + 1;
     loadSeqRef.current = seq;
 
     setLoadingOrders(true);
     try {
-      const all: RecentOrder[] = [];
-      let cursor: string | null = null;
+      const qs = new URLSearchParams();
+      qs.set("connectionId", connectionId);
+      qs.set("limit", "50");
+      if (opts.cursor) qs.set("cursor", opts.cursor);
 
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        if (loadSeqRef.current !== seq) return;
+      if (loadSeqRef.current !== seq) return;
 
-        const qs = new URLSearchParams();
-        qs.set("connectionId", connectionId);
-        qs.set("limit", "500");
-        if (cursor) qs.set("cursor", cursor);
-
-        const res = await fetch(hermesApiUrl(`/api/orders/list?${qs.toString()}`));
-        const json = await res.json();
-        if (!res.ok || json?.ok !== true) {
-          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
-        }
-        if (!Array.isArray(json.orders)) {
-          throw new Error("Invalid response (orders)");
-        }
-
-        all.push(...(json.orders as RecentOrder[]));
-
-        if (json.nextCursor === null) break;
-        if (typeof json.nextCursor !== "string") {
-          throw new Error("Invalid response (nextCursor)");
-        }
-        cursor = json.nextCursor;
+      const res = await fetch(hermesApiUrl(`/api/orders/list?${qs.toString()}`));
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+      if (!Array.isArray(json.orders)) {
+        throw new Error("Invalid response (orders)");
+      }
+      if (json.nextCursor !== null && typeof json.nextCursor !== "string") {
+        throw new Error("Invalid response (nextCursor)");
       }
 
       if (loadSeqRef.current !== seq) return;
-      setOrders(all);
+      setOrders(json.orders as RecentOrder[]);
+      setOrdersCursor(opts.cursor);
+      setOrdersCursorStack(opts.stack);
+      setOrdersNextCursor(json.nextCursor);
     } catch (e: any) {
       if (loadSeqRef.current !== seq) return;
       setOrders([]);
+      setOrdersCursor(null);
+      setOrdersCursorStack([]);
+      setOrdersNextCursor(null);
       toast.error("Could not load orders", { description: e?.message ?? "" });
     } finally {
       if (loadSeqRef.current !== seq) return;
@@ -166,7 +176,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   }
 
   React.useEffect(() => {
-    loadAllOrders();
+    loadOrdersPage({ cursor: null, stack: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionId]);
 
@@ -343,7 +353,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         });
       }
       setOpen(false);
-      await loadAllOrders();
+      await loadOrdersPage({ cursor: null, stack: [] });
     } catch (e: any) {
       toast.error("Sync failed", { description: e?.message ?? "" });
     } finally {
@@ -353,6 +363,9 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   }
 
   const progress = syncing ? Math.min(95, pages * 5) : 0;
+  const pageNumber = ordersCursorStack.length + 1;
+  const canPrev = ordersCursorStack.length > 0;
+  const canNext = ordersNextCursor !== null;
 
   return (
     <div className="space-y-6">
@@ -367,7 +380,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
               <SelectContent>
                 {connections.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.accountName}
+                    {connectionLabel(c)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -539,16 +552,50 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Orders</CardTitle>
-            <Button size="sm" variant="ghost" onClick={loadAllOrders} disabled={loadingOrders}>
-              <CalendarClock className="h-4 w-4" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">Page {pageNumber}</Badge>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (!canPrev) return;
+                  const prevCursor = ordersCursorStack[ordersCursorStack.length - 1] ?? null;
+                  const nextStack = ordersCursorStack.slice(0, -1);
+                  loadOrdersPage({ cursor: prevCursor, stack: nextStack });
+                }}
+                disabled={!canPrev || loadingOrders}
+              >
+                Prev
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (!ordersNextCursor) return;
+                  const nextStack = [...ordersCursorStack, ordersCursor];
+                  loadOrdersPage({ cursor: ordersNextCursor, stack: nextStack });
+                }}
+                disabled={!canNext || loadingOrders}
+              >
+                Next
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack })}
+                disabled={loadingOrders}
+              >
+                <CalendarClock className="h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Order</TableHead>
+                  <TableHead className="hidden sm:table-cell">Marketplace</TableHead>
                   <TableHead>Purchase</TableHead>
                   <TableHead>Delivery</TableHead>
                   <TableHead>Status</TableHead>
@@ -559,6 +606,11 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
                 {orders.map((o) => (
                   <TableRow key={o.orderId}>
                     <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="secondary" title={o.marketplaceId}>
+                        {shortMarketplace(o.marketplaceId)}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{fmtDateShort(o.purchaseDate)}</TableCell>
                     <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
                     <TableCell>
@@ -570,7 +622,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center">
+                    <TableCell colSpan={6} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
                           <PackageSearch className="h-5 w-5 text-muted-foreground" />
@@ -584,7 +636,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
 
                 {loadingOrders ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
