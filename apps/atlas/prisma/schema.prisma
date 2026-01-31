@@ -1234,6 +1234,34 @@ model Password {
   @@index([title])
 }
 
+enum CreditCardBrand {
+  VISA
+  MASTERCARD
+  AMEX
+  DISCOVER
+  OTHER
+}
+
+model CreditCard {
+  id             String             @id @default(cuid())
+  title          String
+  cardholderName String?
+  brand          CreditCardBrand
+  last4          String
+  expMonth       Int
+  expYear        Int
+  department     PasswordDepartment @default(FINANCE)
+  url            String?
+  notes          String?
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([department])
+  @@index([title])
+  @@index([last4])
+}
+
 model Contractor {
   id              String           @id @default(cuid())
   name            String
