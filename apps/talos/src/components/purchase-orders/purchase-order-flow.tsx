@@ -3496,7 +3496,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             </td>
                             {canEditDispatchAllocation && (
                               <td
-                                className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap"
+                                className="px-3 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
                                 data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
                               >
                                 {(() => {
@@ -3529,7 +3529,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 })()}
                               </td>
                             )}
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                            <td className="px-3 py-1 text-muted-foreground whitespace-nowrap min-w-[140px]">
                               {(() => {
                                 const gateKey = `cargo.lines.${line.id}.piNumber`
                                 const issue = gateIssues ? gateIssues[gateKey] : null
