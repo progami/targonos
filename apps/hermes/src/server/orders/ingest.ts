@@ -366,6 +366,40 @@ export async function listRecentOrders(params: {
   }));
 }
 
+export async function countOrders(params: {
+  connectionId: string;
+  marketplaceId?: string | null;
+}): Promise<number> {
+  const pool = getPgPool();
+
+  const values: any[] = [params.connectionId];
+  const where: string[] = ["connection_id = $1"];
+
+  if (params.marketplaceId) {
+    values.push(params.marketplaceId);
+    where.push(`marketplace_id = $${values.length}`);
+  }
+
+  const res = await pool.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM hermes_orders
+    WHERE ${where.join("\n      AND ")};
+    `,
+    values
+  );
+
+  const raw = res.rows?.[0]?.count;
+  if (typeof raw !== "string") {
+    throw new Error("Invalid count");
+  }
+  const count = Number(raw);
+  if (!Number.isFinite(count)) {
+    throw new Error("Invalid count");
+  }
+  return count;
+}
+
 export type HermesOrdersListCursor = {
   purchaseDate: string | null;
   importedAt: string;
