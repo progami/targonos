@@ -327,7 +327,7 @@ export default function CreditCardsPage() {
   return (
     <>
       <ListPageHeader
-        title="Passwords"
+        title="Secrets"
         description="Shared passwords, credentials, and cards"
         icon={<LockClosedIcon className="h-6 w-6 text-white" />}
         showBack
@@ -342,10 +342,10 @@ export default function CreditCardsPage() {
         <Tabs value="credit-cards">
           <TabsList>
             <TabsTrigger value="passwords" asChild>
-              <Link href="/passwords">Passwords</Link>
+              <Link href="/secrets">Passwords</Link>
             </TabsTrigger>
             <TabsTrigger value="credit-cards" asChild>
-              <Link href="/passwords/credit-cards">Credit Cards</Link>
+              <Link href="/secrets/credit-cards">Credit Cards</Link>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -499,4 +499,3 @@ export default function CreditCardsPage() {
     </>
   )
 }
-
