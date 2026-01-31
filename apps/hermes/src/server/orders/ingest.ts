@@ -1,5 +1,6 @@
+import crypto from "crypto";
+
 import { getPgPool } from "../db/pool";
-import { queueRequestReview } from "../dispatch/ledger";
 
 export type HermesOrder = {
   orderId: string;
@@ -23,6 +24,11 @@ export type ScheduleConfig = {
   spreadMaxMinutes: number;
   timezone?: string; // stored for future use; scheduling is server-local for now
 };
+
+function newId(): string {
+  // url-safe base64 id (no padding)
+  return crypto.randomBytes(16).toString("base64url");
+}
 
 function parseDate(input?: string | null): Date | null {
   if (!input) return null;
@@ -144,51 +150,71 @@ export async function upsertOrders(params: {
 }): Promise<{ upserted: number }> {
   const pool = getPgPool();
 
-  let upserted = 0;
-  for (const o of params.orders) {
-    await pool.query(
-      `
-      INSERT INTO hermes_orders (
-        connection_id, order_id, marketplace_id,
-        purchase_date, last_update_date, order_status, fulfillment_channel,
-        earliest_delivery_date, latest_delivery_date, latest_ship_date,
-        raw, imported_at, updated_at
-      ) VALUES (
-        $1,$2,$3,
-        $4::timestamptz,$5::timestamptz,$6,$7,
-        $8::timestamptz,$9::timestamptz,$10::timestamptz,
-        $11::jsonb, NOW(), NOW()
-      )
-      ON CONFLICT (connection_id, order_id) DO UPDATE
-        SET marketplace_id = EXCLUDED.marketplace_id,
-            purchase_date = COALESCE(EXCLUDED.purchase_date, hermes_orders.purchase_date),
-            last_update_date = COALESCE(EXCLUDED.last_update_date, hermes_orders.last_update_date),
-            order_status = COALESCE(EXCLUDED.order_status, hermes_orders.order_status),
-            fulfillment_channel = COALESCE(EXCLUDED.fulfillment_channel, hermes_orders.fulfillment_channel),
-            earliest_delivery_date = COALESCE(EXCLUDED.earliest_delivery_date, hermes_orders.earliest_delivery_date),
-            latest_delivery_date = COALESCE(EXCLUDED.latest_delivery_date, hermes_orders.latest_delivery_date),
-            latest_ship_date = COALESCE(EXCLUDED.latest_ship_date, hermes_orders.latest_ship_date),
-            raw = COALESCE(EXCLUDED.raw, hermes_orders.raw),
-            updated_at = NOW();
-      `,
-      [
-        params.connectionId,
-        o.orderId,
-        o.marketplaceId,
-        o.purchaseDate ?? null,
-        o.lastUpdateDate ?? null,
-        o.orderStatus ?? null,
-        o.fulfillmentChannel ?? null,
-        o.earliestDeliveryDate ?? null,
-        o.latestDeliveryDate ?? null,
-        o.latestShipDate ?? null,
-        o.raw ? JSON.stringify(o.raw) : null,
-      ]
-    );
-    upserted += 1;
-  }
+  if (params.orders.length === 0) return { upserted: 0 };
 
-  return { upserted };
+  const rows = params.orders.map((o) => ({
+    order_id: o.orderId,
+    marketplace_id: o.marketplaceId,
+    purchase_date: o.purchaseDate ?? null,
+    last_update_date: o.lastUpdateDate ?? null,
+    order_status: o.orderStatus ?? null,
+    fulfillment_channel: o.fulfillmentChannel ?? null,
+    earliest_delivery_date: o.earliestDeliveryDate ?? null,
+    latest_delivery_date: o.latestDeliveryDate ?? null,
+    latest_ship_date: o.latestShipDate ?? null,
+    raw: o.raw ?? null,
+  }));
+
+  await pool.query(
+    `
+    INSERT INTO hermes_orders (
+      connection_id, order_id, marketplace_id,
+      purchase_date, last_update_date, order_status, fulfillment_channel,
+      earliest_delivery_date, latest_delivery_date, latest_ship_date,
+      raw, imported_at, updated_at
+    )
+    SELECT
+      $1,
+      x.order_id,
+      x.marketplace_id,
+      x.purchase_date::timestamptz,
+      x.last_update_date::timestamptz,
+      x.order_status,
+      x.fulfillment_channel,
+      x.earliest_delivery_date::timestamptz,
+      x.latest_delivery_date::timestamptz,
+      x.latest_ship_date::timestamptz,
+      x.raw::jsonb,
+      NOW(),
+      NOW()
+    FROM jsonb_to_recordset($2::jsonb) AS x(
+      order_id text,
+      marketplace_id text,
+      purchase_date text,
+      last_update_date text,
+      order_status text,
+      fulfillment_channel text,
+      earliest_delivery_date text,
+      latest_delivery_date text,
+      latest_ship_date text,
+      raw jsonb
+    )
+    ON CONFLICT (connection_id, order_id) DO UPDATE
+      SET marketplace_id = EXCLUDED.marketplace_id,
+          purchase_date = COALESCE(EXCLUDED.purchase_date, hermes_orders.purchase_date),
+          last_update_date = COALESCE(EXCLUDED.last_update_date, hermes_orders.last_update_date),
+          order_status = COALESCE(EXCLUDED.order_status, hermes_orders.order_status),
+          fulfillment_channel = COALESCE(EXCLUDED.fulfillment_channel, hermes_orders.fulfillment_channel),
+          earliest_delivery_date = COALESCE(EXCLUDED.earliest_delivery_date, hermes_orders.earliest_delivery_date),
+          latest_delivery_date = COALESCE(EXCLUDED.latest_delivery_date, hermes_orders.latest_delivery_date),
+          latest_ship_date = COALESCE(EXCLUDED.latest_ship_date, hermes_orders.latest_ship_date),
+          raw = COALESCE(EXCLUDED.raw, hermes_orders.raw),
+          updated_at = NOW();
+    `,
+    [params.connectionId, JSON.stringify(rows)]
+  );
+
+  return { upserted: params.orders.length };
 }
 
 export async function enqueueRequestReviewsForOrders(params: {
@@ -199,9 +225,21 @@ export async function enqueueRequestReviewsForOrders(params: {
   experimentId?: string | null;
   variantId?: string | null;
 }): Promise<{ enqueued: number; skippedExpired: number; alreadyExists: number }> {
-  let enqueued = 0;
+  if (params.orders.length === 0) {
+    return { enqueued: 0, skippedExpired: 0, alreadyExists: 0 };
+  }
+
+  const pool = getPgPool();
+
   let skippedExpired = 0;
-  let alreadyExists = 0;
+  const rows: Array<{
+    id: string;
+    order_id: string;
+    marketplace_id: string;
+    scheduled_at: string;
+    expires_at: string | null;
+    metadata: unknown;
+  }> = [];
 
   for (const o of params.orders) {
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
@@ -211,40 +249,80 @@ export async function enqueueRequestReviewsForOrders(params: {
       continue;
     }
 
-    const metadata = {
-      source: "orders_backfill",
-      policyAnchor,
-      schedule: {
-        delayDays: clamp(params.schedule.delayDays, 5, 30),
-        windowEnabled: params.schedule.windowEnabled,
-        startHour: params.schedule.startHour,
-        endHour: params.schedule.endHour,
-        spreadEnabled: params.schedule.spreadEnabled,
-        spreadMaxMinutes: params.schedule.spreadMaxMinutes,
-        timezone: params.schedule.timezone,
+    rows.push({
+      id: newId(),
+      order_id: o.orderId,
+      marketplace_id: o.marketplaceId,
+      scheduled_at: scheduledAt.toISOString(),
+      expires_at: expiresAt ? expiresAt.toISOString() : null,
+      metadata: {
+        source: "orders_backfill",
+        policyAnchor,
+        schedule: {
+          delayDays: clamp(params.schedule.delayDays, 5, 30),
+          windowEnabled: params.schedule.windowEnabled,
+          startHour: params.schedule.startHour,
+          endHour: params.schedule.endHour,
+          spreadEnabled: params.schedule.spreadEnabled,
+          spreadMaxMinutes: params.schedule.spreadMaxMinutes,
+          timezone: params.schedule.timezone,
+        },
+        order: {
+          purchaseDate: o.purchaseDate ?? null,
+          latestDeliveryDate: o.latestDeliveryDate ?? null,
+          earliestDeliveryDate: o.earliestDeliveryDate ?? null,
+        },
       },
-      order: {
-        purchaseDate: o.purchaseDate ?? null,
-        latestDeliveryDate: o.latestDeliveryDate ?? null,
-        earliestDeliveryDate: o.earliestDeliveryDate ?? null,
-      },
-    };
-
-    const res = await queueRequestReview({
-      connectionId: params.connectionId,
-      orderId: o.orderId,
-      marketplaceId: o.marketplaceId,
-      scheduledAt,
-      expiresAt,
-      campaignId: params.campaignId ?? null,
-      experimentId: params.experimentId ?? null,
-      variantId: params.variantId ?? null,
-      metadata,
     });
-
-    if (res.kind === "queued") enqueued += 1;
-    else alreadyExists += 1;
   }
+
+  if (rows.length === 0) {
+    return { enqueued: 0, skippedExpired, alreadyExists: 0 };
+  }
+
+  const insert = await pool.query(
+    `
+    INSERT INTO hermes_dispatches (
+      id, connection_id, order_id, marketplace_id,
+      type, message_kind, state, scheduled_at,
+      expires_at, campaign_id, experiment_id, variant_id, template_id, metadata
+    )
+    SELECT
+      x.id,
+      $1,
+      x.order_id,
+      x.marketplace_id,
+      'request_review',
+      NULL,
+      'queued',
+      x.scheduled_at::timestamptz,
+      x.expires_at::timestamptz,
+      $2,
+      $3,
+      $4,
+      NULL,
+      x.metadata::jsonb
+    FROM jsonb_to_recordset($5::jsonb) AS x(
+      id text,
+      order_id text,
+      marketplace_id text,
+      scheduled_at text,
+      expires_at text,
+      metadata jsonb
+    )
+    ON CONFLICT (connection_id, order_id) WHERE type = 'request_review' DO NOTHING;
+    `,
+    [
+      params.connectionId,
+      params.campaignId ?? null,
+      params.experimentId ?? null,
+      params.variantId ?? null,
+      JSON.stringify(rows),
+    ]
+  );
+
+  const enqueued = insert.rowCount ?? 0;
+  const alreadyExists = rows.length - enqueued;
 
   return { enqueued, skippedExpired, alreadyExists };
 }
