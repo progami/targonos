@@ -150,71 +150,51 @@ export async function upsertOrders(params: {
 }): Promise<{ upserted: number }> {
   const pool = getPgPool();
 
-  if (params.orders.length === 0) return { upserted: 0 };
+  let upserted = 0;
+  for (const o of params.orders) {
+    await pool.query(
+      `
+      INSERT INTO hermes_orders (
+        connection_id, order_id, marketplace_id,
+        purchase_date, last_update_date, order_status, fulfillment_channel,
+        earliest_delivery_date, latest_delivery_date, latest_ship_date,
+        raw, imported_at, updated_at
+      ) VALUES (
+        $1,$2,$3,
+        $4::timestamptz,$5::timestamptz,$6,$7,
+        $8::timestamptz,$9::timestamptz,$10::timestamptz,
+        $11::jsonb, NOW(), NOW()
+      )
+      ON CONFLICT (connection_id, order_id) DO UPDATE
+        SET marketplace_id = EXCLUDED.marketplace_id,
+            purchase_date = COALESCE(EXCLUDED.purchase_date, hermes_orders.purchase_date),
+            last_update_date = COALESCE(EXCLUDED.last_update_date, hermes_orders.last_update_date),
+            order_status = COALESCE(EXCLUDED.order_status, hermes_orders.order_status),
+            fulfillment_channel = COALESCE(EXCLUDED.fulfillment_channel, hermes_orders.fulfillment_channel),
+            earliest_delivery_date = COALESCE(EXCLUDED.earliest_delivery_date, hermes_orders.earliest_delivery_date),
+            latest_delivery_date = COALESCE(EXCLUDED.latest_delivery_date, hermes_orders.latest_delivery_date),
+            latest_ship_date = COALESCE(EXCLUDED.latest_ship_date, hermes_orders.latest_ship_date),
+            raw = COALESCE(EXCLUDED.raw, hermes_orders.raw),
+            updated_at = NOW();
+      `,
+      [
+        params.connectionId,
+        o.orderId,
+        o.marketplaceId,
+        o.purchaseDate ?? null,
+        o.lastUpdateDate ?? null,
+        o.orderStatus ?? null,
+        o.fulfillmentChannel ?? null,
+        o.earliestDeliveryDate ?? null,
+        o.latestDeliveryDate ?? null,
+        o.latestShipDate ?? null,
+        o.raw ? JSON.stringify(o.raw) : null,
+      ]
+    );
+    upserted += 1;
+  }
 
-  const rows = params.orders.map((o) => ({
-    order_id: o.orderId,
-    marketplace_id: o.marketplaceId,
-    purchase_date: o.purchaseDate ?? null,
-    last_update_date: o.lastUpdateDate ?? null,
-    order_status: o.orderStatus ?? null,
-    fulfillment_channel: o.fulfillmentChannel ?? null,
-    earliest_delivery_date: o.earliestDeliveryDate ?? null,
-    latest_delivery_date: o.latestDeliveryDate ?? null,
-    latest_ship_date: o.latestShipDate ?? null,
-    raw: o.raw ?? null,
-  }));
-
-  await pool.query(
-    `
-    INSERT INTO hermes_orders (
-      connection_id, order_id, marketplace_id,
-      purchase_date, last_update_date, order_status, fulfillment_channel,
-      earliest_delivery_date, latest_delivery_date, latest_ship_date,
-      raw, imported_at, updated_at
-    )
-    SELECT
-      $1,
-      x.order_id,
-      x.marketplace_id,
-      x.purchase_date::timestamptz,
-      x.last_update_date::timestamptz,
-      x.order_status,
-      x.fulfillment_channel,
-      x.earliest_delivery_date::timestamptz,
-      x.latest_delivery_date::timestamptz,
-      x.latest_ship_date::timestamptz,
-      x.raw::jsonb,
-      NOW(),
-      NOW()
-    FROM jsonb_to_recordset($2::jsonb) AS x(
-      order_id text,
-      marketplace_id text,
-      purchase_date text,
-      last_update_date text,
-      order_status text,
-      fulfillment_channel text,
-      earliest_delivery_date text,
-      latest_delivery_date text,
-      latest_ship_date text,
-      raw jsonb
-    )
-    ON CONFLICT (connection_id, order_id) DO UPDATE
-      SET marketplace_id = EXCLUDED.marketplace_id,
-          purchase_date = COALESCE(EXCLUDED.purchase_date, hermes_orders.purchase_date),
-          last_update_date = COALESCE(EXCLUDED.last_update_date, hermes_orders.last_update_date),
-          order_status = COALESCE(EXCLUDED.order_status, hermes_orders.order_status),
-          fulfillment_channel = COALESCE(EXCLUDED.fulfillment_channel, hermes_orders.fulfillment_channel),
-          earliest_delivery_date = COALESCE(EXCLUDED.earliest_delivery_date, hermes_orders.earliest_delivery_date),
-          latest_delivery_date = COALESCE(EXCLUDED.latest_delivery_date, hermes_orders.latest_delivery_date),
-          latest_ship_date = COALESCE(EXCLUDED.latest_ship_date, hermes_orders.latest_ship_date),
-          raw = COALESCE(EXCLUDED.raw, hermes_orders.raw),
-          updated_at = NOW();
-    `,
-    [params.connectionId, JSON.stringify(rows)]
-  );
-
-  return { upserted: params.orders.length };
+  return { upserted };
 }
 
 export async function enqueueRequestReviewsForOrders(params: {
