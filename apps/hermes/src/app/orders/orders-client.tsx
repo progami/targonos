@@ -138,6 +138,12 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
   const [loadingOrdersTotal, setLoadingOrdersTotal] = React.useState(false);
   const totalSeqRef = React.useRef(0);
 
+  // Table filters
+  const [filterMarketplaceId, setFilterMarketplaceId] = React.useState<string>("any");
+  const [filterDelivery, setFilterDelivery] = React.useState<string>("any");
+  const [filterOrderStatus, setFilterOrderStatus] = React.useState<string>("any");
+  const [filterReviewState, setFilterReviewState] = React.useState<string>("any");
+
   // Backfill dialog
   const [open, setOpen] = React.useState(false);
   const [presetDays, setPresetDays] = React.useState<number>(60);
@@ -178,6 +184,10 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     try {
       const qs = new URLSearchParams();
       qs.set("connectionId", connectionId);
+      if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
+      if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
+      if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
+      if (filterReviewState !== "any") qs.set("reviewState", filterReviewState);
 
       const res = await fetch(hermesApiUrl(`/api/orders/count?${qs.toString()}`));
       const json = await res.json();
@@ -210,6 +220,10 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
       qs.set("connectionId", connectionId);
       qs.set("limit", String(pageSize));
       if (opts.cursor) qs.set("cursor", opts.cursor);
+      if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
+      if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
+      if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
+      if (filterReviewState !== "any") qs.set("reviewState", filterReviewState);
 
       if (loadSeqRef.current !== seq) return;
 
@@ -247,7 +261,7 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
     loadOrdersPage({ cursor: null, stack: [] });
     loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId, pageSize]);
+  }, [connectionId, pageSize, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -445,7 +459,16 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
         title="Orders"
         right={
           <div className="flex items-center gap-2">
-            <Select value={connectionId} onValueChange={setConnectionId}>
+            <Select
+              value={connectionId}
+              onValueChange={(id) => {
+                setConnectionId(id);
+                setFilterMarketplaceId("any");
+                setFilterDelivery("any");
+                setFilterOrderStatus("any");
+                setFilterReviewState("any");
+              }}
+            >
               <SelectTrigger className="w-[220px]">
                 <SelectValue placeholder="Select account" />
               </SelectTrigger>
@@ -684,11 +707,77 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
               <TableHeader>
                 <TableRow>
                   <TableHead>Order</TableHead>
-                  <TableHead className="hidden sm:table-cell">Marketplace</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    <div className="flex flex-col gap-1">
+                      <div>Marketplace</div>
+                      <Select value={filterMarketplaceId} onValueChange={setFilterMarketplaceId}>
+                        <SelectTrigger className="h-8 w-[140px]">
+                          <SelectValue placeholder="All" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">All</SelectItem>
+                          {(connection?.marketplaceIds ?? []).map((id) => (
+                            <SelectItem key={id} value={id}>
+                              {marketplaceDisplay(id)} • {shortMarketplace(id)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </TableHead>
                   <TableHead>Purchase</TableHead>
-                  <TableHead>Delivery</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Review request</TableHead>
+                  <TableHead>
+                    <div className="flex flex-col gap-1">
+                      <div>Delivery</div>
+                      <Select value={filterDelivery} onValueChange={setFilterDelivery}>
+                        <SelectTrigger className="h-8 w-[130px]">
+                          <SelectValue placeholder="All" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">All</SelectItem>
+                          <SelectItem value="has">Has date</SelectItem>
+                          <SelectItem value="missing">Missing</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </TableHead>
+                  <TableHead>
+                    <div className="flex flex-col gap-1">
+                      <div>Status</div>
+                      <Select value={filterOrderStatus} onValueChange={setFilterOrderStatus}>
+                        <SelectTrigger className="h-8 w-[160px]">
+                          <SelectValue placeholder="All" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">All</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Unshipped">Unshipped</SelectItem>
+                          <SelectItem value="PartiallyShipped">PartiallyShipped</SelectItem>
+                          <SelectItem value="Shipped">Shipped</SelectItem>
+                          <SelectItem value="Canceled">Canceled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      <div>Review request</div>
+                      <Select value={filterReviewState} onValueChange={setFilterReviewState}>
+                        <SelectTrigger className="h-8 w-[160px]">
+                          <SelectValue placeholder="All" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">All</SelectItem>
+                          <SelectItem value="not_queued">Not queued</SelectItem>
+                          <SelectItem value="queued">Queued</SelectItem>
+                          <SelectItem value="sending">Sending</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="failed">Failed</SelectItem>
+                          <SelectItem value="skipped">Skipped</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -28,12 +28,18 @@ async function handleGet(req: Request) {
 
   const url = new URL(req.url);
   const marketplaceIdRaw = url.searchParams.get("marketplaceId");
+  const orderStatusRaw = url.searchParams.get("orderStatus");
+  const deliveryRaw = url.searchParams.get("delivery");
+  const reviewStateRaw = url.searchParams.get("reviewState");
   const cursorRaw = url.searchParams.get("cursor");
   const limitRaw = url.searchParams.get("limit");
 
   const schema = z.object({
     connectionId: z.string().min(1),
     marketplaceId: z.string().min(1).optional(),
+    orderStatus: z.string().min(1).optional(),
+    delivery: z.enum(["any", "has", "missing"]).optional(),
+    reviewState: z.enum(["any", "not_queued", "queued", "sending", "sent", "failed", "skipped"]).optional(),
     cursor: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(500),
   });
@@ -41,6 +47,9 @@ async function handleGet(req: Request) {
   const parsed = schema.safeParse({
     connectionId: url.searchParams.get("connectionId"),
     marketplaceId: marketplaceIdRaw === null ? undefined : marketplaceIdRaw,
+    orderStatus: orderStatusRaw === null ? undefined : orderStatusRaw,
+    delivery: deliveryRaw === null ? undefined : deliveryRaw,
+    reviewState: reviewStateRaw === null ? undefined : reviewStateRaw,
     cursor: cursorRaw === null ? undefined : cursorRaw,
     limit: limitRaw === null ? undefined : limitRaw,
   });
@@ -53,10 +62,15 @@ async function handleGet(req: Request) {
   }
 
   const cursor = parsed.data.cursor ? decodeCursor(parsed.data.cursor) : null;
+  const delivery = parsed.data.delivery === "any" ? undefined : parsed.data.delivery;
+  const reviewState = parsed.data.reviewState === "any" ? undefined : parsed.data.reviewState;
 
   const { orders, nextCursor } = await listOrdersPage({
     connectionId: parsed.data.connectionId,
     marketplaceId: parsed.data.marketplaceId,
+    orderStatus: parsed.data.orderStatus,
+    delivery,
+    reviewState,
     cursor,
     limit: parsed.data.limit,
   });
