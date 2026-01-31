@@ -369,21 +369,49 @@ export async function listRecentOrders(params: {
 export async function countOrders(params: {
   connectionId: string;
   marketplaceId?: string | null;
+  orderStatus?: string | null;
+  delivery?: "has" | "missing";
+  reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<number> {
   const pool = getPgPool();
 
   const values: any[] = [params.connectionId];
-  const where: string[] = ["connection_id = $1"];
+  const where: string[] = ["o.connection_id = $1"];
 
   if (params.marketplaceId) {
     values.push(params.marketplaceId);
-    where.push(`marketplace_id = $${values.length}`);
+    where.push(`o.marketplace_id = $${values.length}`);
+  }
+
+  if (params.orderStatus) {
+    values.push(params.orderStatus);
+    where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.delivery === "has") {
+    where.push("o.latest_delivery_date IS NOT NULL");
+  }
+  if (params.delivery === "missing") {
+    where.push("o.latest_delivery_date IS NULL");
+  }
+
+  if (params.reviewState) {
+    if (params.reviewState === "not_queued") {
+      where.push("d.state IS NULL");
+    } else {
+      values.push(params.reviewState);
+      where.push(`d.state = $${values.length}`);
+    }
   }
 
   const res = await pool.query(
     `
     SELECT COUNT(*) AS count
-    FROM hermes_orders
+    FROM hermes_orders o
+    LEFT JOIN hermes_dispatches d
+      ON d.connection_id = o.connection_id
+     AND d.order_id = o.order_id
+     AND d.type = 'request_review'
     WHERE ${where.join("\n      AND ")};
     `,
     values
@@ -411,6 +439,9 @@ export async function listOrdersPage(params: {
   limit: number;
   cursor?: HermesOrdersListCursor | null;
   marketplaceId?: string | null;
+  orderStatus?: string | null;
+  delivery?: "has" | "missing";
+  reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<{
   orders: Array<{
     orderId: string;
@@ -440,6 +471,27 @@ export async function listOrdersPage(params: {
   if (params.marketplaceId) {
     values.push(params.marketplaceId);
     where.push(`o.marketplace_id = $${values.length}`);
+  }
+
+  if (params.orderStatus) {
+    values.push(params.orderStatus);
+    where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.delivery === "has") {
+    where.push("o.latest_delivery_date IS NOT NULL");
+  }
+  if (params.delivery === "missing") {
+    where.push("o.latest_delivery_date IS NULL");
+  }
+
+  if (params.reviewState) {
+    if (params.reviewState === "not_queued") {
+      where.push("d.state IS NULL");
+    } else {
+      values.push(params.reviewState);
+      where.push(`d.state = $${values.length}`);
+    }
   }
 
   if (cursor) {
