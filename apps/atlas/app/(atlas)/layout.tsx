@@ -74,7 +74,7 @@ const navigation: NavSection[] = [
       { name: 'Org Chart', href: '/organogram', icon: OrgChartIcon },
       { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
       { name: 'Policies', href: '/policies', icon: DocumentIcon },
-      { name: 'Passwords', href: '/passwords', icon: LockClosedIcon },
+      { name: 'Secrets', href: '/secrets', icon: LockClosedIcon },
       { name: 'Contractors', href: '/contractors', icon: BriefcaseIcon },
     ],
   },
