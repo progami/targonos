@@ -82,6 +82,36 @@ function PasswordCell({ password }: { password: string }) {
   )
 }
 
+function UsernameCell({ username }: { username: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(username)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+      <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs max-w-[220px] truncate">
+        {username}
+      </code>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy username'}
+      >
+        <ClipboardIcon className={cn(
+          "h-4 w-4 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
 type PasswordFormData = {
   title: string
   username: string
@@ -223,12 +253,22 @@ export default function PasswordsPage() {
             </div>
             <div>
               <p className="font-semibold text-foreground">{row.original.title}</p>
-              {row.original.username && (
-                <p className="text-xs text-muted-foreground mt-0.5">{row.original.username}</p>
-              )}
             </div>
           </div>
         ),
+        enableSorting: true,
+      },
+      {
+        accessorFn: (row) => row.username ?? '',
+        id: 'username',
+        header: 'Username',
+        cell: ({ row }) => {
+          const username = row.original.username
+          if (!username) {
+            return <span className="text-muted-foreground">—</span>
+          }
+          return <UsernameCell username={username} />
+        },
         enableSorting: true,
       },
       {
