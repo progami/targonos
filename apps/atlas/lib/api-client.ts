@@ -1470,6 +1470,80 @@ export const PasswordsApi = {
   },
 }
 
+// Credit Cards
+export type CreditCardBrand = 'VISA' | 'MASTERCARD' | 'AMEX' | 'DISCOVER' | 'OTHER'
+
+export type CreditCard = {
+  id: string
+  title: string
+  cardholderName?: string | null
+  brand: CreditCardBrand
+  last4: string
+  expMonth: number
+  expYear: number
+  department: PasswordDepartment
+  url?: string | null
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export const CreditCardsApi = {
+  list(params: { q?: string; take?: number; skip?: number; department?: PasswordDepartment } = {}) {
+    const qp = new URLSearchParams()
+    if (params.q) qp.set('q', params.q)
+    if (params.take != null) qp.set('take', String(params.take))
+    if (params.skip != null) qp.set('skip', String(params.skip))
+    if (params.department) qp.set('department', params.department)
+    const qs = qp.toString()
+    return request<{ items: CreditCard[]; total: number; allowedDepartments: PasswordDepartment[] }>(
+      `/api/credit-cards${qs ? `?${qs}` : ''}`
+    )
+  },
+  get(id: string) {
+    return request<CreditCard>(`/api/credit-cards/${encodeURIComponent(id)}`)
+  },
+  create(payload: {
+    title: string
+    cardholderName?: string | null
+    brand: CreditCardBrand
+    last4: string
+    expMonth: number
+    expYear: number
+    department?: PasswordDepartment
+    url?: string | null
+    notes?: string | null
+  }) {
+    return request<CreditCard>(`/api/credit-cards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  update(id: string, payload: Partial<{
+    title: string
+    cardholderName: string | null
+    brand: CreditCardBrand
+    last4: string
+    expMonth: number
+    expYear: number
+    department: PasswordDepartment
+    url: string | null
+    notes: string | null
+  }>) {
+    return request<CreditCard>(`/api/credit-cards/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  delete(id: string) {
+    return request<{ ok: boolean }>(`/api/credit-cards/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
 // Contractors
 export type ContractorStatus = 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'TERMINATED'
 
