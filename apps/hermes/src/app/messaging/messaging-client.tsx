@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hermesApiUrl } from "@/lib/base-path";
 import { formatDate } from "@/lib/time";
-import type { AmazonConnection } from "@/lib/types";
+import { useConnectionsStore } from "@/stores/connections-store";
 
 type RecentOrder = {
   orderId: string;
@@ -84,15 +84,25 @@ function shortMarketplace(id: string) {
   return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-3)}` : id;
 }
 
-export function MessagingClient(props: { connections: AmazonConnection[] }) {
-  const connections = props.connections;
-  const defaultConnectionId = connections[0]?.id ?? "";
+export function MessagingClient() {
+  const {
+    connections,
+    loading: connectionsLoading,
+    activeConnectionId,
+    setActiveConnectionId,
+    fetch: fetchConnections,
+  } = useConnectionsStore();
 
-  const [connectionId, setConnectionId] = useState(defaultConnectionId);
-  const connection = useMemo(
-    () => connections.find((c) => c.id === connectionId) ?? connections[0],
-    [connections, connectionId]
-  );
+  useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  const connectionId = activeConnectionId ?? "";
+  const connection = useMemo(() => {
+    const selected = connections.find((c) => c.id === connectionId);
+    if (selected) return selected;
+    return connections[0];
+  }, [connections, connectionId]);
 
   const [orders, setOrders] = useState<RecentOrder[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
@@ -165,9 +175,9 @@ export function MessagingClient(props: { connections: AmazonConnection[] }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={connectionId} onValueChange={setConnectionId}>
+              <Select value={connectionId} onValueChange={setActiveConnectionId}>
                 <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder="Select account" />
+                  <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select account"} />
                 </SelectTrigger>
                 <SelectContent>
                   {connections.map((c) => (
