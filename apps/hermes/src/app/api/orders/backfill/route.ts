@@ -20,6 +20,18 @@ function isoDaysAgo(days: number): string {
   return d.toISOString();
 }
 
+function clampCreatedBefore(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return iso;
+
+  // Amazon Orders API rejects CreatedBefore values too close to "now" (and any future time).
+  // Keep a small safety buffer to avoid 400 InvalidInput and gateway errors.
+  const maxMs = Date.now() - 5 * 60 * 1000;
+  const clampedMs = Math.min(d.getTime(), maxMs);
+  return new Date(clampedMs).toISOString();
+}
+
 function pickNextToken(body: any): string | null {
   const payload = body?.payload ?? body;
   return (
@@ -93,6 +105,7 @@ async function handlePost(req: Request) {
   // Policy-safe defaults: by default backfill only a recent window.
   // (Orders API may restrict how far back you can query; also reduces load.)
   const createdAfterFinal = createdAfter ?? isoDaysAgo(60);
+  const createdBeforeFinal = clampCreatedBefore(createdBefore);
 
   const schedule: ScheduleConfig = {
     delayDays: parsed.data.schedule?.delayDays ?? 10,
@@ -111,7 +124,7 @@ async function handlePost(req: Request) {
       client,
       marketplaceIds: [marketplaceId],
       createdAfter: createdAfterFinal,
-      createdBefore,
+      createdBefore: createdBeforeFinal,
       nextToken,
       orderStatuses,
       fulfillmentChannels,
@@ -139,6 +152,7 @@ async function handlePost(req: Request) {
     }
 
     if (sp.status !== 200) {
+      const httpStatus = sp.status >= 400 && sp.status < 500 ? sp.status : 502;
       return NextResponse.json(
         {
           ok: false,
@@ -146,7 +160,7 @@ async function handlePost(req: Request) {
           status: sp.status,
           body: sp.body,
         },
-        { status: 502 }
+        { status: httpStatus }
       );
     }
 
