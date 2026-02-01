@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { hermesApiUrl } from "@/lib/base-path";
+import { useConnectionsStore } from "@/stores/connections-store";
 
 type RecentOrder = {
   orderId: string;
@@ -123,12 +124,25 @@ function fromDateInputValueEnd(value: string): string {
   return new Date(`${value}T23:59:59Z`).toISOString();
 }
 
-export function OrdersClient({ connections }: { connections: AmazonConnection[] }) {
-  const [connectionId, setConnectionId] = React.useState(connections[0]?.id ?? "");
+export function OrdersClient() {
+  const {
+    connections,
+    loaded: connectionsLoaded,
+    loading: connectionsLoading,
+    activeConnectionId,
+    setActiveConnectionId,
+    fetch: fetchConnections,
+  } = useConnectionsStore();
+
+  React.useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  const connectionId = activeConnectionId ?? "";
   const connection = connections.find((c) => c.id === connectionId);
 
   const [orders, setOrders] = React.useState<RecentOrder[]>([]);
-  const [loadingOrders, setLoadingOrders] = React.useState(true);
+  const [loadingOrders, setLoadingOrders] = React.useState(false);
   const loadSeqRef = React.useRef(0);
   const [pageSize, setPageSize] = React.useState<number>(50);
   const [ordersCursor, setOrdersCursor] = React.useState<string | null>(null);
@@ -462,15 +476,15 @@ export function OrdersClient({ connections }: { connections: AmazonConnection[] 
             <Select
               value={connectionId}
               onValueChange={(id) => {
-                setConnectionId(id);
+                setActiveConnectionId(id);
                 setFilterMarketplaceId("any");
                 setFilterDelivery("any");
                 setFilterOrderStatus("any");
                 setFilterReviewState("any");
               }}
             >
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select account" />
+              <SelectTrigger className="w-[220px]" disabled={!connectionsLoaded && connectionsLoading}>
+                <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select account"} />
               </SelectTrigger>
               <SelectContent>
                 {connections.map((c) => (

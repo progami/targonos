@@ -1,11 +1,9 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CalendarClock,
-  ChevronLeft,
   FlaskConical,
   Info,
   Mail,
@@ -80,7 +78,13 @@ function PresetTile({
 
 export default function NewCampaignPage() {
   const router = useRouter();
-  const { connections, fetch: fetchConnections } = useConnectionsStore();
+  const {
+    connections,
+    loading: connectionsLoading,
+    activeConnectionId,
+    setActiveConnectionId,
+    fetch: fetchConnections,
+  } = useConnectionsStore();
 
   React.useEffect(() => {
     fetchConnections();
@@ -90,15 +94,9 @@ export default function NewCampaignPage() {
 
   // Basics
   const [name, setName] = React.useState("Review Request");
-  const [connectionId, setConnectionId] = React.useState("");
   const [startLive, setStartLive] = React.useState(true);
 
-  // Set default connection once loaded
-  React.useEffect(() => {
-    if (!connectionId && connections.length > 0) {
-      setConnectionId(connections[0].id);
-    }
-  }, [connections, connectionId]);
+  const connectionId = activeConnectionId ?? "";
 
   // Timing
   const [delayDays, setDelayDays] = React.useState(10);
@@ -175,17 +173,9 @@ export default function NewCampaignPage() {
       <PageHeader
         title="New campaign"
         right={
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/campaigns">
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </Link>
-            </Button>
-            <Button size="sm" onClick={create} disabled={creating}>
-              Create
-            </Button>
-          </>
+          <Button size="sm" onClick={create} disabled={creating}>
+            Create
+          </Button>
         }
       />
 
@@ -210,9 +200,9 @@ export default function NewCampaignPage() {
 
               <div className="space-y-2">
                 <Label>Amazon account</Label>
-                <Select value={connectionId} onValueChange={setConnectionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
+                <Select value={connectionId} onValueChange={setActiveConnectionId}>
+                  <SelectTrigger disabled={connectionsLoading}>
+                    <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select account"} />
                   </SelectTrigger>
                   <SelectContent>
                     {connections.map((c) => (
