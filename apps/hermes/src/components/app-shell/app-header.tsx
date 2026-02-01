@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
+import { ChevronLeft, Search } from "lucide-react";
 
 import { navItems } from "@/components/app-shell/nav";
 import { ModeToggle } from "@/components/mode-toggle";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -28,11 +29,19 @@ function breadcrumbFromPath(pathname: string) {
 export function AppHeader() {
   const pathname = usePathname() ?? "/";
   const crumbs = breadcrumbFromPath(pathname);
+  const back = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="flex h-16 items-center gap-4 px-4 md:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-3">
+          {back ? (
+            <Button asChild variant="ghost" size="icon" aria-label={`Back to ${back.label}`}>
+              <Link href={back.href}>
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
           <nav className="hidden min-w-0 items-center gap-2 text-sm md:flex">
             {crumbs.map((c, idx) => (
               <span key={c.href} className="min-w-0">
