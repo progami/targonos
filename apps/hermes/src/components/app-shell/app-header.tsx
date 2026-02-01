@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { navItems } from "@/components/app-shell/nav";
 import { ModeToggle } from "@/components/mode-toggle";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +26,7 @@ function breadcrumbFromPath(pathname: string) {
 }
 
 export function AppHeader() {
-  const pathname = usePathname() || "/";
+  const pathname = usePathname() ?? "/";
   const crumbs = breadcrumbFromPath(pathname);
 
   return (
@@ -57,12 +56,6 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button asChild className="hidden sm:inline-flex">
-            <Link href="/campaigns/new">
-              <Plus className="h-4 w-4" />
-              New Campaign
-            </Link>
-          </Button>
           <ModeToggle />
         </div>
       </div>
