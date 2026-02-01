@@ -109,6 +109,22 @@ function isoDaysAgo(days: number): string {
   return d.toISOString();
 }
 
+function isoMinutesAgo(minutes: number): string {
+  const d = new Date(Date.now() - minutes * 60 * 1000);
+  return d.toISOString();
+}
+
+function clampCreatedBefore(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return iso;
+
+  // Amazon Orders API rejects CreatedBefore values too close to "now" (and any future time).
+  // Keep a small safety buffer to avoid 400 InvalidInput and gateway retries.
+  const maxMs = Date.now() - 5 * 60 * 1000;
+  const clampedMs = Math.min(d.getTime(), maxMs);
+  return new Date(clampedMs).toISOString();
+}
+
 function toDateInputValue(iso: string): string {
   // yyyy-mm-dd
   return iso.slice(0, 10);
@@ -162,7 +178,7 @@ export function OrdersClient() {
   const [open, setOpen] = React.useState(false);
   const [presetDays, setPresetDays] = React.useState<number>(60);
   const [createdAfter, setCreatedAfter] = React.useState<string>(isoDaysAgo(60));
-  const [createdBefore, setCreatedBefore] = React.useState<string>(new Date().toISOString());
+  const [createdBefore, setCreatedBefore] = React.useState<string>(isoMinutesAgo(5));
   const [enqueue, setEnqueue] = React.useState(false);
 
   // Scheduling knobs (compact presets)
@@ -186,7 +202,7 @@ export function OrdersClient() {
   React.useEffect(() => {
     // Keep date inputs in sync with preset.
     setCreatedAfter(isoDaysAgo(presetDays));
-    setCreatedBefore(new Date().toISOString());
+    setCreatedBefore(isoMinutesAgo(5));
   }, [presetDays]);
 
   async function loadOrdersTotal() {
@@ -358,7 +374,7 @@ export function OrdersClient() {
         if (nextToken) body.nextToken = nextToken;
         else {
           body.createdAfter = createdAfter;
-          body.createdBefore = createdBefore;
+          body.createdBefore = clampCreatedBefore(createdBefore);
           body.orderStatuses = ["Shipped", "PartiallyShipped", "Unshipped"]; // pragmatic default
           body.maxResultsPerPage = 100;
         }
