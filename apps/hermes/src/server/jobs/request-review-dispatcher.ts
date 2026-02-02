@@ -61,10 +61,15 @@ function getInt(name: string, fallback: number): number {
 // loadSpApiConfigForConnection lives in ../sp-api/connection-config.ts
 
 function hasReviewActionFromResponseBody(body: any): boolean {
-  // Conservative parser: Amazon typically returns {payload:{actions:[{name,href,...}]}}
-  // but you should validate against your real response once wired.
-  const actions = body?.payload?.actions ?? body?.actions;
-  if (!Array.isArray(actions)) return false;
+  // Amazon can return actions in different shapes:
+  // - Orders-style: { payload: { actions: [...] } }
+  // - Direct: { actions: [...] }
+  // - Solicitations HAL: { _embedded: { actions: [...] } }
+  let actions: any[] | null = null;
+  if (Array.isArray(body?.payload?.actions)) actions = body.payload.actions;
+  else if (Array.isArray(body?.actions)) actions = body.actions;
+  else if (Array.isArray(body?._embedded?.actions)) actions = body._embedded.actions;
+  if (!actions) return false;
 
   for (const a of actions) {
     const name = a?.name;
