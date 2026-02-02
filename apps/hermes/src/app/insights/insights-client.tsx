@@ -4,13 +4,13 @@ import * as React from "react";
 import { Ban, MailCheck, ShieldAlert, Timer, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 
-import type { AmazonConnection } from "@/lib/types";
 import { hermesApiUrl } from "@/lib/base-path";
 import { PageHeader } from "@/components/hermes/page-header";
 import { KpiCard } from "@/components/hermes/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useConnectionsStore } from "@/stores/connections-store";
 
 // Recharts (shadcn/ui charts are built on this)
 import {
@@ -66,8 +66,20 @@ function TooltipCard({ active, payload, label }: any) {
   );
 }
 
-export function InsightsClient({ connections }: { connections: AmazonConnection[] }) {
-  const [connectionId, setConnectionId] = React.useState(connections[0]?.id ?? "");
+export function InsightsClient() {
+  const {
+    connections,
+    loading: connectionsLoading,
+    activeConnectionId,
+    setActiveConnectionId,
+    fetch: fetchConnections,
+  } = useConnectionsStore();
+
+  React.useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  const connectionId = activeConnectionId ?? "";
   const [rangeDays, setRangeDays] = React.useState<7 | 30 | 90>(30);
   const [loading, setLoading] = React.useState(true);
   const [overview, setOverview] = React.useState<Overview | null>(null);
@@ -137,9 +149,9 @@ export function InsightsClient({ connections }: { connections: AmazonConnection[
               </TabsList>
             </Tabs>
 
-            <Select value={connectionId} onValueChange={setConnectionId}>
+            <Select value={connectionId} onValueChange={setActiveConnectionId}>
               <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="All accounts" />
+                <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select account"} />
               </SelectTrigger>
               <SelectContent>
                 {connections.map((c) => (

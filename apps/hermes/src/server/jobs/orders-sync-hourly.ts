@@ -28,6 +28,7 @@ import {
   type ScheduleConfig,
 } from "../orders/ingest";
 import { deleteJobState, getJobState, setJobState } from "./job-state";
+import { loadHermesEnv } from "./load-env";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -249,6 +250,7 @@ async function syncAllConnectionsOnce(): Promise<void> {
 }
 
 async function main() {
+  loadHermesEnv();
   const once = getBool("HERMES_ORDERS_SYNC_ONCE", false);
   const intervalMinutes = getInt("HERMES_ORDERS_SYNC_INTERVAL_MINUTES", 60);
 

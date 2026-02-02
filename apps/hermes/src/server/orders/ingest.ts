@@ -1,5 +1,6 @@
+import crypto from "crypto";
+
 import { getPgPool } from "../db/pool";
-import { queueRequestReview } from "../dispatch/ledger";
 
 export type HermesOrder = {
   orderId: string;
@@ -23,6 +24,11 @@ export type ScheduleConfig = {
   spreadMaxMinutes: number;
   timezone?: string; // stored for future use; scheduling is server-local for now
 };
+
+function newId(): string {
+  // url-safe base64 id (no padding)
+  return crypto.randomBytes(16).toString("base64url");
+}
 
 function parseDate(input?: string | null): Date | null {
   if (!input) return null;
@@ -199,9 +205,21 @@ export async function enqueueRequestReviewsForOrders(params: {
   experimentId?: string | null;
   variantId?: string | null;
 }): Promise<{ enqueued: number; skippedExpired: number; alreadyExists: number }> {
-  let enqueued = 0;
+  if (params.orders.length === 0) {
+    return { enqueued: 0, skippedExpired: 0, alreadyExists: 0 };
+  }
+
+  const pool = getPgPool();
+
   let skippedExpired = 0;
-  let alreadyExists = 0;
+  const rows: Array<{
+    id: string;
+    order_id: string;
+    marketplace_id: string;
+    scheduled_at: string;
+    expires_at: string | null;
+    metadata: unknown;
+  }> = [];
 
   for (const o of params.orders) {
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
@@ -211,40 +229,80 @@ export async function enqueueRequestReviewsForOrders(params: {
       continue;
     }
 
-    const metadata = {
-      source: "orders_backfill",
-      policyAnchor,
-      schedule: {
-        delayDays: clamp(params.schedule.delayDays, 5, 30),
-        windowEnabled: params.schedule.windowEnabled,
-        startHour: params.schedule.startHour,
-        endHour: params.schedule.endHour,
-        spreadEnabled: params.schedule.spreadEnabled,
-        spreadMaxMinutes: params.schedule.spreadMaxMinutes,
-        timezone: params.schedule.timezone,
+    rows.push({
+      id: newId(),
+      order_id: o.orderId,
+      marketplace_id: o.marketplaceId,
+      scheduled_at: scheduledAt.toISOString(),
+      expires_at: expiresAt ? expiresAt.toISOString() : null,
+      metadata: {
+        source: "orders_backfill",
+        policyAnchor,
+        schedule: {
+          delayDays: clamp(params.schedule.delayDays, 5, 30),
+          windowEnabled: params.schedule.windowEnabled,
+          startHour: params.schedule.startHour,
+          endHour: params.schedule.endHour,
+          spreadEnabled: params.schedule.spreadEnabled,
+          spreadMaxMinutes: params.schedule.spreadMaxMinutes,
+          timezone: params.schedule.timezone,
+        },
+        order: {
+          purchaseDate: o.purchaseDate ?? null,
+          latestDeliveryDate: o.latestDeliveryDate ?? null,
+          earliestDeliveryDate: o.earliestDeliveryDate ?? null,
+        },
       },
-      order: {
-        purchaseDate: o.purchaseDate ?? null,
-        latestDeliveryDate: o.latestDeliveryDate ?? null,
-        earliestDeliveryDate: o.earliestDeliveryDate ?? null,
-      },
-    };
-
-    const res = await queueRequestReview({
-      connectionId: params.connectionId,
-      orderId: o.orderId,
-      marketplaceId: o.marketplaceId,
-      scheduledAt,
-      expiresAt,
-      campaignId: params.campaignId ?? null,
-      experimentId: params.experimentId ?? null,
-      variantId: params.variantId ?? null,
-      metadata,
     });
-
-    if (res.kind === "queued") enqueued += 1;
-    else alreadyExists += 1;
   }
+
+  if (rows.length === 0) {
+    return { enqueued: 0, skippedExpired, alreadyExists: 0 };
+  }
+
+  const insert = await pool.query(
+    `
+    INSERT INTO hermes_dispatches (
+      id, connection_id, order_id, marketplace_id,
+      type, message_kind, state, scheduled_at,
+      expires_at, campaign_id, experiment_id, variant_id, template_id, metadata
+    )
+    SELECT
+      x.id,
+      $1,
+      x.order_id,
+      x.marketplace_id,
+      'request_review',
+      NULL,
+      'queued',
+      x.scheduled_at::timestamptz,
+      x.expires_at::timestamptz,
+      $2,
+      $3,
+      $4,
+      NULL,
+      x.metadata::jsonb
+    FROM jsonb_to_recordset($5::jsonb) AS x(
+      id text,
+      order_id text,
+      marketplace_id text,
+      scheduled_at text,
+      expires_at text,
+      metadata jsonb
+    )
+    ON CONFLICT (connection_id, order_id) WHERE type = 'request_review' DO NOTHING;
+    `,
+    [
+      params.connectionId,
+      params.campaignId ?? null,
+      params.experimentId ?? null,
+      params.variantId ?? null,
+      JSON.stringify(rows),
+    ]
+  );
+
+  const enqueued = insert.rowCount ?? 0;
+  const alreadyExists = rows.length - enqueued;
 
   return { enqueued, skippedExpired, alreadyExists };
 }
@@ -308,6 +366,68 @@ export async function listRecentOrders(params: {
   }));
 }
 
+export async function countOrders(params: {
+  connectionId: string;
+  marketplaceId?: string | null;
+  orderStatus?: string | null;
+  delivery?: "has" | "missing";
+  reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
+}): Promise<number> {
+  const pool = getPgPool();
+
+  const values: any[] = [params.connectionId];
+  const where: string[] = ["o.connection_id = $1"];
+
+  if (params.marketplaceId) {
+    values.push(params.marketplaceId);
+    where.push(`o.marketplace_id = $${values.length}`);
+  }
+
+  if (params.orderStatus) {
+    values.push(params.orderStatus);
+    where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.delivery === "has") {
+    where.push("o.latest_delivery_date IS NOT NULL");
+  }
+  if (params.delivery === "missing") {
+    where.push("o.latest_delivery_date IS NULL");
+  }
+
+  if (params.reviewState) {
+    if (params.reviewState === "not_queued") {
+      where.push("d.state IS NULL");
+    } else {
+      values.push(params.reviewState);
+      where.push(`d.state = $${values.length}`);
+    }
+  }
+
+  const res = await pool.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM hermes_orders o
+    LEFT JOIN hermes_dispatches d
+      ON d.connection_id = o.connection_id
+     AND d.order_id = o.order_id
+     AND d.type = 'request_review'
+    WHERE ${where.join("\n      AND ")};
+    `,
+    values
+  );
+
+  const raw = res.rows?.[0]?.count;
+  if (typeof raw !== "string") {
+    throw new Error("Invalid count");
+  }
+  const count = Number(raw);
+  if (!Number.isFinite(count)) {
+    throw new Error("Invalid count");
+  }
+  return count;
+}
+
 export type HermesOrdersListCursor = {
   purchaseDate: string | null;
   importedAt: string;
@@ -319,6 +439,9 @@ export async function listOrdersPage(params: {
   limit: number;
   cursor?: HermesOrdersListCursor | null;
   marketplaceId?: string | null;
+  orderStatus?: string | null;
+  delivery?: "has" | "missing";
+  reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<{
   orders: Array<{
     orderId: string;
@@ -348,6 +471,27 @@ export async function listOrdersPage(params: {
   if (params.marketplaceId) {
     values.push(params.marketplaceId);
     where.push(`o.marketplace_id = $${values.length}`);
+  }
+
+  if (params.orderStatus) {
+    values.push(params.orderStatus);
+    where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.delivery === "has") {
+    where.push("o.latest_delivery_date IS NOT NULL");
+  }
+  if (params.delivery === "missing") {
+    where.push("o.latest_delivery_date IS NULL");
+  }
+
+  if (params.reviewState) {
+    if (params.reviewState === "not_queued") {
+      where.push("d.state IS NULL");
+    } else {
+      values.push(params.reviewState);
+      where.push(`d.state = $${values.length}`);
+    }
   }
 
   if (cursor) {

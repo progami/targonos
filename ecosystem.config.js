@@ -121,6 +121,30 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
+    {
+      name: 'dev-hermes-orders-sync',
+      cwd: path.join(DEV_DIR, 'apps/hermes'),
+      script: 'node_modules/.bin/tsx',
+      args: 'src/server/jobs/orders-sync-hourly.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'dev-hermes-request-review',
+      cwd: path.join(DEV_DIR, 'apps/hermes'),
+      script: 'node_modules/.bin/tsx',
+      args: 'src/server/jobs/request-review-dispatcher.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
 
     // ===========================================
     // MAIN ENVIRONMENT (30xx ports) - os.targonglobal.com
@@ -227,6 +251,30 @@ module.exports = {
       interpreter: 'node',
       exec_mode: 'fork',
       env: { NODE_ENV: 'production', PORT: 3014, BASE_PATH: '/hermes', NEXT_PUBLIC_BASE_PATH: '/hermes' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-hermes-orders-sync',
+      cwd: path.join(MAIN_DIR, 'apps/hermes'),
+      script: 'node_modules/.bin/tsx',
+      args: 'src/server/jobs/orders-sync-hourly.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-hermes-request-review',
+      cwd: path.join(MAIN_DIR, 'apps/hermes'),
+      script: 'node_modules/.bin/tsx',
+      args: 'src/server/jobs/request-review-dispatcher.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: { NODE_ENV: 'production' },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'

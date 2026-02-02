@@ -19,6 +19,7 @@ import {
   processBuyerMessageDispatch,
   requeueStuckBuyerMessages,
 } from "../messaging/dispatcher";
+import { loadHermesEnv } from "./load-env";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,6 +37,7 @@ function getInt(name: string, fallback: number): number {
 }
 
 async function main() {
+  loadHermesEnv();
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);

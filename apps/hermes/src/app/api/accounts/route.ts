@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 async function handleGet(_req: Request) {
   const targets = listConnectionTargets();
+  const nowIso = new Date().toISOString();
 
   const accounts = targets.map((t) => {
     let region: string = "NA";
@@ -25,7 +26,9 @@ async function handleGet(_req: Request) {
       accountName: t.connectionId,
       region,
       marketplaceIds: t.marketplaceIds,
+      sellerId: "",
       status,
+      createdAt: nowIso,
     };
   });
 

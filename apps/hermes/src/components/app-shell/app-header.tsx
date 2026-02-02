@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { ChevronLeft, Search } from "lucide-react";
 
 import { navItems } from "@/components/app-shell/nav";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -27,13 +27,21 @@ function breadcrumbFromPath(pathname: string) {
 }
 
 export function AppHeader() {
-  const pathname = usePathname() || "/";
+  const pathname = usePathname() ?? "/";
   const crumbs = breadcrumbFromPath(pathname);
+  const back = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="flex h-16 items-center gap-4 px-4 md:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-3">
+          {back ? (
+            <Button asChild variant="ghost" size="icon" aria-label={`Back to ${back.label}`}>
+              <Link href={back.href}>
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
           <nav className="hidden min-w-0 items-center gap-2 text-sm md:flex">
             {crumbs.map((c, idx) => (
               <span key={c.href} className="min-w-0">
@@ -57,12 +65,6 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button asChild className="hidden sm:inline-flex">
-            <Link href="/campaigns/new">
-              <Plus className="h-4 w-4" />
-              New Campaign
-            </Link>
-          </Button>
           <ModeToggle />
         </div>
       </div>

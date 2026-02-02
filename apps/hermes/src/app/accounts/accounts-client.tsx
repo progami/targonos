@@ -10,16 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { hermesApiUrl } from "@/lib/base-path";
+import type { AmazonConnection } from "@/lib/types";
+import { useConnectionsStore } from "@/stores/connections-store";
 
-type Account = {
-  id: string;
-  accountName: string;
-  region: string;
-  marketplaceIds: string[];
-  status: "connected" | "needs_reauth" | "disconnected";
-};
-
-function statusBadge(status: Account["status"]) {
+function statusBadge(status: AmazonConnection["status"]) {
   const label =
     status === "connected" ? "Connected" : status === "needs_reauth" ? "Reauth" : "Disconnected";
   const variant = status === "connected" ? "secondary" : status === "needs_reauth" ? "outline" : "destructive";
@@ -27,30 +21,14 @@ function statusBadge(status: Account["status"]) {
 }
 
 export function AccountsClient() {
-  const [accounts, setAccounts] = React.useState<Account[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const { connections, loaded, loading, fetch: fetchConnections } = useConnectionsStore();
   const [testingId, setTestingId] = React.useState<string | null>(null);
 
-  async function loadAccounts() {
-    setLoading(true);
-    try {
-      const res = await fetch(hermesApiUrl("/api/accounts"));
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-      setAccounts(json.accounts ?? []);
-    } catch (e: any) {
-      toast.error("Failed to load accounts", { description: e?.message ?? "" });
-      setAccounts([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   React.useEffect(() => {
-    loadAccounts();
-  }, []);
+    fetchConnections();
+  }, [fetchConnections]);
 
-  async function testConnection(account: Account) {
+  async function testConnection(account: AmazonConnection) {
     const marketplaceId = account.marketplaceIds[0];
     if (!marketplaceId) {
       toast.error("No marketplace ID configured for this account");
@@ -84,18 +62,18 @@ export function AccountsClient() {
     <div className="space-y-6">
       <PageHeader title="Accounts" />
 
-      {loading ? (
+      {(!loaded || loading) ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : accounts.length === 0 ? (
+      ) : connections.length === 0 ? (
         <EmptyState
           icon={PlugZap}
           title="No accounts configured"
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {accounts.map((c) => (
+          {connections.map((c) => (
             <Card key={c.id} className="transition-shadow hover:shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">

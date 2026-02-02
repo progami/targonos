@@ -3,8 +3,13 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ColumnDef } from '@tanstack/react-table'
-import { PasswordsApi, type Password, type PasswordDepartment } from '@/lib/api-client'
-import { LockClosedIcon, PlusIcon, EyeIcon, EyeSlashIcon, ClipboardIcon, ExternalLinkIcon, TrashIcon, PencilIcon } from '@/components/ui/Icons'
+import {
+  CreditCardsApi,
+  type CreditCard,
+  type CreditCardBrand,
+  type PasswordDepartment,
+} from '@/lib/api-client'
+import { LockClosedIcon, PlusIcon, ExternalLinkIcon, TrashIcon, PencilIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -36,72 +41,44 @@ function getDepartmentConfig(department: PasswordDepartment) {
   return DEPARTMENT_OPTIONS.find(d => d.value === department) ?? DEPARTMENT_OPTIONS[0]
 }
 
-function PasswordCell({ password }: { password: string }) {
-  const [visible, setVisible] = useState(false)
-  const [copied, setCopied] = useState(false)
+const BRAND_OPTIONS: { value: CreditCardBrand; label: string }[] = [
+  { value: 'VISA', label: 'Visa' },
+  { value: 'MASTERCARD', label: 'Mastercard' },
+  { value: 'AMEX', label: 'Amex' },
+  { value: 'DISCOVER', label: 'Discover' },
+  { value: 'OTHER', label: 'Other' },
+]
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    await navigator.clipboard.writeText(password)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-      <code className={cn(
-        "px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs min-w-[100px]",
-        !visible && "tracking-widest"
-      )}>
-        {visible ? password : '••••••••'}
-      </code>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
-        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        title={visible ? 'Hide password' : 'Show password'}
-      >
-        {visible ? (
-          <EyeSlashIcon className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <EyeIcon className="h-4 w-4 text-muted-foreground" />
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        title={copied ? 'Copied!' : 'Copy password'}
-      >
-        <ClipboardIcon className={cn(
-          "h-4 w-4 transition-colors",
-          copied ? "text-emerald-500" : "text-muted-foreground"
-        )} />
-      </button>
-    </div>
-  )
+function getBrandLabel(brand: CreditCardBrand) {
+  return BRAND_OPTIONS.find((b) => b.value === brand)?.label ?? brand
 }
 
-type PasswordFormData = {
+type CreditCardFormData = {
   title: string
-  username: string
-  password: string
-  url: string
+  cardholderName: string
+  brand: CreditCardBrand
+  last4: string
+  expMonth: number
+  expYear: number
   department: PasswordDepartment
+  url: string
   notes: string
 }
 
-const defaultFormData: PasswordFormData = {
+const defaultFormData: CreditCardFormData = {
   title: '',
-  username: '',
-  password: '',
+  cardholderName: '',
+  brand: 'VISA',
+  last4: '',
+  expMonth: 1,
+  expYear: new Date().getFullYear(),
+  department: 'FINANCE',
   url: '',
-  department: 'OPS',
   notes: '',
 }
 
-export default function PasswordsPage() {
-  const [items, setItems] = useState<Password[]>([])
+export default function CreditCardsPage() {
+  const [items, setItems] = useState<CreditCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [allowedDepartments, setAllowedDepartments] = useState<PasswordDepartment[]>([])
@@ -109,7 +86,7 @@ export default function PasswordsPage() {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState<PasswordFormData>(defaultFormData)
+  const [formData, setFormData] = useState<CreditCardFormData>(defaultFormData)
   const [saving, setSaving] = useState(false)
 
   // Delete confirmation
@@ -120,13 +97,13 @@ export default function PasswordsPage() {
     try {
       setLoading(true)
       setError(null)
-      const data = await PasswordsApi.list()
+      const data = await CreditCardsApi.list()
       setItems(data.items)
       setAllowedDepartments(data.allowedDepartments)
     } catch (e) {
-      console.error('Failed to load passwords', e)
+      console.error('Failed to load credit cards', e)
       setItems([])
-      setError(e instanceof Error ? e.message : 'Failed to load passwords')
+      setError(e instanceof Error ? e.message : 'Failed to load credit cards')
       setAllowedDepartments([])
     } finally {
       setLoading(false)
@@ -137,30 +114,44 @@ export default function PasswordsPage() {
     load()
   }, [load])
 
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear()
+    return Array.from({ length: 15 }, (_, i) => currentYear + i)
+  }, [])
+
+  const monthOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), [])
+
   const openCreateModal = () => {
     if (!allowedDepartments.length) {
       setError('No department access configured')
       return
     }
+    const defaultDepartment = allowedDepartments.includes('FINANCE') ? 'FINANCE' : allowedDepartments[0]
     setEditingId(null)
-    setFormData({ ...defaultFormData, department: allowedDepartments[0] })
+    setFormData({
+      ...defaultFormData,
+      department: defaultDepartment,
+      expYear: new Date().getFullYear(),
+    })
     setModalOpen(true)
   }
 
-  const openEditModal = (password: Password) => {
-    // Validate user still has access to this password's department
-    if (!allowedDepartments.includes(password.department)) {
-      setError('You no longer have access to edit this password')
+  const openEditModal = (card: CreditCard) => {
+    if (!allowedDepartments.includes(card.department)) {
+      setError('You no longer have access to edit this card')
       return
     }
-    setEditingId(password.id)
+    setEditingId(card.id)
     setFormData({
-      title: password.title,
-      username: password.username ?? '',
-      password: password.password,
-      url: password.url ?? '',
-      department: password.department,
-      notes: password.notes ?? '',
+      title: card.title,
+      cardholderName: card.cardholderName ?? '',
+      brand: card.brand,
+      last4: card.last4,
+      expMonth: card.expMonth,
+      expYear: card.expYear,
+      department: card.department,
+      url: card.url ?? '',
+      notes: card.notes ?? '',
     })
     setModalOpen(true)
   }
@@ -169,29 +160,39 @@ export default function PasswordsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      const cardholderName = formData.cardholderName.trim() ? formData.cardholderName : null
+      const url = formData.url.trim() ? formData.url : null
+      const notes = formData.notes.trim() ? formData.notes : null
+
       if (editingId) {
-        await PasswordsApi.update(editingId, {
+        await CreditCardsApi.update(editingId, {
           title: formData.title,
-          username: formData.username || null,
-          password: formData.password,
-          url: formData.url || null,
+          cardholderName,
+          brand: formData.brand,
+          last4: formData.last4,
+          expMonth: formData.expMonth,
+          expYear: formData.expYear,
           department: formData.department,
-          notes: formData.notes || null,
+          url,
+          notes,
         })
       } else {
-        await PasswordsApi.create({
+        await CreditCardsApi.create({
           title: formData.title,
-          username: formData.username || null,
-          password: formData.password,
-          url: formData.url || null,
+          cardholderName,
+          brand: formData.brand,
+          last4: formData.last4,
+          expMonth: formData.expMonth,
+          expYear: formData.expYear,
           department: formData.department,
-          notes: formData.notes || null,
+          url,
+          notes,
         })
       }
       setModalOpen(false)
       load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save password')
+      setError(e instanceof Error ? e.message : 'Failed to save credit card')
     } finally {
       setSaving(false)
     }
@@ -201,40 +202,59 @@ export default function PasswordsPage() {
     if (!deleteId) return
     setDeleting(true)
     try {
-      await PasswordsApi.delete(deleteId)
+      await CreditCardsApi.delete(deleteId)
       setDeleteId(null)
       load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete password')
+      setError(e instanceof Error ? e.message : 'Failed to delete credit card')
     } finally {
       setDeleting(false)
     }
   }
 
-  const columns = useMemo<ColumnDef<Password>[]>(
+  const columns = useMemo<ColumnDef<CreditCard>[]>(
     () => [
       {
         accessorKey: 'title',
-        header: 'Title',
+        header: 'Card',
         cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 flex items-center justify-center">
-              <LockClosedIcon className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">{row.original.title}</p>
-              {row.original.username && (
-                <p className="text-xs text-muted-foreground mt-0.5">{row.original.username}</p>
-              )}
-            </div>
+          <div>
+            <p className="font-semibold text-foreground">{row.original.title}</p>
+            {row.original.cardholderName ? (
+              <p className="text-xs text-muted-foreground mt-0.5">{row.original.cardholderName}</p>
+            ) : null}
           </div>
         ),
         enableSorting: true,
       },
       {
-        accessorKey: 'password',
-        header: 'Password',
-        cell: ({ row }) => <PasswordCell password={row.original.password} />,
+        accessorKey: 'brand',
+        header: 'Brand',
+        cell: ({ row }) => (
+          <Badge variant="outline" className="font-medium">
+            {getBrandLabel(row.original.brand)}
+          </Badge>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'last4',
+        header: 'Last 4',
+        cell: ({ row }) => (
+          <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
+            •••• {row.original.last4}
+          </code>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'expiry',
+        header: 'Expiry',
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {String(row.original.expMonth).padStart(2, '0')}/{row.original.expYear}
+          </span>
+        ),
         enableSorting: false,
       },
       {
@@ -252,7 +272,7 @@ export default function PasswordsPage() {
       },
       {
         accessorKey: 'url',
-        header: 'URL',
+        header: 'Link',
         cell: ({ row }) => row.original.url ? (
           <a
             href={row.original.url}
@@ -298,7 +318,7 @@ export default function PasswordsPage() {
     []
   )
 
-  const passwordToDelete = items.find(p => p.id === deleteId)
+  const cardToDelete = items.find(c => c.id === deleteId)
   const departmentOptions = useMemo(
     () => DEPARTMENT_OPTIONS.filter((opt) => allowedDepartments.includes(opt.value)),
     [allowedDepartments]
@@ -307,25 +327,25 @@ export default function PasswordsPage() {
   return (
     <>
       <ListPageHeader
-        title="Passwords"
+        title="Secrets"
         description="Shared passwords, credentials, and cards"
         icon={<LockClosedIcon className="h-6 w-6 text-white" />}
         showBack
         action={
           <Button onClick={openCreateModal} icon={<PlusIcon className="h-4 w-4" />}>
-            Add Password
+            Add Card
           </Button>
         }
       />
 
       <div className="space-y-6">
-        <Tabs value="passwords">
+        <Tabs value="credit-cards">
           <TabsList>
             <TabsTrigger value="passwords" asChild>
-              <Link href="/passwords">Passwords</Link>
+              <Link href="/secrets">Passwords</Link>
             </TabsTrigger>
             <TabsTrigger value="credit-cards" asChild>
-              <Link href="/passwords/credit-cards">Credit Cards</Link>
+              <Link href="/secrets/credit-cards">Credit Cards</Link>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -336,7 +356,7 @@ export default function PasswordsPage() {
           </Alert>
         ) : null}
 
-        <ResultsCount count={items.length} singular="password" plural="passwords" loading={loading} />
+        <ResultsCount count={items.length} singular="card" plural="cards" loading={loading} />
 
         <DataTable
           columns={columns}
@@ -344,13 +364,13 @@ export default function PasswordsPage() {
           loading={loading}
           skeletonRows={6}
           onRowClick={openEditModal}
-          addRow={{ label: 'Add Password', onClick: openCreateModal }}
+          addRow={{ label: 'Add Card', onClick: openCreateModal }}
           emptyState={
             <TableEmptyContent
               icon={<LockClosedIcon className="h-10 w-10" />}
-              title="No passwords yet"
-              description="Add your first password to get started."
-              action={{ label: 'Add Password', onClick: openCreateModal }}
+              title="No cards yet"
+              description="Add your first card entry to get started."
+              action={{ label: 'Add Card', onClick: openCreateModal }}
             />
           }
         />
@@ -360,9 +380,9 @@ export default function PasswordsPage() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Password' : 'Add Password'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Edit Card' : 'Add Card'}</DialogTitle>
             <DialogDescription>
-              {editingId ? 'Update the password details below.' : 'Enter the details for the new password entry.'}
+              {editingId ? 'Update the card details below.' : 'Enter the details for the new card entry.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -371,34 +391,58 @@ export default function PasswordsPage() {
               label="Title"
               name="title"
               required
-              placeholder="e.g., Company Instagram"
+              placeholder="e.g., Finance Corporate Card"
               value={formData.title}
               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
             />
 
             <FormField
-              label="Username / Email"
-              name="username"
-              placeholder="e.g., admin@company.com"
-              value={formData.username}
-              onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
+              label="Cardholder Name"
+              name="cardholderName"
+              placeholder="e.g., John Smith"
+              value={formData.cardholderName}
+              onChange={(e) => setFormData(prev => ({ ...prev, cardholderName: e.target.value }))}
+            />
+
+            <SelectField
+              label="Brand"
+              name="brand"
+              value={formData.brand}
+              onChange={(e) => setFormData(prev => ({ ...prev, brand: e.target.value as CreditCardBrand }))}
+              options={BRAND_OPTIONS.map((b) => ({ value: b.value, label: b.label }))}
             />
 
             <FormField
-              label="Password"
-              name="password"
-              type="text"
+              label="Last 4"
+              name="last4"
               required
-              placeholder="Enter password"
-              value={formData.password}
-              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+              placeholder="1234"
+              value={formData.last4}
+              onChange={(e) => setFormData(prev => ({ ...prev, last4: e.target.value }))}
             />
 
+            <div className="grid grid-cols-2 gap-4">
+              <SelectField
+                label="Expiry Month"
+                name="expMonth"
+                value={String(formData.expMonth)}
+                onChange={(e) => setFormData(prev => ({ ...prev, expMonth: Number(e.target.value) }))}
+                options={monthOptions.map((m) => ({ value: String(m), label: String(m).padStart(2, '0') }))}
+              />
+              <SelectField
+                label="Expiry Year"
+                name="expYear"
+                value={String(formData.expYear)}
+                onChange={(e) => setFormData(prev => ({ ...prev, expYear: Number(e.target.value) }))}
+                options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+              />
+            </div>
+
             <FormField
-              label="URL"
+              label="Link"
               name="url"
               type="url"
-              placeholder="https://example.com"
+              placeholder="https://..."
               value={formData.url}
               onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
             />
@@ -425,7 +469,7 @@ export default function PasswordsPage() {
                 Cancel
               </Button>
               <Button type="submit" loading={saving}>
-                {editingId ? 'Save Changes' : 'Add Password'}
+                {editingId ? 'Save Changes' : 'Add Card'}
               </Button>
             </FormActions>
           </form>
@@ -436,9 +480,9 @@ export default function PasswordsPage() {
       <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Delete Password</DialogTitle>
+            <DialogTitle>Delete Card</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>"{passwordToDelete?.title}"</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>"{cardToDelete?.title}"</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
 
