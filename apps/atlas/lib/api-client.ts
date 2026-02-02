@@ -1416,6 +1416,7 @@ export type Password = {
   url?: string | null
   department: PasswordDepartment
   notes?: string | null
+  createdBy?: { id: string; firstName: string; lastName: string; email: string } | null
   createdAt: string
   updatedAt: string
 }

@@ -112,6 +112,41 @@ function UsernameCell({ username }: { username: string }) {
   )
 }
 
+function addedByName(employee: { firstName: string; lastName: string }) {
+  return `${employee.firstName} ${employee.lastName}`.trim()
+}
+
+function AddedByCell({ employee }: { employee: { firstName: string; lastName: string; email: string } }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(employee.email)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+      <div className="min-w-0">
+        <div className="font-medium text-foreground text-sm truncate">{addedByName(employee)}</div>
+        <div className="text-xs text-muted-foreground truncate">{employee.email}</div>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy email'}
+      >
+        <ClipboardIcon className={cn(
+          "h-4 w-4 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
 type PasswordFormData = {
   title: string
   username: string
@@ -268,6 +303,19 @@ export default function PasswordsPage() {
             return <span className="text-muted-foreground">—</span>
           }
           return <UsernameCell username={username} />
+        },
+        enableSorting: true,
+      },
+      {
+        accessorFn: (row) => (row.createdBy ? row.createdBy.email : ''),
+        id: 'createdBy',
+        header: 'Added By',
+        cell: ({ row }) => {
+          const createdBy = row.original.createdBy
+          if (!createdBy) {
+            return <span className="text-muted-foreground">—</span>
+          }
+          return <AddedByCell employee={createdBy} />
         },
         enableSorting: true,
       },
