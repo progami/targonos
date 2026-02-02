@@ -3487,10 +3487,56 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               {line.skuDescription ? line.skuDescription : '—'}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                              {line.unitsOrdered.toLocaleString()}
+                              {canEdit ? (
+                                <div className="flex justify-end">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    defaultValue={String(line.unitsOrdered)}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) return
+                                      const parsed = Number.parseInt(trimmed, 10)
+                                      if (!Number.isInteger(parsed) || parsed <= 0) {
+                                        toast.error('Units must be a positive integer')
+                                        return
+                                      }
+                                      void patchOrderLine(line.id, { unitsOrdered: parsed })
+                                    }}
+                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                  />
+                                </div>
+                              ) : (
+                                line.unitsOrdered.toLocaleString()
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              {line.unitsPerCarton.toLocaleString()}
+                              {canEdit ? (
+                                <div className="flex justify-end">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    defaultValue={String(line.unitsPerCarton)}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) return
+                                      const parsed = Number.parseInt(trimmed, 10)
+                                      if (!Number.isInteger(parsed) || parsed <= 0) {
+                                        toast.error('Units per carton must be a positive integer')
+                                        return
+                                      }
+                                      void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                    }}
+                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                  />
+                                </div>
+                              ) : (
+                                line.unitsPerCarton.toLocaleString()
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                               {line.quantity.toLocaleString()}
@@ -3567,32 +3613,63 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 )
                               })()}
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
-                              {line.lineNotes ? line.lineNotes : '—'}
+                            <td className="px-3 py-2 text-muted-foreground min-w-[140px]">
+                              {canEdit ? (
+                                <Input
+                                  defaultValue={line.lineNotes ?? ''}
+                                  placeholder="Notes"
+                                  onBlur={e => {
+                                    const trimmed = e.target.value.trim()
+                                    void patchOrderLine(line.id, {
+                                      notes: trimmed.length > 0 ? trimmed : null,
+                                    })
+                                  }}
+                                  className="h-7 px-2 py-0 text-xs"
+                                />
+                              ) : (
+                                <span className="truncate block max-w-[140px]">
+                                  {line.lineNotes ? line.lineNotes : '—'}
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                               {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
                             </td>
                             {canEdit && (
                               <td className="px-2 py-2 whitespace-nowrap text-right">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                  onClick={() =>
-                                    setConfirmDialog({
-                                      open: true,
-                                      type: 'delete-line',
-                                      title: 'Remove line item',
-                                      message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
-                                      lineId: line.id,
-                                    })
-                                  }
-                                  title="Remove line"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
+                                    onClick={() => {
+                                      setProductCostsEditing(true)
+                                      jumpToGateKey(`costs.lines.${line.id}.totalCost`)
+                                    }}
+                                    title="Edit costs"
+                                  >
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                    onClick={() =>
+                                      setConfirmDialog({
+                                        open: true,
+                                        type: 'delete-line',
+                                        title: 'Remove line item',
+                                        message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
+                                        lineId: line.id,
+                                      })
+                                    }
+                                    title="Remove line"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
                               </td>
                             )}
                           </tr>
@@ -4257,11 +4334,61 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
                                 {line.skuDescription ? line.skuDescription : '—'}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {line.unitsOrdered.toLocaleString()}
+                              <td className="px-3 py-2">
+                                <div className="flex justify-end">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    value={String(line.unitsOrdered)}
+                                    onChange={e => {
+                                      const parsed = Number.parseInt(e.target.value, 10)
+                                      setDraftLines(prev =>
+                                        prev.map(candidate => {
+                                          if (candidate.id !== line.id) return candidate
+                                          const unitsOrdered = Number.isFinite(parsed) ? parsed : 0
+                                          const unitsPerCarton = candidate.unitsPerCarton
+                                          const quantity =
+                                            Number.isFinite(unitsPerCarton) &&
+                                            unitsPerCarton > 0 &&
+                                            unitsOrdered > 0
+                                              ? Math.ceil(unitsOrdered / unitsPerCarton)
+                                              : 0
+                                          return { ...candidate, unitsOrdered, quantity }
+                                        })
+                                      )
+                                    }}
+                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                  />
+                                </div>
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {line.unitsPerCarton.toLocaleString()}
+                              <td className="px-3 py-2">
+                                <div className="flex justify-end">
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    value={String(line.unitsPerCarton)}
+                                    onChange={e => {
+                                      const parsed = Number.parseInt(e.target.value, 10)
+                                      setDraftLines(prev =>
+                                        prev.map(candidate => {
+                                          if (candidate.id !== line.id) return candidate
+                                          const unitsPerCarton = Number.isFinite(parsed) ? parsed : 0
+                                          const unitsOrdered = candidate.unitsOrdered
+                                          const quantity =
+                                            unitsPerCarton > 0 && unitsOrdered > 0
+                                              ? Math.ceil(unitsOrdered / unitsPerCarton)
+                                              : 0
+                                          return { ...candidate, unitsPerCarton, quantity }
+                                        })
+                                      )
+                                    }}
+                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                  />
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
@@ -4299,34 +4426,63 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       )}
                                     </div>
                                   )
-                                })()}
+                                  })()}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
-                                {line.lineNotes ? line.lineNotes : '—'}
+                              <td className="px-3 py-2 min-w-[140px]">
+                                <Input
+                                  value={line.lineNotes ?? ''}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    setDraftLines(prev =>
+                                      prev.map(candidate =>
+                                        candidate.id === line.id
+                                          ? {
+                                              ...candidate,
+                                              lineNotes: value.trim() ? value : null,
+                                            }
+                                          : candidate
+                                      )
+                                    )
+                                  }}
+                                  placeholder="Notes"
+                                  className="h-7 px-2 py-0 text-xs"
+                                />
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
                               </td>
                               {canEdit && (
                                 <td className="px-2 py-2 whitespace-nowrap text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                    onClick={() =>
-                                      setConfirmDialog({
-                                        open: true,
-                                        type: 'delete-line',
-                                        title: 'Remove line item',
-                                        message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
-                                        lineId: line.id,
-                                      })
-                                    }
-                                    title="Remove line"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => jumpToGateKey(`costs.lines.${line.id}.totalCost`)}
+                                      title="Edit costs"
+                                    >
+                                      <DollarSign className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                      onClick={() =>
+                                        setConfirmDialog({
+                                          open: true,
+                                          type: 'delete-line',
+                                          title: 'Remove line item',
+                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                          lineId: line.id,
+                                        })
+                                      }
+                                      title="Remove line"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 </td>
                               )}
                             </tr>
