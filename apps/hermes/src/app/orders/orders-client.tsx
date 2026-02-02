@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { hermesApiUrl } from "@/lib/base-path";
 import { useConnectionsStore } from "@/stores/connections-store";
+import { useHermesUiPreferencesStore, type OrdersPreferences } from "@/stores/ui-preferences-store";
 
 type RecentOrder = {
   orderId: string;
@@ -145,22 +146,28 @@ export function OrdersClient() {
     connections,
     loaded: connectionsLoaded,
     loading: connectionsLoading,
+    hasHydrated: connectionsHydrated,
     activeConnectionId,
     setActiveConnectionId,
     fetch: fetchConnections,
   } = useConnectionsStore();
 
   React.useEffect(() => {
+    if (!connectionsHydrated) return;
     fetchConnections();
-  }, [fetchConnections]);
+  }, [connectionsHydrated, fetchConnections]);
 
   const connectionId = activeConnectionId ?? "";
   const connection = connections.find((c) => c.id === connectionId);
 
+  const uiHydrated = useHermesUiPreferencesStore((s) => s.hasHydrated);
+  const ordersPrefs = useHermesUiPreferencesStore((s) => s.orders);
+  const setOrdersPreferences = useHermesUiPreferencesStore((s) => s.setOrdersPreferences);
+
   const [orders, setOrders] = React.useState<RecentOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = React.useState(false);
   const loadSeqRef = React.useRef(0);
-  const [pageSize, setPageSize] = React.useState<number>(50);
+  const pageSize = ordersPrefs.pageSize;
   const [ordersCursor, setOrdersCursor] = React.useState<string | null>(null);
   const [ordersNextCursor, setOrdersNextCursor] = React.useState<string | null>(null);
   const [ordersCursorStack, setOrdersCursorStack] = React.useState<(string | null)[]>([]);
@@ -169,10 +176,10 @@ export function OrdersClient() {
   const totalSeqRef = React.useRef(0);
 
   // Table filters
-  const [filterMarketplaceId, setFilterMarketplaceId] = React.useState<string>("any");
-  const [filterDelivery, setFilterDelivery] = React.useState<string>("any");
-  const [filterOrderStatus, setFilterOrderStatus] = React.useState<string>("any");
-  const [filterReviewState, setFilterReviewState] = React.useState<string>("any");
+  const filterMarketplaceId = ordersPrefs.filterMarketplaceId;
+  const filterDelivery = ordersPrefs.filterDelivery;
+  const filterOrderStatus = ordersPrefs.filterOrderStatus;
+  const filterReviewState = ordersPrefs.filterReviewState;
 
   // Backfill dialog
   const [open, setOpen] = React.useState(false);
@@ -288,10 +295,11 @@ export function OrdersClient() {
   }
 
   React.useEffect(() => {
+    if (!uiHydrated) return;
     loadOrdersPage({ cursor: null, stack: [] });
     loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId, pageSize, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
+  }, [uiHydrated, connectionId, pageSize, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -493,10 +501,12 @@ export function OrdersClient() {
               value={connectionId}
               onValueChange={(id) => {
                 setActiveConnectionId(id);
-                setFilterMarketplaceId("any");
-                setFilterDelivery("any");
-                setFilterOrderStatus("any");
-                setFilterReviewState("any");
+                setOrdersPreferences({
+                  filterMarketplaceId: "any",
+                  filterDelivery: "any",
+                  filterOrderStatus: "any",
+                  filterReviewState: "any",
+                });
               }}
             >
               <SelectTrigger className="w-[220px]" disabled={!connectionsLoaded && connectionsLoading}>
@@ -682,8 +692,8 @@ export function OrdersClient() {
                 <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
               ) : null}
               <Badge variant="outline">{pageLabel}</Badge>
-              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-                <SelectTrigger className="h-9 w-[110px]">
+              <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
+                <SelectTrigger className="h-9 w-[120px]">
                   <SelectValue placeholder="Rows" />
                 </SelectTrigger>
                 <SelectContent>
@@ -740,7 +750,7 @@ export function OrdersClient() {
                   <TableHead className="hidden sm:table-cell">
                     <div className="flex flex-col gap-1">
                       <div>Marketplace</div>
-                      <Select value={filterMarketplaceId} onValueChange={setFilterMarketplaceId}>
+                      <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
                         <SelectTrigger className="h-8 w-[140px]">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
@@ -759,7 +769,7 @@ export function OrdersClient() {
                   <TableHead>
                     <div className="flex flex-col gap-1">
                       <div>Delivery</div>
-                      <Select value={filterDelivery} onValueChange={setFilterDelivery}>
+                      <Select value={filterDelivery} onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}>
                         <SelectTrigger className="h-8 w-[130px]">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
@@ -774,7 +784,7 @@ export function OrdersClient() {
                   <TableHead>
                     <div className="flex flex-col gap-1">
                       <div>Status</div>
-                      <Select value={filterOrderStatus} onValueChange={setFilterOrderStatus}>
+                      <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
                         <SelectTrigger className="h-8 w-[160px]">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
@@ -792,7 +802,7 @@ export function OrdersClient() {
                   <TableHead className="text-right">
                     <div className="flex flex-col items-end gap-1">
                       <div>Review request</div>
-                      <Select value={filterReviewState} onValueChange={setFilterReviewState}>
+                      <Select value={filterReviewState} onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}>
                         <SelectTrigger className="h-8 w-[160px]">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
