@@ -851,7 +851,7 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const tenant = await getCurrentTenant()
   const buyerVatNumber = getBuyerVatNumber(tenant.code)
 
-  const documentType: OrderDocumentType = order.status === 'DRAFT' ? 'rfq' : 'po'
+  const documentType: OrderDocumentType = order.status === 'RFQ' ? 'rfq' : 'po'
   const documentNumber = toPublicOrderNumber(
     documentType === 'rfq' ? order.orderNumber : order.poNumber ?? order.orderNumber
   )

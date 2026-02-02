@@ -56,7 +56,7 @@ import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 // 5-Stage State Machine Types
 type POStageStatus =
-  | 'DRAFT'
+  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -373,7 +373,7 @@ type SplitGroupOrderSummary = {
 }
 
 type PurchaseOrderDocumentStage =
-  | 'DRAFT'
+  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -454,7 +454,7 @@ const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
 > = {
-  DRAFT: [],
+  RFQ: [],
   ISSUED: [],
   MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
   OCEAN: [
@@ -463,7 +463,7 @@ const STAGE_DOCUMENTS: Record<
     { id: 'packing_list', label: 'Packing List' },
   ],
   WAREHOUSE: [
-    { id: 'movement_note', label: 'Movement Note' },
+    { id: 'grn', label: 'GRN' },
     { id: 'custom_declaration', label: 'Customs & Border Patrol Clearance Proof' },
   ],
 }
@@ -472,7 +472,7 @@ const DOCUMENT_STAGE_META: Record<
   PurchaseOrderDocumentStage,
   { label: string; icon: ComponentType<{ className?: string }> }
 > = {
-  DRAFT: { label: 'RFQ', icon: FileEdit },
+  RFQ: { label: 'RFQ', icon: FileEdit },
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
   OCEAN: { label: 'In Transit', icon: Ship },
@@ -507,7 +507,7 @@ function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: strin
 
 // Stage configuration
 const STAGES = [
-  { value: 'DRAFT', label: 'RFQ', icon: FileEdit, color: 'slate' },
+  { value: 'RFQ', label: 'RFQ', icon: FileEdit, color: 'slate' },
   { value: 'ISSUED', label: 'Issued', icon: Send, color: 'emerald' },
   { value: 'MANUFACTURING', label: 'Manufacturing', icon: Factory, color: 'amber' },
   { value: 'OCEAN', label: 'In Transit', icon: Ship, color: 'blue' },
@@ -938,6 +938,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [activeBottomTab, setActiveBottomTab] = useState<
     'details' | 'cargo' | 'costs' | 'documents' | 'history'
   >('details')
+  const [productCostsEditing, setProductCostsEditing] = useState(false)
   const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes' | 'receiving'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
@@ -1870,7 +1871,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   useEffect(() => {
     if (!session) return
 
-    if (isCreate || order?.status === 'DRAFT') {
+    if (isCreate || order?.status === 'RFQ') {
       void ensureSkusLoaded()
     }
   }, [ensureSkusLoaded, isCreate, order?.status, session])
@@ -2077,7 +2078,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   // The stage view being displayed (defaults to current stage)
   const activeViewStage = useMemo(() => {
     if (selectedStageView) return selectedStageView
-    if (!order) return 'DRAFT'
+    if (!order) return 'RFQ'
     return order.status
   }, [selectedStageView, order])
 
@@ -2305,7 +2306,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   // Can user click on a stage to view it?
   const canViewStage = (stageValue: string) => {
-    if (isCreate) return stageValue === 'DRAFT'
+    if (isCreate) return stageValue === 'RFQ'
     if (!order || order.status === 'CANCELLED') return false
     const targetIdx = STAGES.findIndex(s => s.value === stageValue)
     if (targetIdx < 0) return false
@@ -2525,7 +2526,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     return null
   }
 
-  const flowStatus: POStageStatus = order ? order.status : 'DRAFT'
+  const flowStatus: POStageStatus = order ? order.status : 'RFQ'
   const flowLines = order ? order.lines.filter(line => line.status !== 'CANCELLED') : draftLines
   const totalUnits = flowLines.reduce((sum, line) => sum + (line.unitsOrdered ?? 0), 0)
   const totalCartons = flowLines.reduce((sum, line) => sum + line.quantity, 0)
@@ -2539,7 +2540,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     : false
   const isReceived = Boolean(order?.postedAt)
   const isReadOnly = isTerminalStatus || isReceived
-  const canEdit = isCreate ? true : !isReadOnly && order?.status === 'DRAFT'
+  const canEdit = isCreate ? true : !isReadOnly && order?.status === 'RFQ'
   const canEditDispatchAllocation =
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
   const canEditForwardingCosts =
@@ -2564,13 +2565,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     editingForwardingQuantity > 0
       ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
       : null
-  const showRfqPdfDownload = !isCreate && activeViewStage === 'DRAFT' && order?.status === 'DRAFT'
-  const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED' && order?.status !== 'DRAFT'
+  const showRfqPdfDownload = !isCreate && activeViewStage === 'RFQ' && order?.status === 'RFQ'
+  const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED' && order?.status !== 'RFQ'
   const showShippingMarksDownload =
-    !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus && order?.status !== 'DRAFT'
+    !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus && order?.status !== 'RFQ'
   const displayOrderNumber = isCreate
     ? 'New RFQ'
-    : flowStatus === 'DRAFT'
+    : flowStatus === 'RFQ'
       ? order.orderNumber
       : order.poNumber ?? order.orderNumber
   const historyCount = isCreate
@@ -3145,7 +3146,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     disabled={transitioning || (order ? activeViewStage !== order.status : false)}
                     className="gap-2"
                   >
-                    {order?.status === 'DRAFT' ? 'Issue PO' : `Advance to ${nextStage.label}`}
+                    {order?.status === 'RFQ' ? 'Issue PO' : `Advance to ${nextStage.label}`}
                     <ChevronRight className="h-4 w-4" />
 		                  </Button>
 		                )}
@@ -3211,7 +3212,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	              </p>
               <Button
                 variant="outline"
-                onClick={() => handleTransition('DRAFT')}
+                onClick={() => handleTransition('RFQ')}
                 disabled={transitioning}
                 className="gap-2"
               >
@@ -3784,7 +3785,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             const canEditAttributes =
                               !isReadOnly &&
                               order.status === activeViewStage &&
-                              (order.status === 'DRAFT' || order.status === 'ISSUED')
+                              (order.status === 'RFQ' || order.status === 'ISSUED')
 
                             const issuePrefix = `cargo.lines.${line.id}`
                             const issue = (suffix: string): string | null => {
@@ -4265,30 +4266,40 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap min-w-[140px]">
-                                <Input
-                                  value={line.piNumber ?? ''}
-                                  placeholder="PI-..."
-                                  data-gate-key={`cargo.lines.${line.id}.piNumber`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    setDraftLines(prev =>
-                                      prev.map(candidate =>
-                                        candidate.id === line.id
-                                          ? { ...candidate, piNumber: value.trim() ? value : null }
-                                          : candidate
-                                      )
-                                    )
-                                  }}
-                                />
-                                {gateIssues?.[`cargo.lines.${line.id}.piNumber`] && (
-                                  <p
-                                    className="mt-1 text-xs text-rose-600"
-                                    data-gate-key={`cargo.lines.${line.id}.piNumber`}
-                                  >
-                                    {gateIssues[`cargo.lines.${line.id}.piNumber`]}
-                                  </p>
-                                )}
+                              <td className="px-3 py-1 text-muted-foreground whitespace-nowrap min-w-[140px]">
+                                {(() => {
+                                  const piGateKey = `cargo.lines.${line.id}.piNumber`
+                                  const issue = gateIssues ? gateIssues[piGateKey] ?? null : null
+
+                                  return (
+                                    <div className="space-y-1" data-gate-key={piGateKey}>
+                                      <Input
+                                        value={line.piNumber ?? ''}
+                                        placeholder="PI-..."
+                                        data-gate-key={piGateKey}
+                                        onChange={e => {
+                                          const value = e.target.value
+                                          setDraftLines(prev =>
+                                            prev.map(candidate =>
+                                              candidate.id === line.id
+                                                ? { ...candidate, piNumber: value.trim() ? value : null }
+                                                : candidate
+                                            )
+                                          )
+                                        }}
+                                        className={cn(
+                                          'h-7 px-2 py-0 text-xs',
+                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
+                                      />
+                                      {issue && (
+                                        <p className="text-xs text-rose-600" data-gate-key={piGateKey}>
+                                          {issue}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">
                                 {line.lineNotes ? line.lineNotes : '—'}
@@ -4729,12 +4740,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         onDownload: () => void
                       }> = []
 
-                      if (activeViewStage === 'DRAFT') {
+                      if (activeViewStage === 'RFQ') {
                         items.push({
                           id: 'rfqPdf',
                           label: 'RFQ PDF',
                           meta: order.outputs.rfqPdf,
-                          canDownload: order.status === 'DRAFT',
+                          canDownload: order.status === 'RFQ',
                           onDownload: () => void handleDownloadPdf(),
                         })
                       }
@@ -4744,14 +4755,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           id: 'poPdf',
                           label: 'PO PDF',
                           meta: order.outputs.poPdf,
-                          canDownload: order.status !== 'DRAFT',
+                          canDownload: order.status !== 'RFQ',
                           onDownload: () => void handleDownloadPdf(),
                         })
                         items.push({
                           id: 'shippingMarks',
                           label: 'Shipping Marks',
                           meta: order.outputs.shippingMarks,
-                          canDownload: order.status !== 'DRAFT',
+                          canDownload: order.status !== 'RFQ',
                           onDownload: () => void handleDownloadShippingMarks(),
                         })
                       }
@@ -5413,6 +5424,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
+                      <>
+                        {canEdit && order.status === 'RFQ' && activeViewStage === 'RFQ' && (
+                          <div className="mb-3 flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setProductCostsEditing(prev => !prev)}
+                            >
+                              {productCostsEditing ? 'Done' : 'Edit'}
+                            </Button>
+                          </div>
+                        )}
+
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -5427,7 +5452,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <tbody>
                             {flowLines.map(line => {
                               const canEditProductCosts =
-                                canEdit && order.status === 'DRAFT' && activeViewStage === 'DRAFT'
+                                canEdit &&
+                                productCostsEditing &&
+                                order.status === 'RFQ' &&
+                                activeViewStage === 'RFQ'
 
                               const totalCost = line.totalCost !== null ? line.totalCost : null
                               const unitCost =
@@ -5449,14 +5477,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                  <td
+                                    className={cn(
+                                      'px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap',
+                                      canEditProductCosts ? 'py-1' : 'py-2'
+                                    )}
+                                  >
                                     {canEditProductCosts ? (
                                       <Input
                                         type="number"
                                         inputMode="decimal"
                                         min="0"
                                         step="0.0001"
-                                        defaultValue={unitCost !== null ? String(unitCost) : ''}
+                                        defaultValue={
+                                          unitCost !== null ? String(Number(unitCost.toFixed(4))) : ''
+                                        }
                                         placeholder="0.00"
                                         onBlur={e => {
                                           const trimmed = e.target.value.trim()
@@ -5473,13 +5508,19 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           const nextTotalCost = parsed * line.unitsOrdered
                                           void patchOrderLine(line.id, { totalCost: Number(nextTotalCost.toFixed(2)) })
                                         }}
-                                        className="text-right w-24"
+                                        className="h-7 px-2 py-0 text-xs text-right w-24"
                                       />
                                     ) : (
                                       <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
+                                  <td
+                                    className={cn(
+                                      'px-3 text-right tabular-nums font-medium whitespace-nowrap',
+                                      canEditProductCosts ? 'py-1' : 'py-2'
+                                    )}
+                                    data-gate-key={gateKey}
+                                  >
                                     {canEditProductCosts ? (
                                       <div className="flex flex-col items-end gap-1">
                                         <Input
@@ -5487,7 +5528,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           inputMode="decimal"
                                           min="0"
                                           step="0.01"
-                                          defaultValue={totalCost !== null ? String(totalCost) : ''}
+                                          defaultValue={
+                                            totalCost !== null ? String(Number(totalCost.toFixed(2))) : ''
+                                          }
                                           placeholder="0.00"
                                           data-gate-key={gateKey}
                                           onBlur={e => {
@@ -5504,9 +5547,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             }
                                             void patchOrderLine(line.id, { totalCost: parsed })
                                           }}
-                                          className={
-                                            issue ? 'border-rose-500 focus-visible:ring-rose-500 text-right w-28' : 'text-right w-28'
-                                          }
+                                          className={cn(
+                                            'h-7 px-2 py-0 text-xs text-right w-28',
+                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                          )}
                                         />
                                         {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                       </div>
@@ -5540,6 +5584,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </tfoot>
                         </table>
                       </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -6526,7 +6571,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        {order.status === 'DRAFT' ? 'RFQ Number' : 'PO Number'}
+                        {order.status === 'RFQ' ? 'RFQ Number' : 'PO Number'}
                       </p>
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                         {displayOrderNumber}
@@ -6718,7 +6763,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       </p>
                     </div>
 
-                    {order.status !== 'DRAFT' && (
+                    {order.status !== 'RFQ' && (
                       <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                           Supplier Banking

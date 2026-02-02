@@ -34,6 +34,7 @@ import {
   createProductReviewAndSellerFeedbackSolicitation,
   getSolicitationActionsForOrder,
 } from "../sp-api/solicitations";
+import { loadHermesEnv } from "./load-env";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -351,6 +352,7 @@ async function processDispatch(row: DispatchRow, opts: {
 }
 
 async function main() {
+  loadHermesEnv();
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);

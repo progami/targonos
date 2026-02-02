@@ -67,7 +67,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   // Only allow editing containers before WAREHOUSE stage
-  if (!['DRAFT', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
+  if (!['RFQ', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
     return ApiResponses.badRequest('Can only edit containers before WAREHOUSE stage')
   }
 
@@ -179,7 +179,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
   }
 
   // Only allow deleting containers before WAREHOUSE stage
-  if (!['DRAFT', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
+  if (!['RFQ', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
     return ApiResponses.badRequest('Can only delete containers before WAREHOUSE stage')
   }
 

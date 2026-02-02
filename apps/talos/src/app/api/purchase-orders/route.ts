@@ -64,7 +64,7 @@ const CreatePOSchema = z.object({
 
 /**
  * POST /api/purchase-orders
- * Create a new RFQ in DRAFT status with an auto-generated order number.
+ * Create a new purchase order in RFQ status with an auto-generated order number.
  * PO number is assigned when the RFQ is advanced to ISSUED.
  * Warehouse is NOT required at this stage - selected at Stage 4 (WAREHOUSE)
  */

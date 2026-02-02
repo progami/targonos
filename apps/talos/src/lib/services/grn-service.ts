@@ -5,7 +5,7 @@ import {
   FinancialLedgerCategory,
   FinancialLedgerSourceType,
   PurchaseOrderType,
-  MovementNoteStatus,
+  GrnStatus,
   PurchaseOrderLineStatus,
   PurchaseOrderStatus,
   TransactionType,
@@ -33,7 +33,7 @@ export interface UserContext {
   name?: string | null
 }
 
-export interface MovementNoteLineInput {
+export interface GrnLineInput {
   purchaseOrderLineId: string
   quantity: number
   batchLot?: string | null
@@ -42,17 +42,17 @@ export interface MovementNoteLineInput {
   attachments?: Record<string, unknown> | null
 }
 
-export interface CreateMovementNoteInput {
+export interface CreateGrnInput {
   purchaseOrderId: string
   referenceNumber?: string | null
   receivedAt?: Date | null
   notes?: string | null
-  lines: MovementNoteLineInput[]
+  lines: GrnLineInput[]
 }
 
-export async function listMovementNotes(filter?: { purchaseOrderId?: string | null }) {
+export async function listGrns(filter?: { purchaseOrderId?: string | null }) {
   const prisma = await getTenantPrisma()
-  const notes = await prisma.movementNote.findMany({
+  const notes = await prisma.grn.findMany({
     where: filter?.purchaseOrderId ? { purchaseOrderId: filter.purchaseOrderId } : undefined,
     orderBy: { createdAt: 'desc' },
     include: {
@@ -70,12 +70,12 @@ export async function listMovementNotes(filter?: { purchaseOrderId?: string | nu
     },
   })
 
-  return notes.map(note => formatNoteOrderNumber(note))
+  return notes.map(note => formatGrnOrderNumber(note))
 }
 
-export async function getMovementNoteById(id: string) {
+export async function getGrnById(id: string) {
   const prisma = await getTenantPrisma()
-  const note = await prisma.movementNote.findUnique({
+  const note = await prisma.grn.findUnique({
     where: { id },
     include: {
       lines: true,
@@ -93,13 +93,13 @@ export async function getMovementNoteById(id: string) {
   })
 
   if (!note) {
-    throw new NotFoundError('Delivery note not found')
+    throw new NotFoundError('GRN not found')
   }
 
-  return formatNoteOrderNumber(note)
+  return formatGrnOrderNumber(note)
 }
 
-export async function createMovementNote(input: CreateMovementNoteInput, user: UserContext) {
+export async function createGrn(input: CreateGrnInput, user: UserContext) {
   if (input.lines.length === 0) {
     throw new ValidationError('At least one line is required')
   }
@@ -123,16 +123,16 @@ export async function createMovementNote(input: CreateMovementNoteInput, user: U
 
     if (!purchaseOrder.warehouseCode || !purchaseOrder.warehouseName) {
       throw new ValidationError(
-        'Select a warehouse on the purchase order before creating a movement note'
+        'Select a warehouse on the purchase order before creating a GRN'
       )
     }
 
     const receivedAt = input.receivedAt ?? new Date()
 
-    const note = await tx.movementNote.create({
+    const note = await tx.grn.create({
       data: {
         purchaseOrderId: input.purchaseOrderId,
-        status: MovementNoteStatus.DRAFT,
+        status: GrnStatus.DRAFT,
         referenceNumber: input.referenceNumber ?? null,
         receivedAt,
         receivedById: user.id ?? null,
@@ -224,35 +224,35 @@ export async function createMovementNote(input: CreateMovementNoteInput, user: U
       },
     })
 
-    return formatNoteOrderNumber(note)
+    return formatGrnOrderNumber(note)
   })
 }
 
-export async function cancelMovementNote(id: string) {
+export async function cancelGrn(id: string) {
   const prisma = await getTenantPrisma()
   return prisma.$transaction(async tx => {
-    const note = await tx.movementNote.findUnique({
+    const note = await tx.grn.findUnique({
       where: { id },
     })
 
     if (!note) {
-      throw new NotFoundError('Movement note not found')
+      throw new NotFoundError('GRN not found')
     }
 
-    if (note.status !== MovementNoteStatus.DRAFT) {
+    if (note.status !== GrnStatus.DRAFT) {
       throw new ConflictError('Only draft notes can be cancelled')
     }
 
-    await tx.movementNote.update({
+    await tx.grn.update({
       where: { id },
       data: {
-        status: MovementNoteStatus.CANCELLED,
+        status: GrnStatus.CANCELLED,
       },
     })
   })
 }
 
-function formatNoteOrderNumber<T extends { purchaseOrder: { orderNumber: string } | null }>(
+function formatGrnOrderNumber<T extends { purchaseOrder: { orderNumber: string } | null }>(
   note: T
 ): T {
   const purchaseOrder = note.purchaseOrder
@@ -266,7 +266,7 @@ function formatNoteOrderNumber<T extends { purchaseOrder: { orderNumber: string 
   } as T
 }
 
-export async function postMovementNote(id: string, _user: UserContext) {
+export async function postGrn(id: string, _user: UserContext) {
   const prisma = await getTenantPrisma()
   let createdTransactions: Array<{
     warehouseCode: string
@@ -278,7 +278,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
   }> = []
 
   const postedNote = await prisma.$transaction(async tx => {
-    const existingNote = await tx.movementNote.findUnique({
+    const existingNote = await tx.grn.findUnique({
       where: { id },
       include: {
         lines: true,
@@ -289,16 +289,16 @@ export async function postMovementNote(id: string, _user: UserContext) {
     })
 
     if (!existingNote) {
-      throw new NotFoundError('Movement note not found')
+      throw new NotFoundError('GRN not found')
     }
 
-    if (existingNote.status !== MovementNoteStatus.DRAFT) {
+    if (existingNote.status !== GrnStatus.DRAFT) {
       throw new ConflictError('Only draft notes can be posted')
     }
 
     const po = existingNote.purchaseOrder
     if (!po) {
-      throw new NotFoundError('Purchase order missing for delivery note')
+      throw new NotFoundError('Purchase order missing for GRN')
     }
     if (po.status === PurchaseOrderStatus.CANCELLED || po.status === PurchaseOrderStatus.CLOSED) {
       throw new ConflictError('Cannot post a note for a closed or cancelled purchase order')
@@ -310,7 +310,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
     })
 
     if (!warehouse) {
-      throw new NotFoundError('Warehouse not found for delivery note purchase order')
+      throw new NotFoundError('Warehouse not found for GRN purchase order')
     }
 
     const transactionType = (() => {
@@ -330,7 +330,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
     for (const line of existingNote.lines) {
       if (!line.purchaseOrderLineId) {
-        throw new ValidationError('Delivery note line missing purchase order line reference')
+        throw new ValidationError('GRN line missing purchase order line reference')
       }
 
       const poLine = po.lines.find(l => l.id === line.purchaseOrderLineId)
@@ -357,7 +357,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
         },
       })
 
-      await tx.movementNoteLine.update({
+      await tx.grnLine.update({
         where: { id: line.id },
         data: {
           varianceQuantity: newPostedQuantity - poLine.quantity,
@@ -371,10 +371,10 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
     const allPosted = allLines.every(line => line.status === PurchaseOrderLineStatus.POSTED)
 
-    await tx.movementNote.update({
+    await tx.grn.update({
       where: { id },
       data: {
-        status: MovementNoteStatus.POSTED,
+        status: GrnStatus.POSTED,
         updatedAt: new Date(),
       },
     })
@@ -407,7 +407,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
 
     for (const line of existingNote.lines) {
       if (!line.purchaseOrderLineId) {
-        throw new ValidationError('Delivery note line missing purchase order line reference')
+        throw new ValidationError('GRN line missing purchase order line reference')
       }
 
       const poLine = po.lines.find(l => l.id === line.purchaseOrderLineId)
@@ -676,7 +676,7 @@ export async function postMovementNote(id: string, _user: UserContext) {
       }
     }
 
-    const updated = await tx.movementNote.findUnique({
+    const updated = await tx.grn.findUnique({
       where: { id },
       include: {
         lines: true,
@@ -693,10 +693,10 @@ export async function postMovementNote(id: string, _user: UserContext) {
       },
     })
     if (!updated) {
-      throw new NotFoundError('Movement note not found after posting')
+      throw new NotFoundError('GRN not found after posting')
     }
 
-    return formatNoteOrderNumber(updated)
+    return formatGrnOrderNumber(updated)
   })
 
   await Promise.all(
