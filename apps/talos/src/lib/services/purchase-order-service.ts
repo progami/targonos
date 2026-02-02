@@ -50,8 +50,14 @@ export function serializePurchaseOrder(
     orderNumber: toPublicOrderNumber(order.orderNumber),
     lines: order.lines.map(line => ({
       ...line,
-      unitCost: line.unitCost ? Number(line.unitCost) : null,
-      totalCost: line.totalCost ? Number(line.totalCost) : null,
+      unitCost:
+        line.unitCost !== null && line.unitCost !== undefined
+          ? Number(Number(line.unitCost).toFixed(2))
+          : null,
+      totalCost:
+        line.totalCost !== null && line.totalCost !== undefined
+          ? Number(Number(line.totalCost).toFixed(2))
+          : null,
       createdAt: line.createdAt.toISOString(),
       updatedAt: line.updatedAt.toISOString(),
     })),
@@ -131,10 +137,7 @@ export async function updatePurchaseOrderDetails(
     throw new NotFoundError('Purchase order not found')
   }
 
-  if (
-    order.isLegacy ||
-    order.status !== PurchaseOrderStatus.RFQ
-  ) {
+  if (order.isLegacy || order.status !== PurchaseOrderStatus.RFQ) {
     throw new ConflictError('Only RFQs can be edited')
   }
 

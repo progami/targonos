@@ -41,6 +41,12 @@ function toNumberOrNull(value: unknown): number | null {
   return null
 }
 
+function toMoneyNumberOrNull(value: unknown): number | null {
+  const parsed = toNumberOrNull(value)
+  if (parsed === null) return null
+  return Number(Math.abs(parsed).toFixed(2))
+}
+
 function computeCartonsOrdered(input: {
   skuCode: string
   unitsOrdered: number
@@ -79,32 +85,32 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
   }
 
   return ApiResponses.success({
-	    data: order.lines.map(line => ({
-	      id: line.id,
-	      skuCode: line.skuCode,
-	      skuDescription: line.skuDescription,
-	      batchLot: line.batchLot,
-        piNumber: line.piNumber ?? null,
-        commodityCode: line.commodityCode ?? null,
-        countryOfOrigin: line.countryOfOrigin ?? null,
-        netWeightKg: toNumberOrNull(line.netWeightKg),
-        material: line.material ?? null,
-        cartonDimensionsCm: line.cartonDimensionsCm ?? null,
-        cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
-        cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
-        cartonSide3Cm: toNumberOrNull(line.cartonSide3Cm),
-        cartonWeightKg: toNumberOrNull(line.cartonWeightKg),
-        packagingType: line.packagingType ? line.packagingType.trim().toUpperCase() : null,
-        storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
-        shippingCartonsPerPallet: line.shippingCartonsPerPallet ?? null,
-	      unitsOrdered: line.unitsOrdered,
-	      unitsPerCarton: line.unitsPerCarton,
-	      quantity: line.quantity,
-	      unitCost: line.unitCost ? Number(line.unitCost) : null,
-	      totalCost: line.totalCost ? Number(line.totalCost) : null,
-	      currency: line.currency ?? tenant.currency,
-	      status: line.status,
-	      postedQuantity: line.postedQuantity,
+    data: order.lines.map(line => ({
+      id: line.id,
+      skuCode: line.skuCode,
+      skuDescription: line.skuDescription,
+      batchLot: line.batchLot,
+      piNumber: line.piNumber ?? null,
+      commodityCode: line.commodityCode ?? null,
+      countryOfOrigin: line.countryOfOrigin ?? null,
+      netWeightKg: toNumberOrNull(line.netWeightKg),
+      material: line.material ?? null,
+      cartonDimensionsCm: line.cartonDimensionsCm ?? null,
+      cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
+      cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),
+      cartonSide3Cm: toNumberOrNull(line.cartonSide3Cm),
+      cartonWeightKg: toNumberOrNull(line.cartonWeightKg),
+      packagingType: line.packagingType ? line.packagingType.trim().toUpperCase() : null,
+      storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
+      shippingCartonsPerPallet: line.shippingCartonsPerPallet ?? null,
+      unitsOrdered: line.unitsOrdered,
+      unitsPerCarton: line.unitsPerCarton,
+      quantity: line.quantity,
+      unitCost: toMoneyNumberOrNull(line.unitCost),
+      totalCost: toMoneyNumberOrNull(line.totalCost),
+      currency: line.currency ?? tenant.currency,
+      status: line.status,
+      postedQuantity: line.postedQuantity,
       quantityReceived: line.quantityReceived,
       lineNotes: line.lineNotes,
       createdAt: line.createdAt.toISOString(),
@@ -184,7 +190,9 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   if (!sku.isActive) {
-    return ApiResponses.badRequest(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
+    return ApiResponses.badRequest(
+      `SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`
+    )
   }
 
   const existingBatch = await prisma.skuBatch.findFirst({
@@ -235,13 +243,19 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     const unitWeightKg = toNumberOrNull(sku.unitWeightKg)
     if (unitWeightKg === null) return null
     const computed = unitWeightKg * result.data.unitsPerCarton
-    return Number.isFinite(computed) && computed > 0 ? new Prisma.Decimal(computed.toFixed(3)) : null
+    return Number.isFinite(computed) && computed > 0
+      ? new Prisma.Decimal(computed.toFixed(3))
+      : null
   })()
 
   const currency =
     typeof result.data.currency === 'string' && result.data.currency.trim().length > 0
       ? result.data.currency.trim().toUpperCase()
       : tenant.currency
+  const normalizedTotalCost =
+    typeof result.data.totalCost === 'number' && Number.isFinite(result.data.totalCost)
+      ? Number(Math.abs(result.data.totalCost).toFixed(2))
+      : null
 
   try {
     line = await prisma.purchaseOrderLine.create({
@@ -264,15 +278,10 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
         unitsOrdered: result.data.unitsOrdered,
         unitsPerCarton: result.data.unitsPerCarton,
         quantity: cartonsOrdered,
-        totalCost:
-          typeof result.data.totalCost === 'number' && Number.isFinite(result.data.totalCost)
-            ? result.data.totalCost.toFixed(2)
-            : undefined,
+        totalCost: normalizedTotalCost !== null ? normalizedTotalCost.toFixed(2) : undefined,
         unitCost:
-          typeof result.data.totalCost === 'number' &&
-          Number.isFinite(result.data.totalCost) &&
-          result.data.unitsOrdered > 0
-            ? (result.data.totalCost / result.data.unitsOrdered).toFixed(4)
+          normalizedTotalCost !== null && result.data.unitsOrdered > 0
+            ? (normalizedTotalCost / result.data.unitsOrdered).toFixed(2)
             : undefined,
         currency,
         lineNotes: result.data.notes,
@@ -315,9 +324,9 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
       quantity: line.quantity,
-      unitCost: line.unitCost ? Number(line.unitCost) : null,
+      unitCost: toMoneyNumberOrNull(line.unitCost),
       currency: line.currency ?? null,
-      totalCost: line.totalCost ? Number(line.totalCost) : null,
+      totalCost: toMoneyNumberOrNull(line.totalCost),
       notes: line.lineNotes ?? null,
     },
   })
@@ -343,8 +352,8 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: line.unitCost ? Number(line.unitCost) : null,
-    totalCost: line.totalCost ? Number(line.totalCost) : null,
+    unitCost: toMoneyNumberOrNull(line.unitCost),
+    totalCost: toMoneyNumberOrNull(line.totalCost),
     currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
