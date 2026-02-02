@@ -1546,13 +1546,13 @@ export async function createPurchaseOrder(
                       }),
                       totalCost:
                         typeof line.totalCost === 'number' && Number.isFinite(line.totalCost)
-                          ? line.totalCost.toFixed(2)
+                          ? Math.abs(line.totalCost).toFixed(2)
                           : undefined,
                       unitCost:
                         typeof line.totalCost === 'number' &&
                         Number.isFinite(line.totalCost) &&
                         line.unitsOrdered > 0
-                          ? (line.totalCost / line.unitsOrdered).toFixed(4)
+                          ? (Number(Math.abs(line.totalCost).toFixed(2)) / line.unitsOrdered).toFixed(2)
                           : undefined,
                       currency: line.currency.trim().toUpperCase(),
                       lineNotes: line.notes,
@@ -2057,7 +2057,7 @@ export async function transitionPurchaseOrderStage(
           unitsOrdered: remainderUnits,
           unitsPerCarton: line.unitsPerCarton,
           quantity: remainderCartons,
-          unitCost: new Prisma.Decimal(unitCost.toFixed(4)),
+          unitCost: new Prisma.Decimal(unitCost.toFixed(2)),
           totalCost: new Prisma.Decimal(remainderCostRounded.toFixed(2)),
           currency: line.currency,
           status: PurchaseOrderLineStatus.PENDING,
@@ -2110,7 +2110,7 @@ export async function transitionPurchaseOrderStage(
           status: PurchaseOrderLineStatus.PENDING,
           quantity: shipNowCartons,
           unitsOrdered: shipNowUnits,
-          unitCost: new Prisma.Decimal(unitCost.toFixed(4)),
+          unitCost: new Prisma.Decimal(unitCost.toFixed(2)),
           totalCost: new Prisma.Decimal(shipNowCostRounded.toFixed(2)),
           cartonRangeStart: shipNowRange?.start ?? null,
           cartonRangeEnd: shipNowRange?.end ?? null,
@@ -4105,8 +4105,8 @@ export function serializePurchaseOrder(
 	      unitsOrdered: line.unitsOrdered,
 	      unitsPerCarton: line.unitsPerCarton,
 	      quantity: line.quantity,
-	      unitCost: line.unitCost ? Number(line.unitCost) : null,
-	      totalCost: line.totalCost ? Number(line.totalCost) : null,
+	      unitCost: line.unitCost !== null && line.unitCost !== undefined ? Number(Math.abs(Number(line.unitCost)).toFixed(2)) : null,
+	      totalCost: line.totalCost !== null && line.totalCost !== undefined ? Number(Math.abs(Number(line.totalCost)).toFixed(2)) : null,
 	      currency: line.currency ?? defaultCurrency,
 	      status: line.status,
 	      postedQuantity: line.postedQuantity,

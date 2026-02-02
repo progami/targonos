@@ -685,8 +685,8 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
         typeof batchLot === 'string' ? `Batch ${batchLot}` : null,
         typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
-        unitCost != null && typeof currency === 'string'
-          ? `Unit ${formatAuditValue(unitCost)} ${currency}`
+        typeof unitCost === 'number' && Number.isFinite(unitCost) && typeof currency === 'string'
+          ? `Unit ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
           : null,
       ]
         .filter((part): part is string => Boolean(part))
@@ -5311,43 +5311,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     {line.unitsOrdered.toLocaleString()}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.0001"
-                                      value={unitCost !== null ? String(unitCost) : ''}
-                                      placeholder="0.00"
-                                      onChange={e => {
-                                        const raw = e.target.value.trim()
-                                        if (!raw) {
-                                          setDraftLines(prev =>
-                                            prev.map(candidate =>
-                                              candidate.id === line.id
-                                                ? { ...candidate, totalCost: null, unitCost: null }
-                                                : candidate
-                                            )
-                                          )
-                                          return
-                                        }
-
-                                        const parsed = Number(raw)
-                                        if (!Number.isFinite(parsed) || parsed < 0) return
-
-                                        setDraftLines(prev =>
-                                          prev.map(candidate => {
-                                            if (candidate.id !== line.id) return candidate
-                                            const nextTotalCost = parsed * candidate.unitsOrdered
-                                            return {
-                                              ...candidate,
-                                              unitCost: parsed,
-                                              totalCost: Number(nextTotalCost.toFixed(2)),
-                                            }
-                                          })
-                                        )
-                                      }}
-                                      className="h-7 px-2 py-0 text-xs text-right w-24"
-                                    />
+                                    {unitCost !== null ? unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
                                     <div className="flex flex-col items-end gap-1">
@@ -5356,10 +5320,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         inputMode="decimal"
                                         min="0"
                                         step="0.01"
-                                        value={totalCost !== null ? String(totalCost) : ''}
+                                        key={`${line.id}-${totalCost ?? 'null'}`}
+                                        defaultValue={
+                                          totalCost !== null ? String(Number(totalCost.toFixed(2))) : ''
+                                        }
                                         placeholder="0.00"
                                         data-gate-key={gateKey}
-                                        onChange={e => {
+                                        onBlur={e => {
                                           const raw = e.target.value.trim()
                                           if (!raw) {
                                             setDraftLines(prev =>
@@ -5373,17 +5340,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           }
 
                                           const parsed = Number(raw)
-                                          if (!Number.isFinite(parsed) || parsed < 0) return
+                                          if (!Number.isFinite(parsed)) {
+                                            toast.error('Total cost must be a number')
+                                            return
+                                          }
 
                                           setDraftLines(prev =>
                                             prev.map(candidate => {
                                               if (candidate.id !== line.id) return candidate
+                                              const nextTotalCost = Number(Math.abs(parsed).toFixed(2))
                                               const nextUnitCost =
-                                                candidate.unitsOrdered > 0 ? parsed / candidate.unitsOrdered : null
+                                                candidate.unitsOrdered > 0 ? nextTotalCost / candidate.unitsOrdered : null
                                               return {
                                                 ...candidate,
-                                                totalCost: parsed,
-                                                unitCost: nextUnitCost !== null ? Number(nextUnitCost.toFixed(4)) : null,
+                                                totalCost: nextTotalCost,
+                                                unitCost: nextUnitCost !== null ? Number(nextUnitCost.toFixed(2)) : null,
                                               }
                                             })
                                           )
@@ -5483,36 +5454,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                       canEditProductCosts ? 'py-1' : 'py-2'
                                     )}
                                   >
-                                    {canEditProductCosts ? (
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.0001"
-                                        defaultValue={
-                                          unitCost !== null ? String(Number(unitCost.toFixed(4))) : ''
-                                        }
-                                        placeholder="0.00"
-                                        onBlur={e => {
-                                          const trimmed = e.target.value.trim()
-                                          if (!trimmed) {
-                                            void patchOrderLine(line.id, { totalCost: null })
-                                            return
-                                          }
-
-                                          const parsed = Number(trimmed)
-                                          if (!Number.isFinite(parsed) || parsed < 0) {
-                                            toast.error('Unit cost must be a positive number')
-                                            return
-                                          }
-                                          const nextTotalCost = parsed * line.unitsOrdered
-                                          void patchOrderLine(line.id, { totalCost: Number(nextTotalCost.toFixed(2)) })
-                                        }}
-                                        className="h-7 px-2 py-0 text-xs text-right w-24"
-                                      />
-                                    ) : (
-                                      <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
-                                    )}
+                                    <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
                                   </td>
                                   <td
                                     className={cn(
@@ -5528,6 +5470,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           inputMode="decimal"
                                           min="0"
                                           step="0.01"
+                                          key={`${line.id}-${totalCost ?? 'null'}`}
                                           defaultValue={
                                             totalCost !== null ? String(Number(totalCost.toFixed(2))) : ''
                                           }
@@ -5541,11 +5484,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             }
 
                                             const parsed = Number(trimmed)
-                                            if (!Number.isFinite(parsed) || parsed < 0) {
-                                              toast.error('Total cost must be a positive number')
+                                            if (!Number.isFinite(parsed)) {
+                                              toast.error('Total cost must be a number')
                                               return
                                             }
-                                            void patchOrderLine(line.id, { totalCost: parsed })
+                                            void patchOrderLine(line.id, { totalCost: Number(Math.abs(parsed).toFixed(2)) })
                                           }}
                                           className={cn(
                                             'h-7 px-2 py-0 text-xs text-right w-28',
