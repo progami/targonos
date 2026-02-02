@@ -1,5 +1,5 @@
 import { withAuth, ApiResponses, z } from '@/lib/api'
-import { createMovementNote, listMovementNotes, type CreateMovementNoteInput } from '@/lib/services/movement-note-service'
+import { createGrn, listGrns, type CreateGrnInput } from '@/lib/services/grn-service'
 
 const lineSchema = z.object({
  purchaseOrderLineId: z.string().min(1, 'Purchase order line is required'),
@@ -22,7 +22,7 @@ export const GET = withAuth(async (request) => {
  const searchParams = request.nextUrl.searchParams
  const purchaseOrderId = searchParams.get('purchaseOrderId')
 
- const notes = await listMovementNotes({ purchaseOrderId: purchaseOrderId ?? undefined })
+ const notes = await listGrns({ purchaseOrderId: purchaseOrderId ?? undefined })
  return ApiResponses.success({ data: notes })
 })
 
@@ -46,7 +46,7 @@ export const POST = withAuth(async (request, session) => {
  receivedAt = parsedDate
  }
 
- const payload: CreateMovementNoteInput = {
+ const payload: CreateGrnInput = {
  purchaseOrderId: parsed.data.purchaseOrderId,
  referenceNumber: parsed.data.referenceNumber ?? null,
  receivedAt,
@@ -61,7 +61,7 @@ export const POST = withAuth(async (request, session) => {
  })),
  }
 
- const note = await createMovementNote(payload, {
+ const note = await createGrn(payload, {
  id: session.user.id,
  name: session.user.name,
  })

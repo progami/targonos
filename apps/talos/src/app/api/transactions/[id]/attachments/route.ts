@@ -482,14 +482,14 @@ function checkIfAllRequiredDocsPresent(
  'commercial_invoice',
  'bill_of_lading', 
  'packing_list',
- 'movement_note',
+ 'grn',
  'cube_master',
  'transaction_certificate',
  'custom_declaration'
  ],
  SHIP: [
  'packing_list',
- 'movement_note'
+ 'grn'
  ],
  ADJUST_IN: ['proof_of_pickup'],
  ADJUST_OUT: ['proof_of_pickup']
@@ -498,9 +498,7 @@ function checkIfAllRequiredDocsPresent(
  const required = requiredDocs[transactionType]
  if (!required) return true // No requirements defined, consider reconciled
  
- const attachmentSynonyms: Record<string, string[]> = {
- movement_note: ['movement_note', 'movementNote', 'delivery_note', 'deliveryNote']
- }
+ const attachmentSynonyms: Record<string, string[]> = {}
 
  const checkRecord = (record: AttachmentsRecord): boolean => {
  for (const docKey of required) {

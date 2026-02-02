@@ -52,15 +52,15 @@ const OptionalInt = z.preprocess((value) => {
 }, z.number().int().optional())
 
  const StageTransitionSchema = z.object({
-  targetStatus: z.enum([
-    'DRAFT',
-    'ISSUED',
-    'MANUFACTURING',
-    'OCEAN',
-    'WAREHOUSE',
-    'REJECTED',
-    'CANCELLED',
-  ] as const),
+	  targetStatus: z.enum([
+	    'RFQ',
+	    'ISSUED',
+	    'MANUFACTURING',
+	    'OCEAN',
+	    'WAREHOUSE',
+	    'REJECTED',
+	    'CANCELLED',
+	  ] as const),
   stageData: z
     .object({
       // ===========================================

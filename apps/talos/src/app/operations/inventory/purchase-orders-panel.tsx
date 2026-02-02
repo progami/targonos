@@ -12,7 +12,7 @@ import {
 
 export type PurchaseOrderTypeOption = 'PURCHASE' | 'ADJUSTMENT' | 'FULFILLMENT'
 export type PurchaseOrderStatusOption =
-  | 'DRAFT'
+  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -102,7 +102,7 @@ function sumReceivedQuantities(lines: PurchaseOrderLineSummary[]) {
   return lines.reduce((sum, line) => sum + (line.quantityReceived ?? line.postedQuantity ?? 0), 0)
 }
 
-function getDraftMissingFields(order: PurchaseOrderSummary) {
+function getRfqMissingFields(order: PurchaseOrderSummary) {
   const missing: string[] = []
   if (!order.counterpartyName?.trim()) missing.push('Supplier')
   if (!order.expectedDate) missing.push('Cargo ready date')
@@ -122,7 +122,7 @@ type TableColumn = {
 
 export function PurchaseOrdersPanel({
   onPosted: _onPosted,
-  statusFilter = 'DRAFT',
+  statusFilter = 'RFQ',
   typeFilter,
 }: PurchaseOrdersPanelProps) {
   const [orders, setOrders] = useState<PurchaseOrderSummary[]>([])
@@ -156,7 +156,7 @@ export function PurchaseOrdersPanel({
   const statusCounts = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        if (order.status === 'DRAFT') acc.draftCount += 1
+        if (order.status === 'RFQ') acc.rfqCount += 1
         if (order.status === 'ISSUED') acc.issuedCount += 1
         if (order.status === 'MANUFACTURING') acc.manufacturingCount += 1
         if (order.status === 'OCEAN') acc.oceanCount += 1
@@ -166,7 +166,7 @@ export function PurchaseOrdersPanel({
         return acc
       },
       {
-        draftCount: 0,
+        rfqCount: 0,
         issuedCount: 0,
         manufacturingCount: 0,
         oceanCount: 0,
@@ -191,7 +191,7 @@ export function PurchaseOrdersPanel({
     const cols: TableColumn[] = [
       {
         key: 'po-number',
-        header: statusFilter === 'DRAFT' ? 'RFQ #' : 'PO #',
+        header: statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
         tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
         render: order => (
           <Link
@@ -199,7 +199,7 @@ export function PurchaseOrdersPanel({
             className="text-primary hover:underline"
             prefetch={false}
           >
-            {order.status === 'DRAFT' ? order.orderNumber : order.poNumber ?? order.orderNumber}
+            {order.status === 'RFQ' ? order.orderNumber : order.poNumber ?? order.orderNumber}
           </Link>
         ),
       },
@@ -309,7 +309,7 @@ export function PurchaseOrdersPanel({
     }
 
     switch (statusFilter) {
-      case 'DRAFT': {
+      case 'RFQ': {
         cols.push(
           {
             key: 'cargo-ready',
@@ -322,7 +322,7 @@ export function PurchaseOrdersPanel({
             header: 'Ready?',
             tdClassName: 'px-3 py-2 whitespace-nowrap',
             render: order => {
-              const missing = getDraftMissingFields(order)
+              const missing = getRfqMissingFields(order)
               if (missing.length === 0) {
                 return (
                   <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -458,10 +458,10 @@ export function PurchaseOrdersPanel({
 	          <div>
 	            <h2 className="text-lg font-semibold text-foreground">Purchase Orders</h2>
 	          </div>
-          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.draftCount}</span> draft
-            </span>
+	          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+	            <span>
+	              <span className="font-semibold text-foreground">{statusCounts.rfqCount}</span> rfq
+	            </span>
             <span>
               <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span>{' '}
               issued

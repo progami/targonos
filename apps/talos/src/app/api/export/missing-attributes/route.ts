@@ -27,10 +27,7 @@ export const GET = withAuth(async (_request, session) => {
  const hasPackingList = attachments.packingList || attachments.packing_list ? 'Yes' : 'No'
  const hasCommercialInvoice = attachments.commercialInvoice || attachments.commercial_invoice ? 'Yes' : 'No'
  const hasBillOfLading = attachments.billOfLading || attachments.bill_of_lading ? 'Yes' : 'No'
- const hasDeliveryNote =
- attachments.movementNote || attachments.movement_note || attachments.deliveryNote || attachments.delivery_note
- ? 'Yes'
- : 'No'
+ const hasGrn = attachments.grn ? 'Yes' : 'No'
  const hasCubeMaster = attachments.cubeMaster || attachments.cube_master ? 'Yes' : 'No'
  const hasTransactionCertificate = attachments.transactionCertificate || attachments.transaction_certificate ? 'Yes' : 'No'
  const hasCustomDeclaration = attachments.customDeclaration || attachments.custom_declaration ? 'Yes' : 'No'
@@ -44,7 +41,7 @@ export const GET = withAuth(async (_request, session) => {
  ],
  SHIP: [
  { check: hasPackingList === 'No', label: 'Packing List' },
- { check: hasDeliveryNote === 'No', label: 'Movement Note' }
+ { check: hasGrn === 'No', label: 'GRN' }
  ],
  ADJUST_IN: [
  { check: hasProofOfPickup === 'No', label: 'Proof of Pickup' }
@@ -107,7 +104,7 @@ export const GET = withAuth(async (_request, session) => {
  hasPackingList,
  hasCommercialInvoice,
  hasBillOfLading,
- hasDeliveryNote,
+ hasGrn,
  hasCubeMaster,
  hasTransactionCertificate,
  hasCustomDeclaration,
@@ -180,7 +177,7 @@ export const GET = withAuth(async (_request, session) => {
  'Has Packing List',
  'Has Commercial Invoice',
  'Has Bill of Lading',
- 'Has Movement Note',
+ 'Has GRN',
  'Has Cube Master',
  'Has TC (GRS)',
  'Has CDS',
@@ -229,7 +226,7 @@ export const GET = withAuth(async (_request, session) => {
  row.hasPackingList,
  row.hasCommercialInvoice,
  row.hasBillOfLading,
- row.hasDeliveryNote,
+ row.hasGrn,
  row.hasCubeMaster,
  row.hasTransactionCertificate,
  row.hasCustomDeclaration,

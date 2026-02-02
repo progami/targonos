@@ -28,8 +28,8 @@ async function cleanPurchaseOrders() {
     return
   }
 
-  await prisma.movementNoteLine.deleteMany()
-  await prisma.movementNote.deleteMany()
+  await prisma.grnLine.deleteMany()
+  await prisma.grn.deleteMany()
   await prisma.inventoryTransaction.deleteMany()
   await prisma.purchaseOrderLine.deleteMany()
   await prisma.purchaseOrder.deleteMany()
@@ -66,7 +66,7 @@ async function createPurchaseOrders() {
     {
       orderNumber: 'PO-1001',
       type: PurchaseOrderType.PURCHASE,
-      status: PurchaseOrderStatus.DRAFT,
+      status: PurchaseOrderStatus.RFQ,
       counterpartyName: 'CS Suppliers',
       expectedInDays: 7,
       notes: 'Draft order staged for initial inventory build.',

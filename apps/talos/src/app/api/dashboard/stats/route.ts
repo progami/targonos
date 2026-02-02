@@ -192,16 +192,16 @@ export const GET = withAuth(async (request, session) => {
       },
     }),
     // Purchase orders count by status
-    prisma.purchaseOrder.findMany({
-      where: {
-        status: {
-          in: ['DRAFT', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE'],
-        },
-      },
-      select: {
-        status: true,
-      },
-    }),
+	    prisma.purchaseOrder.findMany({
+	      where: {
+	        status: {
+	          in: ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE'],
+	        },
+	      },
+	      select: {
+	        status: true,
+	      },
+	    }),
     // Pending fulfillment orders (draft status)
     prisma.fulfillmentOrder.count({
       where: {
@@ -426,11 +426,11 @@ export const GET = withAuth(async (request, session) => {
     inTransit: 0,
     atWarehouse: 0,
   }
-  for (const po of purchaseOrdersByStage) {
-    switch (po.status) {
-      case 'DRAFT':
-        orderPipeline.draft++
-        break
+	  for (const po of purchaseOrdersByStage) {
+	    switch (po.status) {
+	      case 'RFQ':
+	        orderPipeline.draft++
+	        break
       case 'ISSUED':
         orderPipeline.issued++
         break

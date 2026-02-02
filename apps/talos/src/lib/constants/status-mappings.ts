@@ -5,7 +5,7 @@
 
 // Purchase Order Status Types (5-stage state machine)
 export type POStatus =
-  | 'DRAFT'
+  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -13,14 +13,19 @@ export type POStatus =
   | 'SHIPPED'
   | 'REJECTED'
   | 'CANCELLED'
+  | 'ARCHIVED'
+  | 'AWAITING_PROOF'
+  | 'REVIEW'
+  | 'POSTED'
+  | 'CLOSED'
 
 export type POType = 'PURCHASE' | 'ADJUSTMENT'
 
 // Transaction Types
 export type TxType = 'RECEIVE' | 'SHIP' | 'ADJUST_IN' | 'ADJUST_OUT'
 
-// Movement Note Status
-export type MNStatus = 'DRAFT' | 'POSTED' | 'CANCELLED' | 'RECONCILED'
+// GRN Status
+export type GRNStatus = 'DRAFT' | 'POSTED' | 'CANCELLED' | 'RECONCILED'
 
 // PO Line Status
 export type POLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
@@ -29,7 +34,7 @@ export type POLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
  * Badge CSS classes for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700 border border-slate-200',
+  RFQ: 'bg-slate-100 text-slate-700 border border-slate-200',
   ISSUED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -37,13 +42,18 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
   SHIPPED: 'bg-slate-50 text-slate-600 border border-slate-200',
   REJECTED: 'bg-rose-50 text-rose-700 border border-rose-200',
   CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
+  ARCHIVED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  AWAITING_PROOF: 'bg-amber-50 text-amber-700 border border-amber-200',
+  REVIEW: 'bg-blue-50 text-blue-700 border border-blue-200',
+  POSTED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  CLOSED: 'bg-slate-50 text-slate-600 border border-slate-200',
 }
 
 /**
  * Human-readable labels for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
-  DRAFT: 'RFQ',
+  RFQ: 'RFQ',
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'In Transit',
@@ -51,6 +61,11 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
   SHIPPED: 'Legacy Closed',
   REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
+  ARCHIVED: 'Archived',
+  AWAITING_PROOF: 'Awaiting Proof',
+  REVIEW: 'Review',
+  POSTED: 'Posted',
+  CLOSED: 'Closed',
 }
 
 /**
@@ -92,9 +107,9 @@ export const TX_TYPE_LABELS: Record<TxType, string> = {
 }
 
 /**
- * Badge CSS classes for Movement Note statuses
+ * Badge CSS classes for GRN statuses
  */
-export const MN_STATUS_BADGE_CLASSES: Record<MNStatus, string> = {
+export const GRN_STATUS_BADGE_CLASSES: Record<GRNStatus, string> = {
   DRAFT: 'bg-amber-50 text-amber-700 border border-amber-200',
   POSTED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
@@ -102,9 +117,9 @@ export const MN_STATUS_BADGE_CLASSES: Record<MNStatus, string> = {
 }
 
 /**
- * Human-readable labels for Movement Note statuses
+ * Human-readable labels for GRN statuses
  */
-export const MN_STATUS_LABELS: Record<MNStatus, string> = {
+export const GRN_STATUS_LABELS: Record<GRNStatus, string> = {
   DRAFT: 'Draft',
   POSTED: 'Posted',
   CANCELLED: 'Cancelled',
@@ -141,7 +156,7 @@ export function getStatusBadgeClass(status: string, type: 'po' | 'tx' | 'mn' | '
     case 'tx':
       return TX_TYPE_BADGE_CLASSES[status as TxType] ?? fallback
     case 'mn':
-      return MN_STATUS_BADGE_CLASSES[status as MNStatus] ?? fallback
+      return GRN_STATUS_BADGE_CLASSES[status as GRNStatus] ?? fallback
     case 'poLine':
       return PO_LINE_STATUS_BADGE_CLASSES[status as POLineStatus] ?? fallback
     default:
@@ -159,7 +174,7 @@ export function getStatusLabel(status: string, type: 'po' | 'tx' | 'mn' | 'poLin
     case 'tx':
       return TX_TYPE_LABELS[status as TxType] ?? status
     case 'mn':
-      return MN_STATUS_LABELS[status as MNStatus] ?? status
+      return GRN_STATUS_LABELS[status as GRNStatus] ?? status
     case 'poLine':
       return PO_LINE_STATUS_LABELS[status as POLineStatus] ?? status
     default:

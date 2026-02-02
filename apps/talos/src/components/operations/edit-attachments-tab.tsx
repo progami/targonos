@@ -57,9 +57,9 @@ const RECEIVE_CATEGORIES = [
  required: false
  },
  {
- id: 'movement_note',
- label: 'Movement Note',
- description: 'Proof of movement',
+ id: 'grn',
+ label: 'GRN',
+ description: 'Goods received note',
  required: false
  },
  {
@@ -71,7 +71,7 @@ const RECEIVE_CATEGORIES = [
  {
  id: 'transaction_certificate',
  label: 'TC GRS',
- description: 'Movement Note Slip',
+ description: 'Transaction certificate (TC GRS)',
  required: false
  },
  {
@@ -91,9 +91,9 @@ const SHIP_CATEGORIES = [
  required: false
  },
  {
- id: 'movement_note',
- label: 'Movement Note',
- description: 'Shipping documentation',
+ id: 'grn',
+ label: 'GRN',
+ description: 'Goods received note',
  required: false
  }
 ]

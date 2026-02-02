@@ -133,7 +133,7 @@ function normalizeAuditValue(value: unknown): unknown {
 // Valid stage transitions for new 5-stage workflow
 export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
   // RFQ = editable PO shared with supplier (negotiation)
-  DRAFT: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.REJECTED, PurchaseOrderStatus.CANCELLED],
+  RFQ: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.REJECTED, PurchaseOrderStatus.CANCELLED],
   ISSUED: [
     PurchaseOrderStatus.MANUFACTURING,
     PurchaseOrderStatus.CANCELLED,
@@ -142,7 +142,7 @@ export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrde
   OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CANCELLED],
   WAREHOUSE: [PurchaseOrderStatus.CANCELLED],
   SHIPPED: [], // Terminal state
-  REJECTED: [PurchaseOrderStatus.DRAFT, PurchaseOrderStatus.CANCELLED], // Terminal unless reopened
+  REJECTED: [PurchaseOrderStatus.RFQ, PurchaseOrderStatus.CANCELLED], // Terminal unless reopened
   CANCELLED: [], // Terminal state
 }
 
@@ -174,7 +174,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
   MANUFACTURING: ['box_artwork'],
   OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
-  WAREHOUSE: ['movement_note', 'custom_declaration'],
+  WAREHOUSE: ['grn', 'custom_declaration'],
 }
 
 // Field labels for error messages
@@ -1128,7 +1128,7 @@ async function computeManufacturingCargoTotals(
 
 /**
  * Generate the next order number in sequence (TG-<Country>-<number> format)
- * Used as RFQ number in DRAFT and becomes PO number at ISSUED.
+ * Used as RFQ number in RFQ and becomes PO number at ISSUED.
  *
  * Format: TG-US-2601, TG-US-2602, etc. for US tenant
  *         TG-UK-2601, TG-UK-2602, etc. for UK tenant
@@ -1184,7 +1184,7 @@ export interface CreatePurchaseOrderLineInput {
 }
 
 /**
- * Create a new Purchase Order in DRAFT status
+ * Create a new Purchase Order in RFQ status
  * Warehouse is NOT required at this stage - it's selected at Stage 4 (WAREHOUSE)
  */
 export async function createPurchaseOrder(
@@ -1435,8 +1435,8 @@ export async function createPurchaseOrder(
 	        return tx.purchaseOrder.create({
 	          data: {
 	            orderNumber,
-            type: 'PURCHASE',
-            status: 'DRAFT',
+	            type: 'PURCHASE',
+	            status: PurchaseOrderStatus.RFQ,
 	            counterpartyName: counterpartyNameCanonical,
 	            counterpartyAddress,
             expectedDate,
@@ -1584,7 +1584,7 @@ export async function createPurchaseOrder(
     action: 'CREATE',
     entityType: 'PurchaseOrder',
     entityId: order.id,
-    data: { orderNumber: order.orderNumber, status: 'DRAFT', lineCount: input.lines?.length ?? 0 },
+    data: { orderNumber: order.orderNumber, status: 'RFQ', lineCount: input.lines?.length ?? 0 },
   })
 
   return order
@@ -1910,9 +1910,9 @@ export async function transitionPurchaseOrderStage(
   const now = new Date()
   switch (targetStatus) {
     case PurchaseOrderStatus.ISSUED:
-      updateData.draftApprovedAt = now
-      updateData.draftApprovedById = user.id
-      updateData.draftApprovedByName = user.name
+      updateData.rfqApprovedAt = now
+      updateData.rfqApprovedById = user.id
+      updateData.rfqApprovedByName = user.name
       break
     case PurchaseOrderStatus.OCEAN:
       updateData.manufacturingApprovedAt = now
@@ -2225,9 +2225,9 @@ export async function transitionPurchaseOrderStage(
               totalCartons: dispatchSplitPlan.remainderTotals.totalCartons,
               totalPallets: dispatchSplitPlan.remainderTotals.totalPallets,
               packagingNotes: order.packagingNotes,
-              draftApprovedAt: order.draftApprovedAt,
-              draftApprovedById: order.draftApprovedById,
-              draftApprovedByName: order.draftApprovedByName,
+	              rfqApprovedAt: order.rfqApprovedAt,
+	              rfqApprovedById: order.rfqApprovedById,
+	              rfqApprovedByName: order.rfqApprovedByName,
               shippingMarksGeneratedAt: dispatchSplitGeneratedAt,
               shippingMarksGeneratedById: user.id,
               shippingMarksGeneratedByName: user.name,
@@ -2250,7 +2250,7 @@ export async function transitionPurchaseOrderStage(
               purchaseOrderId: order.id,
               stage: {
                 in: [
-                  PurchaseOrderDocumentStage.DRAFT,
+                  PurchaseOrderDocumentStage.RFQ,
                   PurchaseOrderDocumentStage.ISSUED,
                   PurchaseOrderDocumentStage.MANUFACTURING,
                 ],
@@ -3016,13 +3016,13 @@ export async function receivePurchaseOrderInventory(params: {
     prisma,
     purchaseOrderId: order.id,
     stage: PurchaseOrderDocumentStage.WAREHOUSE,
-    documentTypes: ['movement_note', 'custom_declaration'],
+    documentTypes: ['grn', 'custom_declaration'],
     issues,
     issueKeyPrefix: 'documents',
     issueLabel: (docType) =>
       docType === 'custom_declaration'
         ? 'Customs & Border Patrol Clearance Proof'
-        : 'Movement Note',
+        : 'GRN',
   })
 
   if (warehouse) {
@@ -3650,7 +3650,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
     throw new ConflictError('Cannot generate shipping marks for legacy orders. They are archived.')
   }
 
-  if (order.status === PurchaseOrderStatus.DRAFT) {
+  if (order.status === PurchaseOrderStatus.RFQ) {
     throw new ConflictError('Shipping marks can be generated after the RFQ is issued')
   }
 
@@ -3838,11 +3838,11 @@ export function getStageApprovalHistory(order: PurchaseOrder): {
 }[] {
   const history = []
 
-  if (order.draftApprovedAt) {
+  if (order.rfqApprovedAt) {
     history.push({
       stage: 'RFQ → ISSUED',
-      approvedAt: order.draftApprovedAt,
-      approvedBy: order.draftApprovedByName,
+      approvedAt: order.rfqApprovedAt,
+      approvedBy: order.rfqApprovedByName,
     })
   }
 
