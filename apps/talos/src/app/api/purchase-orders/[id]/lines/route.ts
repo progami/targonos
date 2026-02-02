@@ -115,7 +115,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 
 /**
  * POST /api/purchase-orders/[id]/lines
- * Add a new line item to a DRAFT purchase order
+ * Add a new line item to an RFQ purchase order
  */
 export const POST = withAuthAndParams(async (request: NextRequest, params, session) => {
   const id = params.id as string
@@ -136,8 +136,8 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
-  if (order.status !== 'DRAFT') {
-    return ApiResponses.badRequest('Can only add line items to orders in DRAFT status')
+  if (order.status !== 'RFQ') {
+    return ApiResponses.badRequest('Can only add line items to orders in RFQ status')
   }
 
   const payload = await request.json().catch(() => null)

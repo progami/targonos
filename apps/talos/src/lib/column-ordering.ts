@@ -229,9 +229,9 @@ export const INVENTORY_TRANSACTION_COLUMNS: ColumnDefinition[] = [
  showInExport: true
  },
  {
- fieldName: 'hasDeliveryNote',
- displayName: 'Has Movement Note',
- exportName: 'Has Movement Note',
+ fieldName: 'hasGrn',
+ displayName: 'Has GRN',
+ exportName: 'Has GRN',
  group: 'metadata',
  order: 23,
  showInUI: false,

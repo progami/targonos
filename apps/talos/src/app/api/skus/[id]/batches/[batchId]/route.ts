@@ -268,13 +268,13 @@ export const DELETE = withAuthAndParams(async (_request, params, session) => {
   const skuCodeFilter = { equals: sku.skuCode, mode: 'insensitive' as const }
   const batchLotFilter = { equals: existing.batchCode, mode: 'insensitive' as const }
 
-  const [
-    inventoryTransactionCount,
-    storageLedgerCount,
-    purchaseOrderLineCount,
-    movementNoteLineCount,
-    fulfillmentOrderLineCount,
-  ] = await Promise.all([
+	  const [
+	    inventoryTransactionCount,
+	    storageLedgerCount,
+	    purchaseOrderLineCount,
+	    grnLineCount,
+	    fulfillmentOrderLineCount,
+	  ] = await Promise.all([
     prisma.inventoryTransaction.count({
       where: { skuCode: skuCodeFilter, batchLot: batchLotFilter },
     }),
@@ -290,9 +290,9 @@ export const DELETE = withAuthAndParams(async (_request, params, session) => {
         },
       },
     }),
-    prisma.movementNoteLine.count({
-      where: { skuCode: skuCodeFilter, batchLot: batchLotFilter },
-    }),
+	    prisma.grnLine.count({
+	      where: { skuCode: skuCodeFilter, batchLot: batchLotFilter },
+	    }),
     prisma.fulfillmentOrderLine.count({
       where: {
         skuCode: skuCodeFilter,
@@ -304,12 +304,12 @@ export const DELETE = withAuthAndParams(async (_request, params, session) => {
     }),
   ])
 
-  const blockers: string[] = []
-  if (purchaseOrderLineCount > 0) blockers.push('purchase orders')
-  if (movementNoteLineCount > 0) blockers.push('goods receipts')
-  if (fulfillmentOrderLineCount > 0) blockers.push('fulfillment orders')
-  if (inventoryTransactionCount > 0) blockers.push('inventory transactions')
-  if (storageLedgerCount > 0) blockers.push('storage ledger')
+	  const blockers: string[] = []
+	  if (purchaseOrderLineCount > 0) blockers.push('purchase orders')
+	  if (grnLineCount > 0) blockers.push('goods receipts')
+	  if (fulfillmentOrderLineCount > 0) blockers.push('fulfillment orders')
+	  if (inventoryTransactionCount > 0) blockers.push('inventory transactions')
+	  if (storageLedgerCount > 0) blockers.push('storage ledger')
 
   if (blockers.length > 0) {
     return ApiResponses.badRequest(

@@ -592,17 +592,16 @@ export default function TransactionDetailPage() {
                     ).map(([category, attachment]) => {
                       if (!attachment) return null
 
-                      const categoryLabels: Record<string, string> = {
-                        commercial_invoice: 'Commercial Invoice',
-                        bill_of_lading: 'Bill of Lading',
-                        packing_list: 'Packing List',
-                        movement_note: 'Movement Note',
-                        delivery_note: 'Movement Note',
-                        cube_master: 'Cube Master',
-                        transaction_certificate: 'TC GRS',
-                        custom_declaration: 'CDS',
-                        proof_of_pickup: 'Proof of Pickup',
-                      }
+	                      const categoryLabels: Record<string, string> = {
+	                        commercial_invoice: 'Commercial Invoice',
+	                        bill_of_lading: 'Bill of Lading',
+	                        packing_list: 'Packing List',
+	                        grn: 'GRN',
+	                        cube_master: 'Cube Master',
+	                        transaction_certificate: 'TC GRS',
+	                        custom_declaration: 'CDS',
+	                        proof_of_pickup: 'Proof of Pickup',
+	                      }
 
                       return (
                         <div key={category} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900">

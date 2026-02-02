@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react'
 
 // 5-Stage State Machine Status Types
 type POStageStatus =
-  | 'DRAFT'
+  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -45,7 +45,7 @@ type StatusConfig = {
 // Main pipeline stages (5-stage state machine)
 const PIPELINE_STAGES: StatusConfig[] = [
   {
-    value: 'DRAFT',
+    value: 'RFQ',
     label: 'RFQ',
     description: 'Request for quote shared with supplier',
     icon: FileEdit,
@@ -102,13 +102,13 @@ function OrdersPageContent() {
   const searchParams = useSearchParams()
   const pageState = usePageState(PAGE_KEY)
 
-  // Get status from URL first, then Zustand state, then default to DRAFT
+  // Get status from URL first, then Zustand state, then default to RFQ
   const statusFromUrl = searchParams.get('status') as POStageStatus | null
   const persistedStatus = pageState.activeTab as POStageStatus | undefined
   const currentStatus: POStageStatus =
     (statusFromUrl && STATUS_CONFIGS.some(s => s.value === statusFromUrl) ? statusFromUrl : null) ??
     (persistedStatus && STATUS_CONFIGS.some(s => s.value === persistedStatus) ? persistedStatus : null) ??
-    'DRAFT'
+    'RFQ'
 
   useEffect(() => {
     if (status === 'loading') return

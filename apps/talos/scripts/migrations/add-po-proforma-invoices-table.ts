@@ -135,8 +135,8 @@ async function backfill(prisma: Awaited<ReturnType<typeof getTenantPrismaClient>
       id: true,
       proformaInvoiceNumber: true,
       proformaInvoiceDate: true,
-      draftApprovedById: true,
-      draftApprovedByName: true,
+      rfqApprovedById: true,
+      rfqApprovedByName: true,
     },
   })
 
@@ -148,8 +148,8 @@ async function backfill(prisma: Awaited<ReturnType<typeof getTenantPrismaClient>
         purchaseOrderId: order.id,
         piNumber,
         invoiceDate: order.proformaInvoiceDate ?? null,
-        createdById: order.draftApprovedById ?? null,
-        createdByName: order.draftApprovedByName ?? null,
+        createdById: order.rfqApprovedById ?? null,
+        createdByName: order.rfqApprovedByName ?? null,
       }
     })
     .filter((value): value is NonNullable<typeof value> => value !== null)
@@ -206,4 +206,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

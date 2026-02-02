@@ -18,7 +18,7 @@ export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetP
 }>
 
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
-  PurchaseOrderStatus.DRAFT,
+  PurchaseOrderStatus.RFQ,
   PurchaseOrderStatus.ISSUED,
   PurchaseOrderStatus.MANUFACTURING,
   PurchaseOrderStatus.OCEAN,
@@ -133,9 +133,9 @@ export async function updatePurchaseOrderDetails(
 
   if (
     order.isLegacy ||
-    order.status !== PurchaseOrderStatus.DRAFT
+    order.status !== PurchaseOrderStatus.RFQ
   ) {
-    throw new ConflictError('Only draft purchase orders can be edited')
+    throw new ConflictError('Only RFQs can be edited')
   }
 
   let expectedDate: Date | null | undefined = order.expectedDate

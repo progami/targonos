@@ -329,7 +329,7 @@ model PurchaseOrder {
   splitGroupId     String?             @map("split_group_id")
   splitParentId    String?             @map("split_parent_id")
   type             PurchaseOrderType
-  status           PurchaseOrderStatus @default(DRAFT)
+  status           PurchaseOrderStatus @default(RFQ)
   counterpartyName String?             @map("counterparty_name")
   counterpartyAddress String?          @map("counterparty_address")
   notes            String?
@@ -429,9 +429,9 @@ model PurchaseOrder {
   // ===========================================
   // STAGE APPROVAL TRACKING
   // ===========================================
-  draftApprovedAt             DateTime? @map("draft_approved_at")
-  draftApprovedById           String?   @map("draft_approved_by_id")
-  draftApprovedByName         String?   @map("draft_approved_by_name")
+  rfqApprovedAt               DateTime? @map("rfq_approved_at")
+  rfqApprovedById             String?   @map("rfq_approved_by_id")
+  rfqApprovedByName           String?   @map("rfq_approved_by_name")
   manufacturingApprovedAt     DateTime? @map("manufacturing_approved_at")
   manufacturingApprovedById   String?   @map("manufacturing_approved_by_id")
   manufacturingApprovedByName String?   @map("manufacturing_approved_by_name")
@@ -466,7 +466,7 @@ model PurchaseOrder {
   documents     PurchaseOrderDocument[]
   proformaInvoices PurchaseOrderProformaInvoice[]
   transactions  InventoryTransaction[]   @relation("TransactionPurchaseOrder")
-  movementNotes MovementNote[]
+  grns          Grn[]
   invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLinePurchaseOrder")
   forwardingCosts PurchaseOrderForwardingCost[]
   financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrder")
@@ -687,7 +687,7 @@ model PurchaseOrderLine {
   updatedAt         DateTime                @updatedAt @map("updated_at")
   transactions      InventoryTransaction[]  @relation("TransactionPurchaseOrderLine")
   financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrderLine")
-  movementNoteLines MovementNoteLine[]
+  grnLines          GrnLine[]
   invoiceLines      WarehouseInvoiceLine[]
 
   @@unique([purchaseOrderId, skuCode, batchLot])
@@ -710,11 +710,11 @@ model PurchaseOrderContainer {
   @@map("purchase_order_containers")
 }
 
-model MovementNote {
+model Grn {
   id              String             @id @default(uuid())
   purchaseOrderId String             @map("purchase_order_id")
   purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  status          MovementNoteStatus @default(DRAFT)
+  status          GrnStatus          @default(DRAFT)
   referenceNumber String?            @map("reference_number")
   receivedAt      DateTime           @default(now()) @map("received_at")
   receivedById    String?            @map("received_by_id")
@@ -726,17 +726,17 @@ model MovementNote {
   attachments     Json?              @map("attachments")
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
-  lines           MovementNoteLine[]
+  lines           GrnLine[]
 
   @@index([purchaseOrderId])
   @@index([warehouseCode])
   @@map("goods_receipts")
 }
 
-model MovementNoteLine {
+model GrnLine {
   id                       String                 @id @default(uuid())
-  movementNoteId           String                 @map("goods_receipt_id")
-  movementNote             MovementNote           @relation(fields: [movementNoteId], references: [id], onDelete: Cascade)
+  grnId                    String                 @map("goods_receipt_id")
+  grn                      Grn                    @relation(fields: [grnId], references: [id], onDelete: Cascade)
   purchaseOrderLineId      String?                @map("purchase_order_line_id")
   purchaseOrderLine        PurchaseOrderLine?     @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
   skuCode                  String                 @map("sku_code")
@@ -751,7 +751,7 @@ model MovementNoteLine {
   updatedAt                DateTime               @updatedAt @map("updated_at")
   invoiceLines             WarehouseInvoiceLine[]
 
-  @@index([movementNoteId])
+  @@index([grnId])
   @@index([purchaseOrderLineId])
   @@map("goods_receipt_lines")
 }
@@ -787,8 +787,8 @@ model WarehouseInvoiceLine {
   purchaseOrder       PurchaseOrder?     @relation("WarehouseInvoiceLinePurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   purchaseOrderLineId String?            @map("purchase_order_line_id")
   purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
-  movementNoteLineId  String?            @map("goods_receipt_line_id")
-  movementNoteLine    MovementNoteLine?  @relation(fields: [movementNoteLineId], references: [id], onDelete: SetNull)
+  grnLineId           String?            @map("goods_receipt_line_id")
+  grnLine             GrnLine?           @relation(fields: [grnLineId], references: [id], onDelete: SetNull)
   chargeCode          String             @map("charge_code")
   description         String?            @map("description")
   quantity            Decimal            @default(0) @map("quantity") @db.Decimal(14, 4)
@@ -801,7 +801,7 @@ model WarehouseInvoiceLine {
 
   @@index([warehouseInvoiceId])
   @@index([purchaseOrderId])
-  @@index([movementNoteLineId])
+  @@index([grnLineId])
   @@map("warehouse_invoice_lines")
 }
 
@@ -1001,7 +1001,7 @@ enum PurchaseOrderType {
 
 enum PurchaseOrderStatus {
   // New 5-stage workflow statuses
-  DRAFT
+  RFQ
   ISSUED
   MANUFACTURING
   OCEAN
@@ -1078,7 +1078,7 @@ enum OutboundShipMode {
 }
 
 enum PurchaseOrderDocumentStage {
-  DRAFT
+  RFQ
   ISSUED
   MANUFACTURING
   OCEAN
@@ -1088,7 +1088,7 @@ enum PurchaseOrderDocumentStage {
   @@map("PurchaseOrderDocumentStage")
 }
 
-enum MovementNoteStatus {
+enum GrnStatus {
   DRAFT
   POSTED
   CANCELLED

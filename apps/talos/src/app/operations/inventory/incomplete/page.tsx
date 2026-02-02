@@ -37,7 +37,7 @@ const RECEIVE_CATEGORIES: AttachmentCategory[] = [
   { id: 'commercial_invoice', label: 'Commercial Invoice' },
   { id: 'bill_of_lading', label: 'Bill of Lading' },
   { id: 'packing_list', label: 'Packing List' },
-  { id: 'movement_note', label: 'Movement Note' },
+  { id: 'grn', label: 'GRN' },
   { id: 'cube_master', label: 'Cube Master' },
   { id: 'transaction_certificate', label: 'TC GRS' },
   { id: 'custom_declaration', label: 'CDS' },
@@ -45,7 +45,7 @@ const RECEIVE_CATEGORIES: AttachmentCategory[] = [
 
 const SHIP_CATEGORIES: AttachmentCategory[] = [
   { id: 'packing_list', label: 'Packing List' },
-  { id: 'movement_note', label: 'Movement Note' },
+  { id: 'grn', label: 'GRN' },
 ]
 
 const ADJUSTMENT_CATEGORIES: AttachmentCategory[] = [{ id: 'proof_of_pickup', label: 'Proof of Pickup' }]
