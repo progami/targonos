@@ -18,6 +18,8 @@ import { cn } from '@/lib/utils'
 import { useNavigationHistory } from '@/lib/navigation-history'
 import { EMPLOYEE_REGION_OPTIONS, EMPLOYEE_STATUS_OPTIONS, EMPLOYMENT_TYPE_OPTIONS } from '@/lib/domain/employee/constants'
 
+const UNASSIGNED_DEPARTMENT_NAME = 'Unassigned'
+
 // Simplified schema for small team
 const EditEmployeeSchema = z.object({
   phone: z.string().optional().nullable(),
@@ -277,6 +279,7 @@ export default function EditEmployeePage() {
                     className={cn(errors.department && 'border-destructive')}
                   >
                     <option value="">Select department...</option>
+                    <option value={UNASSIGNED_DEPARTMENT_NAME}>{UNASSIGNED_DEPARTMENT_NAME}</option>
                     {departments.map((dept) => (
                       <option key={dept.id} value={dept.name}>{dept.name}</option>
                     ))}

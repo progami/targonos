@@ -9,6 +9,8 @@ import { canReassignEmployee, canViewEmployeeDirectory, filterAllowedFields, isH
 
 type EmployeeRouteContext = { params: Promise<{ id: string }> }
 
+const UNASSIGNED_DEPARTMENT_NAME = 'Unassigned'
+
 export async function GET(req: Request, context: EmployeeRouteContext) {
   // Rate limiting
   const rateLimitError = withRateLimit(req)
@@ -172,7 +174,7 @@ export async function PATCH(req: Request, context: EmployeeRouteContext) {
       data.reportsToId = rawData.reportsToId
     }
 
-    const departmentName = (data.department || data.departmentName) as string | undefined
+    const departmentName = (data.department ?? data.departmentName) as string | undefined
     const roles = data.roles as string[] | undefined
 
     // Get current employee data to detect hierarchy changes
@@ -237,11 +239,15 @@ export async function PATCH(req: Request, context: EmployeeRouteContext) {
       updates.department = departmentName
       // Auto-set local override flag when department is manually updated
       updates.departmentLocalOverride = true
-      updates.dept = {
-        connectOrCreate: {
-          where: { name: departmentName },
-          create: { name: departmentName },
-        },
+      if (departmentName === UNASSIGNED_DEPARTMENT_NAME) {
+        updates.dept = { disconnect: true }
+      } else {
+        updates.dept = {
+          connectOrCreate: {
+            where: { name: departmentName },
+            create: { name: departmentName },
+          },
+        }
       }
     }
 
