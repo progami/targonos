@@ -40,7 +40,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const allowedDepartments = getAllowedPasswordDepartments(deptRefs)
 
     const { id } = await params
-    const password = await prisma.password.findUnique({ where: { id } })
+    const password = await prisma.password.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    })
 
     if (!password) {
       return NextResponse.json({ error: 'Password not found' }, { status: 404 })
@@ -102,6 +107,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         url: data.url,
         department: data.department,
         notes: data.notes,
+      },
+      include: {
+        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
     })
 
