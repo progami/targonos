@@ -7,7 +7,7 @@ on:
 jobs:
   require-dev-source:
     name: Require PR head to be dev
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - name: Validate source branch
         run: |
