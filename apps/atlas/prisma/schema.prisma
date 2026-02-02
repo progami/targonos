@@ -96,6 +96,7 @@ model Employee {
   tasksSubject     Task[]          @relation("TasksSubjectEmployee")
 
   auditLogs        AuditLog[]      @relation("AuditLogsActor")
+  passwordsCreated Password[]      @relation("PasswordsCreated")
 
   @@index([email])
   @@index([employeeId])
@@ -1226,6 +1227,9 @@ model Password {
   url         String?
   department  PasswordDepartment @default(OPS)
   notes       String?
+
+  createdById String?
+  createdBy   Employee?          @relation("PasswordsCreated", fields: [createdById], references: [id], onDelete: SetNull)
 
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt

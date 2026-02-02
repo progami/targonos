@@ -86,6 +86,9 @@ export async function GET(req: Request) {
         take,
         skip,
         orderBy: [{ title: 'asc' }],
+        include: {
+          createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
       }),
       prisma.password.count({ where }),
     ])
@@ -134,6 +137,10 @@ export async function POST(req: Request) {
         url: data.url ?? null,
         department: data.department,
         notes: data.notes ?? null,
+        createdById: currentEmployeeId,
+      },
+      include: {
+        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
     })
 
