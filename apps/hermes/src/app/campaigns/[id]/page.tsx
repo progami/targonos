@@ -18,10 +18,14 @@ export default function CampaignDetailPage() {
   const [dispatches, setDispatches] = React.useState<DispatchAttempt[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
-  const { connections, fetch: fetchConnections } = useConnectionsStore();
+  const { connections, hasHydrated, fetch: fetchConnections } = useConnectionsStore();
 
   React.useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
+  }, [hasHydrated, fetchConnections]);
+
+  React.useEffect(() => {
     async function load() {
       try {
         const res = await fetch(hermesApiUrl(`/api/campaigns/${params.id}`));
@@ -50,7 +54,7 @@ export default function CampaignDetailPage() {
       }
     }
     load();
-  }, [params.id, fetchConnections]);
+  }, [params.id]);
 
   if (loading) {
     return (

@@ -88,14 +88,16 @@ export function MessagingClient() {
   const {
     connections,
     loading: connectionsLoading,
+    hasHydrated,
     activeConnectionId,
     setActiveConnectionId,
     fetch: fetchConnections,
   } = useConnectionsStore();
 
   useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
-  }, [fetchConnections]);
+  }, [hasHydrated, fetchConnections]);
 
   const connectionId = activeConnectionId ?? "";
   const connection = useMemo(() => {
