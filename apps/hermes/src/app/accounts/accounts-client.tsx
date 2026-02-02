@@ -21,12 +21,13 @@ function statusBadge(status: AmazonConnection["status"]) {
 }
 
 export function AccountsClient() {
-  const { connections, loaded, loading, fetch: fetchConnections } = useConnectionsStore();
+  const { connections, loaded, loading, hasHydrated, fetch: fetchConnections } = useConnectionsStore();
   const [testingId, setTestingId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
-  }, [fetchConnections]);
+  }, [hasHydrated, fetchConnections]);
 
   async function testConnection(account: AmazonConnection) {
     const marketplaceId = account.marketplaceIds[0];

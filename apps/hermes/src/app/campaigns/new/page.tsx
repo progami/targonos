@@ -81,14 +81,16 @@ export default function NewCampaignPage() {
   const {
     connections,
     loading: connectionsLoading,
+    hasHydrated,
     activeConnectionId,
     setActiveConnectionId,
     fetch: fetchConnections,
   } = useConnectionsStore();
 
   React.useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
-  }, [fetchConnections]);
+  }, [hasHydrated, fetchConnections]);
 
   const [tab, setTab] = React.useState<"basics" | "timing" | "experiment" | "review">("basics");
 

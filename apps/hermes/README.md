@@ -1,200 +1,106 @@
 # Hermes
 
-Hermes is the TargonOS email-style automation app for Amazon Seller Central, built on **Selling Partner API (SP-API)**.
+Hermes is a TargonOS app that automates **Amazon post‑purchase outreach** using the **Selling Partner API (SP‑API)**. It behaves like an email automation system, but the “recipients” are **Amazon orders**, and Amazon strictly controls what can be sent and when.
 
-It currently ships **two separate modules**:
+Hermes has two operational modules:
 
-1) **Request-a-Review** (Solicitations API)
-- Fully automated review-request dispatching (eligible-window aware)
-- Strict dedupe: never sends more than once per order
+1) **Request‑a‑Review** (Solicitations API)
+- Queues and sends Amazon’s “Request a Review” solicitation when an order is eligible.
+- Guarantees **at most one** send per order.
 
-2) **Buyer-Seller Messaging** (Messaging API)
-- Sends allowed order-related messages using Amazon's Messaging API
-- Strict dedupe: never sends the same *message kind* more than once per order
-
-This folder is meant to be copied into:
-
-`~/targonos-main/apps/hermes`
+2) **Buyer‑Seller Messaging** (Messaging API)
+- Lets you send allowed, order‑related messages (only when Amazon exposes an allowed action for that order).
+- Guarantees **at most one** send per message kind per order.
 
 ---
 
-## Why Hermes exists
+## The core idea: Orders → Dispatches → Attempts
 
-Amazon allows limited post-purchase buyer contact. Hermes focuses on:
-- **automation with safety** (idempotency + audit logs)
-- **timing optimization levers** (delay windows, time windows, jitter, holdouts)
-- **analytics** (send volume, eligibility, throttling, lift scaffolding)
+Hermes is built around a small set of concepts:
 
----
+- **Connection**: an Amazon seller account configuration (region + marketplace IDs + credentials). In this standalone version, connections are provided via environment variables.
+- **Order cache**: Hermes keeps a local copy of orders it has seen, so the UI and schedulers can work without repeatedly hitting the Orders API.
+- **Dispatch queue**: every outbound action (review request or buyer message) becomes a **dispatch** with a `scheduled_at` time and an optional `expires_at` deadline.
+- **Attempt log**: every send attempt (sent / ineligible / throttled / failed) is recorded as an immutable audit entry.
 
-## What’s implemented
-
-### UI
-- Dashboard shell (shadcn/ui)
-- Campaigns / Experiments / Templates / Accounts / Orders / Insights / Logs / Settings
-- **Messaging module** UI (`/messaging`) to:
-  - pick an order
-  - fetch *allowed messaging actions* for that order
-  - send a buyer message (with built-in content safety checks)
-
-### Backend
-- Postgres schema (`db/schema.sql`) with:
-  - `hermes_orders` (local order cache)
-  - `hermes_dispatches` (send queue)
-  - `hermes_dispatch_attempts` (immutable audit log)
-- SP-API client:
-  - LWA token handling
-  - SigV4 signing
-  - token-bucket rate limiter
-
-### Workers
-- **Orders sync** (hourly): `pnpm worker:orders-sync`
-  - fetches and upserts orders
-  - can auto-enqueue request-a-review dispatches
-- **Request-a-Review dispatcher**: `pnpm worker:request-review`
-  - sends solicitations when due
-  - preflights eligibility via `GetSolicitationActionsForOrder`
-- **Buyer message dispatcher**: `pnpm worker:buyer-message`
-  - sends Messaging API dispatches when due
-  - preflights eligibility via `getMessagingActionsForOrder`
+This means Hermes can be run with “at‑least once” worker semantics (retries, restarts, multiple processes) while still avoiding duplicate sends.
 
 ---
 
-## Marketplace support (UK / US / any marketplace)
+## How Request‑a‑Review works (end‑to‑end)
 
-Hermes is marketplace-agnostic.
-
-Each connection config contains:
-- `region`: `NA` | `EU` | `FE`
-- `marketplaceIds`: one or more marketplace IDs (US, UK, DE, etc.)
-
-Orders sync can request multiple marketplaces at once. Messaging/Solicitations calls require a **single marketplaceId per request**, and Hermes always uses the marketplaceId stored on the order.
-
----
-
-## Safety guarantees (hard requirements)
-
-### 1) Never send the same Request-a-Review twice
-Enforced at the database layer with a **partial unique index**:
-- `UNIQUE(connection_id, order_id) WHERE type='request_review'`
-
-### 2) Never send the same Buyer-Seller message type twice
-Enforced at the database layer with a **partial unique index**:
-- `UNIQUE(connection_id, order_id, message_kind) WHERE type='buyer_message'`
-
-### 3) Concurrency-safe dispatching
-Both dispatcher workers use:
-- a **claim step** (`queued -> sending`) so only one worker can process a dispatch
-- attempt logging in `hermes_dispatch_attempts` for every outcome
-
-### 4) Built-in content safety checks (Messaging UI/API)
-Buyer messages are blocked if they include obvious policy-risk content, including:
-- review / feedback solicitation phrases
-- links
-- phone numbers / email addresses
-- HTML/markup
-
-These checks are intentionally conservative.
+1) **Orders are ingested** into the local order cache (either via the Orders UI backfill or the orders‑sync worker).
+2) Hermes **computes a schedule** per order (delay + optional time window + optional jitter) and enqueues a `request_review` dispatch.
+3) The **request‑review worker** continuously:
+   - finds due dispatches (`queued` + `scheduled_at <= now`)
+   - **claims** them (`queued → sending`) so only one worker can process the row
+   - calls Amazon to **preflight eligibility** (actions for the order)
+   - sends the solicitation only if eligible
+   - writes an attempt row and marks the dispatch `sent`, or reschedules / skips / fails based on the outcome
 
 ---
 
-## Orders backfill ("all previous orders")
+## How Buyer‑Seller Messaging works (end‑to‑end)
 
-Hermes can backfill orders via the UI:
-- Orders → **Backfill**
-- preset includes **"2y"**
-
-Important: Amazon may archive older orders; the Orders API typically exposes up to ~2 years depending on marketplace/account settings.
-
----
-
-## Dev
-
-```bash
-pnpm install
-pnpm dev
-```
-
-Default port is `3014`.
+1) You pick an order in the Messaging UI.
+2) Hermes calls Amazon to fetch the order’s **allowed messaging actions**.
+3) You choose a supported message type and provide content.
+4) Hermes runs **content safety checks** (blocks links, contact info, and obvious review/feedback solicitation phrases).
+5) Hermes enqueues a `buyer_message` dispatch and (optionally) sends immediately, using the same claim + attempt logging flow as the worker.
+6) The **buyer‑message worker** can also process queued message dispatches on a loop.
 
 ---
 
-## Database
+## Safety guarantees (what Hermes enforces)
 
-Set:
-
-```bash
-DATABASE_URL=postgresql://...
-```
-
-### Schema/migrations
-Hermes supports a dev-only auto-migrate mode:
-
-```bash
-HERMES_AUTO_MIGRATE=1
-```
-
-Production recommendation: run `db/schema.sql` using your normal migration tooling.
+- **No duplicate sends (hard DB safety)**:
+  - Request‑a‑Review: one per `(connection_id, order_id)`
+  - Buyer message: one per `(connection_id, order_id, message_kind)`
+- **Concurrency‑safe sending**: dispatches are processed via a claim step (`queued → sending`) so only one worker instance sends.
+- **Immutable audit trail**: every outcome is recorded in the attempt log.
+- **Eligibility validation at send time**: Hermes checks Amazon “allowed actions” right before sending.
+- **Expiry windows**: dispatches can expire; expired dispatches are skipped instead of being sent late.
+- **Rate‑limit aware behavior**: throttled calls are recorded and the dispatch is rescheduled with backoff.
 
 ---
 
-## Workers
+## What you can do in the UI today
 
-### Request-a-Review dispatcher
-
-```bash
-pnpm worker:request-review
-```
-
-### Buyer message dispatcher
-
-```bash
-pnpm worker:buyer-message
-```
-
-### Orders sync (hourly)
-
-```bash
-pnpm worker:orders-sync
-```
+- **Dashboard**: queue KPIs + recent dispatch activity.
+- **Orders**: backfill from Orders API into the local cache; optionally enqueue review requests; browse/filter cached orders.
+- **Messaging**: fetch allowed actions for an order and send a safe buyer message; view recent message dispatches.
+- **Accounts**: view configured connections and run a lightweight SP‑API connectivity test.
+- **Insights**: basic analytics from the local DB (dispatch states, attempts, order counts).
+- **Campaigns / Experiments / Templates / Settings / Logs**: UI + basic persistence exist; campaign/experiment metadata is not yet what drives dispatch generation (dispatches can store campaign/experiment IDs, but scheduling is currently driven by the order ingest flows).
 
 ---
 
-## Connection configuration
+## Running Hermes (local dev)
 
-This standalone package reads connections from env.
-
-### Multiple connections
-
-```bash
-HERMES_CONNECTIONS_JSON='[
-  {"connectionId":"conn_us","region":"NA","marketplaceIds":["ATVPDKIKX0DER"],"lwaRefreshToken":"..."},
-  {"connectionId":"conn_uk","region":"EU","marketplaceIds":["A1F83G8C2ARO7P"],"lwaRefreshToken":"..."}
-]'
-```
-
-### Or single default connection
-Use `SPAPI_*` variables plus `HERMES_DEFAULT_MARKETPLACE_IDS`.
-
-See `.env.example` for all knobs.
+- Web: `pnpm dev` (default port `3014`)
+- Workers:
+  - `pnpm worker:orders-sync`
+  - `pnpm worker:request-review`
+  - `pnpm worker:buyer-message`
 
 ---
 
-## Base path
+## Configuration (what Hermes needs)
 
-Hermes is designed to run under a base path.
-
-```bash
-BASE_PATH=/hermes
-```
+- **Base path**: Hermes is meant to run behind a base path (default `/hermes`).
+  - Set `BASE_PATH` for Next.js routing and `NEXT_PUBLIC_BASE_PATH` for client API calls (they should match).
+- **Database**: `DATABASE_URL` is required (Hermes uses Postgres to enforce idempotency and store audit logs).
+  - Dev convenience: set `HERMES_AUTO_MIGRATE=1` to auto‑create tables from `db/schema.sql` on boot.
+- **Connections**: provide one or more connection targets (connectionId + marketplaces + region) plus SP‑API credentials.
+  - See `.env.example` for all knobs and examples.
 
 ---
 
-## Notes on Amazon policies
+## Policy note
 
-Hermes is built to respect:
-- Solicitations API eligibility windows
-- Messaging API per-order allowed actions
-- "no duplicate review requests" safety
+Hermes is designed to follow Amazon’s constraints by:
+- sending solicitations only when Amazon exposes the eligible action for that order
+- sending buyer messages only when Amazon exposes the allowed action for that order
+- blocking obvious high‑risk message content in the Messaging UI/API
 
-You are still responsible for complying with Amazon Communication Guidelines and any marketplace-specific rules.
+You are still responsible for compliance with Amazon Communication Guidelines and marketplace rules.
