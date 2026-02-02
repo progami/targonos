@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import prisma from '../../../../lib/prisma'
 import { withRateLimit } from '@/lib/api-helpers'
 import { getCurrentEmployeeId } from '@/lib/current-user'
-import { getOrgVisibleEmployeeIds, isHROrAbove } from '@/lib/permissions'
 
 export async function GET(req: Request) {
   const rateLimitError = withRateLimit(req)
@@ -13,9 +12,6 @@ export async function GET(req: Request) {
     if (!actorId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const isHR = await isHROrAbove(actorId)
-    const visibleIds = isHR ? null : await getOrgVisibleEmployeeIds(actorId)
 
     // Check if the project model exists (migration may not have been run yet)
     const projectModel = (prisma as any).project
@@ -39,7 +35,6 @@ export async function GET(req: Request) {
         startDate: true,
         endDate: true,
         members: {
-          ...(visibleIds ? { where: { employeeId: { in: visibleIds } } } : {}),
           select: {
             id: true,
             role: true,

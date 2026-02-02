@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withRateLimit, safeErrorResponse } from '@/lib/api-helpers'
 import { getCurrentUser } from '@/lib/current-user'
-import { getManagerChain, getOrgVisibleEmployeeIds, isHROrAbove } from '@/lib/permissions'
+import { getManagerChain } from '@/lib/permissions'
 
 type HierarchyEmployee = {
   id: string
@@ -16,6 +16,11 @@ type HierarchyEmployee = {
   avatar: string | null
   reportsToId: string | null
   status: string
+  phone?: string | null
+  city?: string | null
+  country?: string | null
+  joinDate?: Date | null
+  projects?: string[]
 }
 
 export async function GET(req: Request) {
@@ -28,8 +33,6 @@ export async function GET(req: Request) {
 
     const user = await getCurrentUser()
     const currentEmployeeId = user?.employee?.id
-    const isHR = currentEmployeeId ? await isHROrAbove(currentEmployeeId) : false
-
     if (type === 'direct-reports') {
       if (!currentEmployeeId) {
         return NextResponse.json({ items: [], currentEmployeeId: null })
@@ -52,6 +55,10 @@ export async function GET(req: Request) {
           avatar: true,
           reportsToId: true,
           status: true,
+          phone: true,
+          city: true,
+          country: true,
+          joinDate: true,
         },
         orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
       })
@@ -83,6 +90,10 @@ export async function GET(req: Request) {
             avatar: true,
             reportsToId: true,
             status: true,
+            phone: true,
+            city: true,
+            country: true,
+            joinDate: true,
           },
         })
 
@@ -109,13 +120,10 @@ export async function GET(req: Request) {
         })
       }
 
-      const visibleIds = isHR ? null : await getOrgVisibleEmployeeIds(currentEmployeeId)
-
-      // Get all active employees (HR) or only visible slice (non-HR).
+      // Get all active employees for the org chart.
       const employees = await prisma.employee.findMany({
         where: {
           status: 'ACTIVE',
-          ...(visibleIds ? { id: { in: visibleIds } } : {}),
         },
         select: {
           id: true,
@@ -129,6 +137,15 @@ export async function GET(req: Request) {
           avatar: true,
           reportsToId: true,
           status: true,
+          phone: true,
+          city: true,
+          country: true,
+          joinDate: true,
+          projectMemberships: {
+            select: {
+              projectId: true,
+            },
+          },
         },
         orderBy: [{ employeeNumber: 'asc' }],
       })
@@ -138,8 +155,23 @@ export async function GET(req: Request) {
         .filter((emp: HierarchyEmployee) => emp.reportsToId === currentEmployeeId)
         .map((emp: HierarchyEmployee) => emp.id)
 
+      const mappedEmployees = employees.map((emp: any) => {
+        const projects: string[] = []
+        const memberships = emp.projectMemberships
+        if (memberships) {
+          for (const membership of memberships) {
+            projects.push(membership.projectId)
+          }
+        }
+        const { projectMemberships, ...rest } = emp
+        return {
+          ...rest,
+          projects,
+        }
+      })
+
       return NextResponse.json({
-        items: employees,
+        items: mappedEmployees,
         currentEmployeeId,
         managerChainIds,
         directReportIds,

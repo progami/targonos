@@ -834,6 +834,11 @@ export type HierarchyEmployee = {
   avatar: string | null
   reportsToId: string | null
   status: string
+  phone?: string | null
+  city?: string | null
+  country?: string | null
+  joinDate?: string | null
+  projects?: string[]
 }
 
 export const HierarchyApi = {
