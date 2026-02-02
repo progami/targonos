@@ -14,17 +14,28 @@ import { useConnectionsStore } from "@/stores/connections-store";
 
 // Recharts (shadcn/ui charts are built on this)
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  BarChart,
-  Bar,
-  Legend,
+  ResponsiveContainer as ResponsiveContainerRaw,
+  LineChart as LineChartRaw,
+  Line as LineRaw,
+  XAxis as XAxisRaw,
+  YAxis as YAxisRaw,
+  Tooltip as TooltipRaw,
+  CartesianGrid as CartesianGridRaw,
+  BarChart as BarChartRaw,
+  Bar as BarRaw,
+  Legend as LegendRaw,
 } from "recharts";
+
+const ResponsiveContainer = ResponsiveContainerRaw as unknown as React.ComponentType<any>;
+const LineChart = LineChartRaw as unknown as React.ComponentType<any>;
+const Line = LineRaw as unknown as React.ComponentType<any>;
+const XAxis = XAxisRaw as unknown as React.ComponentType<any>;
+const YAxis = YAxisRaw as unknown as React.ComponentType<any>;
+const Tooltip = TooltipRaw as unknown as React.ComponentType<any>;
+const CartesianGrid = CartesianGridRaw as unknown as React.ComponentType<any>;
+const BarChart = BarChartRaw as unknown as React.ComponentType<any>;
+const Bar = BarRaw as unknown as React.ComponentType<any>;
+const Legend = LegendRaw as unknown as React.ComponentType<any>;
 
 type Overview = {
   rangeDays: number;
