@@ -696,6 +696,44 @@ CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
 pm2 start "$REPO_DIR/ecosystem.config.js" --only "$pm2_name" --update-env
 log "$pm2_name started"
 
+if [[ "$app_key" == "hermes" ]]; then
+  hermes_workers=("${PM2_PREFIX}-hermes-orders-sync" "${PM2_PREFIX}-hermes-request-review")
+  for worker in "${hermes_workers[@]}"; do
+    log "Step 7: Starting $worker"
+    CI= \
+    GITHUB_ACTIONS= \
+    GITHUB_PERSONAL_ACCESS_TOKEN= \
+    GITHUB_TOKEN= \
+    GH_TOKEN= \
+    GEMINI_API_KEY= \
+    CLAUDECODE= \
+    CLAUDE_CODE_ENTRYPOINT= \
+    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
+    pm2 start "$worker" --update-env 2>/dev/null || \
+    CI= \
+    GITHUB_ACTIONS= \
+    GITHUB_PERSONAL_ACCESS_TOKEN= \
+    GITHUB_TOKEN= \
+    GH_TOKEN= \
+    GEMINI_API_KEY= \
+    CLAUDECODE= \
+    CLAUDE_CODE_ENTRYPOINT= \
+    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
+    pm2 restart "$worker" --update-env 2>/dev/null || \
+    CI= \
+    GITHUB_ACTIONS= \
+    GITHUB_PERSONAL_ACCESS_TOKEN= \
+    GITHUB_TOKEN= \
+    GH_TOKEN= \
+    GEMINI_API_KEY= \
+    CLAUDECODE= \
+    CLAUDE_CODE_ENTRYPOINT= \
+    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
+    pm2 start "$REPO_DIR/ecosystem.config.js" --only "$worker" --update-env
+    log "$worker started"
+  done
+fi
+
 # Step 8: Save PM2 state
 if is_truthy "$skip_pm2_save"; then
   log "Step 8: Skipping PM2 save (DEPLOY_SKIP_PM2_SAVE=$skip_pm2_save)"
