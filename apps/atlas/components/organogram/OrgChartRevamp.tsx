@@ -970,9 +970,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   }
 
   return (
-    <div style={{ height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', background: COLORS.light, fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', borderRadius: 18, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+    <div style={{ height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ background: COLORS.white, borderBottom: '1px solid #E2E8F0', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20 }}>
+      <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1063,7 +1063,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
         onMouseUp={() => setDragging(false)}
         onMouseLeave={() => setDragging(false)}
       >
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.4, backgroundImage: `radial-gradient(${COLORS.slate}30 1px, transparent 1px)`, backgroundSize: '28px 28px', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: 0, opacity: 0.3, backgroundImage: `radial-gradient(${COLORS.slate}20 1px, transparent 1px)`, backgroundSize: '28px 28px', pointerEvents: 'none' }} />
 
         <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
@@ -1098,7 +1098,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
           ))}
         </div>
 
-        <div style={{ position: 'absolute', bottom: 16, left: 16, padding: '8px 14px', background: COLORS.white, borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12, color: COLORS.slate, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ position: 'absolute', bottom: 16, left: 16, padding: '6px 12px', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 11, color: COLORS.slate, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>{viewMode === 'organization' ? '🔗' : '📁'}</span>
           {viewMode === 'organization' ? 'Hover to trace reporting chain' : 'Grouped by project'}
         </div>
