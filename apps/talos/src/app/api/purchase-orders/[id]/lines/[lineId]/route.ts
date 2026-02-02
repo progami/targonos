@@ -70,6 +70,12 @@ function toNumberOrNull(value: unknown): number | null {
   return null
 }
 
+function toMoneyNumberOrNull(value: unknown): number | null {
+  const parsed = toNumberOrNull(value)
+  if (parsed === null) return null
+  return Number(Math.abs(parsed).toFixed(2))
+}
+
 /**
  * GET /api/purchase-orders/[id]/lines/[lineId]
  * Get a specific line item
@@ -112,8 +118,8 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: line.unitCost ? Number(line.unitCost) : null,
-    totalCost: line.totalCost ? Number(line.totalCost) : null,
+    unitCost: toMoneyNumberOrNull(line.unitCost),
+    totalCost: toMoneyNumberOrNull(line.totalCost),
     currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
@@ -208,9 +214,13 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       updateData.quantity = cartonsOrdered
     }
 
-    const existingTotalCost = line.totalCost ? Number(line.totalCost) : null
+    const existingTotalCost = toNumberOrNull(line.totalCost)
     const nextTotalCost =
       result.data.totalCost !== undefined ? result.data.totalCost : existingTotalCost
+    const normalizedTotalCost =
+      typeof nextTotalCost === 'number' && Number.isFinite(nextTotalCost)
+        ? Number(Math.abs(nextTotalCost).toFixed(2))
+        : null
 
     if (totalCostChanged) {
       if (nextTotalCost === null) {
@@ -218,20 +228,14 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         updateData.unitCost = null
       } else {
         updateData.totalCost =
-          typeof nextTotalCost === 'number' && Number.isFinite(nextTotalCost)
-            ? nextTotalCost.toFixed(2)
-            : undefined
+          normalizedTotalCost !== null ? normalizedTotalCost.toFixed(2) : undefined
       }
     }
 
-    if (
-      (totalCostChanged || unitsChanged) &&
-      typeof nextTotalCost === 'number' &&
-      Number.isFinite(nextTotalCost)
-    ) {
+    if ((totalCostChanged || unitsChanged) && normalizedTotalCost !== null) {
       const nextUnitsOrdered = result.data.unitsOrdered ?? line.unitsOrdered
       if (nextUnitsOrdered > 0) {
-        updateData.unitCost = (nextTotalCost / nextUnitsOrdered).toFixed(4)
+        updateData.unitCost = (normalizedTotalCost / nextUnitsOrdered).toFixed(2)
       }
     }
   }
@@ -245,11 +249,13 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
   if (allowShippingMarkEdits) {
     if (result.data.commodityCode !== undefined) {
-      const trimmed = typeof result.data.commodityCode === 'string' ? result.data.commodityCode.trim() : ''
+      const trimmed =
+        typeof result.data.commodityCode === 'string' ? result.data.commodityCode.trim() : ''
       updateData.commodityCode = trimmed.length > 0 ? trimmed : null
     }
     if (result.data.countryOfOrigin !== undefined) {
-      const trimmed = typeof result.data.countryOfOrigin === 'string' ? result.data.countryOfOrigin.trim() : ''
+      const trimmed =
+        typeof result.data.countryOfOrigin === 'string' ? result.data.countryOfOrigin.trim() : ''
       updateData.countryOfOrigin = trimmed.length > 0 ? trimmed : null
     }
     if (result.data.material !== undefined) {
@@ -264,7 +270,8 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     }
     if (result.data.cartonWeightKg !== undefined) {
       updateData.cartonWeightKg =
-        typeof result.data.cartonWeightKg === 'number' && Number.isFinite(result.data.cartonWeightKg)
+        typeof result.data.cartonWeightKg === 'number' &&
+        Number.isFinite(result.data.cartonWeightKg)
           ? new Prisma.Decimal(result.data.cartonWeightKg.toFixed(3))
           : null
     }
@@ -302,7 +309,9 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         unitsPerCarton: result.data.unitsPerCarton,
       })
     } catch (error) {
-      return ApiResponses.badRequest(error instanceof Error ? error.message : 'Invalid units/carton inputs')
+      return ApiResponses.badRequest(
+        error instanceof Error ? error.message : 'Invalid units/carton inputs'
+      )
     }
 
     updateData.unitsPerCarton = result.data.unitsPerCarton
@@ -310,7 +319,11 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   // quantityReceived - editable in WAREHOUSE status
-  if (order.status === 'WAREHOUSE' && !order.postedAt && result.data.quantityReceived !== undefined) {
+  if (
+    order.status === 'WAREHOUSE' &&
+    !order.postedAt &&
+    result.data.quantityReceived !== undefined
+  ) {
     updateData.quantityReceived = result.data.quantityReceived
   }
 
@@ -343,7 +356,9 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
     if (needsSkuBatchSnapshot) {
       const nextSkuCode = (result.data.skuCode ?? line.skuCode).trim()
-      const nextBatchLot = (normalizedRequestedBatchLot ?? currentBatchLot ?? '').trim().toUpperCase()
+      const nextBatchLot = (normalizedRequestedBatchLot ?? currentBatchLot ?? '')
+        .trim()
+        .toUpperCase()
 
       if (!nextBatchLot || nextBatchLot === 'DEFAULT') {
         return ApiResponses.badRequest('Batch is required')
@@ -370,7 +385,9 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       }
 
       if (!sku.isActive) {
-        return ApiResponses.badRequest(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
+        return ApiResponses.badRequest(
+          `SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`
+        )
       }
 
       const existingBatch = await prisma.skuBatch.findFirst({
@@ -399,7 +416,8 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       }
 
       updateData.batchLot = existingBatch.batchCode
-      updateData.cartonDimensionsCm = existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null
+      updateData.cartonDimensionsCm =
+        existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null
       updateData.cartonSide1Cm = existingBatch.cartonSide1Cm ?? sku.cartonSide1Cm ?? null
       updateData.cartonSide2Cm = existingBatch.cartonSide2Cm ?? sku.cartonSide2Cm ?? null
       updateData.cartonSide3Cm = existingBatch.cartonSide3Cm ?? sku.cartonSide3Cm ?? null
@@ -452,8 +470,8 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: line.unitCost ? Number(line.unitCost) : null,
-    totalCost: line.totalCost ? Number(line.totalCost) : null,
+    unitCost: toMoneyNumberOrNull(line.unitCost),
+    totalCost: toMoneyNumberOrNull(line.totalCost),
     currency: line.currency ?? null,
     notes: line.lineNotes ?? null,
     quantityReceived: line.quantityReceived ?? null,
@@ -479,8 +497,8 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: updated.unitsOrdered,
     unitsPerCarton: updated.unitsPerCarton,
     quantity: updated.quantity,
-    unitCost: updated.unitCost ? Number(updated.unitCost) : null,
-    totalCost: updated.totalCost ? Number(updated.totalCost) : null,
+    unitCost: toMoneyNumberOrNull(updated.unitCost),
+    totalCost: toMoneyNumberOrNull(updated.totalCost),
     currency: updated.currency ?? null,
     notes: updated.lineNotes ?? null,
     quantityReceived: updated.quantityReceived ?? null,
@@ -528,8 +546,8 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: updated.unitsOrdered,
     unitsPerCarton: updated.unitsPerCarton,
     quantity: updated.quantity,
-    unitCost: updated.unitCost ? Number(updated.unitCost) : null,
-    totalCost: updated.totalCost ? Number(updated.totalCost) : null,
+    unitCost: toMoneyNumberOrNull(updated.unitCost),
+    totalCost: toMoneyNumberOrNull(updated.totalCost),
     currency: updated.currency,
     status: updated.status,
     postedQuantity: updated.postedQuantity,
@@ -603,8 +621,8 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
       quantity: line.quantity,
-      unitCost: line.unitCost ? Number(line.unitCost) : null,
-      totalCost: line.totalCost ? Number(line.totalCost) : null,
+      unitCost: toMoneyNumberOrNull(line.unitCost),
+      totalCost: toMoneyNumberOrNull(line.totalCost),
       currency: line.currency ?? null,
       notes: line.lineNotes ?? null,
     },
