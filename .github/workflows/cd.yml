@@ -145,7 +145,7 @@ jobs:
             is_release_run="true"
           fi
 
-          if [[ "$is_release_run" == "true" ]] && [[ -z "${remote_semver_tags//[[:space:]]/}" ]]; then
+          if [[ "$is_release_run" == "true" ]] && [[ -z "$remote_semver_tags" ]]; then
             echo "::error::No remote semver tags discovered; refusing to create a v0.0.x release."
             exit 1
           fi
