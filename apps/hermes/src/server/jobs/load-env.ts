@@ -1,6 +1,9 @@
-import * as nextEnv from "@next/env";
+import { createRequire } from "module";
 
 let loaded = false;
+
+const require = createRequire(import.meta.url);
+const nextEnv = require("@next/env") as { loadEnvConfig: (dir: string, dev: boolean) => void };
 
 export function loadHermesEnv(): void {
   if (loaded) return;
