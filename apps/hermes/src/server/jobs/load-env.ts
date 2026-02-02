@@ -1,4 +1,4 @@
-import { loadEnvConfig } from "@next/env";
+import * as nextEnv from "@next/env";
 
 let loaded = false;
 
@@ -9,6 +9,5 @@ export function loadHermesEnv(): void {
   const nodeEnv = process.env.NODE_ENV;
   const dev = typeof nodeEnv === "string" ? nodeEnv !== "production" : false;
 
-  loadEnvConfig(process.cwd(), dev);
+  nextEnv.loadEnvConfig(process.cwd(), dev);
 }
-
