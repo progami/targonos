@@ -81,14 +81,16 @@ export function InsightsClient() {
   const {
     connections,
     loading: connectionsLoading,
+    hasHydrated,
     activeConnectionId,
     setActiveConnectionId,
     fetch: fetchConnections,
   } = useConnectionsStore();
 
   React.useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
-  }, [fetchConnections]);
+  }, [hasHydrated, fetchConnections]);
 
   const connectionId = activeConnectionId ?? "";
   const [rangeDays, setRangeDays] = React.useState<7 | 30 | 90>(30);

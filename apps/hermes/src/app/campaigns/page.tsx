@@ -18,10 +18,14 @@ import type { Campaign } from "@/lib/types";
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const { connections, fetch: fetchConnections } = useConnectionsStore();
+  const { connections, hasHydrated, fetch: fetchConnections } = useConnectionsStore();
 
   React.useEffect(() => {
+    if (!hasHydrated) return;
     fetchConnections();
+  }, [hasHydrated, fetchConnections]);
+
+  React.useEffect(() => {
     async function load() {
       try {
         const res = await fetch(hermesApiUrl("/api/campaigns"));
@@ -34,7 +38,7 @@ export default function CampaignsPage() {
       }
     }
     load();
-  }, [fetchConnections]);
+  }, []);
 
   const byId = new Map(connections.map((c) => [c.id, c] as const));
 
