@@ -71,11 +71,9 @@ function formatDuration(durationMs: number): string {
 }
 
 export function SellerboardUsSyncControl({
-  isSuperAdmin,
   strategyRegion,
   strategyId,
 }: {
-  isSuperAdmin: boolean;
   strategyRegion: 'US' | 'UK';
   strategyId: string;
 }) {
@@ -86,7 +84,7 @@ export function SellerboardUsSyncControl({
   const [result, setResult] = useState<SellerboardSyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canRender = isSuperAdmin;
+  const canRender = Boolean(strategyId);
   const regionSlug = strategyRegion === 'UK' ? 'uk' : 'us';
   const status = useMemo(() => {
     if (isSyncing) return 'syncing';
@@ -338,7 +336,6 @@ export function SellerboardUsSyncControl({
 }
 
 export function SellerboardSyncControl(props: {
-  isSuperAdmin: boolean;
   strategyRegion: 'US' | 'UK';
   strategyId: string;
 }) {

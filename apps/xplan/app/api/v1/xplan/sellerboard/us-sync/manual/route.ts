@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withXPlanAuth } from '@/lib/api/auth';
-import { getStrategyActor } from '@/lib/strategy-access';
+import { canAccessStrategy, getStrategyActor } from '@/lib/strategy-access';
 import prisma from '@/lib/prisma';
 import { syncSellerboardUsActualSales, syncSellerboardUsDashboard } from '@/lib/integrations/sellerboard';
 
@@ -8,15 +8,17 @@ export const runtime = 'nodejs';
 
 export const POST = withXPlanAuth(async (request: Request, session) => {
   const actor = getStrategyActor(session);
-  if (!actor.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const url = new URL(request.url);
   const rawStrategyId = url.searchParams.get('strategyId');
   const strategyId = rawStrategyId ? rawStrategyId.trim() : '';
   if (!strategyId) {
     return NextResponse.json({ error: 'Missing strategyId' }, { status: 400 });
+  }
+
+  const hasAccess = await canAccessStrategy(strategyId, actor);
+  if (!hasAccess) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const strategy = await prisma.strategy.findUnique({
