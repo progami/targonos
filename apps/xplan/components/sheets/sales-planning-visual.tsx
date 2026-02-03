@@ -47,6 +47,29 @@ type ShipmentMarker = {
   arrivalDetail: string;
 };
 
+type RechartsTooltipPayload<TPayload> = { payload: TPayload };
+type RechartsTooltipProps<TPayload> = {
+  active?: boolean;
+  payload?: readonly RechartsTooltipPayload<TPayload>[];
+};
+
+type StockChartPoint = {
+  weekLabel: string;
+  weekDate: string;
+  stockWeeks: number;
+  stockEnd: number;
+  isLowStock: boolean;
+  hasShipment: boolean;
+};
+
+type ForecastChartPoint = {
+  weekLabel: string;
+  weekDate: string;
+  actual: number;
+  forecast: number;
+  error: number;
+};
+
 export function SalesPlanningVisual({
   rows,
   columnMeta,
@@ -350,14 +373,14 @@ export function SalesPlanningVisual({
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(value) =>
+                  tickFormatter={(value: number) =>
                     Math.abs(value) >= 1000 ? `${(value / 1000).toFixed(0)}K` : value.toString()
                   }
                   width={60}
                   domain={[yAxisBounds.min, yAxisBounds.max]}
                 />
                 <Tooltip
-                  content={({ active, payload }) => {
+                  content={({ active, payload }: RechartsTooltipProps<StockChartPoint>) => {
                     if (!active || !payload?.[0]) return null;
                     const data = payload[0].payload;
                     const stockWeeksDisplay =
@@ -599,7 +622,7 @@ export function SalesPlanningVisual({
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(value) =>
+                  tickFormatter={(value: number) =>
                     Math.abs(value) >= 1000 ? `${(value / 1000).toFixed(1)}K` : value.toString()
                   }
                   width={60}
@@ -612,12 +635,12 @@ export function SalesPlanningVisual({
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(value) => `${value.toFixed(0)}%`}
+                  tickFormatter={(value: number) => `${value.toFixed(0)}%`}
                   width={50}
                   domain={[-100, 100]}
                 />
                 <Tooltip
-                  content={({ active, payload }) => {
+                  content={({ active, payload }: RechartsTooltipProps<ForecastChartPoint>) => {
                     if (!active || !payload?.[0]) return null;
                     const data = payload[0].payload;
                     return (

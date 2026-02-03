@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider as NextThemeProvider, useTheme } from 'next-themes';
 import { Toaster } from 'sonner';
-import { useState, type ComponentProps, type ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -16,6 +16,9 @@ type ProvidersProps = {
     | undefined
     | any;
 };
+
+type ThemeProviderProps = ComponentProps<typeof NextThemeProvider> & { children?: ReactNode };
+const ThemeProvider = NextThemeProvider as unknown as (props: ThemeProviderProps) => ReactElement;
 
 function ThemedToaster() {
   const { resolvedTheme } = useTheme();
@@ -44,13 +47,13 @@ export function Providers({ children }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
-    <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={100}>
           {children}
           <ThemedToaster />
         </TooltipProvider>
       </QueryClientProvider>
-    </NextThemeProvider>
+    </ThemeProvider>
   );
 }

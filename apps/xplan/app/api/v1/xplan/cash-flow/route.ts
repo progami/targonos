@@ -22,10 +22,15 @@ const updateSchema = z.object({
 
 function parseNumber(value: string | null | undefined) {
   if (!value) return null;
-  const cleaned = value.replace(/[,$%\s]/g, '');
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const negativeParens = trimmed.startsWith('(') && trimmed.endsWith(')');
+  const normalized = trimmed.replace(/[()]/g, '').replace(/[^0-9.,-]/g, '');
+  const cleaned = normalized.replace(/,/g, '');
+  if (!cleaned) return null;
   const parsed = Number(cleaned);
-  if (Number.isNaN(parsed)) return null;
-  return parsed;
+  if (!Number.isFinite(parsed)) return null;
+  return negativeParens ? -parsed : parsed;
 }
 
 export const PUT = withXPlanAuth(async (request: Request, session) => {

@@ -392,7 +392,7 @@ export async function syncSellerboardDashboard(options: {
       weekNumberForDate(getUtcDateForTimeZone(new Date(), reportTimeZone), planning.calendar) ??
       Number.NEGATIVE_INFINITY;
 
-    const weeklyTotals = parsed.weeklyTotals.filter((entry) => entry.weekNumber <= currentWeekNumber);
+    const weeklyTotals = parsed.weeklyTotals.filter((entry) => entry.weekNumber < currentWeekNumber);
 
     const strategies = options.strategyId
       ? [{ id: options.strategyId }]
@@ -416,10 +416,10 @@ export async function syncSellerboardDashboard(options: {
               units: Math.round(entry.units),
               revenue: entry.revenue,
               cogs: entry.cogs,
-              grossProfit: entry.grossProfit,
               amazonFees: entry.amazonFees,
               ppcSpend: entry.ppcSpend,
-              netProfit: entry.netProfit,
+              grossProfit: null,
+              netProfit: null,
             },
             create: {
               strategyId: strategy.id,
@@ -428,10 +428,10 @@ export async function syncSellerboardDashboard(options: {
               units: Math.round(entry.units),
               revenue: entry.revenue,
               cogs: entry.cogs,
-              grossProfit: entry.grossProfit,
               amazonFees: entry.amazonFees,
               ppcSpend: entry.ppcSpend,
-              netProfit: entry.netProfit,
+              grossProfit: null,
+              netProfit: null,
             },
           }),
         );
@@ -482,9 +482,7 @@ export async function syncSellerboardDashboard(options: {
   const currentWeekNumber =
     weekNumberForDate(getUtcDateForTimeZone(new Date(), reportTimeZone), planning.calendar) ??
     Number.NEGATIVE_INFINITY;
-  const weeklyFinancials = parsed.weeklyFinancials.filter(
-    (entry) => entry.weekNumber <= currentWeekNumber,
-  );
+  const weeklyFinancials = parsed.weeklyFinancials.filter((entry) => entry.weekNumber < currentWeekNumber);
 
   const productCodes = Array.from(
     new Set(weeklyFinancials.map((entry) => entry.productCode))

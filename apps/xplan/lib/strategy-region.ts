@@ -28,3 +28,29 @@ export function sellerboardReportTimeZoneForRegion(region: StrategyRegion): stri
     }
   }
 }
+
+export function localeForRegion(region: StrategyRegion): string {
+  switch (region) {
+    case 'US':
+      return 'en-US';
+    case 'UK':
+      return 'en-GB';
+    default: {
+      const exhaustive: never = region;
+      throw new Error(`Unsupported region: ${String(exhaustive)}`);
+    }
+  }
+}
+
+export function currencyForRegion(region: StrategyRegion): string {
+  switch (region) {
+    case 'US':
+      return 'USD';
+    case 'UK':
+      return 'GBP';
+    default: {
+      const exhaustive: never = region;
+      throw new Error(`Unsupported region: ${String(exhaustive)}`);
+    }
+  }
+}
