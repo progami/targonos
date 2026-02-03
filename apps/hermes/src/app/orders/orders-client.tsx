@@ -687,20 +687,28 @@ export function OrdersClient() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Orders</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {ordersTotalCount !== null ? (
                 <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
               ) : null}
               <Badge variant="outline">{pageLabel}</Badge>
               <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                <SelectTrigger className="h-9 w-[120px]">
+                <SelectTrigger className="h-9 w-[120px] flex-none">
                   <SelectValue placeholder="Rows" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="25">25 / page</SelectItem>
-                  <SelectItem value="50">50 / page</SelectItem>
-                  <SelectItem value="100">100 / page</SelectItem>
-                  <SelectItem value="200">200 / page</SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="25">
+                    25 / page
+                  </SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="50">
+                    50 / page
+                  </SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="100">
+                    100 / page
+                  </SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="200">
+                    200 / page
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <Button

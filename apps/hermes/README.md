@@ -78,6 +78,7 @@ This means Hermes can be run with “at‑least once” worker semantics (retrie
 ## Running Hermes (local dev)
 
 - Web: `pnpm dev` (default port `3014`)
+- Orders backfill (CLI): `pnpm orders:backfill -- --days 45` (use `--schema main_hermes` for main/prod)
 - Workers:
   - `pnpm worker:orders-sync`
   - `pnpm worker:request-review`
@@ -90,6 +91,7 @@ This means Hermes can be run with “at‑least once” worker semantics (retrie
 - **Base path**: Hermes is meant to run behind a base path (default `/hermes`).
   - Set `BASE_PATH` for Next.js routing and `NEXT_PUBLIC_BASE_PATH` for client API calls (they should match).
 - **Database**: `DATABASE_URL` is required (Hermes uses Postgres to enforce idempotency and store audit logs).
+  - Optional: set `HERMES_DB_SCHEMA` to force a schema/search_path (e.g. `main_hermes`) without changing `DATABASE_URL`.
   - Dev convenience: set `HERMES_AUTO_MIGRATE=1` to auto‑create tables from `db/schema.sql` on boot.
 - **Connections**: provide one or more connection targets (connectionId + marketplaces + region) plus SP‑API credentials.
   - See `.env.example` for all knobs and examples.

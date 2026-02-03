@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectionsStore } from "@/stores/connections-store";
+import { useHermesUiPreferencesStore } from "@/stores/ui-preferences-store";
 
 // Recharts (shadcn/ui charts are built on this)
 import {
@@ -93,11 +94,14 @@ export function InsightsClient() {
   }, [hasHydrated, fetchConnections]);
 
   const connectionId = activeConnectionId ?? "";
-  const [rangeDays, setRangeDays] = React.useState<7 | 30 | 90>(30);
+  const uiHydrated = useHermesUiPreferencesStore((s) => s.hasHydrated);
+  const rangeDays = useHermesUiPreferencesStore((s) => s.insights.rangeDays);
+  const setInsightsPreferences = useHermesUiPreferencesStore((s) => s.setInsightsPreferences);
   const [loading, setLoading] = React.useState(true);
   const [overview, setOverview] = React.useState<Overview | null>(null);
 
   React.useEffect(() => {
+    if (!uiHydrated) return;
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -125,7 +129,7 @@ export function InsightsClient() {
     return () => {
       cancelled = true;
     };
-  }, [connectionId, rangeDays]);
+  }, [uiHydrated, connectionId, rangeDays]);
 
   const series = overview?.series ?? [];
 
@@ -154,7 +158,10 @@ export function InsightsClient() {
         title="Insights"
         right={
           <div className="flex items-center gap-2">
-            <Tabs value={String(rangeDays)} onValueChange={(v) => setRangeDays(Number(v) as any)}>
+            <Tabs
+              value={String(rangeDays)}
+              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 })}
+            >
               <TabsList>
                 <TabsTrigger value="7">7d</TabsTrigger>
                 <TabsTrigger value="30">30d</TabsTrigger>

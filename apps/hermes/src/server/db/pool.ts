@@ -15,12 +15,25 @@ function getDatabaseUrl(): string {
   return url;
 }
 
+function getDatabaseOptions(): string | undefined {
+  const schema = process.env.HERMES_DB_SCHEMA;
+  if (typeof schema !== "string") return undefined;
+  const trimmed = schema.trim();
+  if (trimmed.length === 0) return undefined;
+
+  return `-c search_path=${trimmed}`;
+}
+
 /**
  * Singleton PG pool (works in Next.js dev/hmr without opening many connections).
  */
 export function getPgPool(): Pool {
   if (!globalThis.__hermesPgPool) {
-    globalThis.__hermesPgPool = new Pool({ connectionString: getDatabaseUrl() });
+    const connectionString = getDatabaseUrl();
+    const options = getDatabaseOptions();
+    globalThis.__hermesPgPool = new Pool(
+      options ? { connectionString, options } : { connectionString }
+    );
   }
   return globalThis.__hermesPgPool;
 }
