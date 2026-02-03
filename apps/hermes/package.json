@@ -10,7 +10,8 @@
     "worker:request-review": "tsx src/server/jobs/request-review-dispatcher.ts",
     "worker:buyer-message": "tsx src/server/jobs/buyer-message-dispatcher.ts",
     "lint": "next lint",
-    "worker:orders-sync": "tsx src/server/jobs/orders-sync-hourly.ts"
+    "worker:orders-sync": "tsx src/server/jobs/orders-sync-hourly.ts",
+    "orders:backfill": "tsx src/server/scripts/orders-backfill.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.0.0",
