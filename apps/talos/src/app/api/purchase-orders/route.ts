@@ -1,10 +1,6 @@
 import { NextRequest } from 'next/server'
 import { withAuth, ApiResponses, z } from '@/lib/api'
-import {
-  getPurchaseOrders,
-  getPurchaseOrdersBySplitGroup,
-  serializePurchaseOrder,
-} from '@/lib/services/purchase-order-service'
+import { getPurchaseOrders, getPurchaseOrdersBySplitGroup } from '@/lib/services/purchase-order-service'
 import {
   createPurchaseOrder,
   serializePurchaseOrder as serializeNewPO,
@@ -20,8 +16,9 @@ export const GET = withAuth(async (request: NextRequest, _session) => {
     typeof splitGroupId === 'string' && splitGroupId.trim().length > 0
       ? await getPurchaseOrdersBySplitGroup(splitGroupId)
       : await getPurchaseOrders()
+  const tenant = await getCurrentTenant()
   return ApiResponses.success({
-    data: orders.map(order => serializePurchaseOrder(order)),
+    data: orders.map(order => serializeNewPO(order, { defaultCurrency: tenant.currency })),
   })
 })
 
