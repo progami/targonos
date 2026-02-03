@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SHEET_TOOLBAR_GROUP } from '@/components/sheet-toolbar';
 import { usePersistentState } from '@/hooks/usePersistentState';
+import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
 
 export type TrendGranularity = 'weekly' | 'monthly' | 'quarterly';
 export type TrendSeries = Record<
@@ -37,6 +38,7 @@ export interface FinancialMetricDefinition {
 interface FinancialTrendsSectionProps {
   title: string;
   description: string;
+  strategyRegion: StrategyRegion;
   metrics: FinancialMetricDefinition[];
   defaultMetricKey?: string;
   storageKey?: string;
@@ -56,6 +58,9 @@ const granularityOptions: Array<{ value: TrendGranularity; label: string }> = [
   { value: 'quarterly', label: 'Quarterly' },
 ];
 
+type TrendTooltipEntry = { dataKey: string; color?: string; value?: number };
+type TrendTooltipProps = { active?: boolean; payload?: TrendTooltipEntry[]; label?: string | number };
+
 function negativeThresholdForFormat(format: TrendFormat): number {
   switch (format) {
     case 'currency':
@@ -73,6 +78,7 @@ function negativeThresholdForFormat(format: TrendFormat): number {
 export function FinancialTrendsSection({
   title,
   description,
+  strategyRegion,
   metrics,
   storageKey,
 }: FinancialTrendsSectionProps) {
@@ -172,29 +178,34 @@ export function FinancialTrendsSection({
     return { min, max, zeroOffset: Math.max(0, Math.min(1, zeroOffset)), hasNegative };
   }, [enabledMetrics, granularity]);
 
+  const locale = localeForRegion(strategyRegion);
+  const currency = currencyForRegion(strategyRegion);
+
   const formatValue = (value: number, format: TrendFormat) => {
     if (!Number.isFinite(value)) return '—';
     if (format === 'currency') {
-      return new Intl.NumberFormat('en-US', {
+      return new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency: 'USD',
+        currency,
         maximumFractionDigits: 0,
       }).format(value);
     }
     if (format === 'percent') return `${(value * 100).toFixed(1)}%`;
-    return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return value.toLocaleString(locale, { maximumFractionDigits: 0 });
   };
 
   const formatAxisValue = (value: number) => {
     const format = enabledMetrics[0]?.format ?? 'currency';
     if (format === 'currency') {
-      if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-      if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-      return `$${value.toFixed(0)}`;
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency,
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(value);
     }
     if (format === 'percent') return `${(value * 100).toFixed(0)}%`;
-    if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}K`;
-    return value.toFixed(0);
+    return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 0 }).format(value);
   };
 
   if (!metrics.length) {
@@ -348,7 +359,7 @@ export function FinancialTrendsSection({
                   width={60}
                 />
                 <Tooltip
-                  content={({ active, payload, label }) => {
+                  content={({ active, payload, label }: TrendTooltipProps) => {
                     if (!active || !payload) return null;
                     const prefix =
                       granularity === 'weekly'
@@ -360,7 +371,7 @@ export function FinancialTrendsSection({
                     return (
                       <div className="rounded-lg border bg-background p-2 shadow-md">
                         <p className="mb-1 text-xs font-medium">{displayLabel}</p>
-                        {payload.map((entry) => (
+                        {payload.map((entry: TrendTooltipEntry) => (
                           <p key={entry.dataKey} className="text-xs" style={{ color: entry.color }}>
                             {metrics.find((m) => m.key === entry.dataKey)?.title}:{' '}
                             {formatValue(

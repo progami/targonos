@@ -2479,7 +2479,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           {node}
         </ProfitAndLossFiltersProvider>
       );
-      tabularContent = <ProfitAndLossGrid strategyId={activeStrategyId} weekly={view.weekly} />;
+      tabularContent = (
+        <ProfitAndLossGrid
+          strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
+          weekly={view.weekly}
+        />
+      );
 
       const segmentStart = activeSegment?.startWeekNumber ?? null;
       const pnlWeeklyBase = data.profit.weekly
@@ -2527,6 +2533,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         <FinancialTrendsSection
           title="Performance graphs"
           description=""
+          strategyRegion={strategyRegion}
           metrics={metrics}
           storageKey="xplan:visual:pnl"
         />
@@ -2554,6 +2561,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       );
       visualContent = (
         <POProfitabilitySection
+          strategyRegion={strategyRegion}
           datasets={view}
           productOptions={productOptions}
           title="Margin trends"
@@ -2564,6 +2572,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       );
       tabularContent = (
         <POProfitabilitySection
+          strategyRegion={strategyRegion}
           datasets={view}
           productOptions={productOptions}
           title="P&L breakdown"
@@ -2588,7 +2597,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       }
       const data = await getFinancialData();
       const view = getCashFlowView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
-      tabularContent = <CashFlowGrid strategyId={activeStrategyId} weekly={view.weekly} />;
+      tabularContent = (
+        <CashFlowGrid
+          strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
+          weekly={view.weekly}
+        />
+      );
 
       const cashSegmentStart = activeSegment?.startWeekNumber ?? null;
       const cashWeeklyBase = data.cash.weekly
@@ -2668,6 +2683,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         <FinancialTrendsSection
           title="Cash flow charts"
           description=""
+          strategyRegion={strategyRegion}
           metrics={metrics}
           storageKey="xplan:visual:cashflow"
         />

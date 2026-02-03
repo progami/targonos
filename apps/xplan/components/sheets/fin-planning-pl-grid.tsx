@@ -44,6 +44,7 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { withAppBasePath } from '@/lib/base-path';
 import type { SelectionStats } from '@/lib/selection-stats';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
+import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
 
 // Context for P&L grid filters
 type ProfitAndLossFiltersContextValue = {
@@ -126,6 +127,7 @@ type UpdatePayload = {
 
 interface ProfitAndLossGridProps {
   strategyId: string;
+  strategyRegion: StrategyRegion;
   weekly: WeeklyRow[];
 }
 
@@ -251,29 +253,26 @@ function normalizeRange(range: CellRange): {
 function formatDisplayValue(
   value: string,
   format: 'text' | 'number' | 'currency' | 'percent',
+  options: { locale: string; currency: string },
 ): string {
   if (format === 'text') return value;
   const numeric = sanitizeNumeric(value);
   if (!Number.isFinite(numeric)) return '';
   if (format === 'percent') return `${(numeric * 100).toFixed(1)}%`;
   if (format === 'currency') {
-    return numeric.toLocaleString('en-US', {
+    return numeric.toLocaleString(options.locale, {
       style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0,
+      currency: options.currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   }
-  return numeric.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return numeric.toLocaleString(options.locale, { maximumFractionDigits: 2 });
 }
 
 function parseNumericCandidate(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value !== 'string') return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  const normalized = raw.replace(/[$,%\s]/g, '').replace(/,/g, '');
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  const numeric = sanitizeNumeric(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function computeSelectionStats(
@@ -314,10 +313,12 @@ function computeSelectionStats(
   };
 }
 
-export function ProfitAndLossGrid({ strategyId, weekly }: ProfitAndLossGridProps) {
+export function ProfitAndLossGrid({ strategyId, strategyRegion, weekly }: ProfitAndLossGridProps) {
   const filters = useContext(ProfitAndLossFiltersContext);
   const showGpAfterPpc = filters?.showGpAfterPpc ?? false;
   const columnHelper = useMemo(() => createColumnHelper<WeeklyRow>(), []);
+  const locale = localeForRegion(strategyRegion);
+  const currency = currencyForRegion(strategyRegion);
 
   const [data, setData] = useState<WeeklyRow[]>(() => weekly.map((row) => ({ ...row })));
   useEffect(() => {
@@ -1131,7 +1132,7 @@ export function ProfitAndLossGrid({ strategyId, weekly }: ProfitAndLossGridProps
                       const adjustedGp = gp - ppc;
                       rawValue = revenue > 0 ? String(adjustedGp / revenue) : '0';
                     }
-                    const displayValue = formatDisplayValue(rawValue, config.format);
+                    const displayValue = formatDisplayValue(rawValue, config.format, { locale, currency });
 
                     const cellContent = isEditing ? (
                       <input

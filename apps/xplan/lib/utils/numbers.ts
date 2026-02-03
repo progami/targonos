@@ -9,10 +9,13 @@ export function parseNumber(value: unknown): number | null {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return null;
-    const sanitized = trimmed.replace(/[,$%\s]/g, '');
+    const negativeParens = trimmed.startsWith('(') && trimmed.endsWith(')');
+    const normalized = trimmed.replace(/[()]/g, '').replace(/[^0-9.,-]/g, '');
+    const sanitized = normalized.replace(/,/g, '');
     if (!sanitized) return null;
     const numeric = Number(sanitized);
-    return Number.isFinite(numeric) ? numeric : null;
+    if (!Number.isFinite(numeric)) return null;
+    return negativeParens ? -numeric : numeric;
   }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
