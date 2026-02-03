@@ -48,7 +48,10 @@ type ShipmentMarker = {
 };
 
 type RechartsTooltipPayload<TPayload> = { payload: TPayload };
-type RechartsTooltipProps<TPayload> = { active?: boolean; payload?: Array<RechartsTooltipPayload<TPayload>> };
+type RechartsTooltipProps<TPayload> = {
+  active?: boolean;
+  payload?: readonly RechartsTooltipPayload<TPayload>[];
+};
 
 type StockChartPoint = {
   weekLabel: string;

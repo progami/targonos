@@ -99,7 +99,11 @@ type StatusFilter = 'ALL' | POStatus;
 type MetricKey = 'grossMarginPercent' | 'netMarginPercent' | 'roi';
 
 type ChartTooltipEntry = { dataKey: string; color?: string; value?: number };
-type ChartTooltipProps = { active?: boolean; payload?: ChartTooltipEntry[]; label?: string | number };
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: readonly ChartTooltipEntry[];
+  label?: string | number;
+};
 
 const metricConfig: Record<MetricKey, { label: string; color: string; gradientId: string }> = {
   grossMarginPercent: {

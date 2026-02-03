@@ -59,7 +59,11 @@ const granularityOptions: Array<{ value: TrendGranularity; label: string }> = [
 ];
 
 type TrendTooltipEntry = { dataKey: string; color?: string; value?: number };
-type TrendTooltipProps = { active?: boolean; payload?: TrendTooltipEntry[]; label?: string | number };
+type TrendTooltipProps = {
+  active?: boolean;
+  payload?: readonly TrendTooltipEntry[];
+  label?: string | number;
+};
 
 function negativeThresholdForFormat(format: TrendFormat): number {
   switch (format) {
