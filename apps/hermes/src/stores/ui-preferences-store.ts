@@ -1,5 +1,9 @@
+"use client";
+
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+
+import { getHermesBasePath } from "@/lib/base-path";
 
 export type OrdersPreferences = {
   pageSize: number;
@@ -12,6 +16,24 @@ export type OrdersPreferences = {
 export type InsightsPreferences = {
   rangeDays: 7 | 30 | 90;
 };
+
+function scopedStorageKey(key: string): string {
+  if (typeof document === "undefined") return key;
+  return `${key}:${getHermesBasePath()}`;
+}
+
+function migrateLegacyLocalStorageKey(params: { legacy: string; next: string }): void {
+  if (typeof localStorage === "undefined") return;
+  if (params.legacy === params.next) return;
+
+  const hasNext = localStorage.getItem(params.next) !== null;
+  if (hasNext) return;
+
+  const legacyValue = localStorage.getItem(params.legacy);
+  if (legacyValue === null) return;
+
+  localStorage.setItem(params.next, legacyValue);
+}
 
 type HermesUiPreferencesState = {
   hasHydrated: boolean;
@@ -36,6 +58,9 @@ const DEFAULT_INSIGHTS: InsightsPreferences = {
   rangeDays: 30,
 };
 
+const STORAGE_KEY = scopedStorageKey("hermes.ui-preferences");
+migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences", next: STORAGE_KEY });
+
 export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
   persist(
     (set) => ({
@@ -55,7 +80,7 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
       },
     }),
     {
-      name: "hermes.ui-preferences",
+      name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         orders: state.orders,
@@ -67,4 +92,3 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
     }
   )
 );
-
