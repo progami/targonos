@@ -13,7 +13,7 @@ The Setup page guides users through prerequisites before Plutus can process COGS
 1. **Sidebar navigation** - Settings-style layout with sections in left sidebar
 2. **Focused sections** - Each section fits on screen without scrolling
 3. **Full-width content** - Use available horizontal space (no narrow wizards)
-4. **NotConnectedScreen pattern** - Show QBO connect prompt if not connected
+4. **NotConnectedScreen pattern** - Dashboards gated until QBO is connected (Setup supports offline mode)
 
 ---
 
@@ -45,7 +45,11 @@ The Setup page guides users through prerequisites before Plutus can process COGS
 
 ## QBO Connection (NotConnectedScreen Pattern)
 
-If QBO is not connected, show the standard NotConnectedScreen instead of the setup page.
+If QBO is not connected, **Plutus still loads Setup in “offline mode”** so users can continue configuration without being blocked.
+
+- **Allowed (offline):** Brands + SKUs
+- **Blocked until connected:** Account mapping + sub-account creation
+- **Dashboards blocked:** Settlements, Bills, Chart of Accounts (show NotConnectedScreen)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -68,7 +72,7 @@ If QBO is not connected, show the standard NotConnectedScreen instead of the set
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Once connected, show the setup page with sidebar navigation.
+Once connected, unlock the Accounts section (QBO account selectors + “Create Sub-Accounts”).
 
 ---
 

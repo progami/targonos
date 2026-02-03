@@ -65,18 +65,27 @@ export function NotConnectedScreen({ title }: NotConnectedScreenProps) {
               </div>
 
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                Not Connected
+                Not connected to QBO
               </h2>
               <p className="text-slate-500 dark:text-slate-400 mb-6">
                 Connect to QuickBooks Online to view your {title.toLowerCase()}.
               </p>
 
-              <Button
-                onClick={handleConnect}
-                className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
-              >
-                Connect to QuickBooks
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  onClick={handleConnect}
+                  className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+                >
+                  Connect to QuickBooks
+                </Button>
+                <Button asChild variant="outline" className="w-full rounded-xl">
+                  <Link href="/setup">Open Setup</Link>
+                </Button>
+              </div>
+
+              <p className="mt-5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                You can still configure Brands and SKUs in Setup while disconnected. Dashboards stay hidden until QBO is connected.
+              </p>
             </div>
           </div>
         </div>
