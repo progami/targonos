@@ -195,20 +195,42 @@ const CurvedPath = ({ x1, y1, x2, y2, color, highlighted }: OrgEdge & { highligh
 }
 
 const wrapText = (text: string, maxChars: number) => {
-  if (!text) return ['']
-  if (text.length <= maxChars) return [text]
-  const words = text.split(' ')
+  const trimmed = text.trim()
+  if (!trimmed) return ['']
+
+  if (trimmed.length <= maxChars) return [trimmed]
+
+  const words = trimmed.split(/\s+/)
   const lines: string[] = []
   let currentLine = ''
-  for (const word of words) {
-    if (`${currentLine} ${word}`.trim().length <= maxChars) {
-      currentLine = `${currentLine} ${word}`.trim()
-    } else {
-      if (currentLine) lines.push(currentLine)
-      currentLine = word
-    }
+
+  const clamp = (value: string) => {
+    if (value.length <= maxChars) return value
+    const safeLength = Math.max(1, maxChars - 1)
+    return `${value.slice(0, safeLength)}…`
   }
-  if (currentLine) lines.push(currentLine)
+
+  const pushLine = (value: string) => {
+    const normalized = value.trim()
+    if (!normalized) return
+    lines.push(clamp(normalized))
+  }
+
+  for (const word of words) {
+    const safeWord = clamp(word)
+    const next = currentLine ? `${currentLine} ${safeWord}` : safeWord
+    if (next.length <= maxChars) {
+      currentLine = next
+      continue
+    }
+
+    if (currentLine) pushLine(currentLine)
+    currentLine = safeWord
+    if (lines.length >= 2) break
+  }
+
+  if (lines.length < 2 && currentLine) pushLine(currentLine)
+
   return lines.slice(0, 2)
 }
 
@@ -237,7 +259,7 @@ const OrgNodeCard = ({
           {node.name.length > 16 ? `${node.name.slice(0, 15)}…` : node.name}
         </text>
         <text x={node.x} y={y + 32} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.85)" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-          {node.role}
+          {node.role.length > 20 ? `${node.role.slice(0, 19)}…` : node.role}
         </text>
       </g>
     )
@@ -970,9 +992,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   }
 
   return (
-    <div style={{ height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20 }}>
+      <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1010,9 +1032,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
             ))}
           </div>
           {viewMode === 'organization' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: COLORS.slate, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Levels</span>
-              <div style={{ display: 'flex', gap: 4, padding: 4, background: COLORS.light, borderRadius: 10 }}>
+              <div style={{ display: 'flex', gap: 4, padding: 4, background: COLORS.light, borderRadius: 10, flexWrap: 'wrap' }}>
                 {levelOptions.map(option => (
                   <button
                     key={String(option.value)}
@@ -1036,14 +1058,14 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
             </div>
           )}
         </div>
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', width: 'min(320px, 100%)' }}>
           <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: COLORS.slate, pointerEvents: 'none' }} />
           <input
             type="text"
             placeholder="Search people..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 200, padding: '9px 12px 9px 38px', fontSize: 13, background: COLORS.light, border: '1px solid #E2E8F0', borderRadius: 10, outline: 'none', boxSizing: 'border-box', color: COLORS.navy }}
+            style={{ width: '100%', padding: '9px 12px 9px 38px', fontSize: 13, background: COLORS.light, border: '1px solid #E2E8F0', borderRadius: 10, outline: 'none', boxSizing: 'border-box', color: COLORS.navy }}
             onFocus={(e) => { e.target.style.borderColor = COLORS.teal }}
             onBlur={(e) => { e.target.style.borderColor = '#E2E8F0' }}
           />
@@ -1057,7 +1079,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
 
       {/* Canvas */}
       <div
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab' }}
+        style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab' }}
         onMouseDown={(e) => { setDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }) }}
         onMouseMove={(e) => { if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }) }}
         onMouseUp={() => setDragging(false)}
