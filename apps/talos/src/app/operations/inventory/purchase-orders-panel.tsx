@@ -6,6 +6,12 @@ import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import {
+  DataTableContainer,
+  DataTableEmpty,
+  DataTableHead,
+  DataTableHeaderCell,
+} from '@/components/ui/data-table-container'
+import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
 } from '@/lib/constants/status-mappings'
@@ -17,6 +23,7 @@ export type PurchaseOrderStatusOption =
   | 'MANUFACTURING'
   | 'OCEAN'
   | 'WAREHOUSE'
+  | 'SHIPPED'
   | 'REJECTED'
   | 'CANCELLED'
 export type PurchaseOrderLineStatusOption = 'PENDING' | 'POSTED' | 'CANCELLED'
@@ -37,33 +44,62 @@ export interface PurchaseOrderLineSummary {
   updatedAt: string
 }
 
+type PurchaseOrderStageData = {
+  manufacturing: {
+    proformaInvoiceNumber: string | null
+    factoryName: string | null
+    manufacturingStartDate: string | null
+    expectedCompletionDate: string | null
+    totalCartons: number | null
+    totalPallets: number | null
+    totalWeightKg: number | null
+    totalVolumeCbm: number | null
+  }
+  ocean: {
+    houseBillOfLading: string | null
+    masterBillOfLading: string | null
+    commercialInvoiceNumber: string | null
+    packingListRef: string | null
+    vesselName: string | null
+    voyageNumber: string | null
+    portOfLoading: string | null
+    portOfDischarge: string | null
+    estimatedDeparture: string | null
+    estimatedArrival: string | null
+  }
+  warehouse: {
+    warehouseCode: string | null
+    warehouseName: string | null
+    customsEntryNumber: string | null
+    customsClearedDate: string | null
+    receivedDate: string | null
+    dutyAmount: number | null
+    dutyCurrency: string | null
+  }
+  shipped: {
+    shipToName: string | null
+    shippingCarrier: string | null
+    trackingNumber: string | null
+    shippedDate: string | null
+    deliveredDate: string | null
+  }
+}
+
 export interface PurchaseOrderSummary {
   id: string
   orderNumber: string
-  poNumber?: string | null
+  poNumber: string | null
   type: PurchaseOrderTypeOption
   status: PurchaseOrderStatusOption
-  warehouseCode: string | null
-  warehouseName: string | null
   counterpartyName: string | null
-  incoterms?: string | null
-  paymentTerms?: string | null
-  notes?: string | null
+  incoterms: string | null
+  paymentTerms: string | null
+  notes: string | null
   expectedDate: string | null
-  proformaInvoiceNumber?: string | null
-  factoryName?: string | null
-  expectedCompletionDate?: string | null
-  vesselName?: string | null
-  voyageNumber?: string | null
-  portOfLoading?: string | null
-  portOfDischarge?: string | null
-  estimatedArrival?: string | null
-  customsClearedDate?: string | null
-  receivedDate?: string | null
-  postedAt: string | null
+  receiveType: string | null
+  stageData: PurchaseOrderStageData
   createdAt: string
-  updatedAt: string
-  createdByName?: string | null
+  createdByName: string | null
   lines: PurchaseOrderLineSummary[]
 }
 
@@ -102,19 +138,22 @@ function sumReceivedQuantities(lines: PurchaseOrderLineSummary[]) {
   return lines.reduce((sum, line) => sum + (line.quantityReceived ?? line.postedQuantity ?? 0), 0)
 }
 
-function getRfqMissingFields(order: PurchaseOrderSummary) {
-  const missing: string[] = []
-  if (!order.counterpartyName?.trim()) missing.push('Supplier')
-  if (!order.expectedDate) missing.push('Cargo ready date')
-  if (!order.incoterms?.trim()) missing.push('Incoterms')
-  if (!order.paymentTerms?.trim()) missing.push('Payment terms')
-  if (order.lines.length === 0) missing.push('Line items')
-  return missing
+function formatTextOrDash(value: string | null | undefined) {
+  if (typeof value !== 'string') return '—'
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : '—'
+}
+
+function formatNumberDisplay(value: number | null | undefined, options?: { maximumFractionDigits?: number }) {
+  if (value === null || value === undefined) return '—'
+  if (!Number.isFinite(value)) return '—'
+  return value.toLocaleString(undefined, { maximumFractionDigits: options?.maximumFractionDigits })
 }
 
 type TableColumn = {
   key: string
   header: string
+  align?: 'left' | 'center' | 'right'
   thClassName?: string
   tdClassName?: string
   render: (order: PurchaseOrderSummary) => ReactNode
@@ -181,29 +220,29 @@ export function PurchaseOrdersPanel({
     () =>
       orders.filter(order => {
         const matchesStatus = order.status === statusFilter
-        const matchesType = !typeFilter || order.type === typeFilter
+        const matchesType = typeFilter ? order.type === typeFilter : true
         return matchesStatus && matchesType
       }),
     [orders, statusFilter, typeFilter]
   )
 
   const columns = useMemo<TableColumn[]>(() => {
-    const cols: TableColumn[] = [
-      {
-        key: 'po-number',
-        header: statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
-        tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
-        render: order => (
-          <Link
-            href={`/operations/purchase-orders/${order.id}`}
-            className="text-primary hover:underline"
-            prefetch={false}
-          >
-            {order.status === 'RFQ' ? order.orderNumber : order.poNumber ?? order.orderNumber}
-          </Link>
-        ),
-      },
-    ]
+    const cols: TableColumn[] = []
+
+    cols.push({
+      key: 'po-number',
+      header: statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
+      tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
+      render: order => (
+        <Link
+          href={`/operations/purchase-orders/${order.id}`}
+          className="text-primary hover:underline"
+          prefetch={false}
+        >
+          {order.status === 'RFQ' ? order.orderNumber : (order.poNumber ?? order.orderNumber)}
+        </Link>
+      ),
+    })
 
     if (!typeFilter) {
       cols.push({
@@ -222,90 +261,29 @@ export function PurchaseOrdersPanel({
       })
     }
 
-    cols.push(
-      {
-        key: 'supplier',
-        header: 'Supplier',
-        tdClassName: 'px-3 py-2 text-muted-foreground',
-        render: order => (
-          <span className="block max-w-[200px] truncate" title={order.counterpartyName || undefined}>
-            {order.counterpartyName || '—'}
-          </span>
-        ),
-      },
-      {
-        key: 'created-by',
-        header: 'Created by',
-        thClassName: 'w-[clamp(6rem,10vw,9rem)]',
-        tdClassName: 'px-3 py-2 text-muted-foreground',
-        render: order => (
-          <span className="block truncate" title={order.createdByName || undefined}>
-            {order.createdByName || '—'}
-          </span>
-        ),
-      },
-      {
-        key: 'lines',
-        header: 'Lines',
-        thClassName: 'text-right',
-        tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
-        render: order => order.lines.length,
-      }
-    )
+    cols.push({
+      key: 'supplier',
+      header: 'Supplier',
+      tdClassName: 'px-3 py-2 text-muted-foreground',
+      render: order => (
+        <span className="block max-w-[220px] truncate" title={order.counterpartyName ?? undefined}>
+          {formatTextOrDash(order.counterpartyName)}
+        </span>
+      ),
+    })
 
-    if (statusFilter === 'WAREHOUSE') {
-      cols.push(
-        {
-          key: 'ordered',
-          header: 'Cartons Ordered',
-          thClassName: 'text-right',
-          tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap',
-          render: order => sumLineCartons(order.lines).toLocaleString(),
-        },
-        {
-          key: 'received',
-          header: 'Cartons Received',
-          thClassName: 'text-right',
-          tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap',
-          render: order => sumReceivedQuantities(order.lines).toLocaleString(),
-        },
-        {
-          key: 'warehouse',
-          header: 'Warehouse',
-          tdClassName: 'px-3 py-2 whitespace-nowrap',
-          render: order => (
-            <div className="min-w-[140px]">
-              <div className="text-sm font-medium text-foreground">{order.warehouseCode || '—'}</div>
-              {order.warehouseName && (
-                <div className="text-xs text-muted-foreground truncate">{order.warehouseName}</div>
-              )}
-            </div>
-          ),
-        },
-        {
-          key: 'received-date',
-          header: 'Received Date',
-          tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-          render: order => (
-            <div className="min-w-[140px]">
-              <div className="text-sm text-foreground">
-                {formatDateDisplay(order.receivedDate ?? null)}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Customs: {formatDateDisplay(order.customsClearedDate ?? null)}
-              </div>
-            </div>
-          ),
-        }
-      )
-    } else {
-      cols.push({
-        key: 'quantity',
-        header: 'Units',
-        thClassName: 'text-right',
-        tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap',
-        render: order => sumLineUnits(order.lines).toLocaleString(),
-      })
+    const createdColumn: TableColumn = {
+      key: 'created',
+      header: 'Created',
+      tdClassName: 'px-3 py-2 whitespace-nowrap',
+      render: order => (
+        <div className="min-w-[140px]">
+          <div className="text-sm text-foreground">{formatDateDisplay(order.createdAt)}</div>
+          <div className="text-xs text-muted-foreground">
+            {order.createdByName ? `by ${order.createdByName}` : '—'}
+          </div>
+        </div>
+      ),
     }
 
     switch (statusFilter) {
@@ -318,30 +296,36 @@ export function PurchaseOrdersPanel({
             render: order => formatDateDisplay(order.expectedDate),
           },
           {
-            key: 'ready',
-            header: 'Ready?',
-            tdClassName: 'px-3 py-2 whitespace-nowrap',
-            render: order => {
-              const missing = getRfqMissingFields(order)
-              if (missing.length === 0) {
-                return (
-                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Ready
-                  </Badge>
-                )
-              }
-
-              return (
-                <Badge
-                  variant="outline"
-                  title={`Missing: ${missing.join(', ')}`}
-                  className="text-muted-foreground"
-                >
-                  Missing {missing.length}
-                </Badge>
-              )
-            },
-          }
+            key: 'incoterms',
+            header: 'Incoterms',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatTextOrDash(order.incoterms),
+          },
+          {
+            key: 'payment-terms',
+            header: 'Payment Terms',
+            tdClassName: 'px-3 py-2 text-muted-foreground',
+            render: order => (
+              <span className="block max-w-[180px] truncate" title={order.paymentTerms ?? undefined}>
+                {formatTextOrDash(order.paymentTerms)}
+              </span>
+            ),
+          },
+          {
+            key: 'lines',
+            header: 'Lines',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => order.lines.length,
+          },
+          {
+            key: 'units',
+            header: 'Units',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
+            render: order => sumLineUnits(order.lines).toLocaleString(),
+          },
+          createdColumn
         )
         break
       }
@@ -357,189 +341,382 @@ export function PurchaseOrdersPanel({
             key: 'incoterms',
             header: 'Incoterms',
             tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => order.incoterms || '—',
+            render: order => formatTextOrDash(order.incoterms),
           },
           {
             key: 'payment-terms',
             header: 'Payment Terms',
             tdClassName: 'px-3 py-2 text-muted-foreground',
             render: order => (
-              <span className="block max-w-[160px] truncate" title={order.paymentTerms || undefined}>
-                {order.paymentTerms || '—'}
+              <span className="block max-w-[180px] truncate" title={order.paymentTerms ?? undefined}>
+                {formatTextOrDash(order.paymentTerms)}
               </span>
             ),
-          }
+          },
+          {
+            key: 'pi-number',
+            header: 'PI #',
+            tdClassName: 'px-3 py-2',
+            render: order => (
+              <div className="min-w-[180px]">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.stageData.manufacturing.factoryName)}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'lines',
+            header: 'Lines',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => order.lines.length,
+          },
+          {
+            key: 'units',
+            header: 'Units',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
+            render: order => sumLineUnits(order.lines).toLocaleString(),
+          },
+          createdColumn
         )
         break
       }
       case 'MANUFACTURING': {
         cols.push(
           {
-            key: 'supplier-ref',
+            key: 'pi-number',
             header: 'PI #',
             tdClassName: 'px-3 py-2',
             render: order => (
-              <span className="block min-w-[180px] text-sm font-medium text-foreground">
-                {order.proformaInvoiceNumber || '—'}
-              </span>
+              <div className="min-w-[200px]">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.stageData.manufacturing.factoryName)}
+                </div>
+              </div>
             ),
+          },
+          {
+            key: 'mfg-start',
+            header: 'Mfg Start',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatDateDisplay(order.stageData.manufacturing.manufacturingStartDate),
           },
           {
             key: 'expected-completion',
             header: 'Exp. Complete',
             tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.expectedCompletionDate ?? null),
-          }
+            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
+          },
+          {
+            key: 'cartons',
+            header: 'Cartons',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => {
+              const ordered = sumLineCartons(order.lines)
+              return (
+                <div className="min-w-[140px] text-right">
+                  <div className="text-sm font-semibold text-foreground tabular-nums">
+                    {formatNumberDisplay(order.stageData.manufacturing.totalCartons)}
+                  </div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    Ordered: {ordered.toLocaleString()}
+                  </div>
+                </div>
+              )
+            },
+          },
+          {
+            key: 'pallets',
+            header: 'Pallets',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => formatNumberDisplay(order.stageData.manufacturing.totalPallets),
+          },
+          {
+            key: 'weight',
+            header: 'KG',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order =>
+              formatNumberDisplay(order.stageData.manufacturing.totalWeightKg, {
+                maximumFractionDigits: 2,
+              }),
+          },
+          {
+            key: 'volume',
+            header: 'CBM',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order =>
+              formatNumberDisplay(order.stageData.manufacturing.totalVolumeCbm, {
+                maximumFractionDigits: 3,
+              }),
+          },
+          createdColumn
         )
         break
       }
       case 'OCEAN': {
         cols.push(
           {
-            key: 'shipment',
-            header: 'Shipment',
+            key: 'bill-of-lading',
+            header: 'B/L',
             tdClassName: 'px-3 py-2',
-            render: order => {
-              const vessel = order.vesselName || '—'
-              const voyage = order.voyageNumber ? ` • ${order.voyageNumber}` : ''
-              const route =
-                order.portOfLoading || order.portOfDischarge
-                  ? `${order.portOfLoading || '—'} → ${order.portOfDischarge || '—'}`
-                  : '—'
-
-              return (
-                <div className="min-w-[220px]">
-                  <div className="text-sm font-medium text-foreground">
-                    {vessel}
-                    {voyage}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">{route}</div>
+            render: order => (
+              <div className="min-w-[200px]">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.stageData.ocean.houseBillOfLading)}
                 </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.stageData.ocean.masterBillOfLading)}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'docs',
+            header: 'Docs',
+            tdClassName: 'px-3 py-2',
+            render: order => (
+              <div className="min-w-[220px]">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.stageData.ocean.commercialInvoiceNumber)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.stageData.ocean.packingListRef)}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'vessel',
+            header: 'Vessel',
+            tdClassName: 'px-3 py-2 whitespace-nowrap',
+            render: order => {
+              const vessel = formatTextOrDash(order.stageData.ocean.vesselName)
+              const voyage = order.stageData.ocean.voyageNumber
+              return (
+                <span className="block min-w-[200px] text-sm font-medium text-foreground">
+                  {voyage ? `${vessel} • ${voyage}` : vessel}
+                </span>
               )
             },
+          },
+          {
+            key: 'route',
+            header: 'Route',
+            tdClassName: 'px-3 py-2 text-muted-foreground',
+            render: order => {
+              const pol = formatTextOrDash(order.stageData.ocean.portOfLoading)
+              const pod = formatTextOrDash(order.stageData.ocean.portOfDischarge)
+              const title = `${pol} → ${pod}`
+              return (
+                <span className="block min-w-[220px] truncate" title={title}>
+                  {title}
+                </span>
+              )
+            },
+          },
+          {
+            key: 'etd',
+            header: 'ETD',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatDateDisplay(order.stageData.ocean.estimatedDeparture),
           },
           {
             key: 'eta',
             header: 'ETA',
             tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.estimatedArrival ?? null),
-          }
+            render: order => formatDateDisplay(order.stageData.ocean.estimatedArrival),
+          },
+          createdColumn
+        )
+        break
+      }
+      case 'WAREHOUSE': {
+        cols.push(
+          {
+            key: 'warehouse',
+            header: 'Warehouse',
+            tdClassName: 'px-3 py-2 whitespace-nowrap',
+            render: order => (
+              <div className="min-w-[160px]">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.stageData.warehouse.warehouseCode)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.stageData.warehouse.warehouseName)}
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'receive-type',
+            header: 'Receive Type',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatTextOrDash(order.receiveType),
+          },
+          {
+            key: 'customs-entry',
+            header: 'Import Entry #',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatTextOrDash(order.stageData.warehouse.customsEntryNumber),
+          },
+          {
+            key: 'customs-cleared',
+            header: 'Customs Cleared',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatDateDisplay(order.stageData.warehouse.customsClearedDate),
+          },
+          {
+            key: 'received',
+            header: 'Received',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+            render: order => formatDateDisplay(order.stageData.warehouse.receivedDate),
+          },
+          {
+            key: 'duty',
+            header: 'Duty',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => {
+              const amount = order.stageData.warehouse.dutyAmount
+              if (amount === null || amount === undefined) return '—'
+              const currency = order.stageData.warehouse.dutyCurrency
+              const suffix = currency && currency.trim().length > 0 ? ` ${currency.trim()}` : ''
+              return `${amount.toLocaleString()}${suffix}`
+            },
+          },
+          {
+            key: 'cartons',
+            header: 'Cartons',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => (
+              <div className="min-w-[140px] text-right">
+                <div className="text-sm font-semibold text-foreground tabular-nums">
+                  {sumReceivedQuantities(order.lines).toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground tabular-nums">
+                  / {sumLineCartons(order.lines).toLocaleString()}
+                </div>
+              </div>
+            ),
+          },
+          createdColumn
         )
         break
       }
       case 'REJECTED':
       case 'CANCELLED': {
-        cols.push({
-          key: 'notes',
-          header: 'Notes',
-          tdClassName: 'px-3 py-2 text-muted-foreground',
-          render: order => (
-            <span className="block max-w-[320px] truncate">{order.notes || '—'}</span>
-          ),
-        })
+        cols.push(
+          {
+            key: 'notes',
+            header: 'Notes',
+            tdClassName: 'px-3 py-2 text-muted-foreground',
+            render: order => (
+              <span className="block max-w-[360px] truncate">{formatTextOrDash(order.notes)}</span>
+            ),
+          },
+          {
+            key: 'lines',
+            header: 'Lines',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => order.lines.length,
+          },
+          {
+            key: 'units',
+            header: 'Units',
+            align: 'right',
+            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
+            render: order => sumLineUnits(order.lines).toLocaleString(),
+          },
+          createdColumn
+        )
         break
       }
+      default: {
+        cols.push(createdColumn)
+      }
     }
-
-    cols.push({
-      key: 'updated',
-      header: 'Updated',
-      tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-      render: order => formatDateDisplay(order.updatedAt),
-    })
 
     return cols
   }, [statusFilter, typeFilter])
 
-	  return (
-	    <div className="flex min-h-0 flex-col gap-4">
-	      <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-	          <div>
-	            <h2 className="text-lg font-semibold text-foreground">Purchase Orders</h2>
-	          </div>
-	          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-	            <span>
-	              <span className="font-semibold text-foreground">{statusCounts.rfqCount}</span> rfq
-	            </span>
+  return (
+    <div className="flex min-h-0 flex-col gap-4">
+      <DataTableContainer
+        title="Purchase Orders"
+        headerContent={
+          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span>{' '}
-              issued
+              <span className="font-semibold text-foreground">{statusCounts.rfqCount}</span> RFQ
             </span>
             <span>
-              <span className="font-semibold text-foreground">
-                {statusCounts.manufacturingCount}
-              </span>{' '}
-              manufacturing
+              <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span> Issued
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.oceanCount}</span> in
-              transit
+              <span className="font-semibold text-foreground">{statusCounts.manufacturingCount}</span>{' '}
+              Manufacturing
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span>{' '}
-              at warehouse
+              <span className="font-semibold text-foreground">{statusCounts.oceanCount}</span> In Transit
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.rejectedCount}</span>{' '}
-              rejected
+              <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span> At Warehouse
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.cancelledCount}</span>{' '}
-              cancelled
+              <span className="font-semibold text-foreground">{statusCounts.rejectedCount}</span> Rejected
+            </span>
+            <span>
+              <span className="font-semibold text-foreground">{statusCounts.cancelledCount}</span> Cancelled
             </span>
           </div>
-        </div>
-      </div>
-
-	      <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-soft">
-	        <div className="overflow-hidden">
-	          <table className="w-full table-fixed text-sm">
-	            <thead>
-	              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-	                {columns.map(column => (
-	                  <th
-	                    key={column.key}
-	                    className={`px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap text-xs ${column.thClassName ?? ''}`}
-	                  >
-	                    {column.header}
-	                  </th>
-	                ))}
-	              </tr>
-	            </thead>
-	            <tbody>
-	              {loading ? (
-	                <tr>
-	                  <td colSpan={columns.length} className="px-4 py-6 text-center text-muted-foreground">
-	                    Loading purchase orders…
-	                  </td>
-	                </tr>
-	              ) : visibleOrders.length === 0 ? (
-	                <tr>
-	                  <td colSpan={columns.length} className="px-4 py-6 text-center text-muted-foreground">
-	                    No purchase orders found for this stage.
-	                  </td>
-	                </tr>
-	              ) : (
-	                visibleOrders.map(order => {
-	                  return (
-	                    <tr key={order.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                      {columns.map(column => (
-	                        <td
-	                          key={`${order.id}-${column.key}`}
-	                          className={column.tdClassName ?? 'px-3 py-2 whitespace-nowrap'}
-	                        >
-	                          {column.render(order)}
-	                        </td>
-	                      ))}
-	                    </tr>
-	                  )
-	                })
-	              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        }
+      >
+        <table className="w-full table-auto text-sm">
+          <DataTableHead>
+            <tr className="border-b border-border">
+              {columns.map(column => (
+                <DataTableHeaderCell
+                  key={column.key}
+                  align={column.align}
+                  className={column.thClassName}
+                >
+                  {column.header}
+                </DataTableHeaderCell>
+              ))}
+            </tr>
+          </DataTableHead>
+          <tbody>
+            {loading ? (
+              <DataTableEmpty colSpan={columns.length} message="Loading purchase orders…" />
+            ) : visibleOrders.length === 0 ? (
+              <DataTableEmpty colSpan={columns.length} message="No purchase orders found for this stage." />
+            ) : (
+              visibleOrders.map(order => (
+                <tr key={order.id} className="border-t border-border hover:bg-muted/30">
+                  {columns.map(column => (
+                    <td key={`${order.id}-${column.key}`} className={column.tdClassName ?? 'px-3 py-2 whitespace-nowrap'}>
+                      {column.render(order)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </DataTableContainer>
     </div>
   )
 }
