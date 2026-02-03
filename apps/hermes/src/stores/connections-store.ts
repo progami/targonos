@@ -6,6 +6,7 @@ import type { AmazonConnection } from "@/lib/types";
 import { getHermesBasePath, hermesApiUrl } from "@/lib/base-path";
 
 function scopedStorageKey(key: string): string {
+  if (typeof document === "undefined") return key;
   return `${key}:${getHermesBasePath()}`;
 }
 

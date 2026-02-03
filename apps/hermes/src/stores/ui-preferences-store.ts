@@ -18,6 +18,7 @@ export type InsightsPreferences = {
 };
 
 function scopedStorageKey(key: string): string {
+  if (typeof document === "undefined") return key;
   return `${key}:${getHermesBasePath()}`;
 }
 
