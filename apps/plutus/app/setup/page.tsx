@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
-import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { PageHeader } from '@/components/page-header';
 import { cn } from '@/lib/utils';
 
@@ -338,6 +337,8 @@ function AccountRow({
 
 // Accounts Section
 function AccountsSection({
+  isQboConnected,
+  onNavigateToSection,
   accounts,
   accountMappings,
   onAccountMappingsChange,
@@ -346,6 +347,8 @@ function AccountsSection({
   accountsCreated,
   isLoadingAccounts,
 }: {
+  isQboConnected: boolean;
+  onNavigateToSection: (section: SetupState['section']) => void;
   accounts: QboAccount[];
   accountMappings: Record<string, string>;
   onAccountMappingsChange: (accounts: Record<string, string>) => void;
@@ -362,6 +365,10 @@ function AccountsSection({
 
   const updateAccount = (key: string, id: string) => {
     onAccountMappingsChange({ ...accountMappings, [key]: id });
+  };
+
+  const handleConnect = () => {
+    window.location.href = `${basePath}/api/qbo/connect`;
   };
 
   const createAccounts = async () => {
@@ -393,6 +400,98 @@ function AccountsSection({
     return (
       <div className="text-center py-12">
         <p className="text-slate-500 dark:text-slate-400">Add brands first before mapping accounts.</p>
+      </div>
+    );
+  }
+
+  if (!isQboConnected) {
+    const hasSavedMappings = mappedCount > 0;
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Account mapping and sub-account creation require a QuickBooks Online connection.
+          </p>
+        </div>
+
+        <Card className="overflow-hidden border-slate-200/70 dark:border-white/10">
+          <CardContent className="relative p-0">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(28rem_18rem_at_10%_10%,rgba(0,194,185,0.18),transparent_60%),radial-gradient(22rem_16rem_at_90%_0%,rgba(255,122,62,0.14),transparent_55%)] dark:bg-[radial-gradient(28rem_18rem_at_10%_10%,rgba(0,194,185,0.22),transparent_60%),radial-gradient(22rem_16rem_at_90%_0%,rgba(255,122,62,0.18),transparent_55%)]"
+            />
+            <div className="relative p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-slate-200/60 text-slate-700 shadow-sm backdrop-blur dark:bg-white/5 dark:ring-white/10 dark:text-slate-200">
+                  <InfoIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Not connected to QuickBooks
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    You can continue configuring <span className="font-medium">Brands</span> and{' '}
+                    <span className="font-medium">SKUs</span>. Connect QBO to map parent accounts and create brand
+                    sub-accounts.
+                  </div>
+
+                  <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={handleConnect}
+                      className="rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+                    >
+                      Connect to QuickBooks
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => onNavigateToSection('brands')}
+                    >
+                      Go to Brands
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Brands</div>
+                      <div className="mt-0.5 font-semibold">{brands.length}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Mapped</div>
+                      <div className="mt-0.5 font-semibold">
+                        {mappedCount}/{ALL_ACCOUNTS.length}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</div>
+                      <div className="mt-0.5 font-semibold">
+                        {accountsCreated ? 'Created' : hasSavedMappings ? 'Draft' : 'Not started'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {accountsCreated && (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      Accounts were previously created, but Plutus can’t verify them while disconnected.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {hasSavedMappings && (
+          <Card className="border-slate-200/70 dark:border-white/10">
+            <CardContent className="p-4">
+              <div className="text-sm text-slate-600 dark:text-slate-300">
+                You have saved mappings. Connect QBO to validate parent accounts and create sub-accounts.
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   }
@@ -905,11 +1004,6 @@ export default function SetupPage() {
     );
   }
 
-  // Show not connected screen
-  if (!connectionStatus?.connected) {
-    return <NotConnectedScreen title="Setup" />;
-  }
-
   return (
     <main className="flex-1">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -922,16 +1016,46 @@ export default function SetupPage() {
           kicker="Plutus"
           description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
           actions={
-            <>
-              <Button asChild variant="outline">
-                <Link href="/settlements">Settlements</Link>
+            connectionStatus?.connected === true ? (
+              <>
+                <Button asChild variant="outline">
+                  <Link href="/settlements">Settlements</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/bills">Bills</Link>
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => {
+                  window.location.href = `${basePath}/api/qbo/connect`;
+                }}
+                className="bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white"
+              >
+                Connect QBO
               </Button>
-              <Button asChild variant="outline">
-                <Link href="/bills">Bills</Link>
-              </Button>
-            </>
+            )
           }
         />
+
+        {connectionStatus?.connected !== true && (
+          <Card className="mt-6 border-slate-200/70 dark:border-white/10">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                  <InfoIcon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Offline setup mode</div>
+                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Brands and SKUs are available without QuickBooks. Dashboards and account mapping stay locked until
+                    you connect QBO.
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="mt-6 overflow-hidden border-slate-200/70 dark:border-white/10">
           <CardContent className="p-0">
@@ -949,6 +1073,8 @@ export default function SetupPage() {
                   {state.section === 'brands' && <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />}
                   {state.section === 'accounts' && (
                     <AccountsSection
+                      isQboConnected={connectionStatus?.connected === true}
+                      onNavigateToSection={(section) => saveState({ section })}
                       accounts={accounts}
                       accountMappings={state.accountMappings}
                       onAccountMappingsChange={saveAccountMappings}
