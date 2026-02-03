@@ -4,7 +4,7 @@ import { withXPlanAuth } from '@/lib/api/auth';
 import { getStrategyActor } from '@/lib/strategy-access';
 import { loadPlanningCalendar } from '@/lib/planning';
 import { sellerboardReportTimeZoneForRegion, weekStartsOnForRegion } from '@/lib/strategy-region';
-import { parseSellerboardOrdersWeeklyUnits } from '@/lib/integrations/sellerboard';
+import { fetchSellerboardCsv, parseSellerboardOrdersWeeklyUnits } from '@/lib/integrations/sellerboard';
 import { getTalosPrisma } from '@/lib/integrations/talos-client';
 
 export const runtime = 'nodejs';
@@ -51,15 +51,7 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
   }
 
   try {
-    const response = await fetch(reportUrl, { method: 'GET' });
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Sellerboard fetch failed (${response.status})` },
-        { status: 502 },
-      );
-    }
-
-    const csv = await response.text();
+    const csv = await fetchSellerboardCsv(reportUrl);
     const weekStartsOn = weekStartsOnForRegion('UK');
     const reportTimeZone = sellerboardReportTimeZoneForRegion('UK');
     const planning = await loadPlanningCalendar(weekStartsOn);

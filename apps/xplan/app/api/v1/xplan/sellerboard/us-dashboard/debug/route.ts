@@ -4,6 +4,7 @@ import { getStrategyActor } from '@/lib/strategy-access';
 import { loadPlanningCalendar } from '@/lib/planning';
 import { weekStartsOnForRegion } from '@/lib/strategy-region';
 import {
+  fetchSellerboardCsv,
   inferSellerboardReportTimeZoneFromCsv,
   parseSellerboardDashboardWeeklyFinancials,
 } from '@/lib/integrations/sellerboard';
@@ -25,15 +26,7 @@ export const GET = withXPlanAuth(async (_request: Request, session) => {
   }
 
   try {
-    const response = await fetch(reportUrl, { method: 'GET' });
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Sellerboard fetch failed (${response.status})` },
-        { status: 502 },
-      );
-    }
-
-    const csv = await response.text();
+    const csv = await fetchSellerboardCsv(reportUrl);
     const reportTimeZone = inferSellerboardReportTimeZoneFromCsv(csv);
     const weekStartsOn = weekStartsOnForRegion('US');
     const planning = await loadPlanningCalendar(weekStartsOn);
