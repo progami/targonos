@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from 'crypto';
  * Fetch CSV content from a Sellerboard report URL
  */
 export async function fetchSellerboardCsv(reportUrl: string): Promise<string> {
-  const response = await fetch(reportUrl, { method: 'GET' });
+  const response = await fetch(reportUrl, { method: 'GET', cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Sellerboard fetch failed: ${response.status}`);
   }
