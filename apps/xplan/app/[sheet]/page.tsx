@@ -2423,7 +2423,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       controls.push(
         <SellerboardSyncControl
           key="sellerboard-sync"
-          isSuperAdmin={viewer.isSuperAdmin}
           strategyRegion={strategyRegion}
           strategyId={activeStrategyId}
         />,
