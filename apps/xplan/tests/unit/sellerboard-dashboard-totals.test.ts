@@ -66,7 +66,7 @@ describe('sellerboard dashboard totals parsing', () => {
       Orders: '1',
       EstimatedPayout: '0',
       GrossProfit: '7',
-      NetProfit: '0',
+      NetProfit: '7',
       'ProductCost Sales': '2',
       SponsoredProducts: '0',
     };
@@ -80,7 +80,7 @@ describe('sellerboard dashboard totals parsing', () => {
     expect(result.weeklyTotals[0]?.amazonFees).toBeCloseTo(1);
   });
 
-  it('derives Amazon fees from GrossProfit', async () => {
+  it('derives Amazon costs from NetProfit + PPC spend', async () => {
     const planning = await loadPlanningCalendar(1);
 
     const headers = [
@@ -117,14 +117,14 @@ describe('sellerboard dashboard totals parsing', () => {
       'ProductCost Unsellable Refunds': '0',
       'ProductCost Non-Amazon': '0',
       'ProductCost MissingFromInbound': '0',
-      SponsoredProducts: '0',
+      SponsoredProducts: '1',
       SponsoredDisplay: '0',
       SponsoredBrands: '0',
       SponsoredBrandsVideo: '0',
       'Google ads': '0',
       'Facebook ads': '0',
-      GrossProfit: '7',
-      NetProfit: '0',
+      GrossProfit: '6',
+      NetProfit: '6',
     };
 
     const row = headers.map((header) => valuesByHeader[header] ?? '0');
@@ -134,5 +134,6 @@ describe('sellerboard dashboard totals parsing', () => {
     expect(result.weeklyTotals).toHaveLength(1);
     expect(result.weeklyTotals[0]?.amazonFees).toBeCloseTo(1);
     expect(result.weeklyTotals[0]?.grossProfit).toBeCloseTo(7);
+    expect(result.weeklyTotals[0]?.netProfit).toBeCloseTo(6);
   });
 });

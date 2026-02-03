@@ -27,6 +27,7 @@ import {
   SHEET_TOOLBAR_SELECT,
 } from '@/components/sheet-toolbar';
 import { usePersistentState } from '@/hooks/usePersistentState';
+import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
 
 export type POStatus = 'DRAFT' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
 
@@ -83,6 +84,7 @@ export interface POProfitabilityData {
 }
 
 interface POProfitabilitySectionProps {
+  strategyRegion: StrategyRegion;
   datasets: { projected: POProfitabilityDataset; real: POProfitabilityDataset };
   productOptions?: Array<{ id: string; name: string }>;
   sheetSlug?: string;
@@ -95,6 +97,13 @@ interface POProfitabilitySectionProps {
 
 type StatusFilter = 'ALL' | POStatus;
 type MetricKey = 'grossMarginPercent' | 'netMarginPercent' | 'roi';
+
+type ChartTooltipEntry = { dataKey: string; color?: string; value?: number };
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: readonly ChartTooltipEntry[];
+  label?: string | number;
+};
 
 const metricConfig: Record<MetricKey, { label: string; color: string; gradientId: string }> = {
   grossMarginPercent: {
@@ -292,6 +301,7 @@ export function POProfitabilityHeaderControls({
 }
 
 export function POProfitabilitySection({
+  strategyRegion,
   datasets,
   productOptions = [],
   sheetSlug,
@@ -409,10 +419,13 @@ export function POProfitabilitySection({
     });
   };
 
+  const locale = localeForRegion(strategyRegion);
+  const currency = currencyForRegion(strategyRegion);
+
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: 'USD',
+      currency,
       maximumFractionDigits: valueDisplay === 'PER_UNIT' ? 2 : 0,
     }).format(value);
   };
@@ -531,11 +544,11 @@ export function POProfitabilitySection({
                     axisLine={false}
                     tick={{ fontSize: 12 }}
                     className="text-slate-500 dark:text-slate-400"
-                    tickFormatter={(value) => `${value.toFixed(0)}%`}
+                    tickFormatter={(value: number) => `${value.toFixed(0)}%`}
                     width={50}
                   />
                   <Tooltip
-                    content={({ active, payload, label }) => {
+                    content={({ active, payload, label }: ChartTooltipProps) => {
                       if (!active || !payload || payload.length === 0) return null;
                       return (
                         <div className="rounded-xl border border-slate-200/50 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-md dark:border-slate-700/50 dark:bg-slate-900/95">
@@ -543,7 +556,7 @@ export function POProfitabilitySection({
                             {label}
                           </p>
                           <div className="space-y-1.5">
-                            {payload.map((entry) => (
+                            {payload.map((entry: ChartTooltipEntry) => (
                               <div
                                 key={entry.dataKey}
                                 className="flex items-center justify-between gap-6"
@@ -1114,4 +1127,3 @@ export function POProfitabilitySection({
     </div>
   );
 }
-

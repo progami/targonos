@@ -31,6 +31,7 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { withAppBasePath } from '@/lib/base-path';
 import type { SelectionStats } from '@/lib/selection-stats';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
+import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
 
 type WeeklyRow = {
   weekNumber: string;
@@ -54,6 +55,7 @@ type UpdatePayload = {
 
 interface CashFlowGridProps {
   strategyId: string;
+  strategyRegion: StrategyRegion;
   weekly: WeeklyRow[];
 }
 
@@ -148,25 +150,25 @@ function normalizeRange(range: CellRange): {
   };
 }
 
-function formatDisplayValue(value: string, format: 'text' | 'currency'): string {
+function formatDisplayValue(
+  value: string,
+  format: 'text' | 'currency',
+  options: { locale: string; currency: string },
+): string {
   if (format === 'text') return value;
   const numeric = sanitizeNumeric(value);
   if (!Number.isFinite(numeric)) return '';
-  return numeric.toLocaleString('en-US', {
+  return numeric.toLocaleString(options.locale, {
     style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
+    currency: options.currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
 function parseNumericCandidate(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value !== 'string') return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  const normalized = raw.replace(/[$,%\s]/g, '').replace(/,/g, '');
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  const numeric = sanitizeNumeric(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function computeSelectionStats(
@@ -207,8 +209,10 @@ function computeSelectionStats(
   };
 }
 
-export function CashFlowGrid({ strategyId, weekly }: CashFlowGridProps) {
+export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGridProps) {
   const columnHelper = useMemo(() => createColumnHelper<WeeklyRow>(), []);
+  const locale = localeForRegion(strategyRegion);
+  const currency = currencyForRegion(strategyRegion);
 
   const [data, setData] = useState<WeeklyRow[]>(() => weekly.map((row) => ({ ...row })));
   useEffect(() => {
@@ -1026,7 +1030,7 @@ export function CashFlowGrid({ strategyId, weekly }: CashFlowGridProps) {
                       });
 
                       const rawValue = row.original[config.key];
-                      const displayValue = formatDisplayValue(rawValue, config.format);
+              const displayValue = formatDisplayValue(rawValue, config.format, { locale, currency });
 
                       const cellContent = isEditing ? (
                         <input

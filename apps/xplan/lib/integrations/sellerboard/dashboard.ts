@@ -422,7 +422,6 @@ export function parseSellerboardDashboardWeeklyTotals(
       parseSellerboardNumber(getCell(record, unitsPpcHeader));
     const orders = parseSellerboardNumber(getCell(record, ordersHeader));
     const estimatedPayout = parseSellerboardNumber(getCell(record, estimatedPayoutHeader));
-    const grossProfit = parseSellerboardNumber(getCell(record, grossProfitHeader));
     const netProfit = parseSellerboardNumber(getCell(record, netProfitHeader));
 
     const rawCogs =
@@ -441,10 +440,12 @@ export function parseSellerboardDashboardWeeklyTotals(
       parseSellerboardNumber(getCell(record, facebookAdsSpendHeader));
     const ppcSpend = Math.abs(rawPpcSpend);
 
-    // Derive Amazon fees from Sellerboard GrossProfit:
-    // GrossProfit = Revenue - COGS - AmazonFees
+    // Sellerboard totals report exposes NetProfit and PPC spend separately. Treat NetProfit as
+    // profit *after* PPC, and back into "Amazon costs" by excluding COGS + PPC from revenue.
     // Store costs as positive magnitudes.
-    const amazonFees = Math.abs(revenue - cogs - grossProfit);
+    const amazonFees = Math.abs(revenue - cogs - ppcSpend - netProfit);
+    // Gross Profit is before PPC (revenue - COGS - Amazon costs).
+    const grossProfit = revenue - cogs - amazonFees;
 
     const existing = weeklyTotalsByWeek.get(weekNumber) ?? {
       revenue: 0,

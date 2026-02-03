@@ -5,9 +5,12 @@ export function sanitizeNumeric(value: unknown): number {
   const raw = String(value).trim();
   if (!raw) return Number.NaN;
 
-  const cleaned = raw.replace(/[$,%\s]/g, '').replace(/,/g, '');
+  const negativeParens = raw.startsWith('(') && raw.endsWith(')');
+  const normalized = raw.replace(/[()]/g, '').replace(/[^0-9.,-]/g, '');
+  const cleaned = normalized.replace(/,/g, '');
   const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  if (!Number.isFinite(parsed)) return Number.NaN;
+  return negativeParens ? -parsed : parsed;
 }
 
 export function formatNumericInput(value: unknown, fractionDigits = 2): string {
