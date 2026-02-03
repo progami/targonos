@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withXPlanAuth } from '@/lib/api/auth';
 import { getStrategyActor } from '@/lib/strategy-access';
 import {
+  fetchSellerboardCsv,
   inferSellerboardReportTimeZoneFromHeaders,
   parseCsv,
   parseSellerboardDateUtc,
@@ -52,15 +53,7 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
   }
 
   try {
-    const response = await fetch(reportUrl, { method: 'GET' });
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Sellerboard fetch failed (${response.status})` },
-        { status: 502 },
-      );
-    }
-
-    const csv = await response.text();
+    const csv = await fetchSellerboardCsv(reportUrl);
     const rows = parseCsv(csv);
 
     if (rows.length === 0) {
