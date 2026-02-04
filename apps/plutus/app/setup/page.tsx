@@ -9,7 +9,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/page-header';
 import { cn } from '@/lib/utils';
 
@@ -89,6 +88,31 @@ function findAccountByExactName(
   return sorted[0];
 }
 
+function findAccountByFullyQualifiedName(
+  accounts: QboAccount[],
+  input: {
+    fullyQualifiedName: string;
+    type: string;
+  },
+): QboAccount | undefined {
+  const expectedFullyQualifiedName = normalizeForMatch(input.fullyQualifiedName);
+  const expectedType = input.type;
+
+  const candidates = accounts.filter((account) => {
+    if (account.type !== expectedType) return false;
+    if (normalizeForMatch(account.fullyQualifiedName) !== expectedFullyQualifiedName) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) return undefined;
+
+  const activeCandidates = candidates.filter((account) => account.active);
+  const preferred = activeCandidates.length > 0 ? activeCandidates : candidates;
+
+  const sorted = [...preferred].sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
+  return sorted[0];
+}
+
 function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, string> {
   const suggestions: Record<string, string> = {};
 
@@ -122,14 +146,23 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
     suggestions.cogsMfgAccessories = mfgAccessories.id;
   }
 
-  const landFreight = findAccountByExactName(accounts, { name: 'Land Freight', type: 'Cost of Goods Sold' });
-  if (landFreight) {
-    suggestions.cogsLandFreight = landFreight.id;
-  }
+  const warehousing3pl = findAccountByFullyQualifiedName(accounts, {
+    fullyQualifiedName: 'Warehousing:3PL',
+    type: 'Cost of Goods Sold',
+  });
+  if (warehousing3pl) {
+    suggestions.cogsLandFreight = warehousing3pl.id;
+    suggestions.cogsStorage3pl = warehousing3pl.id;
+  } else {
+    const landFreight = findAccountByExactName(accounts, { name: 'Land Freight', type: 'Cost of Goods Sold' });
+    if (landFreight) {
+      suggestions.cogsLandFreight = landFreight.id;
+    }
 
-  const storage3pl = findAccountByExactName(accounts, { name: 'Storage 3PL', type: 'Cost of Goods Sold' });
-  if (storage3pl) {
-    suggestions.cogsStorage3pl = storage3pl.id;
+    const storage3pl = findAccountByExactName(accounts, { name: 'Storage 3PL', type: 'Cost of Goods Sold' });
+    if (storage3pl) {
+      suggestions.cogsStorage3pl = storage3pl.id;
+    }
   }
 
   const shrinkage = findAccountByExactName(accounts, { name: 'Inventory Shrinkage', type: 'Cost of Goods Sold' });
@@ -213,33 +246,33 @@ function InfoIcon({ className }: { className?: string }) {
   );
 }
 
-// Account definitions with tooltips
+// Account definitions
 const INVENTORY_ACCOUNTS = [
-  { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset', tip: 'Product cost from supplier' },
-  { key: 'invFreight', label: 'Freight', type: 'Other Current Asset', tip: 'International shipping costs' },
-  { key: 'invDuty', label: 'Duty', type: 'Other Current Asset', tip: 'Import duty/customs charges' },
-  { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset', tip: 'Packaging, labels, inserts' },
+  { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
+  { key: 'invFreight', label: 'Freight', type: 'Other Current Asset' },
+  { key: 'invDuty', label: 'Duty', type: 'Other Current Asset' },
+  { key: 'invMfgAccessories', label: 'Mfg Accessories', type: 'Other Current Asset' },
 ];
 
 const COGS_ACCOUNTS = [
-  { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold', tip: 'Product cost when sold' },
-  { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold', tip: 'Freight cost when sold' },
-  { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold', tip: 'Duty cost when sold' },
-  { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold', tip: 'Accessories cost when sold' },
-  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold', tip: 'Local shipping (3PL to FBA)' },
-  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold', tip: '3PL warehouse storage fees' },
-  { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold', tip: 'Lost/damaged inventory' },
+  { key: 'cogsManufacturing', label: 'Manufacturing', type: 'Cost of Goods Sold' },
+  { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
+  { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
+  { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
+  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
+  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
+  { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
 ];
 
 const LMB_ACCOUNTS = [
-  { key: 'amazonSales', label: 'Amazon Sales', type: 'Income', tip: 'Revenue from product sales' },
-  { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income', tip: 'Customer refunds (contra-revenue)' },
-  { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income', tip: 'Amazon reimbursements for lost inventory' },
-  { key: 'amazonSellerFees', label: 'Seller Fees', type: 'Cost of Goods Sold', tip: 'Referral fees, closing fees' },
-  { key: 'amazonFbaFees', label: 'FBA Fees', type: 'Cost of Goods Sold', tip: 'Fulfillment fees' },
-  { key: 'amazonStorageFees', label: 'Storage Fees', type: 'Cost of Goods Sold', tip: 'FBA warehouse storage' },
-  { key: 'amazonAdvertisingCosts', label: 'Advertising', type: 'Cost of Goods Sold', tip: 'PPC and sponsored ads' },
-  { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold', tip: 'Coupons and promotions' },
+  { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
+  { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
+  { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income' },
+  { key: 'amazonSellerFees', label: 'Seller Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonFbaFees', label: 'FBA Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonStorageFees', label: 'Storage Fees', type: 'Cost of Goods Sold' },
+  { key: 'amazonAdvertisingCosts', label: 'Advertising', type: 'Cost of Goods Sold' },
+  { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
 ];
 
 const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...LMB_ACCOUNTS];
@@ -412,14 +445,12 @@ function AccountRow({
   accounts,
   onChange,
   type,
-  tip,
 }: {
   label: string;
   accountId: string;
   accounts: QboAccount[];
   onChange: (id: string) => void;
   type?: string;
-  tip?: string;
 }) {
   const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
   const selected = accounts.find((a) => a.id === accountId);
@@ -427,14 +458,7 @@ function AccountRow({
   return (
     <TableRow>
       <TableCell className="text-sm font-medium text-slate-900 dark:text-white">
-        <div className="flex items-center gap-1.5">
-          <span>{label}</span>
-          {tip && (
-            <Tooltip content={tip} className="inline-flex">
-              <InfoIcon className="h-3.5 w-3.5 text-slate-400" />
-            </Tooltip>
-          )}
-        </div>
+        {label}
       </TableCell>
       <TableCell>
         <Select value={accountId} onValueChange={onChange}>
@@ -468,7 +492,6 @@ function AccountRow({
 // Accounts Section
 function AccountsSection({
   isQboConnected,
-  onNavigateToSection,
   accounts,
   accountMappings,
   onAccountMappingsChange,
@@ -478,7 +501,6 @@ function AccountsSection({
   isLoadingAccounts,
 }: {
   isQboConnected: boolean;
-  onNavigateToSection: (section: SetupState['section']) => void;
   accounts: QboAccount[];
   accountMappings: Record<string, string>;
   onAccountMappingsChange: (accounts: Record<string, string>) => void;
@@ -489,8 +511,6 @@ function AccountsSection({
 }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autoFillApplied, setAutoFillApplied] = useState<{ appliedCount: number; suggestedCount: number } | null>(null);
-  const [createSummary, setCreateSummary] = useState<{ createdCount: number; skippedCount: number } | null>(null);
 
   const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
   const allMapped = mappedCount === ALL_ACCOUNTS.length;
@@ -500,30 +520,27 @@ function AccountsSection({
   };
 
   const suggestedMappings = useMemo(() => suggestPlutusAccountMappings(accounts), [accounts]);
-  const suggestedCount = Object.keys(suggestedMappings).length;
-  const suggestedFillableKeys = useMemo(() => {
-    const keys: string[] = [];
+
+  useEffect(() => {
+    if (!isQboConnected) return;
+    if (isLoadingAccounts) return;
+    if (accounts.length === 0) return;
+
+    const next = { ...accountMappings };
+    let changed = false;
     for (const [key, value] of Object.entries(suggestedMappings)) {
-      const current = accountMappings[key];
+      const current = next[key];
       const isEmpty = current === undefined ? true : current === '';
       if (isEmpty && value !== '') {
-        keys.push(key);
-      }
-    }
-    return keys;
-  }, [accountMappings, suggestedMappings]);
-
-  const applyAutoFill = () => {
-    const next = { ...accountMappings };
-    for (const key of suggestedFillableKeys) {
-      const value = suggestedMappings[key];
-      if (value !== undefined && value !== '') {
         next[key] = value;
+        changed = true;
       }
     }
-    onAccountMappingsChange(next);
-    setAutoFillApplied({ appliedCount: suggestedFillableKeys.length, suggestedCount });
-  };
+
+    if (changed) {
+      onAccountMappingsChange(next);
+    }
+  }, [accountMappings, accounts.length, isLoadingAccounts, isQboConnected, onAccountMappingsChange, suggestedMappings]);
 
   const handleConnect = () => {
     window.location.href = `${basePath}/api/qbo/connect`;
@@ -532,7 +549,6 @@ function AccountsSection({
   const createAccounts = async () => {
     setCreating(true);
     setError(null);
-    setCreateSummary(null);
     try {
       const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
         method: 'POST',
@@ -547,9 +563,6 @@ function AccountsSection({
         const message = data.error ? data.error : 'Failed to create accounts';
         throw new Error(message);
       }
-      const createdCount = Array.isArray(data.created) ? data.created.length : 0;
-      const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
-      setCreateSummary({ createdCount, skippedCount });
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -567,93 +580,27 @@ function AccountsSection({
   }
 
   if (!isQboConnected) {
-    const hasSavedMappings = mappedCount > 0;
-
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Account mapping and sub-account creation require a QuickBooks Online connection.
-          </p>
-        </div>
-
-        <Card className="overflow-hidden border-slate-200/70 dark:border-white/10">
-          <CardContent className="relative p-0">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(28rem_18rem_at_10%_10%,rgba(0,194,185,0.18),transparent_60%),radial-gradient(22rem_16rem_at_90%_0%,rgba(255,122,62,0.14),transparent_55%)] dark:bg-[radial-gradient(28rem_18rem_at_10%_10%,rgba(0,194,185,0.22),transparent_60%),radial-gradient(22rem_16rem_at_90%_0%,rgba(255,122,62,0.18),transparent_55%)]"
-            />
-            <div className="relative p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-slate-200/60 text-slate-700 shadow-sm backdrop-blur dark:bg-white/5 dark:ring-white/10 dark:text-slate-200">
-                  <InfoIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Not connected to QuickBooks
-                  </div>
-                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                    You can continue configuring <span className="font-medium">Brands</span> and{' '}
-                    <span className="font-medium">SKUs</span>. Connect QBO to map parent accounts and create brand
-                    sub-accounts.
-                  </div>
-
-                  <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                    <Button
-                      onClick={handleConnect}
-                      className="rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
-                    >
-                      Connect to QuickBooks
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="rounded-xl"
-                      onClick={() => onNavigateToSection('brands')}
-                    >
-                      Go to Brands
-                    </Button>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Brands</div>
-                      <div className="mt-0.5 font-semibold">{brands.length}</div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Mapped</div>
-                      <div className="mt-0.5 font-semibold">
-                        {mappedCount}/{ALL_ACCOUNTS.length}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Status</div>
-                      <div className="mt-0.5 font-semibold">
-                        {accountsCreated ? 'Created' : hasSavedMappings ? 'Draft' : 'Not started'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {accountsCreated && (
-                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                      Accounts were previously created, but Plutus can’t verify them while disconnected.
-                    </div>
-                  )}
-                </div>
-              </div>
+      <div className="flex items-center justify-center py-12">
+        <Card className="max-w-md w-full border-slate-200/70 dark:border-white/10">
+          <CardContent className="p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
+              <PlusIcon className="h-5 w-5" />
+            </div>
+            <div className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">Connect QuickBooks</div>
+            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Account mapping is available after connecting QBO.
+            </div>
+            <div className="mt-5">
+              <Button
+                onClick={handleConnect}
+                className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+              >
+                Connect to QuickBooks
+              </Button>
             </div>
           </CardContent>
         </Card>
-
-        {hasSavedMappings && (
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
-              <div className="text-sm text-slate-600 dark:text-slate-300">
-                You have saved mappings. Connect QBO to validate parent accounts and create sub-accounts.
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     );
   }
@@ -676,30 +623,15 @@ function AccountsSection({
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO
         </p>
-        {createSummary && (
-          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-            Created {createSummary.createdCount} • Skipped {createSummary.skippedCount} existing
-          </p>
-        )}
-        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-          Safe to run again: Plutus skips existing sub-accounts under the same parent.
-        </p>
       </div>
     );
   }
 
-  const renderAccountGroup = (title: string, description: string, accountList: typeof INVENTORY_ACCOUNTS) => (
+  const renderAccountGroup = (title: string, accountList: typeof INVENTORY_ACCOUNTS) => (
     <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
       <CardContent className="p-0">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-              {title}
-            </div>
-            <Tooltip content={description} className="inline-flex">
-              <InfoIcon className="h-3.5 w-3.5 text-slate-400" />
-            </Tooltip>
-          </div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</div>
         </div>
 
         <div className="overflow-x-auto">
@@ -720,7 +652,6 @@ function AccountsSection({
                   accounts={accounts}
                   onChange={(id) => updateAccount(acc.key, id)}
                   type={acc.type}
-                  tip={acc.tip}
                 />
               ))}
             </TableBody>
@@ -735,99 +666,14 @@ function AccountsSection({
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Select your existing QBO <span className="font-medium text-slate-600 dark:text-slate-300">parent accounts</span>. Plutus will create brand sub-accounts under each (e.g., &quot;Manufacturing - US-Dust Sheets&quot;).
+          Select your QBO parent accounts. Plutus creates brand sub-accounts under each.
         </p>
       </div>
 
-      <Card className="border-slate-200/70 dark:border-white/10">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
-              <InfoIcon className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-white">Prerequisite</div>
-              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Run the Link My Books Accounts &amp; Taxes wizard first so the base Amazon accounts exist in QBO. Then map those parent accounts here.
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="overflow-hidden border-slate-200/70 dark:border-white/10">
-        <CardContent className="relative p-0">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(26rem_18rem_at_10%_0%,rgba(0,194,185,0.18),transparent_60%),radial-gradient(22rem_18rem_at_90%_110%,rgba(255,122,62,0.14),transparent_55%)] dark:bg-[radial-gradient(26rem_18rem_at_10%_0%,rgba(0,194,185,0.22),transparent_60%),radial-gradient(22rem_18rem_at_90%_110%,rgba(255,122,62,0.18),transparent_55%)]"
-          />
-          <div className="relative p-5 sm:p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-slate-200/60 text-slate-700 shadow-sm backdrop-blur dark:bg-white/5 dark:ring-white/10 dark:text-slate-200">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h8" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v8" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Auto-map from QBO</div>
-                <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Plutus can pre-fill parent account selections using common Link My Books defaults found in your Chart of Accounts.
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Suggested</div>
-                    <div className="mt-0.5 font-semibold">
-                      {suggestedCount}/{ALL_ACCOUNTS.length}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Fillable</div>
-                    <div className="mt-0.5 font-semibold">{suggestedFillableKeys.length}</div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Mapped</div>
-                    <div className="mt-0.5 font-semibold">
-                      {mappedCount}/{ALL_ACCOUNTS.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                  <Button
-                    onClick={applyAutoFill}
-                    disabled={suggestedFillableKeys.length === 0}
-                    className="rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
-                  >
-                    Auto-fill {suggestedFillableKeys.length} field{suggestedFillableKeys.length === 1 ? '' : 's'}
-                  </Button>
-                  <Button variant="outline" className="rounded-xl" onClick={() => setAutoFillApplied(null)}>
-                    Dismiss
-                  </Button>
-                </div>
-
-                {autoFillApplied && (
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                    Auto-filled {autoFillApplied.appliedCount} field{autoFillApplied.appliedCount === 1 ? '' : 's'}.
-                    Review the selections, then create your brand sub-accounts.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-4">
-        {renderAccountGroup(
-          'Inventory Asset',
-          'For most setups, select your QBO "Inventory Asset" parent for all 4 rows. Plutus creates sub-accounts like "Inv Manufacturing - US-Dust Sheets" under it.',
-          INVENTORY_ACCOUNTS,
-        )}
-        {renderAccountGroup('Cost of Goods Sold', 'Select parent accounts for COGS sub-accounts. Plutus posts here when inventory is sold.', COGS_ACCOUNTS)}
-        {renderAccountGroup('Revenue & Fees (LMB)', 'Select LMB parent accounts. Plutus creates brand sub-accounts for fee allocation.', LMB_ACCOUNTS)}
+        {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
+        {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
+        {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
       </div>
 
       {error && (
@@ -1309,7 +1155,6 @@ export default function SetupPage() {
                   {state.section === 'accounts' && (
                     <AccountsSection
                       isQboConnected={connectionStatus?.connected === true}
-                      onNavigateToSection={(section) => saveState({ section })}
                       accounts={accounts}
                       accountMappings={state.accountMappings}
                       onAccountMappingsChange={saveAccountMappings}
