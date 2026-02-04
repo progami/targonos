@@ -15,7 +15,6 @@
   flex-direction: column;
   align-items: stretch;
   position: relative;
-  overflow: hidden;
 }
 
 .container::before {
@@ -36,8 +35,9 @@
   border-bottom: 1px solid var(--border-muted);
   background: rgba(3, 29, 47, 0.72);
   backdrop-filter: blur(16px);
-  position: relative;
-  z-index: 1;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .header {
@@ -120,9 +120,6 @@
   gap: 6px;
   position: relative;
   z-index: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .accessError {
