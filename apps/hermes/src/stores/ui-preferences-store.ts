@@ -84,11 +84,27 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
     }),
     {
       name: STORAGE_KEY,
+      version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         orders: state.orders,
         insights: state.insights,
       }),
+      merge: (persisted, current) => {
+        const raw = persisted as { state?: unknown } | null;
+        const persistedState = raw && typeof raw === "object" && "state" in raw ? (raw as any).state : null;
+
+        const orders = {
+          ...DEFAULT_ORDERS,
+          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).orders : null),
+        };
+        const insights = {
+          ...DEFAULT_INSIGHTS,
+          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).insights : null),
+        };
+
+        return { ...current, ...(persistedState as any), orders, insights };
+      },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
