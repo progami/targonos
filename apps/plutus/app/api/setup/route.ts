@@ -39,8 +39,6 @@ export async function GET() {
             cogsFreight: config.cogsFreight,
             cogsDuty: config.cogsDuty,
             cogsMfgAccessories: config.cogsMfgAccessories,
-            cogsLandFreight: config.cogsLandFreight,
-            cogsStorage3pl: config.cogsStorage3pl,
             cogsShrinkage: config.cogsShrinkage,
             warehousing3pl: config.warehousing3pl,
             warehousingAmazonFc: config.warehousingAmazonFc,
