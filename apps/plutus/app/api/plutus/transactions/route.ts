@@ -17,6 +17,8 @@ import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/co
 
 const logger = createLogger({ name: 'plutus-transactions' });
 
+class RequestValidationError extends Error {}
+
 function shouldUseSecureCookies(req: NextRequest): boolean {
   let isHttps = req.nextUrl.protocol === 'https:';
   if (!isHttps) {
@@ -56,7 +58,15 @@ type TransactionRow = {
 
 function requireTransactionType(raw: string | null): TransactionTypeParam {
   if (raw === 'journalEntry' || raw === 'bill' || raw === 'purchase') return raw;
-  throw new Error('Invalid transaction type');
+  throw new RequestValidationError('Invalid transaction type');
+}
+
+function requirePositiveInt(raw: string | null, fallback: number, label: string): number {
+  const value = raw === null ? fallback : Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 1) {
+    throw new RequestValidationError(`Invalid ${label}`);
+  }
+  return value;
 }
 
 function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
@@ -198,8 +208,11 @@ export async function GET(req: NextRequest) {
 
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
-    const page = parseInt(rawPage === null ? '1' : rawPage, 10);
-    const pageSize = parseInt(rawPageSize === null ? '25' : rawPageSize, 10);
+    const page = requirePositiveInt(rawPage, 1, 'page');
+    const pageSize = requirePositiveInt(rawPageSize, 25, 'pageSize');
+    if (pageSize > 500) {
+      throw new RequestValidationError('Invalid pageSize (max 500)');
+    }
     const startPosition = (page - 1) * pageSize + 1;
 
     let activeConnection = connection;
@@ -275,6 +288,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
+    if (error instanceof RequestValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     logger.error('Failed to fetch transactions', error);
     return NextResponse.json(
       {
@@ -285,4 +302,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-
