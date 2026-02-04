@@ -8,11 +8,13 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import {
-  ChevronDown,
-  ChevronRight,
   FileText,
+  Info,
+  Package2,
   Plus,
+  RefreshCw,
   Trash2,
   Truck,
 } from '@/lib/lucide-icons'
@@ -33,6 +35,8 @@ import {
 
 type DestinationType = 'AMAZON_FBA' | 'CUSTOMER' | 'TRANSFER'
 
+type FulfillmentOrderCreateTab = 'details' | 'amazon' | 'lines' | 'freight'
+
 export default function NewFulfillmentOrderPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -47,8 +51,7 @@ export default function NewFulfillmentOrderPage() {
   // Source type selection (replaces destination type in Order Details tab)
   const [sourceType, setSourceType] = useState<DestinationType>('AMAZON_FBA')
 
-  // Collapsible freight section
-  const [freightExpanded, setFreightExpanded] = useState(false)
+  const [activeTab, setActiveTab] = useState<FulfillmentOrderCreateTab>('details')
 
   const [formData, setFormData] = useState<FormData>({
     warehouseCode: '',
@@ -122,11 +125,6 @@ export default function NewFulfillmentOrderPage() {
     setFormData(prev => ({ ...prev, destinationType: sourceType }))
   }, [sourceType])
 
-  const warehouseLabel = useMemo(() => {
-    const selected = warehouses.find(w => w.code === formData.warehouseCode)
-    return selected ? `${selected.code} — ${selected.name}` : ''
-  }, [formData.warehouseCode, warehouses])
-
   // Calculate total units for display
   const totalUnits = useMemo(() => {
     return lineItems.reduce((sum, item) => {
@@ -149,6 +147,44 @@ export default function NewFulfillmentOrderPage() {
       return sum + item.quantity * unitsPerCarton
     }, 0)
   }, [inventorySkus, lineItems, skus])
+
+  const tabIssueCounts = useMemo(() => {
+    const issues: Record<FulfillmentOrderCreateTab, number> = {
+      details: 0,
+      amazon: 0,
+      lines: 0,
+      freight: 0,
+    }
+
+    const warehouseMissing = !formData.warehouseCode.trim()
+    if (warehouseMissing) {
+      if (isAmazonFBA) {
+        issues.amazon += 1
+      } else {
+        issues.details += 1
+      }
+    }
+
+    if (!isAmazonFBA && !formData.destinationName.trim()) {
+      issues.details += 1
+    }
+
+    if (isAmazonFBA && !amazonShipment.shipmentId.trim()) {
+      issues.amazon += 1
+    }
+
+    const invalidLines = lineItems.filter(item => {
+      if (!item.skuCode.trim()) return true
+      if (!item.batchLot.trim()) return true
+      return !Number.isFinite(item.quantity) || item.quantity <= 0
+    }).length
+
+    if (invalidLines > 0) {
+      issues.lines = invalidLines
+    }
+
+    return issues
+  }, [amazonShipment.shipmentId, formData.destinationName, formData.warehouseCode, isAmazonFBA, lineItems])
 
   useEffect(() => {
     if (status === 'loading') return
@@ -308,8 +344,21 @@ export default function NewFulfillmentOrderPage() {
 
   const handleSubmit = async () => {
     try {
-      if (!formData.warehouseCode) {
+      if (isAmazonFBA && !amazonShipment.shipmentId.trim()) {
+        setActiveTab('amazon')
+        toast.error('Select an Amazon shipment')
+        return
+      }
+
+      if (!formData.warehouseCode.trim()) {
+        setActiveTab(isAmazonFBA ? 'amazon' : 'details')
         toast.error('Select a warehouse')
+        return
+      }
+
+      if (!isAmazonFBA && !formData.destinationName.trim()) {
+        setActiveTab('details')
+        toast.error('Destination name is required')
         return
       }
 
@@ -317,16 +366,19 @@ export default function NewFulfillmentOrderPage() {
         item => !item.skuCode || !item.batchLot || item.quantity <= 0
       )
       if (invalidLine) {
+        setActiveTab('lines')
         toast.error('Each line requires SKU, batch, and quantity')
         return
       }
 
       if (inventoryOptionsLoading) {
+        setActiveTab('lines')
         toast.error('Inventory options are still loading')
         return
       }
 
       if (inventorySkus.length === 0) {
+        setActiveTab('lines')
         toast.error('No on-hand inventory available for this warehouse')
         return
       }
@@ -358,55 +410,53 @@ export default function NewFulfillmentOrderPage() {
 
       const payload = {
         warehouseCode: formData.warehouseCode,
-        warehouseName: warehouseLabel || undefined,
         destinationType: formData.destinationType,
-        destinationName: formData.destinationName || undefined,
-        destinationAddress: formData.destinationAddress || undefined,
-        shippingCarrier: formData.shippingCarrier || undefined,
-        shippingMethod: formData.shippingMethod || undefined,
-        trackingNumber: formData.trackingNumber || undefined,
-        externalReference: formData.externalReference || undefined,
-        amazonShipmentId: amazonShipment.shipmentId || undefined,
-        amazonShipmentName: amazonShipment.shipmentName || undefined,
-        amazonShipmentStatus: amazonShipment.shipmentStatus || undefined,
-        amazonDestinationFulfillmentCenterId:
-          amazonShipment.destinationFulfillmentCenterId || undefined,
-        amazonLabelPrepType: amazonShipment.labelPrepType || undefined,
-        amazonBoxContentsSource: amazonShipment.boxContentsSource || undefined,
-        amazonShipFromAddress: amazonShipment.shipFromAddress ?? undefined,
-        amazonReferenceId: amazonShipment.referenceId || undefined,
-        amazonShipmentReference: amazonFreight.shipmentReference || undefined,
-        amazonShipperId: amazonFreight.shipperId || undefined,
-        amazonPickupNumber: amazonFreight.pickupNumber || undefined,
-        amazonPickupAppointmentId: amazonFreight.pickupAppointmentId || undefined,
-        amazonDeliveryAppointmentId: amazonFreight.deliveryAppointmentId || undefined,
-        amazonLoadId: amazonFreight.loadId || undefined,
-        amazonFreightBillNumber: amazonFreight.freightBillNumber || undefined,
-        amazonBillOfLadingNumber: amazonFreight.billOfLadingNumber || undefined,
-        amazonPickupWindowStart: amazonFreight.pickupWindowStart || undefined,
-        amazonPickupWindowEnd: amazonFreight.pickupWindowEnd || undefined,
-        amazonDeliveryWindowStart: amazonFreight.deliveryWindowStart || undefined,
-        amazonDeliveryWindowEnd: amazonFreight.deliveryWindowEnd || undefined,
-        amazonPickupAddress: amazonFreight.pickupAddress || undefined,
-        amazonPickupContactName: amazonFreight.pickupContactName || undefined,
-        amazonPickupContactPhone: amazonFreight.pickupContactPhone || undefined,
-        amazonDeliveryAddress: amazonFreight.deliveryAddress || undefined,
-        amazonShipmentMode: amazonFreight.shipmentMode || undefined,
-        amazonBoxCount: amazonFreight.boxCount || undefined,
-        amazonPalletCount: amazonFreight.palletCount || undefined,
-        amazonCommodityDescription: amazonFreight.commodityDescription || undefined,
-        amazonDistanceMiles: amazonFreight.distanceMiles || undefined,
-        amazonBasePrice: amazonFreight.basePrice || undefined,
-        amazonFuelSurcharge: amazonFreight.fuelSurcharge || undefined,
-        amazonTotalPrice: amazonFreight.totalPrice || undefined,
-        amazonCurrency: amazonFreight.currency || undefined,
-        notes: formData.notes || undefined,
+        destinationName: formData.destinationName,
+        destinationAddress: formData.destinationAddress,
+        shippingCarrier: formData.shippingCarrier,
+        shippingMethod: formData.shippingMethod,
+        trackingNumber: formData.trackingNumber,
+        externalReference: formData.externalReference,
+        amazonShipmentId: amazonShipment.shipmentId,
+        amazonShipmentName: amazonShipment.shipmentName,
+        amazonShipmentStatus: amazonShipment.shipmentStatus,
+        amazonDestinationFulfillmentCenterId: amazonShipment.destinationFulfillmentCenterId,
+        amazonLabelPrepType: amazonShipment.labelPrepType,
+        amazonBoxContentsSource: amazonShipment.boxContentsSource,
+        amazonShipFromAddress: amazonShipment.shipFromAddress,
+        amazonReferenceId: amazonShipment.referenceId,
+        amazonShipmentReference: amazonFreight.shipmentReference,
+        amazonShipperId: amazonFreight.shipperId,
+        amazonPickupNumber: amazonFreight.pickupNumber,
+        amazonPickupAppointmentId: amazonFreight.pickupAppointmentId,
+        amazonDeliveryAppointmentId: amazonFreight.deliveryAppointmentId,
+        amazonLoadId: amazonFreight.loadId,
+        amazonFreightBillNumber: amazonFreight.freightBillNumber,
+        amazonBillOfLadingNumber: amazonFreight.billOfLadingNumber,
+        amazonPickupWindowStart: amazonFreight.pickupWindowStart,
+        amazonPickupWindowEnd: amazonFreight.pickupWindowEnd,
+        amazonDeliveryWindowStart: amazonFreight.deliveryWindowStart,
+        amazonDeliveryWindowEnd: amazonFreight.deliveryWindowEnd,
+        amazonPickupAddress: amazonFreight.pickupAddress,
+        amazonPickupContactName: amazonFreight.pickupContactName,
+        amazonPickupContactPhone: amazonFreight.pickupContactPhone,
+        amazonDeliveryAddress: amazonFreight.deliveryAddress,
+        amazonShipmentMode: amazonFreight.shipmentMode,
+        amazonBoxCount: amazonFreight.boxCount,
+        amazonPalletCount: amazonFreight.palletCount,
+        amazonCommodityDescription: amazonFreight.commodityDescription,
+        amazonDistanceMiles: amazonFreight.distanceMiles,
+        amazonBasePrice: amazonFreight.basePrice,
+        amazonFuelSurcharge: amazonFreight.fuelSurcharge,
+        amazonTotalPrice: amazonFreight.totalPrice,
+        amazonCurrency: amazonFreight.currency,
+        notes: formData.notes,
         lines: lineItems.map(item => ({
           skuCode: item.skuCode,
-          skuDescription: item.skuDescription || undefined,
+          skuDescription: item.skuDescription,
           batchLot: item.batchLot,
           quantity: item.quantity,
-          notes: item.notes || undefined,
+          notes: item.notes,
         })),
       }
 
@@ -456,7 +506,10 @@ export default function NewFulfillmentOrderPage() {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setSourceType(type)}
+                  onClick={() => {
+                    setSourceType(type)
+                    setActiveTab(type === 'AMAZON_FBA' ? 'amazon' : 'details')
+                  }}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
                     sourceType === type
                       ? 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400 text-cyan-700 dark:text-cyan-300'
@@ -473,242 +526,338 @@ export default function NewFulfillmentOrderPage() {
             </div>
           </div>
 
-          {/* Amazon Shipment Picker (for Amazon FBA) */}
-          {isAmazonFBA && (
-            <AmazonShipmentPicker
-              amazonShipment={amazonShipment}
-              setAmazonShipment={setAmazonShipment}
-              setAmazonFreight={setAmazonFreight}
-              formData={formData}
-              setFormData={setFormData}
-              setLineItems={setLineItems}
-              skus={skus}
-              warehouses={warehouses}
-            />
-          )}
-
-          {/* Warehouse & Destination (for non-Amazon) */}
-          {!isAmazonFBA && (
-            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
-              <h3 className="text-sm font-semibold mb-4">Destination Details</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Warehouse *</label>
-                  <select
-                    value={formData.warehouseCode}
-                    onChange={e =>
-                      setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                    disabled={loading}
-                    required
-                  >
-                    <option value="">Select warehouse</option>
-                    {warehouses.map(w => (
-                      <option key={w.id} value={w.code}>
-                        {w.code} — {w.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Destination Name</label>
-                  <Input
-                    value={formData.destinationName}
-                    onChange={e =>
-                      setFormData(prev => ({ ...prev, destinationName: e.target.value }))
-                    }
-                    placeholder="Customer / Warehouse name"
-                    className="text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Shipping Carrier</label>
-                  <Input
-                    value={formData.shippingCarrier}
-                    onChange={e =>
-                      setFormData(prev => ({ ...prev, shippingCarrier: e.target.value }))
-                    }
-                    placeholder="Optional..."
-                    className="text-sm"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1.5">Destination Address</label>
-                  <Input
-                    value={formData.destinationAddress}
-                    onChange={e =>
-                      setFormData(prev => ({ ...prev, destinationAddress: e.target.value }))
-                    }
-                    placeholder="Optional address..."
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Line Items Section (always visible) */}
-          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold">Line Items</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
-                  {totalUnits > 0 && ` · ${totalUnits.toLocaleString()} units`}
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Item
-              </Button>
-            </div>
-
-            <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
-                <div className="col-span-3">SKU</div>
-                <div className="col-span-3">Batch</div>
-                <div className="col-span-3">Description</div>
-                <div className="col-span-1">Qty</div>
-                <div className="col-span-1">Units</div>
-                <div className="col-span-2">Notes</div>
-                <div className="col-span-1"></div>
-              </div>
-
-              <div className="divide-y divide-border">
-                {lineItems.map(item => {
-                  const batches = getBatchOptions(item.skuCode)
-                  let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
-                  if (!sku) {
-                    sku = skus.find(s => s.skuCode === item.skuCode)
-                  }
-                  const batch = batches.find(b => b.batchCode === item.batchLot)
-                  const unitsPerCarton = batch?.unitsPerCarton ?? sku?.unitsPerCarton ?? 1
-                  const totalItemUnits = item.quantity * unitsPerCarton
-
-                  return (
-                    <div key={item.id} className="grid grid-cols-14 gap-2 items-center p-3">
-                      <div className="col-span-3">
-                        <select
-                          value={item.skuCode}
-                          onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                          required
-                          disabled={!formData.warehouseCode || inventoryOptionsLoading}
-                        >
-                          <option value="">Select SKU</option>
-                          {inventorySkus.map(s => (
-                            <option key={s.id} value={s.skuCode}>
-                              {s.skuCode}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="col-span-3">
-                        <select
-                          value={item.batchLot}
-                          onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                          className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                          required
-                          disabled={!item.skuCode}
-                        >
-                          <option value="">Select batch</option>
-                          {batches.map(b => (
-                            <option key={b.id} value={b.batchCode}>
-                              {b.batchCode}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="col-span-3">
-                        <Input
-                          value={item.skuDescription}
-                          onChange={e => updateLineItem(item.id, 'skuDescription', e.target.value)}
-                          placeholder="Description"
-                          className="text-sm h-8"
-                        />
-                      </div>
-
-                      <div className="col-span-1">
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={e =>
-                            updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 0)
-                          }
-                          className="text-sm h-8"
-                          required
-                        />
-                      </div>
-
-                      <div className="col-span-1">
-                        <span className="text-sm text-muted-foreground">
-                          {item.skuCode && item.batchLot ? totalItemUnits.toLocaleString() : '—'}
-                        </span>
-                      </div>
-
-                      <div className="col-span-2">
-                        <Input
-                          value={item.notes}
-                          onChange={e => updateLineItem(item.id, 'notes', e.target.value)}
-                          placeholder="Notes"
-                          className="text-sm h-8"
-                        />
-                      </div>
-
-                      <div className="col-span-1 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeLineItem(item.id)}
-                          disabled={lineItems.length === 1}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Collapsible Freight Section (for Amazon FBA only) */}
-          {isAmazonFBA && (
-            <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
+          {/* Details / Amazon / Lines / Freight Tabs */}
+          <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
+            <div className="flex items-center border-b">
               <button
                 type="button"
-                onClick={() => setFreightExpanded(!freightExpanded)}
-                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => setActiveTab('details')}
+                className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'details'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Freight & Logistics</span>
-                  <Badge variant="outline" className="text-xs">
-                    Optional
-                  </Badge>
-                </div>
-                {freightExpanded ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <Info className="h-4 w-4" />
+                Details
+                {tabIssueCounts.details > 0 && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
+                {activeTab === 'details' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
-              {freightExpanded && (
-                <div className="border-t px-5 py-4">
-                  <FreightLogisticsTab
-                    amazonFreight={amazonFreight}
-                    setAmazonFreight={setAmazonFreight}
-                  />
-                </div>
+
+              {isAmazonFBA && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('amazon')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'amazon'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Amazon
+                  {tabIssueCounts.amazon > 0 && (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                  )}
+                  {activeTab === 'amazon' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('lines')}
+                className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'lines'
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Package2 className="h-4 w-4" />
+                Lines
+                <Badge variant="outline" className="text-xs ml-1">
+                  {lineItems.length}
+                </Badge>
+                {tabIssueCounts.lines > 0 && (
+                  <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                )}
+                {activeTab === 'lines' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+
+              {isAmazonFBA && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('freight')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'freight'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Truck className="h-4 w-4" />
+                  Freight
+                  <Badge variant="outline" className="text-xs ml-1">
+                    Optional
+                  </Badge>
+                  {activeTab === 'freight' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
               )}
             </div>
-          )}
+
+            <div className="p-5">
+              {activeTab === 'amazon' && isAmazonFBA && (
+                <AmazonShipmentPicker
+                  amazonShipment={amazonShipment}
+                  setAmazonShipment={setAmazonShipment}
+                  setAmazonFreight={setAmazonFreight}
+                  formData={formData}
+                  setFormData={setFormData}
+                  setLineItems={setLineItems}
+                  skus={skus}
+                  warehouses={warehouses}
+                />
+              )}
+
+              {activeTab === 'details' && (
+                <div className="space-y-4">
+                  {!isAmazonFBA && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3">Destination</h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">
+                            Warehouse *
+                            {!formData.warehouseCode.trim() && (
+                              <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                            )}
+                          </label>
+                          <select
+                            value={formData.warehouseCode}
+                            onChange={e =>
+                              setFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
+                            }
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                            disabled={loading}
+                            required
+                          >
+                            <option value="">Select warehouse</option>
+                            {warehouses.map(w => (
+                              <option key={w.id} value={w.code}>
+                                {w.code} — {w.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">
+                            Destination Name *
+                            {!formData.destinationName.trim() && (
+                              <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                            )}
+                          </label>
+                          <Input
+                            value={formData.destinationName}
+                            onChange={e =>
+                              setFormData(prev => ({ ...prev, destinationName: e.target.value }))
+                            }
+                            placeholder="Customer / warehouse name"
+                            className="text-sm"
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium mb-1.5">Destination Address</label>
+                          <Input
+                            value={formData.destinationAddress}
+                            onChange={e =>
+                              setFormData(prev => ({ ...prev, destinationAddress: e.target.value }))
+                            }
+                            placeholder="Optional"
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3">Notes</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium mb-1.5">External Reference</label>
+                        <Input
+                          value={formData.externalReference}
+                          onChange={e =>
+                            setFormData(prev => ({ ...prev, externalReference: e.target.value }))
+                          }
+                          placeholder="Optional"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-1.5">Order Notes</label>
+                        <Textarea
+                          value={formData.notes}
+                          onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                          placeholder="Optional notes…"
+                          className="min-h-[96px] text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'lines' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">Line Items</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
+                        {totalUnits > 0 ? ` · ${totalUnits.toLocaleString()} units` : ''}
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Item
+                    </Button>
+                  </div>
+
+                  <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
+                    <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
+                      <div className="col-span-3">SKU</div>
+                      <div className="col-span-3">Batch</div>
+                      <div className="col-span-3">Description</div>
+                      <div className="col-span-1">Qty</div>
+                      <div className="col-span-1">Units</div>
+                      <div className="col-span-2">Notes</div>
+                      <div className="col-span-1"></div>
+                    </div>
+
+                    <div className="divide-y divide-border">
+                      {lineItems.map(item => {
+                        const batches = getBatchOptions(item.skuCode)
+                        let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
+                        if (!sku) {
+                          sku = skus.find(s => s.skuCode === item.skuCode)
+                        }
+                        const batch = batches.find(b => b.batchCode === item.batchLot)
+                        const unitsPerCarton = batch?.unitsPerCarton ?? sku?.unitsPerCarton ?? 1
+                        const totalItemUnits = item.quantity * unitsPerCarton
+
+                        return (
+                          <div key={item.id} className="grid grid-cols-14 gap-2 items-center p-3">
+                            <div className="col-span-3">
+                              <select
+                                value={item.skuCode}
+                                onChange={e => updateLineItem(item.id, 'skuCode', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                required
+                                disabled={!formData.warehouseCode || inventoryOptionsLoading}
+                              >
+                                <option value="">Select SKU</option>
+                                {inventorySkus.map(s => (
+                                  <option key={s.id} value={s.skuCode}>
+                                    {s.skuCode}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="col-span-3">
+                              <select
+                                value={item.batchLot}
+                                onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
+                                className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                required
+                                disabled={!item.skuCode}
+                              >
+                                <option value="">Select batch</option>
+                                {batches.map(b => (
+                                  <option key={b.id} value={b.batchCode}>
+                                    {b.batchCode}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="col-span-3">
+                              <Input
+                                value={item.skuDescription}
+                                onChange={e => updateLineItem(item.id, 'skuDescription', e.target.value)}
+                                placeholder="Description"
+                                className="text-sm h-8"
+                              />
+                            </div>
+
+                            <div className="col-span-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={e => {
+                                  const parsed = Number.parseInt(e.target.value, 10)
+                                  updateLineItem(item.id, 'quantity', Number.isFinite(parsed) ? parsed : 0)
+                                }}
+                                className="text-sm h-8"
+                                required
+                              />
+                            </div>
+
+                            <div className="col-span-1">
+                              <span className="text-sm text-muted-foreground">
+                                {item.skuCode && item.batchLot ? totalItemUnits.toLocaleString() : '—'}
+                              </span>
+                            </div>
+
+                            <div className="col-span-2">
+                              <Input
+                                value={item.notes}
+                                onChange={e => updateLineItem(item.id, 'notes', e.target.value)}
+                                placeholder="Notes"
+                                className="text-sm h-8"
+                              />
+                            </div>
+
+                            <div className="col-span-1 flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeLineItem(item.id)}
+                                disabled={lineItems.length === 1}
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'freight' && isAmazonFBA && (
+                <FreightLogisticsTab
+                  amazonFreight={amazonFreight}
+                  setAmazonFreight={setAmazonFreight}
+                />
+              )}
+            </div>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-2">

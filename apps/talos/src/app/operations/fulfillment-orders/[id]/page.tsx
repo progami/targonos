@@ -21,7 +21,10 @@ import {
   ExternalLink,
   Eye,
   FileText,
+  Info,
   Loader2,
+  Package2,
+  RefreshCw,
   Truck,
   Upload,
   X,
@@ -49,6 +52,7 @@ type FulfillmentOrder = {
   destinationType: string
   destinationName: string | null
   destinationAddress: string | null
+  destinationCountry: string | null
   shippingCarrier: string | null
   shippingMethod: string | null
   trackingNumber: string | null
@@ -184,6 +188,14 @@ function formatAmazonAddress(address?: Record<string, unknown> | null) {
   return lines.length > 0 ? lines.join(', ') : '—'
 }
 
+type FulfillmentOrderDetailTab =
+  | 'details'
+  | 'amazon'
+  | 'lines'
+  | 'freight'
+  | 'documents'
+  | 'shipping'
+
 export default function FulfillmentOrderDetailPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -194,8 +206,8 @@ export default function FulfillmentOrderDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
-  // Collapsible freight section
-  const [freightExpanded, setFreightExpanded] = useState(false)
+  const [activeTab, setActiveTab] = useState<FulfillmentOrderDetailTab>('details')
+  const [freightExpanded, setFreightExpanded] = useState(true)
 
   const [shipForm, setShipForm] = useState({
     shippedDate: '',
@@ -204,6 +216,19 @@ export default function FulfillmentOrderDetailPage() {
     shippingMethod: '',
     trackingNumber: '',
   })
+
+  const [detailsForm, setDetailsForm] = useState({
+    destinationName: '',
+    destinationAddress: '',
+    destinationCountry: '',
+    externalReference: '',
+    notes: '',
+  })
+  const [detailsSaving, setDetailsSaving] = useState(false)
+
+  const [amazonShipmentIdDraft, setAmazonShipmentIdDraft] = useState('')
+  const [amazonShipmentSaving, setAmazonShipmentSaving] = useState(false)
+  const [amazonSyncing, setAmazonSyncing] = useState(false)
 
   // Amazon Freight form state
   const [amazonFreight, setAmazonFreight] = useState({
@@ -282,6 +307,14 @@ export default function FulfillmentOrderDetailPage() {
         shippingMethod: data.shippingMethod ?? '',
         trackingNumber: data.trackingNumber ?? '',
       })
+      setDetailsForm({
+        destinationName: data.destinationName ?? '',
+        destinationAddress: data.destinationAddress ?? '',
+        destinationCountry: data.destinationCountry ?? '',
+        externalReference: data.externalReference ?? '',
+        notes: data.notes ?? '',
+      })
+      setAmazonShipmentIdDraft(data.amazonShipmentId ?? '')
       setAmazonFreight({
         shipmentReference: data.amazonShipmentReference ?? '',
         shipperId: data.amazonShipperId ?? '',
@@ -384,9 +417,182 @@ export default function FulfillmentOrderDetailPage() {
   const isAmazonFBA = order?.destinationType === 'AMAZON_FBA'
   const canEdit = order?.status === 'DRAFT'
 
+  const hasBillOfLading = Boolean(documentsByKey.get('SHIPPING::bill_of_lading'))
+
+  const tabIssueCounts = useMemo(() => {
+    const issues: Record<FulfillmentOrderDetailTab, number> = {
+      details: 0,
+      amazon: 0,
+      lines: 0,
+      freight: 0,
+      documents: 0,
+      shipping: 0,
+    }
+
+    if (!order) return issues
+
+    if (!isAmazonFBA && !order.destinationName?.trim()) {
+      issues.details += 1
+    }
+
+    if (isAmazonFBA && !order.amazonShipmentId?.trim()) {
+      issues.amazon += 1
+    }
+
+    if (!order.lines || order.lines.length === 0) {
+      issues.lines += 1
+    }
+
+    if (!hasBillOfLading) {
+      issues.documents += 1
+    }
+
+    if (canEdit) {
+      if (!shipForm.shippingCarrier.trim()) {
+        issues.shipping += 1
+      }
+      if (!shipForm.shippingMethod.trim()) {
+        issues.shipping += 1
+      }
+      if (!hasBillOfLading) {
+        issues.shipping += 1
+      }
+      if (isAmazonFBA && !order.amazonShipmentId?.trim()) {
+        issues.shipping += 1
+      }
+      if (!isAmazonFBA && !order.destinationName?.trim()) {
+        issues.shipping += 1
+      }
+    }
+
+    return issues
+  }, [canEdit, hasBillOfLading, isAmazonFBA, order, shipForm.shippingCarrier, shipForm.shippingMethod])
+
+  const handleDetailsSave = async () => {
+    if (!order) return
+    try {
+      setDetailsSaving(true)
+      const payload = {
+        destinationName: detailsForm.destinationName,
+        destinationAddress: detailsForm.destinationAddress,
+        destinationCountry: detailsForm.destinationCountry,
+        externalReference: detailsForm.externalReference,
+        notes: detailsForm.notes,
+      }
+
+      const response = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        toast.error(data?.error ?? 'Failed to save details')
+        return
+      }
+
+      toast.success('Details saved')
+      setOrder(data?.data ?? null)
+    } catch (_error) {
+      toast.error('Failed to save details')
+    } finally {
+      setDetailsSaving(false)
+    }
+  }
+
+  const handleAmazonShipmentSave = async () => {
+    if (!order) return
+    if (!amazonShipmentIdDraft.trim()) {
+      toast.error('Amazon shipment ID is required')
+      return
+    }
+
+    try {
+      setAmazonShipmentSaving(true)
+      const payload = { amazonShipmentId: amazonShipmentIdDraft }
+      const response = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        toast.error(data?.error ?? 'Failed to save Amazon shipment ID')
+        return
+      }
+
+      toast.success('Amazon shipment saved')
+      setOrder(data?.data ?? null)
+    } catch (_error) {
+      toast.error('Failed to save Amazon shipment ID')
+    } finally {
+      setAmazonShipmentSaving(false)
+    }
+  }
+
+  const handleAmazonSync = async () => {
+    if (!order) return
+    if (!order.amazonShipmentId?.trim()) {
+      toast.error('Save an Amazon shipment ID first')
+      return
+    }
+
+    try {
+      setAmazonSyncing(true)
+      const response = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}/amazon-sync`, {
+        method: 'POST',
+      })
+
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        toast.error(data?.error ?? 'Failed to sync Amazon shipment')
+        return
+      }
+
+      toast.success('Amazon shipment synced')
+      setOrder(data?.data ?? null)
+    } catch (_error) {
+      toast.error('Failed to sync Amazon shipment')
+    } finally {
+      setAmazonSyncing(false)
+    }
+  }
+
   const handleShip = async () => {
     if (!order) return
     try {
+      if (isAmazonFBA && !order.amazonShipmentId?.trim()) {
+        setActiveTab('amazon')
+        toast.error('Amazon shipment ID is required')
+        return
+      }
+
+      if (!isAmazonFBA && !order.destinationName?.trim()) {
+        setActiveTab('details')
+        toast.error('Destination name is required')
+        return
+      }
+
+      if (!hasBillOfLading) {
+        setActiveTab('documents')
+        toast.error('Upload the Bill of Lading (BOL) before shipping')
+        return
+      }
+
+      if (!shipForm.shippingCarrier.trim()) {
+        setActiveTab('shipping')
+        toast.error('Shipping carrier is required')
+        return
+      }
+
+      if (!shipForm.shippingMethod.trim()) {
+        setActiveTab('shipping')
+        toast.error('Shipping method is required')
+        return
+      }
+
       setSubmitting(true)
       const payload = {
         targetStatus: 'SHIPPED',
@@ -397,9 +603,9 @@ export default function FulfillmentOrderDetailPage() {
           deliveredDate: shipForm.deliveredDate
             ? new Date(shipForm.deliveredDate).toISOString()
             : undefined,
-          shippingCarrier: shipForm.shippingCarrier || undefined,
-          shippingMethod: shipForm.shippingMethod || undefined,
-          trackingNumber: shipForm.trackingNumber || undefined,
+          shippingCarrier: shipForm.shippingCarrier,
+          shippingMethod: shipForm.shippingMethod,
+          trackingNumber: shipForm.trackingNumber,
         },
       }
 
@@ -453,31 +659,31 @@ export default function FulfillmentOrderDetailPage() {
     try {
       setAmazonSaving(true)
       const payload = {
-        amazonShipmentReference: amazonFreight.shipmentReference || null,
-        amazonShipperId: amazonFreight.shipperId || null,
-        amazonPickupNumber: amazonFreight.pickupNumber || null,
-        amazonPickupAppointmentId: amazonFreight.pickupAppointmentId || null,
-        amazonDeliveryAppointmentId: amazonFreight.deliveryAppointmentId || null,
-        amazonLoadId: amazonFreight.loadId || null,
-        amazonFreightBillNumber: amazonFreight.freightBillNumber || null,
-        amazonBillOfLadingNumber: amazonFreight.billOfLadingNumber || null,
-        amazonPickupWindowStart: amazonFreight.pickupWindowStart || null,
-        amazonPickupWindowEnd: amazonFreight.pickupWindowEnd || null,
-        amazonDeliveryWindowStart: amazonFreight.deliveryWindowStart || null,
-        amazonDeliveryWindowEnd: amazonFreight.deliveryWindowEnd || null,
-        amazonPickupAddress: amazonFreight.pickupAddress || null,
-        amazonPickupContactName: amazonFreight.pickupContactName || null,
-        amazonPickupContactPhone: amazonFreight.pickupContactPhone || null,
-        amazonDeliveryAddress: amazonFreight.deliveryAddress || null,
-        amazonShipmentMode: amazonFreight.shipmentMode || null,
-        amazonBoxCount: amazonFreight.boxCount || null,
-        amazonPalletCount: amazonFreight.palletCount || null,
-        amazonCommodityDescription: amazonFreight.commodityDescription || null,
-        amazonDistanceMiles: amazonFreight.distanceMiles || null,
-        amazonBasePrice: amazonFreight.basePrice || null,
-        amazonFuelSurcharge: amazonFreight.fuelSurcharge || null,
-        amazonTotalPrice: amazonFreight.totalPrice || null,
-        amazonCurrency: amazonFreight.currency || null,
+        amazonShipmentReference: amazonFreight.shipmentReference,
+        amazonShipperId: amazonFreight.shipperId,
+        amazonPickupNumber: amazonFreight.pickupNumber,
+        amazonPickupAppointmentId: amazonFreight.pickupAppointmentId,
+        amazonDeliveryAppointmentId: amazonFreight.deliveryAppointmentId,
+        amazonLoadId: amazonFreight.loadId,
+        amazonFreightBillNumber: amazonFreight.freightBillNumber,
+        amazonBillOfLadingNumber: amazonFreight.billOfLadingNumber,
+        amazonPickupWindowStart: amazonFreight.pickupWindowStart,
+        amazonPickupWindowEnd: amazonFreight.pickupWindowEnd,
+        amazonDeliveryWindowStart: amazonFreight.deliveryWindowStart,
+        amazonDeliveryWindowEnd: amazonFreight.deliveryWindowEnd,
+        amazonPickupAddress: amazonFreight.pickupAddress,
+        amazonPickupContactName: amazonFreight.pickupContactName,
+        amazonPickupContactPhone: amazonFreight.pickupContactPhone,
+        amazonDeliveryAddress: amazonFreight.deliveryAddress,
+        amazonShipmentMode: amazonFreight.shipmentMode,
+        amazonBoxCount: amazonFreight.boxCount,
+        amazonPalletCount: amazonFreight.palletCount,
+        amazonCommodityDescription: amazonFreight.commodityDescription,
+        amazonDistanceMiles: amazonFreight.distanceMiles,
+        amazonBasePrice: amazonFreight.basePrice,
+        amazonFuelSurcharge: amazonFreight.fuelSurcharge,
+        amazonTotalPrice: amazonFreight.totalPrice,
+        amazonCurrency: amazonFreight.currency,
       }
 
       const response = await fetchWithCSRF(`/api/fulfillment-orders/${order.id}`, {
@@ -740,81 +946,332 @@ export default function FulfillmentOrderDetailPage() {
               </div>
             </div>
 
+            {/* Workflow Tabs */}
+            <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
+              <div className="flex items-center border-b">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('details')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'details'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Info className="h-4 w-4" />
+                  Details
+                  {tabIssueCounts.details > 0 && (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                  )}
+                  {activeTab === 'details' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+
+                {isAmazonFBA && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('amazon')}
+                    className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                      activeTab === 'amazon'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Amazon
+                    {tabIssueCounts.amazon > 0 && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
+                    {activeTab === 'amazon' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('lines')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'lines'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Package2 className="h-4 w-4" />
+                  Lines
+                  <Badge variant="outline" className="text-xs ml-1">
+                    {order.lines.length}
+                  </Badge>
+                  {tabIssueCounts.lines > 0 && (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                  )}
+                  {activeTab === 'lines' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+
+                {isAmazonFBA && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('freight')}
+                    className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                      activeTab === 'freight'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Truck className="h-4 w-4" />
+                    Freight
+                    {activeTab === 'freight' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('documents')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'documents'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Documents
+                  {tabIssueCounts.documents > 0 && (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                  )}
+                  {activeTab === 'documents' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('shipping')}
+                  className={`relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
+                    activeTab === 'shipping'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Truck className="h-4 w-4" />
+                  Shipping
+                  {tabIssueCounts.shipping > 0 && (
+                    <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                  )}
+                  {activeTab === 'shipping' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Amazon Shipment Info (for Amazon FBA) - matches new page structure */}
-            {isAmazonFBA && (
+            {activeTab === 'amazon' && isAmazonFBA && (
               <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
                 <h3 className="text-sm font-semibold mb-4">Amazon Shipment</h3>
-                {order.amazonShipmentId ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-emerald-600" />
-                      <span className="font-medium text-foreground">Imported:</span>
-                      <span className="text-muted-foreground">
-                        {order.amazonShipmentId} →{' '}
-                        {order.amazonDestinationFulfillmentCenterId || 'N/A'}
-                      </span>
-                      {order.amazonShipmentName && (
-                        <span className="text-muted-foreground">({order.amazonShipmentName})</span>
-                      )}
+                <div className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1.5">
+                        Amazon Shipment ID *
+                        {!amazonShipmentIdDraft.trim() && (
+                          <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                        )}
+                      </label>
+                      <Input
+                        value={amazonShipmentIdDraft}
+                        onChange={e => setAmazonShipmentIdDraft(e.target.value)}
+                        disabled={!canEdit || amazonShipmentSaving || amazonSyncing}
+                        className="text-sm"
+                      />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-3 text-sm">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Status</div>
-                        <div className="font-medium">{order.amazonShipmentStatus || '—'}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Label Prep</div>
-                        <div className="font-medium">{order.amazonLabelPrepType || '—'}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Reference ID</div>
-                        <div className="font-medium">{order.amazonReferenceId || '—'}</div>
-                      </div>
-                    </div>
-                    {order.amazonShipFromAddress && (
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Ship From</div>
-                        <div className="text-sm text-slate-600">
-                          {formatAmazonAddress(order.amazonShipFromAddress)}
-                        </div>
-                      </div>
-                    )}
                   </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No Amazon shipment imported</div>
-                )}
-              </div>
-            )}
 
-            {/* Destination Details (for non-Amazon) - matches new page structure */}
-            {!isAmazonFBA && (
-              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
-                <h3 className="text-sm font-semibold mb-4">Destination Details</h3>
-                <div className="grid gap-4 md:grid-cols-2 text-sm">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Warehouse</div>
-                    <div className="font-medium">
-                      {order.warehouseCode} — {order.warehouseName}
+                  {canEdit && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleAmazonSync}
+                        disabled={amazonSyncing || !order.amazonShipmentId}
+                        className="gap-2"
+                      >
+                        {amazonSyncing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Syncing…
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4" />
+                            Sync from Amazon
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleAmazonShipmentSave}
+                        disabled={amazonShipmentSaving || !amazonShipmentIdDraft.trim()}
+                        className="gap-2"
+                      >
+                        {amazonShipmentSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving…
+                          </>
+                        ) : (
+                          'Save Shipment'
+                        )}
+                      </Button>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Destination Name</div>
-                    <div className="font-medium">{order.destinationName || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Shipping Carrier</div>
-                    <div className="font-medium">{order.shippingCarrier || '—'}</div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="text-xs text-muted-foreground">Destination Address</div>
-                    <div className="font-medium">{order.destinationAddress || '—'}</div>
+                  )}
+
+                  <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 p-4">
+                    {order.amazonShipmentId ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-emerald-600" />
+                          <span className="font-medium text-foreground">Imported:</span>
+                          <span className="text-muted-foreground">
+                            {order.amazonShipmentId} → {order.amazonDestinationFulfillmentCenterId ?? 'N/A'}
+                          </span>
+                          {order.amazonShipmentName ? (
+                            <span className="text-muted-foreground">({order.amazonShipmentName})</span>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-3 text-sm">
+                          <div>
+                            <div className="text-xs text-muted-foreground">Status</div>
+                            <div className="font-medium">{order.amazonShipmentStatus ?? '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Label Prep</div>
+                            <div className="font-medium">{order.amazonLabelPrepType ?? '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Reference ID</div>
+                            <div className="font-medium">{order.amazonReferenceId ?? '—'}</div>
+                          </div>
+                        </div>
+                        {order.amazonShipFromAddress ? (
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1">Ship From</div>
+                            <div className="text-sm text-slate-600">
+                              {formatAmazonAddress(order.amazonShipFromAddress)}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No Amazon shipment saved.</div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
+            {activeTab === 'details' && (
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Warehouse</div>
+                    <div className="text-sm font-medium">
+                      {order.warehouseCode} — {order.warehouseName}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Created</div>
+                    <div className="text-sm font-medium">{formatDateTimeDisplay(order.createdAt)}</div>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      Destination Name{isAmazonFBA ? '' : ' *'}
+                      {!isAmazonFBA && !detailsForm.destinationName.trim() && (
+                        <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                      )}
+                    </label>
+                    <Input
+                      value={detailsForm.destinationName}
+                      onChange={e =>
+                        setDetailsForm(prev => ({ ...prev, destinationName: e.target.value }))
+                      }
+                      disabled={!canEdit || detailsSaving}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Destination Country</label>
+                    <Input
+                      value={detailsForm.destinationCountry}
+                      onChange={e =>
+                        setDetailsForm(prev => ({ ...prev, destinationCountry: e.target.value }))
+                      }
+                      disabled={!canEdit || detailsSaving}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1.5">Destination Address</label>
+                    <Input
+                      value={detailsForm.destinationAddress}
+                      onChange={e =>
+                        setDetailsForm(prev => ({ ...prev, destinationAddress: e.target.value }))
+                      }
+                      disabled={!canEdit || detailsSaving}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1.5">External Reference</label>
+                    <Input
+                      value={detailsForm.externalReference}
+                      onChange={e =>
+                        setDetailsForm(prev => ({ ...prev, externalReference: e.target.value }))
+                      }
+                      disabled={!canEdit || detailsSaving}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1.5">Notes</label>
+                    <Textarea
+                      value={detailsForm.notes}
+                      onChange={e => setDetailsForm(prev => ({ ...prev, notes: e.target.value }))}
+                      disabled={!canEdit || detailsSaving}
+                      className="min-h-[96px] text-sm"
+                    />
+                  </div>
+                </div>
+
+                {canEdit && (
+                  <div className="flex justify-end border-t pt-4 mt-5">
+                    <Button onClick={handleDetailsSave} disabled={detailsSaving} className="gap-2">
+                      {detailsSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        'Save Details'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Line Items Section - matches new page structure */}
-            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
+            {activeTab === 'lines' && (
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Line Items</h3>
@@ -864,9 +1321,10 @@ export default function FulfillmentOrderDetailPage() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Collapsible Freight Section (for Amazon FBA) - matches new page structure */}
-            {isAmazonFBA && (
+            {activeTab === 'freight' && isAmazonFBA && (
               <div className="rounded-xl border bg-white dark:bg-slate-800 overflow-hidden">
                 <button
                   type="button"
@@ -1345,7 +1803,8 @@ export default function FulfillmentOrderDetailPage() {
             )}
 
             {/* Documents Section */}
-            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
+            {activeTab === 'documents' && (
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Documents</h3>
@@ -1451,9 +1910,11 @@ export default function FulfillmentOrderDetailPage() {
                 )}
               </div>
             </div>
+            )}
 
             {/* Shipping Section */}
-            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
+            {activeTab === 'shipping' && (
+              <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Shipping</h3>
@@ -1531,6 +1992,7 @@ export default function FulfillmentOrderDetailPage() {
                 )}
               </div>
             </div>
+            )}
           </div>
         </PageContent>
       </PageContainer>
