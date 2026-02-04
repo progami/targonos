@@ -222,6 +222,13 @@ export async function enqueueRequestReviewsForOrders(params: {
   }> = [];
 
   for (const o of params.orders) {
+    if (typeof o.orderStatus === "string") {
+      const s = o.orderStatus.trim();
+      if (s !== "Shipped" && s !== "PartiallyShipped") {
+        continue;
+      }
+    }
+
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
 
     if (expiresAt && expiresAt.getTime() <= Date.now()) {

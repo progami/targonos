@@ -60,6 +60,7 @@ const DEFAULT_INSIGHTS: InsightsPreferences = {
 
 const STORAGE_KEY = scopedStorageKey("hermes.ui-preferences");
 migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences", next: STORAGE_KEY });
+migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences:", next: STORAGE_KEY });
 
 export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
   persist(
