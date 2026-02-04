@@ -144,25 +144,6 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
     suggestions.cogsMfgAccessories = mfgAccessories.id;
   }
 
-  let landFreight = findAccountByFullyQualifiedName(accounts, {
-    fullyQualifiedName: 'Warehousing:3PL:Land Freight',
-    type: 'Cost of Goods Sold',
-  });
-  if (!landFreight) {
-    landFreight = findAccountByExactName(accounts, { name: 'Land Freight', type: 'Cost of Goods Sold' });
-  }
-  if (landFreight) {
-    suggestions.cogsLandFreight = landFreight.id;
-  }
-
-  let storage3pl = findAccountByExactName(accounts, { name: 'Storage 3PL', type: 'Cost of Goods Sold' });
-  if (!storage3pl) {
-    storage3pl = findAccountByExactName(accounts, { name: '3PL Storage', type: 'Cost of Goods Sold' });
-  }
-  if (storage3pl) {
-    suggestions.cogsStorage3pl = storage3pl.id;
-  }
-
   const warehousing3pl = findAccountByFullyQualifiedName(accounts, {
     fullyQualifiedName: 'Warehousing:3PL',
     type: 'Cost of Goods Sold',
@@ -281,8 +262,6 @@ const COGS_ACCOUNTS = [
   { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
   { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
   { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
-  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
-  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
   { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
 ];
 
