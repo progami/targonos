@@ -32,6 +32,10 @@ packages/prisma-plutus/generated/
 
 # Logs
 logs/
+!apps/hermes/src/app/logs/
+!apps/hermes/src/app/logs/**
+!apps/hermes/src/app/api/logs/
+!apps/hermes/src/app/api/logs/**
 **/logs-dev/
 *.log
 

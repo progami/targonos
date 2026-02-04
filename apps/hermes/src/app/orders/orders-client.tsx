@@ -176,6 +176,7 @@ export function OrdersClient() {
   const totalSeqRef = React.useRef(0);
 
   // Table filters
+  const filterOrderId = ordersPrefs.filterOrderId;
   const filterMarketplaceId = ordersPrefs.filterMarketplaceId;
   const filterDelivery = ordersPrefs.filterDelivery;
   const filterOrderStatus = ordersPrefs.filterOrderStatus;
@@ -221,6 +222,7 @@ export function OrdersClient() {
     try {
       const qs = new URLSearchParams();
       qs.set("connectionId", connectionId);
+      if (filterOrderId.trim().length > 0) qs.set("orderIdQuery", filterOrderId.trim());
       if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
       if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
       if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
@@ -257,6 +259,7 @@ export function OrdersClient() {
       qs.set("connectionId", connectionId);
       qs.set("limit", String(pageSize));
       if (opts.cursor) qs.set("cursor", opts.cursor);
+      if (filterOrderId.trim().length > 0) qs.set("orderIdQuery", filterOrderId.trim());
       if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
       if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
       if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
@@ -299,7 +302,7 @@ export function OrdersClient() {
     loadOrdersPage({ cursor: null, stack: [] });
     loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiHydrated, connectionId, pageSize, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
+  }, [uiHydrated, connectionId, pageSize, filterOrderId, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -511,6 +514,7 @@ export function OrdersClient() {
               onValueChange={(id) => {
                 setActiveConnectionId(id);
                 setOrdersPreferences({
+                  filterOrderId: "",
                   filterMarketplaceId: "any",
                   filterDelivery: "any",
                   filterOrderStatus: "any",
@@ -702,7 +706,7 @@ export function OrdersClient() {
               ) : null}
               <Badge variant="outline">{pageLabel}</Badge>
               <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                <SelectTrigger className="h-8 w-[96px] flex-none text-xs">
+                <SelectTrigger className="h-8 w-[96px] flex-none whitespace-nowrap text-xs">
                   <SelectValue placeholder="Rows/pg" />
                 </SelectTrigger>
                 <SelectContent>
@@ -755,7 +759,17 @@ export function OrdersClient() {
             <Table className="text-xs">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="h-9 px-3">Order</TableHead>
+                  <TableHead className="h-9 px-3">
+                    <div className="flex flex-col gap-1">
+                      <div>Order</div>
+                      <Input
+                        value={filterOrderId}
+                        onChange={(e) => setOrdersPreferences({ filterOrderId: e.target.value })}
+                        placeholder="Search…"
+                        className="h-8 w-[190px] font-mono text-xs"
+                      />
+                    </div>
+                  </TableHead>
                   <TableHead className="hidden h-9 px-3 sm:table-cell">
                     <div className="flex flex-col gap-1">
                       <div>Marketplace</div>
