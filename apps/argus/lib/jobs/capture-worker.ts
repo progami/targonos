@@ -44,7 +44,7 @@ async function claimNextJob(workerId: string) {
     WITH cte AS (
       SELECT id
       FROM "CaptureJob"
-      WHERE status = 'QUEUED' AND "scheduledAt" <= NOW()
+      WHERE status = 'QUEUED' AND "scheduledAt" <= (NOW() AT TIME ZONE 'UTC')
       ORDER BY "scheduledAt" ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1
@@ -52,11 +52,11 @@ async function claimNextJob(workerId: string) {
     UPDATE "CaptureJob"
     SET
       status = 'RUNNING',
-      "lockedAt" = NOW(),
+      "lockedAt" = (NOW() AT TIME ZONE 'UTC'),
       "lockedBy" = ${workerId},
-      "startedAt" = NOW(),
+      "startedAt" = (NOW() AT TIME ZONE 'UTC'),
       "attemptCount" = "attemptCount" + 1,
-      "updatedAt" = NOW()
+      "updatedAt" = (NOW() AT TIME ZONE 'UTC')
     FROM cte
     WHERE "CaptureJob".id = cte.id
     RETURNING "CaptureJob".id, "CaptureJob"."targetId", "CaptureJob"."attemptCount", "CaptureJob"."scheduledAt";
@@ -139,6 +139,7 @@ async function main() {
         const run = await prisma.captureRun.create({
           data: {
             targetId: target.id,
+            startedAt: now,
             finalUrl: result.finalUrl,
             contentHash: sha256Hex(stableStringify({ blocked: true, url: result.finalUrl })),
             changedFromRunId: previous?.id,
@@ -192,6 +193,7 @@ async function main() {
       const run = await prisma.captureRun.create({
         data: {
           targetId: target.id,
+          startedAt: now,
           finalUrl: result.finalUrl,
           contentHash: result.contentHash,
           rawExtracted: result.rawExtracted as Prisma.InputJsonValue,
