@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
+import { isProtectedStrategyId } from '@/lib/protected-strategies';
 import { cn } from '@/lib/utils';
 import { formatDateDisplay } from '@/lib/utils/dates';
 import { Badge } from '@/components/ui/badge';
@@ -619,10 +620,10 @@ export function StrategiesWorkspace({
                           {strategy._count.purchaseOrders}
                         </span>
                       </TableCell>
-                      <TableCell className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
-                          {isEditing ? (
-                            <>
+                    <TableCell className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1">
+                        {isEditing ? (
+                          <>
                               <button
                                 type="button"
                                 onClick={() => void handleUpdate(strategy.id)}
@@ -647,13 +648,15 @@ export function StrategiesWorkspace({
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(strategy.id)}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {isProtectedStrategyId(strategy.id) ? null : (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDelete(strategy.id)}
+                                  className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
