@@ -315,6 +315,7 @@ export interface QboQueryResponse {
 export interface FetchPurchasesOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -322,6 +323,7 @@ export interface FetchPurchasesOptions {
 export interface FetchBillsOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -368,7 +370,7 @@ export async function fetchPurchases(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   // Build query
   let query = `SELECT * FROM Purchase`;
@@ -379,6 +381,9 @@ export async function fetchPurchases(
   }
   if (endDate) {
     conditions.push(`TxnDate <= '${endDate}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${docNumberContains}%'`);
   }
 
   if (conditions.length > 0) {
@@ -454,7 +459,7 @@ export async function fetchBills(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   let query = `SELECT * FROM Bill`;
   const conditions: string[] = [];
@@ -464,6 +469,9 @@ export async function fetchBills(
   }
   if (endDate) {
     conditions.push(`TxnDate <= '${endDate}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${docNumberContains}%'`);
   }
 
   if (conditions.length > 0) {
