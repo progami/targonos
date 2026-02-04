@@ -111,15 +111,6 @@ export async function GET(req: Request) {
     }
 
     if (type === 'full') {
-      if (!currentEmployeeId) {
-        return NextResponse.json({
-          items: [],
-          currentEmployeeId: null,
-          managerChainIds: [],
-          directReportIds: [],
-        })
-      }
-
       // Get all active employees for the org chart.
       const employees = await prisma.employee.findMany({
         where: {
@@ -150,10 +141,12 @@ export async function GET(req: Request) {
         orderBy: [{ employeeNumber: 'asc' }],
       })
 
-      const managerChainIds = await getManagerChain(currentEmployeeId)
-      const directReportIds = employees
-        .filter((emp: HierarchyEmployee) => emp.reportsToId === currentEmployeeId)
-        .map((emp: HierarchyEmployee) => emp.id)
+      const managerChainIds = currentEmployeeId ? await getManagerChain(currentEmployeeId) : []
+      const directReportIds = currentEmployeeId
+        ? employees
+          .filter((emp: HierarchyEmployee) => emp.reportsToId === currentEmployeeId)
+          .map((emp: HierarchyEmployee) => emp.id)
+        : []
 
       const mappedEmployees = employees.map((emp: any) => {
         const projects: string[] = []
