@@ -114,7 +114,7 @@ const BASE_APPS: AppBase[] = [
   },
   {
     id: 'xplan',
-    name: 'xplan',
+    name: 'xPlan',
     description: 'Collaborative planning workspace for sales, operations, and finance.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-strategies'),
     category: 'Product',
@@ -137,6 +137,15 @@ const BASE_APPS: AppBase[] = [
     category: 'Account / Listing',
     devPath: '/hermes',
     devUrl: 'http://localhost:3014',
+  },
+  {
+    id: 'argus',
+    name: 'Argus',
+    description: 'Listings watcher (ASIN + search snapshots, screenshots, diffs).',
+    url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
+    category: 'Account / Listing',
+    devPath: '/argus',
+    devUrl: 'http://localhost:3016',
   },
 ]
 

@@ -11,8 +11,8 @@
   <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#00C2B9" stroke-opacity="0.2" />
 
   <!-- xplan: Bold X mark -->
-  <g fill="none" stroke="#00C2B9" stroke-width="6" stroke-linecap="round">
-    <path d="M20 20L44 44" />
-    <path d="M44 20L20 44" />
+  <g fill="none" stroke="#00C2B9" stroke-width="7" stroke-linecap="round">
+    <path d="M19 19L45 45" />
+    <path d="M45 19L19 45" />
   </g>
 </svg>
