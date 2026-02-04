@@ -992,7 +992,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   }
 
   return (
-    <div style={{ position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
