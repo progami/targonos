@@ -43,6 +43,16 @@ type Overview = {
       skipped: number;
       failed: number;
     };
+    orders: {
+      total: number;
+      shipped: number;
+      pending: number;
+      canceled: number;
+      oldestPurchaseIso: string | null;
+      newestPurchaseIso: string | null;
+      importedInRange: number;
+      withAnyDispatch: number;
+    };
   };
   series: Array<{ day: string; sent: number }>;
 };
@@ -55,6 +65,12 @@ function fmtDayShort(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   if (!Number.isFinite(d.getTime())) return day;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function fmtIsoDay(iso: string | null): string {
+  if (!iso) return "—";
+  if (iso.length >= 10) return iso.slice(0, 10);
+  return iso;
 }
 
 function SentChart({ series }: { series: Overview["series"] }) {
@@ -244,6 +260,9 @@ export function InsightsClient() {
       const sentAll = ov ? ov.summary.dispatchStateNow.sent : null;
       const sentRange = ov ? ov.summary.sentInRange : null;
       const queuedAll = ov ? ov.summary.dispatchStateNow.queued : null;
+      const shipped = ov ? ov.summary.orders.shipped : null;
+      const pending = ov ? ov.summary.orders.pending : null;
+      const canceled = ov ? ov.summary.orders.canceled : null;
       const queuedToday = ov ? (ov.queue.series[0]?.queued ?? 0) : null;
       const queuedTomorrow = ov ? (ov.queue.series[1]?.queued ?? 0) : null;
       const queuedNext7 = ov ? ov.queue.queuedTotal : null;
@@ -252,6 +271,9 @@ export function InsightsClient() {
         id: c.id,
         label: `${c.accountName} • ${c.region}`,
         active: c.id === connectionId,
+        shipped,
+        pending,
+        canceled,
         sentAll,
         sentRange,
         queuedAll,
@@ -261,6 +283,10 @@ export function InsightsClient() {
       };
     });
   }, [connections, connectionId, overview, allOverviews]);
+
+  const overviewOrderRange = overview
+    ? `${fmtIsoDay(overview.summary.orders.oldestPurchaseIso)} → ${fmtIsoDay(overview.summary.orders.newestPurchaseIso)}`
+    : null;
 
   return (
     <div className="space-y-4">
@@ -303,12 +329,14 @@ export function InsightsClient() {
           <CardContent className="p-0">
             <div className="overflow-auto">
               <Table className="text-xs">
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead>Account</TableHead>
-                    <TableHead className="text-right">Sent (all)</TableHead>
+                    <TableHead className="text-right">Sent / shipped</TableHead>
                     <TableHead className="text-right">Sent ({rangeDays}d)</TableHead>
-                    <TableHead className="text-right">Queued (all)</TableHead>
+                    <TableHead className="text-right">Queued</TableHead>
+                    <TableHead className="text-right">Pending</TableHead>
+                    <TableHead className="text-right">Canceled</TableHead>
                     <TableHead className="text-right">Queued (today)</TableHead>
                     <TableHead className="text-right">Queued (tomorrow)</TableHead>
                     <TableHead className="text-right">Queued (next 7d)</TableHead>
@@ -328,13 +356,21 @@ export function InsightsClient() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {typeof r.sentAll === "number" ? fmtInt(r.sentAll) : <span className="text-muted-foreground">—</span>}
+                        {(typeof r.sentAll === "number" && typeof r.shipped === "number")
+                          ? `${fmtInt(r.sentAll)} / ${fmtInt(r.shipped)}`
+                          : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {typeof r.sentRange === "number" ? fmtInt(r.sentRange) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {typeof r.queuedAll === "number" ? fmtInt(r.queuedAll) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.pending === "number" ? fmtInt(r.pending) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.canceled === "number" ? fmtInt(r.canceled) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {typeof r.queuedToday === "number" ? fmtInt(r.queuedToday) : <span className="text-muted-foreground">—</span>}
@@ -349,7 +385,7 @@ export function InsightsClient() {
                   ))}
                 {accountsTableRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
                       {connectionsLoading ? "Loading…" : "No accounts"}
                     </TableCell>
                   </TableRow>
@@ -369,6 +405,7 @@ export function InsightsClient() {
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-1.5">
+            {overviewOrderRange ? <Badge variant="outline">Orders {overviewOrderRange}</Badge> : null}
             <Badge variant="secondary">Sent ({rangeDays}d) {overview ? fmtInt(sentInRange) : "—"}</Badge>
             <Badge variant="outline">Queued today {overview ? fmtInt(queuedToday) : "—"}</Badge>
             <Badge variant="outline">Queued tomorrow {overview ? fmtInt(queuedTomorrow) : "—"}</Badge>
@@ -389,7 +426,7 @@ export function InsightsClient() {
             <CardContent className="p-0">
               <div className="max-h-[60vh] overflow-auto">
                 <Table className="text-xs">
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead>Day (UTC)</TableHead>
                       <TableHead className="text-right">Sent</TableHead>

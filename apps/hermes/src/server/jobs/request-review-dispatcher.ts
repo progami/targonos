@@ -287,7 +287,7 @@ async function processDispatch(row: DispatchRow, opts: {
     });
     await rescheduleDispatch({
       dispatchId: row.id,
-      delayMs: 6 * 60 * 60 * 1000, // 6 hours
+      delayMs: 24 * 60 * 60 * 1000, // 24 hours
       note: "ineligible_retry",
     });
     return;
