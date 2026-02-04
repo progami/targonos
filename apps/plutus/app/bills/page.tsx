@@ -73,6 +73,23 @@ function getManufacturingLineCompliance(lineDescription: string | undefined): Co
   return match ? 'compliant' : 'partial';
 }
 
+function isManufacturingInventoryLine(accountName: string | undefined): boolean {
+  if (!accountName) return false;
+
+  let leaf = accountName;
+  if (accountName.includes(':')) {
+    const parts = accountName.split(':');
+    leaf = parts[parts.length - 1];
+  }
+
+  let normalized = leaf.trim().toLowerCase();
+  if (normalized.startsWith('inv ')) {
+    normalized = normalized.slice('inv '.length).trimStart();
+  }
+
+  return normalized.startsWith('manufacturing');
+}
+
 function getBillCompliance(bill: Bill): ComplianceStatus {
   const memoStatus = getMemoCompliance(bill.memo);
 
@@ -80,9 +97,7 @@ function getBillCompliance(bill: Bill): ComplianceStatus {
     return 'non-compliant';
   }
 
-  const manufacturingLines = bill.lineItems.filter((line) =>
-    line.account?.toLowerCase().includes('inv manufacturing'),
-  );
+  const manufacturingLines = bill.lineItems.filter((line) => isManufacturingInventoryLine(line.account));
 
   if (manufacturingLines.length === 0) {
     return memoStatus;
