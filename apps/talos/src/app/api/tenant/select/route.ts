@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import {
   TenantCode,
+  TENANT_CODES,
   isValidTenantCode,
   TENANT_COOKIE_NAME,
   TENANT_COOKIE_MAX_AGE,
@@ -14,10 +15,27 @@ import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
 
 export const dynamic = 'force-dynamic'
 
+async function userExistsInOtherTenant(email: string, tenantCode: TenantCode): Promise<boolean> {
+  for (const otherTenantCode of TENANT_CODES) {
+    if (otherTenantCode === tenantCode) continue
+    const prisma = await getTenantPrismaClient(otherTenantCode)
+    const user = await prisma.user.findFirst({
+      where: { email },
+      select: { id: true },
+    })
+    if (user) {
+      return true
+    }
+  }
+
+  return false
+}
+
 /**
  * Ensure an active user exists in the specified tenant database.
  * - If the user record exists but is inactive, returns false.
- * - If the user record does not exist, provisions a default staff user and returns true.
+ * - If the user record does not exist, provisions a default staff user (only if
+ *   the email is not already provisioned in a different tenant).
  */
 async function ensureActiveUserInTenant(email: string, fullName: string, tenantCode: TenantCode): Promise<boolean> {
   const prisma = await getTenantPrismaClient(tenantCode)
@@ -29,6 +47,10 @@ async function ensureActiveUserInTenant(email: string, fullName: string, tenantC
 
   if (existing) {
     return existing.isActive
+  }
+
+  if (await userExistsInOtherTenant(email, tenantCode)) {
+    return false
   }
 
   await prisma.user.create({
