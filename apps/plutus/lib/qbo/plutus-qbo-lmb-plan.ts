@@ -133,10 +133,10 @@ export async function ensurePlutusQboLmbPlanAccounts(
   // Resolve all parent accounts from mappings
   const parents = {
     // Inventory
-    invManufacturing: requireAccountById(accounts, mappings.invManufacturing, 'Inv Manufacturing'),
-    invFreight: requireAccountById(accounts, mappings.invFreight, 'Inv Freight'),
-    invDuty: requireAccountById(accounts, mappings.invDuty, 'Inv Duty'),
-    invMfgAccessories: requireAccountById(accounts, mappings.invMfgAccessories, 'Inv Mfg Accessories'),
+    invManufacturing: requireAccountById(accounts, mappings.invManufacturing, 'Inventory Manufacturing'),
+    invFreight: requireAccountById(accounts, mappings.invFreight, 'Inventory Freight'),
+    invDuty: requireAccountById(accounts, mappings.invDuty, 'Inventory Duty'),
+    invMfgAccessories: requireAccountById(accounts, mappings.invMfgAccessories, 'Inventory Mfg Accessories'),
 
     // COGS
     cogsManufacturing: requireAccountById(accounts, mappings.cogsManufacturing, 'COGS Manufacturing'),
@@ -164,10 +164,10 @@ export async function ensurePlutusQboLmbPlanAccounts(
 
   const accountSpecs: Array<{ label: string; parent: QboAccount }> = [
     // Inventory (asset)
-    { label: 'Inv Manufacturing', parent: parents.invManufacturing },
-    { label: 'Inv Freight', parent: parents.invFreight },
-    { label: 'Inv Duty', parent: parents.invDuty },
-    { label: 'Inv Mfg Accessories', parent: parents.invMfgAccessories },
+    { label: 'Manufacturing', parent: parents.invManufacturing },
+    { label: 'Freight', parent: parents.invFreight },
+    { label: 'Duty', parent: parents.invDuty },
+    { label: 'Mfg Accessories', parent: parents.invMfgAccessories },
 
     // COGS
     { label: 'Manufacturing', parent: parents.cogsManufacturing },
