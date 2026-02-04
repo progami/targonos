@@ -8,6 +8,17 @@ import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-create-plutus-lmb-accounts' });
 
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  let isHttps = request.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
+
 export async function POST(request: NextRequest) {
   const requestId = randomUUID();
 
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest) {
       });
       cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldUseSecureCookies(request),
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 100,
         path: '/',

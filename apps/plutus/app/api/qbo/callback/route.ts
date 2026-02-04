@@ -8,6 +8,17 @@ import type { QboConnection } from '@/lib/qbo/api';
 
 const logger = createLogger({ name: 'qbo-callback' });
 
+function shouldUseSecureCookies(req: NextRequest): boolean {
+  let isHttps = req.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = req.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
+
 const CallbackSchema = z.object({
   code: z.string().min(1),
   realmId: z.string().min(1),
@@ -64,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     cookieStore.set('qbo_connection', JSON.stringify(connection), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: shouldUseSecureCookies(req),
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 100, // 100 days (refresh token lifetime)
       path: '/',
