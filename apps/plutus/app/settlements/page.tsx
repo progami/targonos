@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SplitButton } from '@/components/ui/split-button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useSettlementsListStore } from '@/lib/store/settlements';
@@ -143,6 +145,7 @@ async function fetchSettlements({
 }
 
 export default function SettlementsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
@@ -191,12 +194,10 @@ export default function SettlementsPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Settlements"
-          kicker="Link My Books"
           variant="accent"
-          description="Plutus polls QuickBooks for LMB-posted settlement journal entries and tracks which ones you've processed."
           actions={
             <>
               <Button
@@ -206,9 +207,6 @@ export default function SettlementsPage() {
                 }}
               >
                 Refresh
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/setup">Setup</Link>
               </Button>
             </>
           }
@@ -289,6 +287,7 @@ export default function SettlementsPage() {
                       <TableHead>Settlement Total</TableHead>
                       <TableHead>LMB</TableHead>
                       <TableHead>Plutus</TableHead>
+                      <TableHead className="w-32 text-right"> </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -355,6 +354,18 @@ export default function SettlementsPage() {
                           </TableCell>
                           <TableCell className="align-top">
                             <PlutusPill status={s.plutusStatus} />
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <SplitButton
+                              onClick={() => router.push(`/settlements/${s.id}`)}
+                              dropdownItems={[
+                                { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
+                                { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
+                                { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                              ]}
+                            >
+                              Action
+                            </SplitButton>
                           </TableCell>
                         </TableRow>
                       ))}

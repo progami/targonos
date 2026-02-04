@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import type { QboConnection } from '@/lib/qbo/api';
+import { QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementPreview } from '@/lib/plutus/settlement-processing';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -88,6 +88,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const status = computed.preview.blocks.length === 0 ? 200 : 400;
     return NextResponse.json(computed.preview, { status });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to compute settlement preview', { error });
     return NextResponse.json(
       {

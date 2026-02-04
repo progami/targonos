@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import type { QboConnection } from '@/lib/qbo/api';
+import { QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -91,6 +91,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json(processed.result, { status: 200 });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to process settlement', { error });
     return NextResponse.json(
       {

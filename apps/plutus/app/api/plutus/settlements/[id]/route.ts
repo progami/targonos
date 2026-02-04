@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import type { QboAccount, QboConnection } from '@/lib/qbo/api';
-import { fetchAccounts, fetchJournalEntryById } from '@/lib/qbo/api';
+import { fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementTotalFromJournalEntry, parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
 import { db } from '@/lib/db';
@@ -132,6 +132,10 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         : null,
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to fetch settlement detail', { error });
     return NextResponse.json(
       {
