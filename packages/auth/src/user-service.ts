@@ -159,7 +159,7 @@ export async function provisionPortalUser(options: {
 
   const prisma = getPortalAuthPrisma()
 
-  await prisma.$transaction(async (tx) => {
+  const provisioned = await prisma.$transaction(async (tx) => {
     const existingUser = await tx.user.findUnique({
       where: { email: normalizedEmail },
       select: { id: true },
@@ -213,14 +213,20 @@ export async function provisionPortalUser(options: {
         create: { userId, appId: appRecord.id, departments: app.departments },
       })
     }
+
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: userSelect,
+    }) as PortalUserRecord | null
+
+    if (!user) {
+      throw new Error('PortalUserMissing')
+    }
+
+    return user
   })
 
-  const user = await getUserByEmail(normalizedEmail)
-  if (!user) {
-    throw new Error('PortalUserMissing')
-  }
-
-  return user
+  return mapPortalUser(provisioned)
 }
 
 export async function authenticateWithPortalDirectory(input: unknown): Promise<AuthenticatedUser | null> {
