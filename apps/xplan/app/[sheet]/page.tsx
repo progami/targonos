@@ -108,6 +108,8 @@ import { weekLabelForWeekNumber, type PlanningWeekConfig } from '@/lib/calculati
 import { formatDateDisplay, toIsoDate } from '@/lib/utils/dates';
 import {
   sellerboardReportTimeZoneForRegion,
+  currencyForRegion,
+  localeForRegion,
   parseStrategyRegion,
   weekStartsOnForRegion,
   type StrategyRegion,
@@ -171,9 +173,9 @@ function formatPercentDecimal(value: number | null | undefined, fractionDigits =
   return Number(value).toFixed(fractionDigits);
 }
 
-function formatCurrency(value: number | null | undefined): string {
+function formatCurrency(value: number | null | undefined, formatter: Intl.NumberFormat): string {
   if (value == null || Number.isNaN(value)) return '';
-  return `$${formatNumeric(value)}`;
+  return formatter.format(Number(value));
 }
 
 function formatPercent(value: number | null | undefined, fractionDigits = 1): string {
@@ -1315,6 +1317,7 @@ type FinancialData = Awaited<ReturnType<typeof loadFinancialData>>;
 
 async function getOpsPlanningView(
   strategyId: string,
+  strategyRegion: StrategyRegion,
   planning?: PlanningCalendar,
   activeSegment?: YearSegment | null,
 ): Promise<{
@@ -1326,6 +1329,10 @@ async function getOpsPlanningView(
   calculator: OpsPlanningCalculatorPayload;
   timelineMonths: { start: string; end: string; label: string }[];
 }> {
+  const currencyFormatter = new Intl.NumberFormat(localeForRegion(strategyRegion), {
+    style: 'currency',
+    currency: currencyForRegion(strategyRegion),
+  });
   const context = await loadOperationsContext(strategyId, planning?.calendar);
   const { rawPurchaseOrders } = context;
 
@@ -1368,9 +1375,9 @@ async function getOpsPlanningView(
     id: derived.id,
     orderCode: derived.orderCode,
     productName,
-    landedUnitCost: formatCurrency(derived.landedUnitCost),
-    poValue: formatCurrency(derived.plannedPoValue),
-    paidAmount: formatCurrency(derived.paidAmount),
+    landedUnitCost: formatCurrency(derived.landedUnitCost, currencyFormatter),
+    poValue: formatCurrency(derived.plannedPoValue, currencyFormatter),
+    paidAmount: formatCurrency(derived.paidAmount, currencyFormatter),
     paidPercent: formatPercent(derived.paidPercent),
     productionStart: formatDate(derived.productionStart),
     productionComplete: formatDate(derived.productionComplete),
@@ -2369,7 +2376,12 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
     }
     case '3-ops-planning': {
       const activeStrategyId = requireStrategyId();
-      const view = await getOpsPlanningView(activeStrategyId, planningCalendar, activeSegment);
+      const view = await getOpsPlanningView(
+        activeStrategyId,
+        strategyRegion,
+        planningCalendar,
+        activeSegment,
+      );
       tabularContent = (
         <OpsPlanningWorkspace
           strategyId={activeStrategyId}
