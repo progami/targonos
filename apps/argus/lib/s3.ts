@@ -6,9 +6,9 @@ type GlobalWithS3 = typeof globalThis & {
 
 const globalForS3 = globalThis as GlobalWithS3;
 
-export const s3 = globalForS3.__argusS3 ?? new S3Service();
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForS3.__argusS3 = s3;
+export function getS3(): S3Service {
+  if (!globalForS3.__argusS3) {
+    globalForS3.__argusS3 = new S3Service();
+  }
+  return globalForS3.__argusS3;
 }
-

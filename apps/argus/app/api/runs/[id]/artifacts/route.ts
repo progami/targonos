@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withArgusAuth } from '@/lib/api/auth';
 import { prisma } from '@/lib/prisma';
-import { s3 } from '@/lib/s3';
+import { getS3 } from '@/lib/s3';
 import { z } from 'zod';
 
 const paramsSchema = z.object({
@@ -25,6 +25,7 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
+  const s3 = getS3();
   const artifacts = await Promise.all(
     run.artifacts.map(async (artifact) => {
       const url = await s3.getPresignedUrl(artifact.s3Key, 'get', { expiresIn: 3600 });

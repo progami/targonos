@@ -1,6 +1,6 @@
 import { Prisma } from '@targon/prisma-argus';
 import { prisma } from '@/lib/prisma';
-import { s3 } from '@/lib/s3';
+import { getS3 } from '@/lib/s3';
 import { requireEnv } from '@/lib/env';
 import { loadEnvFromFiles } from './load-env';
 import { launchDefaultBrowser, captureTarget } from '@/lib/capture/run';
@@ -101,6 +101,7 @@ async function main() {
 
   const workerId = getWorkerId();
   const argusEnv = getArgusEnv();
+  const s3 = getS3();
 
   // eslint-disable-next-line no-console
   console.log('[argus-capture] starting', { workerId, argusEnv });
