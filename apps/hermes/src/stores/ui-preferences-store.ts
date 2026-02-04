@@ -92,6 +92,127 @@ const DEFAULT_MESSAGING: MessagingPreferences = {
   historyState: "any",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function parsePageSize(raw: unknown): OrdersPreferences["pageSize"] {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_ORDERS.pageSize;
+  const n = Math.trunc(raw);
+  if (n === 25) return 25;
+  if (n === 50) return 50;
+  if (n === 100) return 100;
+  if (n === 200) return 200;
+  return DEFAULT_ORDERS.pageSize;
+}
+
+function parseOrdersPreferences(raw: unknown): OrdersPreferences {
+  const v = isRecord(raw) ? raw : {};
+
+  const filterDeliveryRaw = v.filterDelivery;
+  const filterDelivery: OrdersPreferences["filterDelivery"] =
+    filterDeliveryRaw === "any" || filterDeliveryRaw === "has" || filterDeliveryRaw === "missing"
+      ? filterDeliveryRaw
+      : DEFAULT_ORDERS.filterDelivery;
+
+  const filterReviewStateRaw = v.filterReviewState;
+  const filterReviewState: OrdersPreferences["filterReviewState"] =
+    filterReviewStateRaw === "any" ||
+    filterReviewStateRaw === "not_queued" ||
+    filterReviewStateRaw === "queued" ||
+    filterReviewStateRaw === "sending" ||
+    filterReviewStateRaw === "sent" ||
+    filterReviewStateRaw === "failed" ||
+    filterReviewStateRaw === "skipped"
+      ? filterReviewStateRaw
+      : DEFAULT_ORDERS.filterReviewState;
+
+  return {
+    pageSize: parsePageSize(v.pageSize),
+    filterOrderId: typeof v.filterOrderId === "string" ? v.filterOrderId : DEFAULT_ORDERS.filterOrderId,
+    filterMarketplaceId:
+      typeof v.filterMarketplaceId === "string"
+        ? v.filterMarketplaceId
+        : DEFAULT_ORDERS.filterMarketplaceId,
+    filterDelivery,
+    filterOrderStatus: typeof v.filterOrderStatus === "string" ? v.filterOrderStatus : DEFAULT_ORDERS.filterOrderStatus,
+    filterReviewState,
+  };
+}
+
+function parseInsightsPreferences(raw: unknown): InsightsPreferences {
+  const v = isRecord(raw) ? raw : {};
+
+  const rangeDaysRaw = v.rangeDays;
+  const rangeDays: InsightsPreferences["rangeDays"] =
+    rangeDaysRaw === 7 || rangeDaysRaw === 30 || rangeDaysRaw === 90
+      ? rangeDaysRaw
+      : DEFAULT_INSIGHTS.rangeDays;
+
+  return { rangeDays };
+}
+
+function parseLogsPreferences(raw: unknown): LogsPreferences {
+  const v = isRecord(raw) ? raw : {};
+
+  const typeRaw = v.type;
+  const type: LogsPreferences["type"] =
+    typeRaw === "any" || typeRaw === "request_review" || typeRaw === "buyer_message"
+      ? typeRaw
+      : DEFAULT_LOGS.type;
+
+  const statusRaw = v.status;
+  const status: LogsPreferences["status"] =
+    statusRaw === "any" ||
+    statusRaw === "sent" ||
+    statusRaw === "ineligible" ||
+    statusRaw === "throttled" ||
+    statusRaw === "failed"
+      ? statusRaw
+      : DEFAULT_LOGS.status;
+
+  return {
+    type,
+    status,
+    orderIdQuery: typeof v.orderIdQuery === "string" ? v.orderIdQuery : DEFAULT_LOGS.orderIdQuery,
+  };
+}
+
+function parseMessagingPreferences(raw: unknown): MessagingPreferences {
+  const v = isRecord(raw) ? raw : {};
+
+  const tabRaw = v.tab;
+  const tab: MessagingPreferences["tab"] =
+    tabRaw === "orders" || tabRaw === "history" ? tabRaw : DEFAULT_MESSAGING.tab;
+
+  const historyStateRaw = v.historyState;
+  const historyState: MessagingPreferences["historyState"] =
+    historyStateRaw === "any" ||
+    historyStateRaw === "queued" ||
+    historyStateRaw === "sending" ||
+    historyStateRaw === "sent" ||
+    historyStateRaw === "failed" ||
+    historyStateRaw === "skipped"
+      ? historyStateRaw
+      : DEFAULT_MESSAGING.historyState;
+
+  const legacyOrderIdQuery = typeof v.orderIdQuery === "string" ? v.orderIdQuery : null;
+  const legacyHistoryOrderIdQuery = typeof v.historyOrderQuery === "string" ? v.historyOrderQuery : null;
+
+  return {
+    tab,
+    ordersOrderIdQuery:
+      typeof v.ordersOrderIdQuery === "string"
+        ? v.ordersOrderIdQuery
+        : legacyOrderIdQuery ?? DEFAULT_MESSAGING.ordersOrderIdQuery,
+    historyOrderIdQuery:
+      typeof v.historyOrderIdQuery === "string"
+        ? v.historyOrderIdQuery
+        : legacyHistoryOrderIdQuery ?? DEFAULT_MESSAGING.historyOrderIdQuery,
+    historyState,
+  };
+}
+
 const STORAGE_KEY = scopedStorageKey("hermes.ui-preferences");
 migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences", next: STORAGE_KEY });
 migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences:", next: STORAGE_KEY });
@@ -137,25 +258,14 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
       merge: (persisted, current) => {
         const raw = persisted as { state?: unknown } | null;
         const persistedState = raw && typeof raw === "object" && "state" in raw ? (raw as any).state : null;
+        const persistedObj = isRecord(persistedState) ? persistedState : {};
 
-        const orders = {
-          ...DEFAULT_ORDERS,
-          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).orders : null),
-        };
-        const insights = {
-          ...DEFAULT_INSIGHTS,
-          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).insights : null),
-        };
-        const logs = {
-          ...DEFAULT_LOGS,
-          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).logs : null),
-        };
-        const messaging = {
-          ...DEFAULT_MESSAGING,
-          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).messaging : null),
-        };
+        const orders = parseOrdersPreferences(persistedObj.orders);
+        const insights = parseInsightsPreferences(persistedObj.insights);
+        const logs = parseLogsPreferences(persistedObj.logs);
+        const messaging = parseMessagingPreferences(persistedObj.messaging);
 
-        return { ...current, ...(persistedState as any), orders, insights, logs, messaging };
+        return { ...current, orders, insights, logs, messaging };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
