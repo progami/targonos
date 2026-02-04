@@ -161,7 +161,7 @@ function formatNumberDisplay(value: number | null | undefined, options?: { maxim
 
 type TableColumn = {
   key: string
-  header: string
+  header: ReactNode
   align?: 'left' | 'center' | 'right'
   thClassName?: string
   tdClassName?: string
@@ -244,6 +244,12 @@ export function PurchaseOrdersPanel({
     fetchOrders()
   }, [fetchOrders])
 
+  useEffect(() => {
+    if (statusFilter !== 'WAREHOUSE') {
+      setReceiveTypeFilter(FILTER_ALL)
+    }
+  }, [statusFilter])
+
   // Count orders by new 5-stage statuses
   const statusCounts = useMemo(() => {
     return orders.reduce(
@@ -284,16 +290,30 @@ export function PurchaseOrdersPanel({
       .map(order => (typeof order.counterpartyName === 'string' ? order.counterpartyName.trim() : ''))
       .filter(name => name.length > 0)
 
+    if (supplierFilter !== FILTER_ALL) {
+      const trimmed = supplierFilter.trim()
+      if (trimmed.length > 0) {
+        values.push(trimmed)
+      }
+    }
+
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
-  }, [visibleOrders])
+  }, [supplierFilter, visibleOrders])
 
   const receiveTypeOptions = useMemo(() => {
     const values = visibleOrders
       .map(order => (typeof order.receiveType === 'string' ? order.receiveType.trim() : ''))
       .filter(name => name.length > 0)
 
+    if (receiveTypeFilter !== FILTER_ALL) {
+      const trimmed = receiveTypeFilter.trim()
+      if (trimmed.length > 0) {
+        values.push(trimmed)
+      }
+    }
+
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
-  }, [visibleOrders])
+  }, [receiveTypeFilter, visibleOrders])
 
   const filteredOrders = useMemo(() => {
     const supplierNeedle = supplierFilter === FILTER_ALL ? '' : normalizeForMatch(supplierFilter)
@@ -315,6 +335,14 @@ export function PurchaseOrdersPanel({
     })
   }, [receiveTypeFilter, searchFilter, statusFilter, supplierFilter, visibleOrders])
 
+  const hasActiveFilters = useMemo(() => {
+    return (
+      searchFilter.trim().length > 0 ||
+      supplierFilter !== FILTER_ALL ||
+      (statusFilter === 'WAREHOUSE' && receiveTypeFilter !== FILTER_ALL)
+    )
+  }, [receiveTypeFilter, searchFilter, statusFilter, supplierFilter])
+
   const clearFilters = useCallback(() => {
     setSearchFilter('')
     setSupplierFilter(FILTER_ALL)
@@ -326,7 +354,18 @@ export function PurchaseOrdersPanel({
 
     cols.push({
       key: 'po-number',
-      header: statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
+      header: (
+        <div className="flex flex-col gap-1">
+          <div>{statusFilter === 'RFQ' ? 'RFQ #' : 'PO #'}</div>
+          <Input
+            value={searchFilter}
+            onChange={event => setSearchFilter(event.target.value)}
+            placeholder="Search…"
+            className="h-8 text-xs font-normal normal-case tracking-normal"
+          />
+        </div>
+      ),
+      thClassName: 'whitespace-normal align-top min-w-[220px]',
       tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
       render: order => (
         <Link
@@ -358,7 +397,25 @@ export function PurchaseOrdersPanel({
 
     cols.push({
       key: 'supplier',
-      header: 'Supplier',
+      header: (
+        <div className="flex flex-col gap-1">
+          <div>Supplier</div>
+          <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+            <SelectTrigger className="h-8 px-2 text-xs font-normal normal-case tracking-normal">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>All</SelectItem>
+              {supplierOptions.map(option => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ),
+      thClassName: 'whitespace-normal align-top min-w-[220px]',
       tdClassName: 'px-3 py-2 text-muted-foreground',
       render: order => (
         <span className="block max-w-[220px] truncate" title={order.counterpartyName ?? undefined}>
@@ -656,7 +713,25 @@ export function PurchaseOrdersPanel({
           },
           {
             key: 'receive-type',
-            header: 'Receive Type',
+            header: (
+              <div className="flex flex-col gap-1">
+                <div>Receive Type</div>
+                <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
+                  <SelectTrigger className="h-8 px-2 text-xs font-normal normal-case tracking-normal">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={FILTER_ALL}>All</SelectItem>
+                    {receiveTypeOptions.map(option => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ),
+            thClassName: 'whitespace-normal align-top min-w-[160px]',
             tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
             render: order => formatTextOrDash(order.receiveType),
           },
@@ -746,14 +821,22 @@ export function PurchaseOrdersPanel({
     }
 
     return cols
-  }, [statusFilter, typeFilter])
+  }, [
+    receiveTypeFilter,
+    receiveTypeOptions,
+    searchFilter,
+    statusFilter,
+    supplierFilter,
+    supplierOptions,
+    typeFilter,
+  ])
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <DataTableContainer
         title="Purchase Orders"
         headerContent={
-          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span>
               <span className="font-semibold text-foreground">{statusCounts.rfqCount}</span> RFQ
             </span>
@@ -776,70 +859,15 @@ export function PurchaseOrdersPanel({
             <span>
               <span className="font-semibold text-foreground">{statusCounts.cancelledCount}</span> Cancelled
             </span>
-          </div>
-        }
-      >
-        <div className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-4 py-3">
-          <div className="flex flex-1 flex-wrap items-end gap-3">
-            <div className="min-w-[220px] max-w-[360px] flex-1">
-              <Input
-                value={searchFilter}
-                onChange={event => setSearchFilter(event.target.value)}
-                placeholder="Search PO / RFQ #, supplier, docs…"
-              />
-            </div>
-            <div className="min-w-[220px]">
-              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={FILTER_ALL}>All suppliers</SelectItem>
-                  {supplierOptions.map(option => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {statusFilter === 'WAREHOUSE' && (
-              <div className="min-w-[220px]">
-                <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Receive Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={FILTER_ALL}>All receive types</SelectItem>
-                    {receiveTypeOptions.map(option => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {hasActiveFilters && (
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={clearFilters}>
+                Clear filters
+              </Button>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden text-sm text-muted-foreground sm:block">
-              <span className="font-semibold text-foreground">{filteredOrders.length}</span> shown
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearFilters}
-              disabled={
-                searchFilter.length === 0 &&
-                supplierFilter === FILTER_ALL &&
-                (statusFilter !== 'WAREHOUSE' || receiveTypeFilter === FILTER_ALL)
-              }
-            >
-              Clear
-            </Button>
-          </div>
-        </div>
+        }
+        className="flex-1"
+      >
         <table className="w-full table-auto text-sm">
           <DataTableHead>
             <tr className="border-b border-border">
