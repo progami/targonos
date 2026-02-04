@@ -22,13 +22,46 @@ export async function POST(request: NextRequest) {
 
     // Get brand name to ID mapping
     const brands = await db.brand.findMany();
-    const brandMap = new Map(brands.map((b: { id: string; name: string }) => [b.name, b.id]));
+    const brandMap = new Map(brands.map((b: { id: string; name: string; marketplace: string }) => [b.name, b]));
 
     // Validate all brands exist
     for (const sku of skus) {
-      if (!brandMap.has(sku.brand)) {
+      const brand = brandMap.get(sku.brand);
+      if (!brand) {
         return NextResponse.json({ error: `Brand not found: ${sku.brand}` }, { status: 400 });
       }
+    }
+
+    const normalizeSkuKey = (raw: string) => raw.trim().replace(/\s+/g, '-').toUpperCase();
+
+    const seenByBrand = new Set<string>();
+    const seenByMarketplace = new Map<string, string>();
+
+    for (const sku of skus) {
+      const brand = brandMap.get(sku.brand);
+      if (!brand) {
+        throw new Error(`Brand not found: ${sku.brand}`);
+      }
+
+      const normalizedSku = normalizeSkuKey(sku.sku);
+      const perBrandKey = `${brand.id}::${normalizedSku}`;
+      if (seenByBrand.has(perBrandKey)) {
+        return NextResponse.json(
+          { error: `Duplicate SKU mapping for brand: ${sku.brand} (${normalizedSku})` },
+          { status: 400 },
+        );
+      }
+      seenByBrand.add(perBrandKey);
+
+      const perMarketplaceKey = `${brand.marketplace}::${normalizedSku}`;
+      const existingBrand = seenByMarketplace.get(perMarketplaceKey);
+      if (existingBrand && existingBrand !== sku.brand) {
+        return NextResponse.json(
+          { error: `SKU maps to multiple brands in same marketplace: ${normalizedSku} (${existingBrand}, ${sku.brand})` },
+          { status: 400 },
+        );
+      }
+      seenByMarketplace.set(perMarketplaceKey, sku.brand);
     }
 
     // Delete all existing skus and create new ones
@@ -43,11 +76,16 @@ export async function POST(request: NextRequest) {
         const asinRaw = sku.asin;
         const asin = asinRaw === undefined || asinRaw.trim() === '' ? null : asinRaw;
 
+        const brand = brandMap.get(sku.brand);
+        if (!brand) {
+          throw new Error(`Brand not found: ${sku.brand}`);
+        }
+
         await tx.sku.create({
           data: {
             sku: sku.sku,
             productName,
-            brandId: brandMap.get(sku.brand)!,
+            brandId: brand.id,
             asin,
           },
         });
