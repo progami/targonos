@@ -1,35 +1,55 @@
 import { NextResponse } from 'next/server';
-import { withXPlanAuth } from '@/lib/api/auth';
-import { canAccessStrategy, getStrategyActor } from '@/lib/strategy-access';
-import prisma from '@/lib/prisma';
-import { syncSellerboardUkActualSales, syncSellerboardUkDashboard } from '@/lib/integrations/sellerboard';
+import {
+  safeEqual,
+  syncSellerboardUkActualSales,
+  syncSellerboardUkDashboard,
+} from '@/lib/integrations/sellerboard';
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RATE_LIMIT_PRESETS,
+} from '@/lib/api/rate-limit';
 
 export const runtime = 'nodejs';
 
-export const POST = withXPlanAuth(async (request: Request, session) => {
-  const actor = getStrategyActor(session);
+const SYNC_RATE_LIMIT = RATE_LIMIT_PRESETS.expensive;
 
-  const url = new URL(request.url);
-  const rawStrategyId = url.searchParams.get('strategyId');
-  const strategyId = rawStrategyId ? rawStrategyId.trim() : '';
-  if (!strategyId) {
-    return NextResponse.json({ error: 'Missing strategyId' }, { status: 400 });
+function extractBearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ? match[1].trim() : null;
+}
+
+function requireSyncAuth(request: Request): NextResponse | null {
+  const expected = process.env.SELLERBOARD_SYNC_TOKEN?.trim();
+  if (!expected) {
+    return NextResponse.json({ error: 'Missing SELLERBOARD_SYNC_TOKEN' }, { status: 500 });
   }
 
-  const hasAccess = await canAccessStrategy(strategyId, actor);
-  if (!hasAccess) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const provided = extractBearerToken(request.headers.get('authorization'));
+  if (!provided || !safeEqual(provided, expected)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const strategy = await prisma.strategy.findUnique({
-    where: { id: strategyId },
-    select: { region: true },
-  });
-  if (!strategy) {
-    return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
-  }
-  if (strategy.region !== 'UK') {
-    return NextResponse.json({ error: 'Strategy region mismatch' }, { status: 400 });
+  return null;
+}
+
+export const POST = async (request: Request) => {
+  const authError = requireSyncAuth(request);
+  if (authError) return authError;
+
+  const identifier = getRateLimitIdentifier(request, 'sellerboard-sync-uk');
+  const rateLimitResult = checkRateLimit(identifier, SYNC_RATE_LIMIT);
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.ceil(rateLimitResult.retryAfterMs / 1000)),
+        },
+      },
+    );
   }
 
   const ordersReportUrl = process.env.SELLERBOARD_UK_ORDERS_REPORT_URL?.trim();
@@ -54,7 +74,6 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     const actualSalesStartedAt = Date.now();
     const actualSalesResult = await syncSellerboardUkActualSales({
       reportUrl: ordersReportUrl,
-      strategyId,
     });
     const actualSales = {
       ok: true,
@@ -67,7 +86,6 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     const dashboardStartedAt = Date.now();
     const dashboardResult = await syncSellerboardUkDashboard({
       reportUrl: dashboardReportUrl,
-      strategyId,
     });
     const dashboard = {
       ok: true,
@@ -85,6 +103,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error('[POST /sellerboard/uk-sync] sync error:', error);
     return NextResponse.json({ error: message }, { status: 502 });
   }
-});
+};
