@@ -66,12 +66,15 @@ This means Hermes can be run with “at‑least once” worker semantics (retrie
 
 ## What you can do in the UI today
 
-- **Dashboard**: queue KPIs + recent dispatch activity.
+- **Insights (landing page)**: KPI snapshot + daily outcomes + recent sent order samples (for Amazon-side verification).
 - **Orders**: backfill from Orders API into the local cache; optionally enqueue review requests; browse/filter cached orders.
 - **Messaging**: fetch allowed actions for an order and send a safe buyer message; view recent message dispatches.
 - **Accounts**: view configured connections and run a lightweight SP‑API connectivity test.
-- **Insights**: basic analytics from the local DB (dispatch states, attempts, order counts).
-- **Campaigns / Experiments / Templates / Settings / Logs**: UI + basic persistence exist; campaign/experiment metadata is not yet what drives dispatch generation (dispatches can store campaign/experiment IDs, but scheduling is currently driven by the order ingest flows).
+- **Logs**: DB-backed attempt log for review requests and buyer messages.
+- **Settings**: basic UI state (more controls can be wired here as scheduling/experimentation matures).
+
+Notes:
+- Pages like Campaigns / Experiments / Templates are scaffolding; dispatch generation is currently driven by order ingest + scheduling.
 
 ---
 

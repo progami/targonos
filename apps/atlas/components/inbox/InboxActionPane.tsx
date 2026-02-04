@@ -27,38 +27,38 @@ type InboxActionPaneProps = {
 function getEntityTypeConfig(type: string) {
   const configs: Record<string, { accentColor: string; iconBgColor: string; icon: React.ReactNode; label: string }> = {
     'TASK': {
-      accentColor: 'text-violet-400',
-      iconBgColor: 'bg-violet-500',
+      accentColor: 'text-accent',
+      iconBgColor: 'bg-accent/15',
       label: 'Task',
       icon: <ClipboardCheck className="w-5 h-5" strokeWidth={2} />,
     },
     'POLICY': {
-      accentColor: 'text-indigo-400',
-      iconBgColor: 'bg-indigo-500',
+      accentColor: 'text-muted-foreground',
+      iconBgColor: 'bg-muted',
       label: 'Policy',
       icon: <FileText className="w-5 h-5" strokeWidth={2} />,
     },
     'LEAVE_REQUEST': {
-      accentColor: 'text-teal-400',
-      iconBgColor: 'bg-teal-500',
+      accentColor: 'text-accent',
+      iconBgColor: 'bg-accent/15',
       label: 'Leave Request',
       icon: <CalendarDays className="w-5 h-5" strokeWidth={2} />,
     },
     'PERFORMANCE_REVIEW': {
-      accentColor: 'text-amber-400',
-      iconBgColor: 'bg-amber-500',
+      accentColor: 'text-warning-700 dark:text-warning-300',
+      iconBgColor: 'bg-warning-100 dark:bg-warning-900/30',
       label: 'Performance Review',
       icon: <TrendingUp className="w-5 h-5" strokeWidth={2} />,
     },
     'DISCIPLINARY_ACTION': {
-      accentColor: 'text-rose-400',
-      iconBgColor: 'bg-rose-500',
+      accentColor: 'text-danger-700 dark:text-danger-300',
+      iconBgColor: 'bg-danger-100 dark:bg-danger-900/30',
       label: 'Disciplinary Action',
       icon: <AlertTriangle className="w-5 h-5" strokeWidth={2} />,
     },
   }
 
-  return configs[type] || configs['TASK']
+  return configs[type] ? configs[type] : configs['TASK']
 }
 
 function formatLeaveType(type: string): string {
@@ -145,20 +145,14 @@ function getEntityDescription(item: WorkItemDTO, entityData?: WorkItemEntityData
 
 function EmptyState() {
   return (
-    <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700">
-      <div className="text-center px-8">
-        <div className="relative mx-auto mb-6 w-20 h-20">
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 rounded-2xl rotate-6 opacity-50" />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-2xl -rotate-3" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <MousePointerClick className="w-8 h-8 text-slate-400 dark:text-slate-500" strokeWidth={1.5} />
-          </div>
+    <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-border bg-card">
+      <div className="text-center px-8 py-12">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+          <MousePointerClick className="h-6 w-6" strokeWidth={1.5} />
         </div>
-        <h3 className="text-base font-semibold text-slate-600 dark:text-slate-300">
-          Select an item
-        </h3>
-        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500 max-w-[200px] mx-auto">
-          Choose from your inbox to view details
+        <h3 className="text-base font-semibold text-foreground">Select an item</h3>
+        <p className="mt-1 text-sm text-muted-foreground max-w-[220px] mx-auto">
+          Choose from your inbox to view details.
         </p>
       </div>
     </div>
@@ -200,33 +194,33 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-      {/* Header - dark slate with colored accent circle */}
-      <div className="shrink-0 px-6 pt-5 pb-6 bg-slate-800 dark:bg-slate-900 text-white">
-        {/* Icon and breadcrumb */}
+    <div className="h-full flex flex-col rounded-xl border border-border bg-card overflow-hidden shadow-soft">
+      {/* Header */}
+      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-border bg-muted/20">
         <div className="flex items-center gap-3 mb-3">
           <div className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center text-white',
-            entityConfig.iconBgColor
+            'w-10 h-10 rounded-xl flex items-center justify-center',
+            entityConfig.iconBgColor,
+            entityConfig.accentColor,
           )}>
             {entityConfig.icon}
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-300">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className={cn('font-medium', entityConfig.accentColor)}>{item.typeLabel}</span>
-            <span className="text-slate-500">·</span>
+            <span className="text-muted-foreground/60">·</span>
             <span>{item.stageLabel}</span>
           </div>
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold leading-tight mb-3 text-white">
+        <h2 className="text-lg font-semibold leading-tight mb-3 text-foreground">
           {item.title}
         </h2>
 
         {/* Action Required badge */}
         {hasAction ? (
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500 text-sm font-medium text-white">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/15 text-sm font-medium text-accent">
+            <span className="w-2 h-2 rounded-full bg-accent" />
             Action Required
           </div>
         ) : null}
@@ -234,8 +228,8 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
 
       {/* Success feedback */}
       {showSuccess ? (
-        <div className="shrink-0 px-6 py-3 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800/50 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+        <div className="shrink-0 px-5 py-3 bg-success-50 dark:bg-success-900/15 border-b border-success-100 dark:border-success-900/30 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2 text-success-800 dark:text-success-200">
             <Check className="w-4 h-4" strokeWidth={2.5} />
             <span className="text-sm font-semibold">{successLabel} complete</span>
           </div>
@@ -243,16 +237,16 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
       ) : null}
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {/* Description */}
-        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed">
           {description}
         </p>
 
         {/* Category tag */}
         {category ? (
           <div>
-            <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">
+            <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-muted text-muted-foreground text-xs font-semibold uppercase tracking-wide">
               {category}
             </span>
           </div>
@@ -260,11 +254,11 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
 
         {/* Summary section */}
         {summary ? (
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Summary
             </p>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               {summary}
             </p>
           </div>
@@ -272,23 +266,23 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
 
         {/* Due date and Created date */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               Due Date
             </p>
             <p className={cn(
               'text-sm font-semibold',
-              item.isOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'
+              item.isOverdue ? 'text-danger-700 dark:text-danger-300' : 'text-foreground'
             )}>
               {item.dueAt ? dueLabel : 'No due date'}
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               Created
             </p>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <p className="text-sm font-semibold text-foreground">
               {formatWorkItemWhen(item.createdAt)}
             </p>
           </div>
@@ -297,7 +291,7 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
         {/* See full details link */}
         <a
           href={item.href}
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ExternalLink className="w-4 h-4" strokeWidth={2} />
           See full details
@@ -306,13 +300,9 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
 
       {/* Action button - sticky at bottom */}
       {item.primaryAction && !showSuccess ? (
-        <div className="shrink-0 p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="shrink-0 p-4 border-t border-border bg-card">
           <Button
-            className={cn(
-              'w-full h-12 text-base font-semibold rounded-xl',
-              'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100',
-              'dark:text-slate-900'
-            )}
+            className="w-full h-11 rounded-xl text-sm font-semibold"
             disabled={item.primaryAction.disabled || acting === item.primaryAction.id}
             loading={acting === item.primaryAction.id}
             onClick={() => handleAction(item.primaryAction!.id)}
