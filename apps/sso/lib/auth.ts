@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
-import { getUserByEmail, getUserEntitlements } from '@targon/auth/server'
+import { getUserByEmail, getUserEntitlements, provisionPortalUser } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -117,6 +117,14 @@ const baseAuthOptions: NextAuthConfig = {
     async signIn({ user, account, profile }) {
       if (account?.provider === 'google') {
         const email = (profile?.email || user?.email || '').toLowerCase()
+        const rawFirstName = (profile as any)?.given_name
+        const rawLastName = (profile as any)?.family_name
+        const firstName = typeof rawFirstName === 'string' && rawFirstName.trim()
+          ? rawFirstName.trim()
+          : undefined
+        const lastName = typeof rawLastName === 'string' && rawLastName.trim()
+          ? rawLastName.trim()
+          : undefined
         const emailVerified = typeof (profile as any)?.email_verified === 'boolean'
           ? Boolean((profile as any)?.email_verified)
           : typeof (profile as any)?.verified_email === 'boolean'
@@ -134,9 +142,20 @@ const baseAuthOptions: NextAuthConfig = {
           return false
         }
 
-        const portalUser = await getUserByEmail(email)
-        if (!portalUser) {
-          throw new Error('PortalUserMissing')
+        let portalUser = await getUserByEmail(email)
+        const hasTalosEntitlement = portalUser
+          ? Object.prototype.hasOwnProperty.call(portalUser.entitlements, 'talos')
+          : false
+
+        if (!portalUser || !hasTalosEntitlement) {
+          portalUser = await provisionPortalUser({
+            email,
+            firstName,
+            lastName,
+            apps: [
+              { slug: 'talos', name: 'Talos', departments: [] },
+            ],
+          })
         }
 
         ;(user as any).portalUser = portalUser
