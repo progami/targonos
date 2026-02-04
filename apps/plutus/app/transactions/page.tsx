@@ -365,9 +365,12 @@ export default function TransactionsPage() {
                           accountLabel = `Split (${uniqueAccounts.length})`;
                         }
 
-                        let typeLabel = row.type;
-                        if (row.type === 'JournalEntry') typeLabel = 'Journal Entry';
-                        if (row.type === 'Purchase') typeLabel = 'Expense';
+                        const typeLabel =
+                          row.type === 'JournalEntry'
+                            ? 'Journal Entry'
+                            : row.type === 'Purchase'
+                              ? 'Expense'
+                              : row.type;
 
                         return (
                           <Fragment key={row.id}>
