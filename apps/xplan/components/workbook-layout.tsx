@@ -426,7 +426,27 @@ export function WorkbookLayout({
                 {/* App branding - LEFT */}
                 <div className="flex items-center gap-2">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
-                    <span className="text-base font-bold text-white">x</span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      aria-hidden="true"
+                      className="text-white"
+                    >
+                      <path
+                        d="M7 7L17 17"
+                        stroke="currentColor"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M17 7L7 17"
+                        stroke="currentColor"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </div>
                   <h1 className="hidden sm:block text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
                     xplan
