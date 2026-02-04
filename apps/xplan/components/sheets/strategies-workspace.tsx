@@ -2,16 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  Plus,
-  Check,
-  X,
-  Pencil,
-  Trash2,
-  ArrowRightLeft,
-  ChevronRight,
-  Sparkles,
-} from 'lucide-react';
+import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
 import { isProtectedStrategyId } from '@/lib/protected-strategies';
@@ -93,6 +84,8 @@ export function StrategiesWorkspace({
   const [editRegion, setEditRegion] = useState<'US' | 'UK'>('US');
   const [editAssigneeId, setEditAssigneeId] = useState<string>('');
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Strategy | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [directoryConfigured, setDirectoryConfigured] = useState(true);
@@ -261,22 +254,42 @@ export function StrategiesWorkspace({
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const requestDelete = (id: string) => {
     const strategy = strategies.find((item) => item.id === id);
     if (!strategy) return;
+    setPendingDelete(strategy);
+  };
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+
+    setIsDeleting(true);
     try {
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error('Failed to delete strategy');
+
+      const data = (await response.json().catch(() => null)) as { error?: unknown } | null;
+
+      if (!response.ok) {
+        const message = typeof data?.error === 'string' ? data.error : null;
+        if (message) {
+          throw new Error(message);
+        }
+        throw new Error('Failed to delete strategy');
+      }
+
       setStrategies((prev) => prev.filter((s) => s.id !== id));
+      setPendingDelete(null);
       toast.success('Strategy deleted');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete strategy');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete strategy');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -651,7 +664,7 @@ export function StrategiesWorkspace({
                               {isProtectedStrategyId(strategy.id) ? null : (
                                 <button
                                   type="button"
-                                  onClick={() => void handleDelete(strategy.id)}
+                                  onClick={() => requestDelete(strategy.id)}
                                   className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -676,83 +689,52 @@ export function StrategiesWorkspace({
           if (!open) setPendingSwitch(null);
         }}
       >
-        <AlertDialogContent className="overflow-hidden border-0 bg-white p-0 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:bg-[#0a1f33] dark:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.5),0_0_40px_rgba(0,194,185,0.08)]">
-          {/* Decorative top gradient bar */}
-          <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-cyan-400 to-teal-400 dark:from-[#00c2b9] dark:via-[#00d5cb] dark:to-[#00e5d4]" />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch strategy?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingSwitch
+                ? selectedStrategyName
+                  ? `Switch from "${selectedStrategyName}" to "${pendingSwitch.name}"? Your data is saved automatically.`
+                  : `Switch to "${pendingSwitch.name}"? Your data is saved automatically.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSelectStrategy}>Switch</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          <div className="px-6 pb-6 pt-5">
-            <AlertDialogHeader className="space-y-4">
-              {/* Icon with animated glow */}
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 blur-md dark:from-[#00c2b9]/30 dark:to-[#00d5cb]/20" />
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 shadow-lg dark:from-[#00c2b9] dark:to-[#00a89d] dark:shadow-[0_8px_24px_rgba(0,194,185,0.3)]">
-                    <ArrowRightLeft className="h-5 w-5 text-white" aria-hidden="true" />
-                  </div>
-                </div>
-                <div>
-                  <AlertDialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    Switch strategy
-                  </AlertDialogTitle>
-                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                    Change your active planning context
-                  </p>
-                </div>
-              </div>
-
-              <AlertDialogDescription asChild>
-                <div className="space-y-4">
-                  {/* Strategy transition display */}
-                  {pendingSwitch != null && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-[#1a3a54] dark:bg-[#061828]">
-                      {selectedStrategyName ? (
-                        <div className="flex items-center gap-3">
-                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <span className="truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300">
-                              {selectedStrategyName}
-                            </span>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
-                            <span className="truncate rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800 dark:border-[#00c2b9]/40 dark:bg-[#00c2b9]/10 dark:text-cyan-300">
-                              {pendingSwitch.name}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-sm text-slate-500 dark:text-slate-400">
-                            Switching to
-                          </span>
-                          <span className="truncate rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800 dark:border-[#00c2b9]/40 dark:bg-[#00c2b9]/10 dark:text-cyan-300">
-                            {pendingSwitch.name}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Auto-save notice */}
-                  <div className="flex items-center gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-2.5 dark:bg-emerald-500/10">
-                    <Sparkles className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-                      Your data is saved automatically
-                    </span>
-                  </div>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            <AlertDialogFooter className="mt-6 flex gap-3 sm:gap-3">
-              <AlertDialogCancel className="flex-1 border-slate-300 bg-white font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]">
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={confirmSelectStrategy}
-                className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl hover:shadow-cyan-500/30 dark:from-[#00c2b9] dark:to-[#00a89d] dark:text-[#002430] dark:shadow-[#00c2b9]/25 dark:hover:from-[#00d5cb] dark:hover:to-[#00c2b9]"
-              >
-                Switch
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </div>
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete strategy?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `This will permanently delete "${pendingDelete.name}" and all its data (${pendingDelete._count.products} products, ${pendingDelete._count.purchaseOrders} purchase orders, ${pendingDelete._count.salesWeeks} sales weeks). This cannot be undone.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </section>
