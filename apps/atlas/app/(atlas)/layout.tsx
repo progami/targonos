@@ -15,6 +15,7 @@ import {
   ExclamationTriangleIcon,
   OrgChartIcon,
   UsersIcon,
+  UserPlusIcon,
   LockClosedIcon,
   FolderIcon,
   BriefcaseIcon,
@@ -82,6 +83,7 @@ const navigation: NavSection[] = [
     title: 'Management',
     items: [
       { name: 'Employees', href: '/employees', icon: UsersIcon },
+      { name: 'Hiring', href: '/hiring', icon: UserPlusIcon, requireHR: true },
       { name: 'Leaves', href: '/leave', icon: CalendarDaysIcon },
       { name: 'Reviews', href: '/performance/reviews', icon: ClipboardDocumentCheckIcon },
       { name: 'Violations', href: '/performance/violations', icon: ExclamationTriangleIcon },
