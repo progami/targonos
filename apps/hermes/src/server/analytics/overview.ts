@@ -405,9 +405,9 @@ export async function getAnalyticsOverview(params: {
     if (bucket) bucket.attemptedUnique = intOr0(r.n);
   }
 
-  // ---- Queue: upcoming scheduled sends (next N days, starting tomorrow UTC)
+  // ---- Queue: upcoming scheduled sends (next N days, starting today UTC)
   const queueDays = 7;
-  const queueFrom = startOfUtcDay(addUtcDays(to, 1));
+  const queueFrom = startOfUtcDay(to);
   const queueTo = startOfUtcDay(addUtcDays(queueFrom, queueDays));
 
   const queueSeries: AnalyticsOverview["queue"]["series"] = [];

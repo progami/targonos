@@ -25,8 +25,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hermesApiUrl } from "@/lib/base-path";
-import { formatDate } from "@/lib/time";
+import { formatDate, formatDateTime } from "@/lib/time";
 import { useConnectionsStore } from "@/stores/connections-store";
+import { useHermesUiPreferencesStore, type MessagingPreferences } from "@/stores/ui-preferences-store";
 
 type RecentOrder = {
   orderId: string;
@@ -45,6 +46,17 @@ type DispatchRow = {
   message_kind: string | null;
   state: string;
   updated_at: string;
+};
+
+type AttemptRow = {
+  id: string;
+  attemptNo: number;
+  status: "sent" | "ineligible" | "throttled" | "failed";
+  httpStatus: number | null;
+  spapiRequestId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
 };
 
 const KIND_UI: Record<
@@ -108,20 +120,50 @@ export function MessagingClient() {
     return connections[0];
   }, [connections, connectionId]);
 
-  const [orderIdQuery, setOrderIdQuery] = useState("");
+  const messagingPrefs = useHermesUiPreferencesStore((s) => s.messaging);
+  const setMessagingPreferences = useHermesUiPreferencesStore((s) => s.setMessagingPreferences);
+
+  const tab = messagingPrefs.tab;
+  const orderIdQuery = messagingPrefs.ordersOrderIdQuery;
+  const historyOrderQuery = messagingPrefs.historyOrderIdQuery;
+  const historyState = messagingPrefs.historyState;
+
   const [orders, setOrders] = useState<RecentOrder[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
 
   const [history, setHistory] = useState<DispatchRow[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  const [historyOrderQuery, setHistoryOrderQuery] = useState("");
-  const [historyState, setHistoryState] = useState<"any" | "queued" | "sending" | "sent" | "failed" | "skipped">("any");
-
   const [activeOrder, setActiveOrder] = useState<RecentOrder | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDispatch, setSelectedDispatch] = useState<DispatchRow | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsAttempts, setDetailsAttempts] = useState<AttemptRow[]>([]);
+  const [detailsAttemptsLoading, setDetailsAttemptsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!detailsOpen || !selectedDispatch) return;
+    if (!connectionId) return;
+
+    setDetailsAttemptsLoading(true);
+    setDetailsAttempts([]);
+
+    const qs = new URLSearchParams();
+    qs.set("connectionId", connectionId);
+    qs.set("dispatchId", selectedDispatch.id);
+    qs.set("limit", "50");
+
+    fetchJson<{ ok: boolean; attempts: AttemptRow[] }>(`/api/logs/attempts?${qs.toString()}`)
+      .then((d) => {
+        setDetailsAttempts(Array.isArray(d.attempts) ? d.attempts : []);
+      })
+      .catch((e: any) => {
+        toast.error(e?.message ?? "Failed to load attempts");
+      })
+      .finally(() => {
+        setDetailsAttemptsLoading(false);
+      });
+  }, [detailsOpen, selectedDispatch, connectionId]);
 
   async function refreshOrders() {
     if (!connectionId) return;
@@ -202,7 +244,10 @@ export function MessagingClient() {
         }
       />
 
-      <Tabs defaultValue="orders">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setMessagingPreferences({ tab: v as MessagingPreferences["tab"] })}
+      >
         <TabsList>
           <TabsTrigger value="orders">Orders</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
@@ -226,7 +271,7 @@ export function MessagingClient() {
                           <div>Order</div>
                           <Input
                             value={orderIdQuery}
-                            onChange={(e) => setOrderIdQuery(e.target.value)}
+                            onChange={(e) => setMessagingPreferences({ ordersOrderIdQuery: e.target.value })}
                             placeholder="Search…"
                             className="h-8 w-[220px] font-mono text-xs"
                             onKeyDown={(e) => {
@@ -300,7 +345,7 @@ export function MessagingClient() {
                           <div>Order</div>
                           <Input
                             value={historyOrderQuery}
-                            onChange={(e) => setHistoryOrderQuery(e.target.value)}
+                            onChange={(e) => setMessagingPreferences({ historyOrderIdQuery: e.target.value })}
                             placeholder="Search…"
                             className="h-8 w-[220px] font-mono text-xs"
                           />
@@ -309,7 +354,10 @@ export function MessagingClient() {
                       <TableHead>
                         <div className="flex flex-col gap-1">
                           <div>State</div>
-                          <Select value={historyState} onValueChange={(v) => setHistoryState(v as any)}>
+                          <Select
+                            value={historyState}
+                            onValueChange={(v) => setMessagingPreferences({ historyState: v as MessagingPreferences["historyState"] })}
+                          >
                             <SelectTrigger className="h-8 w-[140px] text-xs">
                               <SelectValue />
                             </SelectTrigger>
@@ -377,13 +425,53 @@ export function MessagingClient() {
             <DialogTitle>Message</DialogTitle>
           </DialogHeader>
           {selectedDispatch ? (
-            <div className="grid gap-2 text-sm">
+            <div className="grid gap-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="font-mono text-xs">{selectedDispatch.order_id}</Badge>
                 <Badge variant="outline" className="text-xs">{selectedDispatch.state}</Badge>
                 <Badge variant="outline" className="text-xs">{selectedDispatch.message_kind ?? "—"}</Badge>
               </div>
-              <div className="text-xs text-muted-foreground">Updated {formatDate(selectedDispatch.updated_at)}</div>
+              <div className="text-xs text-muted-foreground">Updated {formatDateTime(selectedDispatch.updated_at)}</div>
+
+              <div className="rounded-md border">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>At</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">HTTP</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead className="hidden md:table-cell">Message</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailsAttempts.map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(a.createdAt)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={a.status === "sent" ? "secondary" : a.status === "failed" ? "destructive" : "outline"}
+                            className="text-[10px]"
+                          >
+                            {a.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{a.httpStatus ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-[11px]">{a.errorCode ?? "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">{a.errorMessage ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+
+                    {(detailsAttemptsLoading || detailsAttempts.length === 0) ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                          {detailsAttemptsLoading ? "Loading…" : "No attempts"}
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           ) : null}
           <DialogFooter>

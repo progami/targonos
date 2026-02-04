@@ -18,6 +18,19 @@ export type InsightsPreferences = {
   rangeDays: 7 | 30 | 90;
 };
 
+export type LogsPreferences = {
+  type: "any" | "request_review" | "buyer_message";
+  status: "any" | "sent" | "ineligible" | "throttled" | "failed";
+  orderIdQuery: string;
+};
+
+export type MessagingPreferences = {
+  tab: "orders" | "history";
+  ordersOrderIdQuery: string;
+  historyOrderIdQuery: string;
+  historyState: "any" | "queued" | "sending" | "sent" | "failed" | "skipped";
+};
+
 function scopedStorageKey(key: string): string {
   if (typeof document === "undefined") return key;
   return `${key}:${getHermesBasePath()}`;
@@ -45,6 +58,12 @@ type HermesUiPreferencesState = {
 
   insights: InsightsPreferences;
   setInsightsPreferences: (next: Partial<InsightsPreferences>) => void;
+
+  logs: LogsPreferences;
+  setLogsPreferences: (next: Partial<LogsPreferences>) => void;
+
+  messaging: MessagingPreferences;
+  setMessagingPreferences: (next: Partial<MessagingPreferences>) => void;
 };
 
 const DEFAULT_ORDERS: OrdersPreferences = {
@@ -58,6 +77,19 @@ const DEFAULT_ORDERS: OrdersPreferences = {
 
 const DEFAULT_INSIGHTS: InsightsPreferences = {
   rangeDays: 30,
+};
+
+const DEFAULT_LOGS: LogsPreferences = {
+  type: "request_review",
+  status: "any",
+  orderIdQuery: "",
+};
+
+const DEFAULT_MESSAGING: MessagingPreferences = {
+  tab: "orders",
+  ordersOrderIdQuery: "",
+  historyOrderIdQuery: "",
+  historyState: "any",
 };
 
 const STORAGE_KEY = scopedStorageKey("hermes.ui-preferences");
@@ -81,6 +113,16 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
       setInsightsPreferences(next) {
         set((state) => ({ insights: { ...state.insights, ...next } }));
       },
+
+      logs: DEFAULT_LOGS,
+      setLogsPreferences(next) {
+        set((state) => ({ logs: { ...state.logs, ...next } }));
+      },
+
+      messaging: DEFAULT_MESSAGING,
+      setMessagingPreferences(next) {
+        set((state) => ({ messaging: { ...state.messaging, ...next } }));
+      },
     }),
     {
       name: STORAGE_KEY,
@@ -89,6 +131,8 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
       partialize: (state) => ({
         orders: state.orders,
         insights: state.insights,
+        logs: state.logs,
+        messaging: state.messaging,
       }),
       merge: (persisted, current) => {
         const raw = persisted as { state?: unknown } | null;
@@ -102,8 +146,16 @@ export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
           ...DEFAULT_INSIGHTS,
           ...(persistedState && typeof persistedState === "object" ? (persistedState as any).insights : null),
         };
+        const logs = {
+          ...DEFAULT_LOGS,
+          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).logs : null),
+        };
+        const messaging = {
+          ...DEFAULT_MESSAGING,
+          ...(persistedState && typeof persistedState === "object" ? (persistedState as any).messaging : null),
+        };
 
-        return { ...current, ...(persistedState as any), orders, insights };
+        return { ...current, ...(persistedState as any), orders, insights, logs, messaging };
       },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
