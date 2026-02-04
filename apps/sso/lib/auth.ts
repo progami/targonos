@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
-import { getUserByEmail } from '@targon/auth/server'
+import { getUserByEmail, getUserEntitlements } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -101,6 +101,8 @@ const providers: NextAuthConfig['providers'] = [
   }),
 ]
 
+const ENTITLEMENTS_REFRESH_INTERVAL_MS = 60_000
+
 const baseAuthOptions: NextAuthConfig = {
   trustHost: true,
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
@@ -155,6 +157,30 @@ const baseAuthOptions: NextAuthConfig = {
         token.apps = Object.keys(portal.entitlements)
         ;(token as any).roles = portal.entitlements
         ;(token as any).entitlements_ver = Date.now()
+        return token
+      }
+
+      const userId = typeof token.sub === 'string' ? token.sub : null
+      if (!userId) {
+        return token
+      }
+
+      const lastRefresh = (token as any).entitlements_ver
+      const lastRefreshMs = typeof lastRefresh === 'number' ? lastRefresh : 0
+      const now = Date.now()
+
+      if (now - lastRefreshMs < ENTITLEMENTS_REFRESH_INTERVAL_MS) {
+        return token
+      }
+
+      try {
+        const entitlements = await getUserEntitlements(userId)
+        token.apps = Object.keys(entitlements)
+        ;(token as any).roles = entitlements
+      } catch (error) {
+        console.error('[auth] Failed to refresh entitlements', error)
+      } finally {
+        ;(token as any).entitlements_ver = now
       }
       return token
     },
