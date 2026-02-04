@@ -15,6 +15,7 @@ import {
   ExclamationTriangleIcon,
   OrgChartIcon,
   UsersIcon,
+  UserPlusIcon,
   LockClosedIcon,
   FolderIcon,
   BriefcaseIcon,
@@ -43,6 +44,14 @@ interface NavSection {
 }
 
 const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+function stripBasePath(pathname: string) {
+  if (assetBasePath === '') return pathname;
+  if (assetBasePath === '/') return pathname;
+  if (!pathname.startsWith(assetBasePath)) return pathname;
+  const stripped = pathname.slice(assetBasePath.length);
+  return stripped === '' ? '/' : stripped;
+}
 
 function TargonWordmark({ className }: { className?: string }) {
   return (
@@ -82,6 +91,7 @@ const navigation: NavSection[] = [
     title: 'Management',
     items: [
       { name: 'Employees', href: '/employees', icon: UsersIcon },
+      { name: 'Hiring', href: '/hiring', icon: UserPlusIcon, requireHR: true },
       { name: 'Leaves', href: '/leave', icon: CalendarDaysIcon },
       { name: 'Reviews', href: '/performance/reviews', icon: ClipboardDocumentCheckIcon },
       { name: 'Violations', href: '/performance/violations', icon: ExclamationTriangleIcon },
@@ -106,10 +116,11 @@ function Sidebar({
   isHR: boolean;
 }) {
   const pathname = usePathname();
+  const appPathname = stripBasePath(pathname);
 
   const matchesPath = (href: string) => {
-    if (href === '/') return pathname === '/' || pathname === '';
-    return pathname.startsWith(href);
+    if (href === '/') return appPathname === '/' ? true : appPathname === '';
+    return appPathname.startsWith(href);
   };
 
   const canSeeHR = isSuperAdmin || isHR;
@@ -220,13 +231,14 @@ function MobileNav({
 
 function Header({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
+  const appPathname = stripBasePath(pathname);
 
   const getCurrentPageName = () => {
     for (const section of navigation) {
       for (const item of section.items) {
         if (item.href === '/') {
-          if (pathname === '/' || pathname === '') return item.name;
-        } else if (pathname.startsWith(item.href)) {
+          if (appPathname === '/' ? true : appPathname === '') return item.name;
+        } else if (appPathname.startsWith(item.href)) {
           return item.name;
         }
       }
@@ -266,7 +278,10 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
   const versionHref = explicitReleaseUrl ?? commitUrl ?? inferredReleaseUrl;
 
   const pathname = usePathname();
-  const isOrganogram = pathname === '/organogram' ? true : pathname.startsWith('/organogram/');
+  const appPathname = stripBasePath(pathname);
+  const isOrganogram = appPathname === '/organogram' ? true : appPathname.startsWith('/organogram/');
+  const isHub = appPathname === '/hub' ? true : appPathname.startsWith('/hub/');
+  const isFullHeightLayout = isOrganogram ? true : isHub;
   useEffect(() => {
     closeMobileMenu();
   }, [closeMobileMenu, pathname]);
@@ -324,13 +339,15 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
         <div className="md:pl-64 min-h-screen flex flex-col bg-background">
           <Header onMenuClick={openMobileMenu} />
 
-          <main className={cn('flex-1', isOrganogram ? 'min-h-0 flex flex-col' : undefined)}>
+          <main className={cn('flex-1', isFullHeightLayout ? 'min-h-0 flex flex-col' : undefined)}>
             <div
               key={pathname}
               className={cn(
                 'animate-in fade-in slide-in-from-bottom-2 duration-300',
                 isOrganogram
                   ? 'flex flex-col flex-1 min-h-0 w-full max-w-none px-0 py-0 md:pt-12'
+                  : isHub
+                    ? 'flex flex-col flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto'
                   : 'px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto',
               )}
             >

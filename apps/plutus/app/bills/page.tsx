@@ -1,9 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -73,6 +71,23 @@ function getManufacturingLineCompliance(lineDescription: string | undefined): Co
   return match ? 'compliant' : 'partial';
 }
 
+function isManufacturingInventoryLine(accountName: string | undefined): boolean {
+  if (!accountName) return false;
+
+  let leaf = accountName;
+  if (accountName.includes(':')) {
+    const parts = accountName.split(':');
+    leaf = parts[parts.length - 1];
+  }
+
+  let normalized = leaf.trim().toLowerCase();
+  if (normalized.startsWith('inv ')) {
+    normalized = normalized.slice('inv '.length).trimStart();
+  }
+
+  return normalized.startsWith('manufacturing');
+}
+
 function getBillCompliance(bill: Bill): ComplianceStatus {
   const memoStatus = getMemoCompliance(bill.memo);
 
@@ -80,9 +95,7 @@ function getBillCompliance(bill: Bill): ComplianceStatus {
     return 'non-compliant';
   }
 
-  const manufacturingLines = bill.lineItems.filter((line) =>
-    line.account?.toLowerCase().includes('inv manufacturing'),
-  );
+  const manufacturingLines = bill.lineItems.filter((line) => isManufacturingInventoryLine(line.account));
 
   if (manufacturingLines.length === 0) {
     return memoStatus;
@@ -191,21 +204,8 @@ export default function BillsPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-3">
-          <BackButton />
-        </div>
-        <PageHeader
-          className="mt-4"
-          title="Bills"
-          kicker="Inventory"
-          description="Audit QBO bills for PO memo + manufacturing line compliance so Plutus can build cost basis."
-          actions={
-            <Button asChild variant="outline">
-              <Link href="/setup">Setup</Link>
-            </Button>
-          }
-        />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <PageHeader title="Bills" variant="accent" />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'guide' | 'scanner')}>
           <TabsList>

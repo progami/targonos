@@ -35,15 +35,18 @@ function normalizeBasePath(raw: string): string {
 export function getHermesBasePath(): string {
   if (cachedHermesBasePath !== null) return cachedHermesBasePath;
 
+  const raw = process.env.NEXT_PUBLIC_BASE_PATH;
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    cachedHermesBasePath = normalizeBasePath(raw);
+    return cachedHermesBasePath;
+  }
+
   if (typeof document !== "undefined") {
     cachedHermesBasePath = normalizeBasePath(detectBasePathFromNextAssets());
     return cachedHermesBasePath;
   }
 
-  const raw = process.env.NEXT_PUBLIC_BASE_PATH;
-  if (!raw) throw new Error("NEXT_PUBLIC_BASE_PATH is required");
-  cachedHermesBasePath = normalizeBasePath(raw);
-  return cachedHermesBasePath;
+  throw new Error("NEXT_PUBLIC_BASE_PATH is required");
 }
 
 export function hermesApiUrl(path: string): string {

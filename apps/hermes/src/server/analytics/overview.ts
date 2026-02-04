@@ -4,6 +4,16 @@ export type AnalyticsOverview = {
   rangeDays: number;
   fromIso: string;
   toIso: string;
+  queue: {
+    nextDays: number;
+    fromIso: string;
+    toIso: string;
+    queuedTotal: number;
+    series: Array<{
+      day: string; // YYYY-MM-DD (UTC)
+      queued: number;
+    }>;
+  };
   summary: {
     sentInRange: number;
     attemptedDispatchesInRange: number;
@@ -395,10 +405,64 @@ export async function getAnalyticsOverview(params: {
     if (bucket) bucket.attemptedUnique = intOr0(r.n);
   }
 
+  // ---- Queue: upcoming scheduled sends (next N days, starting tomorrow UTC)
+  const queueDays = 7;
+  const queueFrom = startOfUtcDay(addUtcDays(to, 1));
+  const queueTo = startOfUtcDay(addUtcDays(queueFrom, queueDays));
+
+  const queueSeries: AnalyticsOverview["queue"]["series"] = [];
+  for (let i = 0; i < queueDays; i += 1) {
+    const day = dayKeyUtc(addUtcDays(queueFrom, i));
+    queueSeries.push({ day, queued: 0 });
+  }
+  const queueByDay = new Map(queueSeries.map((d) => [d.day, d]));
+
+  const queuedSeriesRows = connectionId
+    ? await pool.query(
+        `
+        SELECT date_trunc('day', scheduled_at) AS day, COUNT(1)::int AS n
+          FROM hermes_dispatches
+         WHERE connection_id = $1
+           AND type = 'request_review'
+           AND state = 'queued'
+           AND scheduled_at >= $2 AND scheduled_at < $3
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [connectionId, queueFrom, queueTo]
+      )
+    : await pool.query(
+        `
+        SELECT date_trunc('day', scheduled_at) AS day, COUNT(1)::int AS n
+          FROM hermes_dispatches
+         WHERE type = 'request_review'
+           AND state = 'queued'
+           AND scheduled_at >= $1 AND scheduled_at < $2
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [queueFrom, queueTo]
+      );
+
+  for (const r of queuedSeriesRows.rows as any[]) {
+    const day = dayKeyUtc(new Date(r.day));
+    const bucket = queueByDay.get(day);
+    if (bucket) bucket.queued = intOr0(r.n);
+  }
+
+  const queuedTotal = queueSeries.reduce((acc, d) => acc + d.queued, 0);
+
   return {
     rangeDays,
     fromIso: from.toISOString(),
     toIso: to.toISOString(),
+    queue: {
+      nextDays: queueDays,
+      fromIso: queueFrom.toISOString(),
+      toIso: queueTo.toISOString(),
+      queuedTotal,
+      series: queueSeries,
+    },
     summary: {
       sentInRange,
       attemptedDispatchesInRange,

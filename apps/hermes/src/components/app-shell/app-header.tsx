@@ -11,12 +11,14 @@ import { cn } from "@/lib/utils";
 
 function breadcrumbFromPath(pathname: string) {
   const parts = pathname.split("/").filter(Boolean);
-  if (parts.length === 0) return [{ label: "Dashboard", href: "/" }];
+  const root = { label: "Insights", href: "/insights" };
+  if (parts.length === 0) return [root];
 
-  const crumbs: Array<{ label: string; href: string }> = [{ label: "Dashboard", href: "/" }];
+  const crumbs: Array<{ label: string; href: string }> = [root];
   let acc = "";
   for (const p of parts) {
     acc += "/" + p;
+    if (acc === root.href) continue;
     const label =
       navItems.find((n) => n.href === acc)?.label ??
       p.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
