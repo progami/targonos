@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
-import { withBasePath, withoutBasePath } from '@/lib/utils/base-path'
+import { withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
 
@@ -63,7 +63,7 @@ export async function middleware(request: NextRequest) {
   // Redirect /operations to /operations/inventory (base-path aware)
   if (normalizedPath === '/operations') {
     const url = request.nextUrl.clone()
-    url.pathname = withBasePath('/operations/inventory')
+    url.pathname = '/operations/inventory'
     return NextResponse.redirect(url)
   }
 
@@ -137,7 +137,7 @@ export async function middleware(request: NextRequest) {
 
     if (hasSession && !talosEntitlement) {
       const url = request.nextUrl.clone()
-      url.pathname = withBasePath('/no-access')
+      url.pathname = '/no-access'
       url.search = ''
       return NextResponse.redirect(url)
     }
@@ -176,7 +176,7 @@ export async function middleware(request: NextRequest) {
   // Skip this for API routes - they should handle missing tenant themselves
   if (!hasTenant && !normalizedPath.startsWith('/api/')) {
     const url = request.nextUrl.clone()
-    url.pathname = withBasePath('/')
+    url.pathname = '/'
     url.search = ''
     return NextResponse.redirect(url)
   }
