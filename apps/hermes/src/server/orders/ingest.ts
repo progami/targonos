@@ -222,6 +222,13 @@ export async function enqueueRequestReviewsForOrders(params: {
   }> = [];
 
   for (const o of params.orders) {
+    if (typeof o.orderStatus === "string") {
+      const s = o.orderStatus.trim();
+      if (s !== "Shipped" && s !== "PartiallyShipped") {
+        continue;
+      }
+    }
+
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
 
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
@@ -370,6 +377,7 @@ export async function countOrders(params: {
   connectionId: string;
   marketplaceId?: string | null;
   orderStatus?: string | null;
+  orderIdQuery?: string | null;
   delivery?: "has" | "missing";
   reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<number> {
@@ -386,6 +394,11 @@ export async function countOrders(params: {
   if (params.orderStatus) {
     values.push(params.orderStatus);
     where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.orderIdQuery) {
+    values.push(params.orderIdQuery);
+    where.push(`o.order_id ILIKE ('%' || $${values.length} || '%')`);
   }
 
   if (params.delivery === "has") {
@@ -440,6 +453,7 @@ export async function listOrdersPage(params: {
   cursor?: HermesOrdersListCursor | null;
   marketplaceId?: string | null;
   orderStatus?: string | null;
+  orderIdQuery?: string | null;
   delivery?: "has" | "missing";
   reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<{
@@ -476,6 +490,11 @@ export async function listOrdersPage(params: {
   if (params.orderStatus) {
     values.push(params.orderStatus);
     where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.orderIdQuery) {
+    values.push(params.orderIdQuery);
+    where.push(`o.order_id ILIKE ('%' || $${values.length} || '%')`);
   }
 
   if (params.delivery === "has") {

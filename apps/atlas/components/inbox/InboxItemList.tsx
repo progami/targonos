@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { WorkItemDTO, WorkItemPriority } from '@/lib/contracts/work-items'
+import type { WorkItemDTO } from '@/lib/contracts/work-items'
 import { cn } from '@/lib/utils'
 
 type InboxItemListProps = {
@@ -10,41 +10,36 @@ type InboxItemListProps = {
   onSelect: (id: string) => void
 }
 
-function getPriorityConfig(item: WorkItemDTO): { ring: string; dot: string; bg: string; label?: string } {
+function getPriorityConfig(item: WorkItemDTO): { dot: string; bg: string; label?: string } {
   if (item.isOverdue) {
     return {
-      ring: 'ring-red-500/30',
-      dot: 'bg-red-500',
-      bg: 'bg-red-50 dark:bg-red-950/20',
+      dot: 'bg-danger-500',
+      bg: 'bg-danger-50/70 dark:bg-danger-900/10',
       label: item.overdueDays ? `${item.overdueDays}d overdue` : 'Overdue',
     }
   }
   if (item.priority === 'URGENT') {
     return {
-      ring: 'ring-red-500/30',
-      dot: 'bg-red-500',
-      bg: 'bg-red-50 dark:bg-red-950/20',
+      dot: 'bg-danger-500',
+      bg: 'bg-danger-50/70 dark:bg-danger-900/10',
       label: 'Urgent',
     }
   }
   if (item.priority === 'HIGH') {
     return {
-      ring: 'ring-orange-400/30',
-      dot: 'bg-orange-400',
-      bg: 'bg-orange-50 dark:bg-orange-950/20',
+      dot: 'bg-warning-500',
+      bg: 'bg-warning-50/70 dark:bg-warning-900/10',
     }
   }
   if (item.isActionRequired) {
     return {
-      ring: 'ring-cyan-500/30',
-      dot: 'bg-cyan-500',
-      bg: 'bg-cyan-50 dark:bg-cyan-950/20',
+      dot: 'bg-accent',
+      bg: 'bg-accent/10',
     }
   }
   return {
-    ring: 'ring-slate-300/50 dark:ring-slate-600/50',
-    dot: 'bg-slate-400',
-    bg: 'bg-slate-50/50 dark:bg-slate-800/30',
+    dot: 'bg-muted-foreground/60',
+    bg: 'bg-card',
   }
 }
 
@@ -67,14 +62,12 @@ function InboxItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        'group relative w-full h-[104px] text-left transition-all duration-200 ease-out',
-        'rounded-xl border-2',
-        selected
-          ? 'border-slate-900 dark:border-slate-100 shadow-lg scale-[1.02]'
-          : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700',
+        'group relative w-full min-h-[92px] text-left transition-colors duration-200',
+        'rounded-xl border',
         config.bg,
-        'ring-2',
-        config.ring,
+        selected
+          ? 'border-accent bg-accent/5 shadow-soft'
+          : 'border-border hover:bg-muted/40',
       )}
       style={{
         animationDelay: `${index * 30}ms`,
@@ -91,13 +84,13 @@ function InboxItem({
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
               {item.typeLabel}
             </span>
           </div>
 
           {config.label ? (
-            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">
+            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-danger-100 text-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
               {config.label}
             </span>
           ) : null}
@@ -105,8 +98,8 @@ function InboxItem({
 
         {/* Title */}
         <h3 className={cn(
-          'mt-2 text-sm font-semibold leading-snug line-clamp-2',
-          selected ? 'text-slate-900 dark:text-slate-50' : 'text-slate-700 dark:text-slate-200'
+          'mt-2 text-sm font-medium leading-snug line-clamp-2',
+          selected ? 'text-foreground' : 'text-foreground'
         )}>
           {item.title}
         </h3>
@@ -127,9 +120,9 @@ function InboxItem({
               </span>
               <span className={cn(
                 'text-xs font-semibold',
-                item.isOverdue || item.priority === 'URGENT' ? 'text-red-600 dark:text-red-400' :
-                item.isActionRequired ? 'text-cyan-600 dark:text-cyan-400' :
-                'text-slate-600 dark:text-slate-300'
+                item.isOverdue || item.priority === 'URGENT' ? 'text-danger-700 dark:text-danger-300' :
+                item.isActionRequired ? 'text-accent' :
+                'text-muted-foreground'
               )}>
                 {item.primaryAction.label}
               </span>
@@ -154,25 +147,19 @@ export function InboxItemList({ items, selectedId, onSelect }: InboxItemListProp
 
   if (!items.length) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center px-8 py-16">
-          {/* Celebratory icon */}
-          <div className="relative mx-auto mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            {/* Sparkles */}
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-400 rounded-full animate-ping" />
-            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-cyan-400 rounded-full animate-ping" style={{ animationDelay: '150ms' }} />
+      <div className="h-full flex items-center justify-center rounded-xl border border-dashed border-border bg-card">
+        <div className="text-center px-8 py-12">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
           </div>
 
-          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50 tracking-tight">
+          <h3 className="text-base font-semibold text-foreground tracking-tight">
             Inbox Zero
           </h3>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-[200px] mx-auto">
-            You've cleared everything. Take a moment to celebrate.
+          <p className="mt-1 text-sm text-muted-foreground max-w-[220px] mx-auto">
+            You’re all caught up.
           </p>
         </div>
       </div>
@@ -184,9 +171,9 @@ export function InboxItemList({ items, selectedId, onSelect }: InboxItemListProp
 
     return (
       <div className="space-y-2">
-        <div className="sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm py-2 -mx-1 px-1">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
-            {title} <span className="text-slate-300 dark:text-slate-600">({groupItems.length})</span>
+        <div className="sticky top-0 z-10 bg-background/85 backdrop-blur-sm py-2 -mx-1 px-1">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.18em]">
+            {title} <span className="text-muted-foreground/60">({groupItems.length})</span>
           </span>
         </div>
         {groupItems.map((item, idx) => (

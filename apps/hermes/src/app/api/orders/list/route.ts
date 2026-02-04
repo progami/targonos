@@ -31,6 +31,7 @@ async function handleGet(req: Request) {
   const orderStatusRaw = url.searchParams.get("orderStatus");
   const deliveryRaw = url.searchParams.get("delivery");
   const reviewStateRaw = url.searchParams.get("reviewState");
+  const orderIdQueryRaw = url.searchParams.get("orderIdQuery");
   const cursorRaw = url.searchParams.get("cursor");
   const limitRaw = url.searchParams.get("limit");
 
@@ -38,6 +39,7 @@ async function handleGet(req: Request) {
     connectionId: z.string().min(1),
     marketplaceId: z.string().min(1).optional(),
     orderStatus: z.string().min(1).optional(),
+    orderIdQuery: z.string().min(1).optional(),
     delivery: z.enum(["any", "has", "missing"]).optional(),
     reviewState: z.enum(["any", "not_queued", "queued", "sending", "sent", "failed", "skipped"]).optional(),
     cursor: z.string().min(1).optional(),
@@ -48,6 +50,7 @@ async function handleGet(req: Request) {
     connectionId: url.searchParams.get("connectionId"),
     marketplaceId: marketplaceIdRaw === null ? undefined : marketplaceIdRaw,
     orderStatus: orderStatusRaw === null ? undefined : orderStatusRaw,
+    orderIdQuery: orderIdQueryRaw === null ? undefined : orderIdQueryRaw,
     delivery: deliveryRaw === null ? undefined : deliveryRaw,
     reviewState: reviewStateRaw === null ? undefined : reviewStateRaw,
     cursor: cursorRaw === null ? undefined : cursorRaw,
@@ -69,6 +72,7 @@ async function handleGet(req: Request) {
     connectionId: parsed.data.connectionId,
     marketplaceId: parsed.data.marketplaceId,
     orderStatus: parsed.data.orderStatus,
+    orderIdQuery: parsed.data.orderIdQuery,
     delivery,
     reviewState,
     cursor,
