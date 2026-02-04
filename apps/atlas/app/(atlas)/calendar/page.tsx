@@ -10,6 +10,10 @@ import { CalendarIcon, SpinnerIcon } from '@/components/ui/Icons'
 const EVENT_TYPE_LABELS: Record<string, string> = {
   PERFORMANCE_REVIEW: 'Performance Review',
   PROBATION_END: 'Probation End',
+  PIP_REVIEW: 'PIP Review',
+  DISCIPLINARY_HEARING: 'Disciplinary Hearing',
+  INTERVIEW: 'Interview',
+  TRAINING: 'Training',
   COMPANY_EVENT: 'Company Event',
   HOLIDAY: 'Holiday',
   OTHER: 'Other',
@@ -18,9 +22,23 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 const EVENT_TYPE_COLORS: Record<string, string> = {
   PERFORMANCE_REVIEW: 'bg-accent/10 text-accent border-accent/20',
   PROBATION_END: 'bg-warning-100 text-warning-700 border-warning-200',
+  PIP_REVIEW: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  DISCIPLINARY_HEARING: 'bg-danger-100 text-danger-700 border-danger-200',
+  INTERVIEW: 'bg-brand-teal-500/10 text-brand-teal-700 border-brand-teal-500/20',
+  TRAINING: 'bg-brand-navy-500/10 text-brand-navy-700 border-brand-navy-500/20',
   COMPANY_EVENT: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   HOLIDAY: 'bg-success-100 text-success-700 border-success-200',
   OTHER: 'bg-muted text-foreground border-border',
+}
+
+function getEventTypeLabel(eventType: string): string {
+  const label = EVENT_TYPE_LABELS[eventType]
+  return label ? label : eventType
+}
+
+function getEventTypeClass(eventType: string): string {
+  const cls = EVENT_TYPE_COLORS[eventType]
+  return cls ? cls : EVENT_TYPE_COLORS.OTHER
 }
 
 function formatDate(dateString: string, allDay?: boolean): string {
@@ -96,9 +114,10 @@ export default function HRCalendarPage() {
           endDate: endDate.toISOString(),
           take: 100,
         })
-        setEvents(items || [])
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load calendar events')
+        setEvents(items)
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message) setError(e.message)
+        else setError('Failed to load calendar events')
       } finally {
         setLoading(false)
       }
@@ -113,7 +132,7 @@ export default function HRCalendarPage() {
     <div className="space-y-6">
       <PageHeader
         title="HR Calendar"
-        description="Company events, reviews, and important dates"
+        description="Company events, reviews, interviews, and important dates"
         icon={<CalendarIcon className="h-6 w-6 text-white" />}
         showBack
       />
@@ -153,8 +172,8 @@ export default function HRCalendarPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-foreground">{event.title}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded border ${EVENT_TYPE_COLORS[event.eventType] || EVENT_TYPE_COLORS.OTHER}`}>
-                          {EVENT_TYPE_LABELS[event.eventType] || event.eventType}
+                        <span className={`text-xs px-2 py-0.5 rounded border ${getEventTypeClass(event.eventType)}`}>
+                          {getEventTypeLabel(event.eventType)}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">
@@ -196,8 +215,8 @@ export default function HRCalendarPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-foreground">{event.title}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded border ${EVENT_TYPE_COLORS[event.eventType] || EVENT_TYPE_COLORS.OTHER}`}>
-                              {EVENT_TYPE_LABELS[event.eventType] || event.eventType}
+                            <span className={`text-xs px-2 py-0.5 rounded border ${getEventTypeClass(event.eventType)}`}>
+                              {getEventTypeLabel(event.eventType)}
                             </span>
                           </div>
                           {event.description && (

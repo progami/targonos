@@ -279,6 +279,10 @@ const OrgNodeCard = ({
       onMouseEnter={() => onHover(node)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick(node)}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        onOpenEmployee(node.id)
+      }}
     >
       <rect x={x + 2} y={y + 2} width={NODE_W} height={NODE_H} rx={10} fill="rgba(0,0,0,0.05)" />
       <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={10} fill={COLORS.white} stroke={isActive ? color : '#E2E8F0'} strokeWidth={isActive ? 2 : 1} style={{ transition: 'all 0.2s ease' }} />
@@ -333,6 +337,29 @@ const OrgNodeCard = ({
           {node.directReports} direct report{node.directReports > 1 ? 's' : ''}
         </text>
       )}
+      <g
+        style={{ cursor: 'pointer' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenEmployee(node.id)
+        }}
+      >
+        <title>Open profile</title>
+        <circle
+          cx={x + NODE_W - 14}
+          cy={y + NODE_H - 14}
+          r={9}
+          fill={isActive ? `${color}15` : COLORS.light}
+        />
+        <path
+          d={`M ${x + NODE_W - 16} ${y + NODE_H - 18} L ${x + NODE_W - 12} ${y + NODE_H - 14} L ${x + NODE_W - 16} ${y + NODE_H - 10}`}
+          fill="none"
+          stroke={isActive ? color : COLORS.slate}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </g>
       {node.type === 'Contract' && (
         <g>
           <circle cx={x + NODE_W - 12} cy={y + 12} r={8} fill={`${COLORS.amber}20`} />
@@ -1365,7 +1392,15 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                   <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.navy, marginBottom: 2 }}>{node.name}</div>
                   <div style={{ fontSize: 11, color: COLORS.slate }}>{node.role}</div>
                 </div>
-                <ChevronRight size={14} color={COLORS.slate} style={{ flexShrink: 0 }} />
+                <ChevronRight
+                  size={14}
+                  color={COLORS.slate}
+                  style={{ flexShrink: 0 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEmployee(node.id)
+                  }}
+                />
               </button>
             ))}
           </div>
