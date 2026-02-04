@@ -321,7 +321,7 @@ export async function DELETE(req: Request, context: EmployeeRouteContext) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
     }
 
-    // Security: Only super-admin can delete employees
+    // Security: Only super-admin can remove employees
     const actorId = await getCurrentEmployeeId()
     if (!actorId) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
@@ -329,20 +329,42 @@ export async function DELETE(req: Request, context: EmployeeRouteContext) {
 
     const isAdmin = await isSuperAdmin(actorId)
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Only super admin can delete employees' }, { status: 403 })
+      return NextResponse.json({ error: 'Only super admin can remove employees' }, { status: 403 })
     }
 
-    // Prevent self-deletion
-    if (actorId === id) {
-      return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
-    }
-
-    const existing = await prisma.employee.findUnique({
-      where: { id },
-      select: { id: true, employeeId: true },
+    // Resolve canonical employee ID (route param can be cuid or employeeId).
+    const base = await prisma.employee.findFirst({
+      where: { OR: [{ id }, { employeeId: id }] },
+      select: { id: true, reportsToId: true },
     })
 
-    await prisma.employee.delete({ where: { id } })
+    if (!base) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    // Prevent self-removal
+    if (actorId === base.id) {
+      return NextResponse.json({ error: 'Cannot remove your own account' }, { status: 400 })
+    }
+
+    // "Remove" means offboard: keep history, hide from all ACTIVE-only views.
+    // Also repair reporting lines + department ownership so org structures don't end up orphaned.
+    await prisma.$transaction(async (tx) => {
+      await tx.department.updateMany({
+        where: { headId: base.id },
+        data: { headId: null },
+      })
+
+      await tx.employee.updateMany({
+        where: { reportsToId: base.id, status: 'ACTIVE' },
+        data: { reportsToId: base.reportsToId },
+      })
+
+      await tx.employee.update({
+        where: { id: base.id },
+        data: { status: 'RESIGNED' as EmployeeStatus, reportsToId: null },
+      })
+    })
 
     return NextResponse.json({ ok: true })
   } catch (e) {

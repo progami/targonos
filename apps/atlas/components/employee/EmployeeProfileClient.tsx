@@ -86,6 +86,7 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadVisibility, setUploadVisibility] = useState<'HR_ONLY' | 'EMPLOYEE_AND_HR'>('HR_ONLY')
   const [uploading, setUploading] = useState(false)
+  const [removingEmployee, setRemovingEmployee] = useState(false)
 
   // Onboarding/Offboarding modal state
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false)
@@ -102,6 +103,7 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
   const canViewLeave = canViewSensitive
   const canViewViolations = canViewSensitive
   const permissionsReady = Boolean(employee && me && permissions)
+  const canRemoveEmployee = isSuperAdmin && !isSelf
 
   // Sync tab from URL only when it differs (e.g., browser back/forward navigation)
   useEffect(() => {
@@ -463,6 +465,31 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
                   Start Offboarding
                 </Button>
               </>
+            ) : null}
+            {employee && canRemoveEmployee ? (
+              <Button
+                variant="destructive"
+                loading={removingEmployee}
+                onClick={async () => {
+                  const confirmed = window.confirm(
+                    `Remove ${employee.firstName} ${employee.lastName}?\n\nThis will mark them as RESIGNED and remove them from active views (org chart, search, pickers).`
+                  )
+                  if (!confirmed) return
+                  try {
+                    setRemovingEmployee(true)
+                    setError(null)
+                    await EmployeesApi.delete(employee.id)
+                    router.push('/employees')
+                  } catch (e) {
+                    const message = e instanceof Error ? e.message : 'Failed to remove employee'
+                    setError(message)
+                  } finally {
+                    setRemovingEmployee(false)
+                  }
+                }}
+              >
+                Remove employee
+              </Button>
             ) : null}
             {canEdit ? (
               <Button href={`/employees/${employee.id}/edit`} icon={<PencilIcon className="h-4 w-4" />}>
