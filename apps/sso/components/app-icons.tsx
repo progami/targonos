@@ -76,75 +76,99 @@ export const KairosIcon = (
   </svg>
 )
 
-/** X-Plan (S&OP): Interlocking chain links as X - bridging Sales & Ops */
+/** X-Plan (S&OP): Bold X mark - cross-functional planning */
 export const XPlanIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* First diagonal link (top-left to bottom-right) */}
     <path
-      d="M6 4C4.5 4 3 5.5 3 7C3 8.5 4.5 10 6 10L10 10"
-      fill="none"
+      d="M7 7L17 17"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="2.4"
       strokeLinecap="round"
     />
     <path
-      d="M14 14L18 14C19.5 14 21 15.5 21 17C21 18.5 19.5 20 18 20"
-      fill="none"
+      d="M17 7L7 17"
       stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    {/* The X crossing */}
-    <path
-      d="M8 8L16 16"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    {/* Second diagonal link (top-right to bottom-left) */}
-    <path
-      d="M18 4C19.5 4 21 5.5 21 7C21 8.5 19.5 10 18 10L14 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    <path
-      d="M10 14L6 14C4.5 14 3 15.5 3 17C3 18.5 4.5 20 6 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    <path
-      d="M16 8L8 16"
-      stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="2.4"
       strokeLinecap="round"
     />
   </svg>
 )
 
-/** Plutus (Financials): Pixelated cornucopia - wealth built from data */
+/** Plutus (Financials): Cornucopia - horn of abundance */
 export const PlutusIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* Horn shape built from pixel blocks */}
-    {/* Wide mouth of cornucopia */}
-    <rect x="2" y="4" width="4" height="4" fill="currentColor" opacity="0.7" rx="0.5" />
-    <rect x="6" y="4" width="4" height="4" fill="currentColor" opacity="0.85" rx="0.5" />
-    <rect x="10" y="4" width="4" height="4" fill="currentColor" opacity="0.7" rx="0.5" />
-    {/* Second row */}
-    <rect x="4" y="8" width="4" height="4" fill="currentColor" opacity="0.9" rx="0.5" />
-    <rect x="8" y="8" width="4" height="4" fill="currentColor" opacity="0.75" rx="0.5" />
-    <rect x="12" y="8" width="4" height="4" fill="currentColor" opacity="0.6" rx="0.5" />
-    {/* Third row - tapering */}
-    <rect x="8" y="12" width="4" height="4" fill="currentColor" opacity="0.85" rx="0.5" />
-    <rect x="12" y="12" width="4" height="4" fill="currentColor" opacity="0.7" rx="0.5" />
-    <rect x="16" y="12" width="4" height="4" fill="currentColor" opacity="0.5" rx="0.5" />
-    {/* Tip of horn */}
-    <rect x="14" y="16" width="4" height="4" fill="currentColor" opacity="0.8" rx="0.5" />
-    <rect x="18" y="16" width="4" height="4" fill="currentColor" opacity="0.6" rx="0.5" />
-    <rect x="18" y="20" width="4" height="3" fill="currentColor" opacity="0.5" rx="0.5" />
+    {/* Horn silhouette with hollow opening */}
+    <path
+      d="M6.6 14.9C6.6 10.3 10.3 6.6 15 6.6c2.6 0 4.6 1.6 4.6 4.1c0 4.5-4.6 8.7-10.5 8.7c-1.4 0-2.5-.4-3.3-1.2c-.6-.7-.9-1.5-.9-2.3Z"
+      fill="currentColor"
+      opacity="0.2"
+    />
+    <path
+      d="M6.6 14.9C6.6 10.3 10.3 6.6 15 6.6c2.6 0 4.6 1.6 4.6 4.1c0 4.5-4.6 8.7-10.5 8.7c-1.4 0-2.5-.4-3.3-1.2c-.6-.7-.9-1.5-.9-2.3Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M10.4 14.6c0-2.2 1.8-4 4-4c1.6 0 2.9 1 2.9 2.6c0 2.5-2.6 4.8-6 4.8c-.5 0-1-.1-1.4-.3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity="0.65"
+    />
+    {/* Abundance (coins) */}
+    <circle cx="6.5" cy="8.3" r="1.4" fill="currentColor" opacity="0.9" />
+    <circle cx="8.8" cy="6.6" r="1.1" fill="currentColor" opacity="0.75" />
+    <circle cx="9.4" cy="9.2" r="0.9" fill="currentColor" opacity="0.65" />
+  </svg>
+)
+
+/** Hermes (Messaging): Winged messenger shoe */
+export const HermesIcon = (
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+    {/* Wing */}
+    <path
+      d="M9.6 10.2c-2.6-1.1-4.2-3-4.8-5.6c2.6 0.2 4.9 1.2 6.6 2.9"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <path
+      d="M10.2 8.9c-1.5-0.8-2.6-1.8-3.2-3.2c1.6 0.1 3.0 0.6 4.2 1.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      opacity="0.75"
+    />
+
+    {/* Shoe */}
+    <path
+      d="M7.6 16h8.1c2.4 0 4.3-1.6 4.3-3.9c0-1-0.4-1.9-1.1-2.6l-1.1-1.1c-.6-.6-1.4-.9-2.2-.9h-3.4c-1 0-1.9.4-2.6 1.1l-1.7 1.7c-.8.8-1.2 1.6-1.2 2.7V16Z"
+      fill="currentColor"
+      opacity="0.18"
+    />
+    <path
+      d="M7.6 16h8.1c2.4 0 4.3-1.6 4.3-3.9c0-1-0.4-1.9-1.1-2.6l-1.1-1.1c-.6-.6-1.4-.9-2.2-.9h-3.4c-1 0-1.9.4-2.6 1.1l-1.7 1.7c-.8.8-1.2 1.6-1.2 2.7V16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M7.6 16h12.8"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      opacity="0.65"
+    />
   </svg>
 )
 
@@ -177,6 +201,7 @@ export const APP_ICONS: Record<string, ReactNode> = {
   kairos: KairosIcon,
   xplan: XPlanIcon,
   plutus: PlutusIcon,
+  hermes: HermesIcon,
   website: WebsiteIcon,
 }
 

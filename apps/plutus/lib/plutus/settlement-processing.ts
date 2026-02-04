@@ -757,12 +757,12 @@ export async function computeSettlementPreview(input: {
 
       const invLabel =
         component === 'manufacturing'
-          ? 'Inv Manufacturing'
+          ? 'Manufacturing'
           : component === 'freight'
-            ? 'Inv Freight'
+            ? 'Freight'
             : component === 'duty'
-              ? 'Inv Duty'
-              : 'Inv Mfg Accessories';
+              ? 'Duty'
+              : 'Mfg Accessories';
 
       const cogsLabel =
         component === 'manufacturing'
