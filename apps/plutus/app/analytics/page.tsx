@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,10 +17,43 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = {
+  connected: boolean;
+  homeCurrency?: string;
+};
+
+type AnalyticsMonth = {
+  month: string;
+  settlements: number;
+  salesCents: number;
+  refundsCents: number;
+  sellerFeesCents: number;
+  fbaFeesCents: number;
+  storageFeesCents: number;
+};
+
+type AnalyticsResponse = {
+  channel: { id: string; label: string; region: string; docNumberContains: string };
+  range: { startMonth: string; endMonth: string; startDate: string; endDate: string };
+  months: AnalyticsMonth[];
+  settlementsInPeriod: number;
+};
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
+
+async function fetchAnalytics(input: { month: string; channel: string }): Promise<AnalyticsResponse> {
+  const params = new URLSearchParams();
+  params.set('month', input.month);
+  params.set('channel', input.channel);
+
+  const res = await fetch(`${basePath}/api/plutus/analytics?${params.toString()}`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
   return res.json();
 }
 
@@ -33,6 +69,37 @@ function CalendarIcon({ className }: { className?: string }) {
       />
     </svg>
   );
+}
+
+function formatMoneyFromCents(cents: number, currency: string): string {
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(Math.abs(cents) / 100);
+
+  if (cents < 0) return `(${formatted})`;
+  return formatted;
+}
+
+function formatSignedPercent(value: number, digits: number = 1): string {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(digits)}%`;
+}
+
+function ratioPercent(numeratorCents: number, denominatorCents: number): number | null {
+  if (denominatorCents <= 0) return null;
+  return (numeratorCents / denominatorCents) * 100;
+}
+
+function growthPercent(currentCents: number, previousCents: number): number | null {
+  if (previousCents <= 0) return null;
+  return ((currentCents - previousCents) / previousCents) * 100;
+}
+
+function clampPercent(value: number): number {
+  if (value < 0) return 0;
+  if (value > 100) return 100;
+  return value;
 }
 
 function buildBellCurvePath({ width, height, points = 64 }: { width: number; height: number; points?: number }): string {
@@ -58,12 +125,6 @@ function buildBellCurvePath({ width, height, points = 64 }: { width: number; hei
     d += ` L ${c.x} ${c.y}`;
   }
   return d;
-}
-
-function clampPercent(value: number): number {
-  if (value < 0) return 0;
-  if (value > 100) return 100;
-  return value;
 }
 
 function BellCurve({
@@ -132,50 +193,71 @@ function BellCurve({
   );
 }
 
-function BenchmarkCard({
+function percentileRank(values: number[], value: number): number | null {
+  if (values.length === 0) return null;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  let leq = 0;
+  for (const v of sorted) {
+    if (v <= value) leq += 1;
+  }
+  return (leq / sorted.length) * 100;
+}
+
+function quartileBand(pct: number): { from: number; to: number; label: string; className: string } {
+  if (pct < 25) return { from: 0, to: 25, label: '0–25th percentile', className: 'fill-amber-500/55 dark:fill-amber-400/35' };
+  if (pct < 50) return { from: 25, to: 50, label: '25–50th percentile', className: 'fill-sky-500/50 dark:fill-sky-400/30' };
+  if (pct < 75) return { from: 50, to: 75, label: '50–75th percentile', className: 'fill-teal-500/45 dark:fill-teal-400/30' };
+  return { from: 75, to: 100, label: '75–100th percentile', className: 'fill-emerald-500/45 dark:fill-emerald-400/30' };
+}
+
+function MetricCard({
   title,
-  subtitle,
-  note,
   value,
-  highlight,
+  detail,
+  percentile,
 }: {
   title: string;
-  subtitle: string;
-  note: { label: string; emphasis: string; emphasisClassName: string };
-  value: { percent: number; label: string };
-  highlight: { from: number; to: number; className: string };
+  value: string;
+  detail: string;
+  percentile: number | null;
 }) {
+  const band = percentile === null ? quartileBand(50) : quartileBand(percentile);
+  const position = percentile === null ? 50 : percentile;
+
   return (
     <Card className="border-slate-200/70 dark:border-white/10">
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-slate-900 dark:text-white">{title}</div>
-            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
+            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{detail}</div>
           </div>
           <div className="text-2xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 whitespace-nowrap">
-            Improve
+            12m
           </div>
         </div>
 
-        <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-          <span className="font-semibold">{note.label}</span>{' '}
-          <span className={cn('font-semibold', note.emphasisClassName)}>{note.emphasis}</span>
+        <div className="mt-4 flex items-end justify-between gap-3">
+          <div className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{value}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {percentile === null ? '—' : `${Math.round(percentile)}th percentile`}
+          </div>
         </div>
 
-        <div className="mt-2">
+        <div className="mt-3">
           <BellCurve
-            valuePercent={value.percent}
-            highlightFromPercent={highlight.from}
-            highlightToPercent={highlight.to}
-            highlightClassName={highlight.className}
+            valuePercent={position}
+            highlightFromPercent={band.from}
+            highlightToPercent={band.to}
+            highlightClassName={band.className}
           />
         </div>
 
         <div className="mt-1 flex items-center justify-between text-2xs font-semibold text-slate-400 dark:text-slate-500">
-          <span>{value.label}</span>
+          <span>0</span>
           <span>MEDIAN</span>
-          <span>{Math.max(0, 100 - value.percent).toFixed(0)}%</span>
+          <span>100</span>
         </div>
       </CardContent>
     </Card>
@@ -191,9 +273,83 @@ export default function AnalyticsPage() {
 
   const now = new Date();
   const defaultMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-
   const [month, setMonth] = useState(defaultMonth);
   const [channel, setChannel] = useState('targon-us');
+
+  const analyticsQuery = useQuery({
+    queryKey: ['plutus-analytics', month, channel],
+    queryFn: () => fetchAnalytics({ month, channel }),
+    enabled: connection !== undefined && connection.connected === true,
+    staleTime: 15 * 1000,
+  });
+
+  const data = analyticsQuery.data;
+  const currency = connection?.homeCurrency ? connection.homeCurrency : 'USD';
+
+  const monthIndex = useMemo(() => {
+    if (!data) return new Map<string, AnalyticsMonth>();
+    const map = new Map<string, AnalyticsMonth>();
+    for (const row of data.months) {
+      map.set(row.month, row);
+    }
+    return map;
+  }, [data]);
+
+  const current = data ? monthIndex.get(data.range.endMonth) : undefined;
+  const previous = data ? monthIndex.get(data.months.at(-2)?.month ?? '') : undefined;
+
+  const salesGrowth = current && previous ? growthPercent(current.salesCents, previous.salesCents) : null;
+  const feeRatio =
+    current ? ratioPercent(current.sellerFeesCents + current.fbaFeesCents, current.salesCents) : null;
+  const refundRatio = current ? ratioPercent(current.refundsCents, current.salesCents) : null;
+  const storageRatio = current ? ratioPercent(current.storageFeesCents, current.salesCents) : null;
+
+  const growthSeries = useMemo(() => {
+    if (!data) return [];
+    const values: number[] = [];
+    for (let i = 1; i < data.months.length; i += 1) {
+      const prev = data.months[i - 1];
+      const next = data.months[i];
+      if (!prev || !next) continue;
+      const value = growthPercent(next.salesCents, prev.salesCents);
+      if (value === null) continue;
+      values.push(value);
+    }
+    return values;
+  }, [data]);
+
+  const feeRatioSeries = useMemo(() => {
+    if (!data) return [];
+    const values: number[] = [];
+    for (const row of data.months) {
+      const value = ratioPercent(row.sellerFeesCents + row.fbaFeesCents, row.salesCents);
+      if (value === null) continue;
+      values.push(value);
+    }
+    return values;
+  }, [data]);
+
+  const refundRatioSeries = useMemo(() => {
+    if (!data) return [];
+    const values: number[] = [];
+    for (const row of data.months) {
+      const value = ratioPercent(row.refundsCents, row.salesCents);
+      if (value === null) continue;
+      values.push(value);
+    }
+    return values;
+  }, [data]);
+
+  const storageRatioSeries = useMemo(() => {
+    if (!data) return [];
+    const values: number[] = [];
+    for (const row of data.months) {
+      const value = ratioPercent(row.storageFeesCents, row.salesCents);
+      if (value === null) continue;
+      values.push(value);
+    }
+    return values;
+  }, [data]);
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Analytics" />;
@@ -229,16 +385,34 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
+          {analyticsQuery.error && (
+            <Card className="border-slate-200/70 dark:border-white/10">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Analytics unavailable</div>
+                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {analyticsQuery.error instanceof Error ? analyticsQuery.error.message : String(analyticsQuery.error)}
+                    </div>
+                  </div>
+                  <Button asChild variant="outline">
+                    <Link href="/setup">Setup Wizard</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-900 dark:text-white">Cohort Benchmarking</div>
                   <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Amazon North America • Order count: 1K–5K • Latest data available: Dec 2025
+                    {data ? `${data.channel.label} • Settlements: ${data.settlementsInPeriod}` : 'Loading…'}
                   </div>
                   <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                    Learn more about how benchmarking works in our help article.
+                    {data ? `Period: ${data.range.startDate} → ${data.range.endDate}` : ' '}
                   </div>
                 </div>
                 <div className="text-slate-400 dark:text-slate-500">
@@ -249,57 +423,38 @@ export default function AnalyticsPage() {
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <BenchmarkCard
+            <MetricCard
               title="Sales growth"
-              subtitle="vs cohort benchmark"
-              note={{ label: '0%', emphasis: 'falls in the lower 50%', emphasisClassName: 'text-amber-600 dark:text-amber-400' }}
-              value={{ percent: 8, label: '0%' }}
-              highlight={{ from: 8, to: 35, className: 'fill-amber-500/60 dark:fill-amber-400/45' }}
+              value={salesGrowth === null ? '—' : formatSignedPercent(salesGrowth)}
+              detail={
+                current
+                  ? `Sales: ${formatMoneyFromCents(current.salesCents, currency)}`
+                  : ' '
+              }
+              percentile={salesGrowth === null ? null : percentileRank(growthSeries, salesGrowth)}
             />
-            <BenchmarkCard
+            <MetricCard
               title="Fee ratio"
-              subtitle="fees / sales"
-              note={{ label: '37.7%', emphasis: 'falls in the bottom 25%', emphasisClassName: 'text-amber-600 dark:text-amber-400' }}
-              value={{ percent: 92, label: '37.7%' }}
-              highlight={{ from: 80, to: 100, className: 'fill-amber-500/60 dark:fill-amber-400/45' }}
+              value={feeRatio === null ? '—' : `${feeRatio.toFixed(2)}%`}
+              detail={
+                current
+                  ? `Fees: ${formatMoneyFromCents(current.sellerFeesCents + current.fbaFeesCents, currency)}`
+                  : ' '
+              }
+              percentile={feeRatio === null ? null : percentileRank(feeRatioSeries, feeRatio)}
             />
-            <BenchmarkCard
+            <MetricCard
               title="Refund ratio"
-              subtitle="refunds / sales"
-              note={{ label: '0%', emphasis: 'falls in the top 25%', emphasisClassName: 'text-sky-600 dark:text-sky-400' }}
-              value={{ percent: 14, label: '0%' }}
-              highlight={{ from: 0, to: 24, className: 'fill-sky-500/55 dark:fill-sky-400/40' }}
+              value={refundRatio === null ? '—' : `${refundRatio.toFixed(2)}%`}
+              detail={current ? `Refunds: ${formatMoneyFromCents(current.refundsCents, currency)}` : ' '}
+              percentile={refundRatio === null ? null : percentileRank(refundRatioSeries, refundRatio)}
             />
-            <BenchmarkCard
-              title="Refund ratio growth trend"
-              subtitle="trend score"
-              note={{ label: '0%', emphasis: 'falls in the lower 50%', emphasisClassName: 'text-amber-600 dark:text-amber-400' }}
-              value={{ percent: 78, label: '0%' }}
-              highlight={{ from: 70, to: 100, className: 'fill-amber-500/60 dark:fill-amber-400/45' }}
+            <MetricCard
+              title="Total storage fees ratio"
+              value={storageRatio === null ? '—' : `${storageRatio.toFixed(2)}%`}
+              detail={current ? `Storage: ${formatMoneyFromCents(current.storageFeesCents, currency)}` : ' '}
+              percentile={storageRatio === null ? null : percentileRank(storageRatioSeries, storageRatio)}
             />
-            <BenchmarkCard
-              title="Long term vs. short term storage fee ratio"
-              subtitle="storage mix"
-              note={{ label: '0%', emphasis: 'falls in the top 25%', emphasisClassName: 'text-sky-600 dark:text-sky-400' }}
-              value={{ percent: 32, label: '0%' }}
-              highlight={{ from: 0, to: 40, className: 'fill-sky-500/55 dark:fill-sky-400/40' }}
-            />
-            <BenchmarkCard
-              title="Long term storage fees ratio"
-              subtitle="long term storage"
-              note={{ label: '0%', emphasis: 'falls in the top 25%', emphasisClassName: 'text-sky-600 dark:text-sky-400' }}
-              value={{ percent: 28, label: '0%' }}
-              highlight={{ from: 0, to: 35, className: 'fill-sky-500/55 dark:fill-sky-400/40' }}
-            />
-            <div className="lg:col-span-2">
-              <BenchmarkCard
-                title="Total storage fees ratio"
-                subtitle="storage / sales"
-                note={{ label: '0%', emphasis: 'falls in the top 25%', emphasisClassName: 'text-sky-600 dark:text-sky-400' }}
-                value={{ percent: 34, label: '0%' }}
-                highlight={{ from: 0, to: 40, className: 'fill-sky-500/55 dark:fill-sky-400/40' }}
-              />
-            </div>
           </div>
         </div>
       </div>

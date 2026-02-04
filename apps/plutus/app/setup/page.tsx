@@ -647,26 +647,6 @@ function AccountsSection({
     );
   }
 
-  if (accountsCreated) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 mb-4">
-          <CheckIcon className="w-8 h-8 text-green-500" />
-        </div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Accounts Created</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO.
-          {lastEnsureSummary && (
-            <>
-              {' '}
-              Created {lastEnsureSummary.created}, skipped {lastEnsureSummary.skipped}.
-            </>
-          )}
-        </p>
-      </div>
-    );
-  }
-
   const renderAccountGroup = (title: string, accountList: Array<{ key: string; label: string; type: string }>) => (
     <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
       <CardContent className="p-0">
@@ -707,6 +687,24 @@ function AccountsSection({
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
       </div>
 
+      {accountsCreated && (
+        <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-4 text-sm text-emerald-900 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-white/5 dark:text-emerald-300 dark:ring-emerald-900/30">
+              <CheckIcon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold">Sub-accounts ensured in QBO</div>
+              <div className="mt-0.5 text-emerald-800/80 dark:text-emerald-200/80">
+                {lastEnsureSummary
+                  ? `Created ${lastEnsureSummary.created}, skipped ${lastEnsureSummary.skipped}.`
+                  : `Ready for ${brands.length} brand${brands.length > 1 ? 's' : ''}.`}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4">
         {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
@@ -731,13 +729,11 @@ function AccountsSection({
   );
 }
 
-// Marketplace to country mapping for Talos DB queries
+// Marketplace to country mapping for SKU scoping
 const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
   'amazon.com': 'US',
   'amazon.co.uk': 'UK',
 };
-
-type TalosSku = { skuCode: string; asin: string | null; description: string; country: 'US' | 'UK' };
 
 // SKUs Section
 function SkusSection({
@@ -760,25 +756,6 @@ function SkusSection({
     }
     return Array.from(set);
   }, [brands]);
-
-  // Fetch Talos SKUs for each country
-  const { data: talosSkus, isLoading: isLoadingTalos } = useQuery({
-    queryKey: ['talos-skus', countries],
-    queryFn: async () => {
-      const results: TalosSku[] = [];
-      for (const country of countries) {
-        const res = await fetch(`${basePath}/api/setup/talos-skus?country=${country}`);
-        if (!res.ok) throw new Error(`Failed to fetch ${country} SKUs`);
-        const data = await res.json() as { skus: { skuCode: string; asin: string | null; description: string }[] };
-        for (const s of data.skus) {
-          results.push({ ...s, country });
-        }
-      }
-      return results;
-    },
-    enabled: countries.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
 
   const [draftSkus, setDraftSkus] = useState<Sku[]>(skus);
 
@@ -803,14 +780,9 @@ function SkusSection({
       if (!country) {
         throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
       }
-      return `${country}::${normalizeSkuKey(sku.sku)}`;
+  return `${country}::${normalizeSkuKey(sku.sku)}`;
     },
     [brandByName, normalizeSkuKey],
-  );
-
-  const keyForTalos = useCallback(
-    (row: TalosSku) => `${row.country}::${normalizeSkuKey(row.skuCode)}`,
-    [normalizeSkuKey],
   );
 
   const draftByKey = useMemo(() => {
@@ -820,56 +792,6 @@ function SkusSection({
     }
     return map;
   }, [draftSkus, keyForSku]);
-
-  const handleAssignTalosSku = useCallback(
-    (row: TalosSku, brandName: string) => {
-      const key = keyForTalos(row);
-
-      setDraftSkus((prev) => {
-        const next = [...prev];
-        const index = next.findIndex((sku) => keyForSku(sku) === key);
-
-        if (brandName === '__unassigned__') {
-          if (index !== -1) {
-            next.splice(index, 1);
-          }
-          return next;
-        }
-
-        const existing = index === -1 ? undefined : next[index];
-
-        const existingProductName = existing?.productName;
-        const productName =
-          existingProductName && existingProductName.trim() !== '' ? existingProductName : row.description;
-
-        const existingAsin = existing?.asin;
-        const asin =
-          existingAsin && existingAsin.trim() !== '' ? existingAsin : row.asin === null ? undefined : row.asin;
-
-        const updated: Sku = {
-          sku: row.skuCode,
-          productName,
-          asin,
-          brand: brandName,
-        };
-
-        if (index === -1) {
-          next.push(updated);
-        } else {
-          next[index] = updated;
-        }
-
-        next.sort((a, b) => {
-          const aKey = keyForSku(a);
-          const bKey = keyForSku(b);
-          return aKey.localeCompare(bKey);
-        });
-
-        return next;
-      });
-    },
-    [keyForSku, keyForTalos],
-  );
 
   const handleRemoveConfiguredSku = useCallback(
     (key: string) => {
@@ -957,14 +879,6 @@ function SkusSection({
     return (
       <div className="text-center py-12">
         <p className="text-slate-500 dark:text-slate-400">No supported marketplaces found. Add US or UK brands first.</p>
-      </div>
-    );
-  }
-
-  if (isLoadingTalos) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">Loading SKUs from Talos…</p>
       </div>
     );
   }
@@ -1110,66 +1024,6 @@ function SkusSection({
                 Add SKU
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-slate-200/70 dark:border-white/10">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Product name</TableHead>
-                  <TableHead>ASIN</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Brand</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {talosSkus && talosSkus.length > 0 ? (
-                  talosSkus.map((s) => (
-                    <TableRow key={`${s.country}-${s.skuCode}`}>
-                      <TableCell className="font-mono text-sm text-slate-900 dark:text-white">{s.skuCode}</TableCell>
-                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">{s.description}</TableCell>
-                      <TableCell className="font-mono text-sm text-slate-500 dark:text-slate-400">
-                        {s.asin ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                          {s.country}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={draftByKey.get(keyForTalos(s))?.brand ?? '__unassigned__'}
-                          onValueChange={(value) => handleAssignTalosSku(s, value)}
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Select brand…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                            {brandsForCountry(s.country).map((b) => (
-                              <SelectItem key={b.name} value={b.name}>
-                                {b.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No SKUs found in Talos for {countries.join(', ')}.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
           </div>
         </CardContent>
       </Card>
@@ -1418,7 +1272,7 @@ export default function SetupPage() {
                 section={state.section}
                 onSectionChange={(s) => saveState({ section: s })}
                 brandsComplete={state.brands.length > 0}
-                accountsComplete={state.accountsCreated}
+                accountsComplete={state.accountsCreated && mappedCount === ALL_ACCOUNTS.length}
                 skusComplete={state.skus.length > 0}
               />
 

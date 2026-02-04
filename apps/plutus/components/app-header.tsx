@@ -3,7 +3,7 @@
 import { Suspense, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Boxes, ChevronDown, ListChecks, ReceiptText, Settings as SettingsIcon } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Boxes, ChevronDown, ListChecks, ReceiptText, Settings as SettingsIcon } from 'lucide-react';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
@@ -74,6 +74,7 @@ type NavItem =
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptText },
+  { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   {
     label: 'Accounts & Taxes',
