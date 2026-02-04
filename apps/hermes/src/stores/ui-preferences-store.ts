@@ -7,6 +7,7 @@ import { getHermesBasePath } from "@/lib/base-path";
 
 export type OrdersPreferences = {
   pageSize: number;
+  filterOrderId: string;
   filterMarketplaceId: string;
   filterDelivery: "any" | "has" | "missing";
   filterOrderStatus: string;
@@ -48,6 +49,7 @@ type HermesUiPreferencesState = {
 
 const DEFAULT_ORDERS: OrdersPreferences = {
   pageSize: 50,
+  filterOrderId: "",
   filterMarketplaceId: "any",
   filterDelivery: "any",
   filterOrderStatus: "any",
@@ -60,6 +62,7 @@ const DEFAULT_INSIGHTS: InsightsPreferences = {
 
 const STORAGE_KEY = scopedStorageKey("hermes.ui-preferences");
 migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences", next: STORAGE_KEY });
+migrateLegacyLocalStorageKey({ legacy: "hermes.ui-preferences:", next: STORAGE_KEY });
 
 export const useHermesUiPreferencesStore = create<HermesUiPreferencesState>()(
   persist(
