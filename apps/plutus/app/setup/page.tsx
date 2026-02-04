@@ -538,6 +538,7 @@ function AccountsSection({
 }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastEnsureSummary, setLastEnsureSummary] = useState<{ created: number; skipped: number } | null>(null);
 
   const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
   const allMapped = mappedCount === ALL_ACCOUNTS.length;
@@ -590,6 +591,12 @@ function AccountsSection({
         const message = data.error ? data.error : 'Failed to create accounts';
         throw new Error(message);
       }
+
+      if (!Array.isArray(data.created) || !Array.isArray(data.skipped)) {
+        throw new Error('Unexpected response from account creation endpoint');
+      }
+
+      setLastEnsureSummary({ created: data.created.length, skipped: data.skipped.length });
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -648,7 +655,13 @@ function AccountsSection({
         </div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Accounts Created</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO
+          Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO.
+          {lastEnsureSummary && (
+            <>
+              {' '}
+              Created {lastEnsureSummary.created}, skipped {lastEnsureSummary.skipped}.
+            </>
+          )}
         </p>
       </div>
     );
@@ -712,7 +725,7 @@ function AccountsSection({
         disabled={!allMapped || creating}
         className="w-full"
       >
-        {creating ? 'Creating…' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+        {creating ? 'Ensuring…' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
       </Button>
     </div>
   );
@@ -736,6 +749,8 @@ function SkusSection({
   onSkusChange: (skus: Sku[]) => void;
   brands: Brand[];
 }) {
+  const normalizeSkuKey = useCallback((raw: string) => raw.trim().replace(/\s+/g, '-').toUpperCase(), []);
+
   // Derive unique countries from brands
   const countries = useMemo(() => {
     const set = new Set<'US' | 'UK'>();
@@ -765,40 +780,170 @@ function SkusSection({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Brand assignments: skuCode -> brand name
-  const [brandAssignments, setBrandAssignments] = useState<Record<string, string>>({});
+  const [draftSkus, setDraftSkus] = useState<Sku[]>(skus);
 
-  // Initialize assignments from existing saved SKUs
   useEffect(() => {
-    if (skus.length > 0 && talosSkus && talosSkus.length > 0) {
-      const initial: Record<string, string> = {};
-      for (const s of skus) {
-        initial[s.sku] = s.brand;
-      }
-      setBrandAssignments(initial);
-    }
-  }, [skus, talosSkus]);
+    setDraftSkus(skus);
+  }, [skus]);
 
   // Get brands for a given country
   const brandsForCountry = useCallback((country: 'US' | 'UK') => {
     return brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] === country);
   }, [brands]);
 
-  // Save assigned SKUs
-  const handleSave = useCallback(() => {
-    if (!talosSkus) return;
-    const skusToSave: Sku[] = talosSkus
-      .filter((s) => brandAssignments[s.skuCode])
-      .map((s) => ({
-        sku: s.skuCode,
-        productName: s.description,
-        asin: s.asin ?? undefined,
-        brand: brandAssignments[s.skuCode],
-      }));
-    onSkusChange(skusToSave);
-  }, [talosSkus, brandAssignments, onSkusChange]);
+  const brandByName = useMemo(() => new Map(brands.map((b) => [b.name, b])), [brands]);
 
-  const assignedCount = Object.values(brandAssignments).filter(Boolean).length;
+  const keyForSku = useCallback(
+    (sku: Sku) => {
+      const brand = brandByName.get(sku.brand);
+      if (!brand) {
+        throw new Error(`Unknown brand: ${sku.brand}`);
+      }
+      const country = MARKETPLACE_COUNTRY[brand.marketplace];
+      if (!country) {
+        throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
+      }
+      return `${country}::${normalizeSkuKey(sku.sku)}`;
+    },
+    [brandByName, normalizeSkuKey],
+  );
+
+  const keyForTalos = useCallback(
+    (row: TalosSku) => `${row.country}::${normalizeSkuKey(row.skuCode)}`,
+    [normalizeSkuKey],
+  );
+
+  const draftByKey = useMemo(() => {
+    const map = new Map<string, Sku>();
+    for (const sku of draftSkus) {
+      map.set(keyForSku(sku), sku);
+    }
+    return map;
+  }, [draftSkus, keyForSku]);
+
+  const handleAssignTalosSku = useCallback(
+    (row: TalosSku, brandName: string) => {
+      const key = keyForTalos(row);
+
+      setDraftSkus((prev) => {
+        const next = [...prev];
+        const index = next.findIndex((sku) => keyForSku(sku) === key);
+
+        if (brandName === '__unassigned__') {
+          if (index !== -1) {
+            next.splice(index, 1);
+          }
+          return next;
+        }
+
+        const existing = index === -1 ? undefined : next[index];
+
+        const existingProductName = existing?.productName;
+        const productName =
+          existingProductName && existingProductName.trim() !== '' ? existingProductName : row.description;
+
+        const existingAsin = existing?.asin;
+        const asin =
+          existingAsin && existingAsin.trim() !== '' ? existingAsin : row.asin === null ? undefined : row.asin;
+
+        const updated: Sku = {
+          sku: row.skuCode,
+          productName,
+          asin,
+          brand: brandName,
+        };
+
+        if (index === -1) {
+          next.push(updated);
+        } else {
+          next[index] = updated;
+        }
+
+        next.sort((a, b) => {
+          const aKey = keyForSku(a);
+          const bKey = keyForSku(b);
+          return aKey.localeCompare(bKey);
+        });
+
+        return next;
+      });
+    },
+    [keyForSku, keyForTalos],
+  );
+
+  const handleRemoveConfiguredSku = useCallback(
+    (key: string) => {
+      setDraftSkus((prev) => prev.filter((sku) => keyForSku(sku) !== key));
+    },
+    [keyForSku],
+  );
+
+  const handleUpdateConfiguredSku = useCallback(
+    (key: string, patch: Partial<Sku>) => {
+      setDraftSkus((prev) => {
+        const next = [...prev];
+        const index = next.findIndex((sku) => keyForSku(sku) === key);
+        if (index === -1) return prev;
+
+        const current = next[index];
+        if (!current) return prev;
+
+        next[index] = { ...current, ...patch };
+        return next;
+      });
+    },
+    [keyForSku],
+  );
+
+  const supportedBrands = useMemo(
+    () => brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] !== undefined),
+    [brands],
+  );
+
+  const [manualSku, setManualSku] = useState<{ sku: string; productName: string; asin: string; brand: string }>({
+    sku: '',
+    productName: '',
+    asin: '',
+    brand: '',
+  });
+
+  const handleAddManualSku = useCallback(() => {
+    const sku = manualSku.sku.trim();
+    if (sku === '') return;
+    if (manualSku.brand.trim() === '') return;
+
+    const brand = brandByName.get(manualSku.brand);
+    if (!brand) {
+      throw new Error(`Unknown brand: ${manualSku.brand}`);
+    }
+    const country = MARKETPLACE_COUNTRY[brand.marketplace];
+    if (!country) {
+      throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
+    }
+
+    const key = `${country}::${normalizeSkuKey(sku)}`;
+    if (draftByKey.has(key)) return;
+
+    const productName = manualSku.productName.trim() === '' ? sku : manualSku.productName.trim();
+    const asin = manualSku.asin.trim() === '' ? undefined : manualSku.asin.trim();
+
+    setDraftSkus((prev) => [
+      ...prev,
+      {
+        sku,
+        productName,
+        asin,
+        brand: manualSku.brand.trim(),
+      },
+    ]);
+
+    setManualSku({ sku: '', productName: '', asin: '', brand: manualSku.brand });
+  }, [brandByName, draftByKey, manualSku, normalizeSkuKey]);
+
+  // Save configured SKUs
+  const handleSave = useCallback(() => {
+    onSkusChange(draftSkus);
+  }, [draftSkus, onSkusChange]);
 
   if (brands.length === 0) {
     return (
@@ -827,8 +972,147 @@ function SkusSection({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">SKUs</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Inventory</h2>
       </div>
+
+      <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Configured SKUs</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">{draftSkus.length} total</div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Product name</TableHead>
+                  <TableHead>ASIN</TableHead>
+                  <TableHead>Country</TableHead>
+                  <TableHead>Brand</TableHead>
+                  <TableHead className="w-12 text-right"> </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {draftSkus.length > 0 ? (
+                  draftSkus
+                    .map((sku) => {
+                      const key = keyForSku(sku);
+                      const [country] = key.split('::');
+                      return { sku, key, country: country as 'US' | 'UK' };
+                    })
+                    .sort((a, b) => a.key.localeCompare(b.key))
+                    .map(({ sku, key, country }) => (
+                      <TableRow key={key}>
+                        <TableCell className="font-mono text-sm text-slate-900 dark:text-white whitespace-nowrap">{sku.sku}</TableCell>
+                        <TableCell className="min-w-[220px]">
+                          <Input
+                            value={sku.productName}
+                            onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
+                            placeholder="Product name"
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-[170px]">
+                          <Input
+                            value={sku.asin ? sku.asin : ''}
+                            onChange={(e) =>
+                              handleUpdateConfiguredSku(
+                                key,
+                                e.target.value.trim() === '' ? { asin: undefined } : { asin: e.target.value },
+                              )
+                            }
+                            placeholder="ASIN"
+                            className="font-mono"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                            {country}
+                          </span>
+                        </TableCell>
+                        <TableCell className="min-w-[220px]">
+                          <Select value={sku.brand} onValueChange={(value) => handleUpdateConfiguredSku(key, { brand: value })}>
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue placeholder="Select brand…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {brandsForCountry(country).map((b) => (
+                                <SelectItem key={b.name} value={b.name}>
+                                  {b.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleRemoveConfiguredSku(key)} aria-label={`Remove SKU ${sku.sku}`}>
+                            <XIcon className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No SKUs configured yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="border-t border-slate-200/70 dark:border-white/10 bg-white/60 dark:bg-white/[0.02] px-4 py-4">
+            <div className="grid gap-3 md:grid-cols-[1.2fr,2fr,1.2fr,1.2fr,auto] md:items-end">
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SKU</div>
+                <Input
+                  value={manualSku.sku}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, sku: e.target.value }))}
+                  placeholder="e.g. CSTDS001002"
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Product name</div>
+                <Input
+                  value={manualSku.productName}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, productName: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">ASIN</div>
+                <Input
+                  value={manualSku.asin}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, asin: e.target.value }))}
+                  placeholder="Optional"
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</div>
+                <Select value={manualSku.brand} onValueChange={(value) => setManualSku((prev) => ({ ...prev, brand: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select brand…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supportedBrands.map((b) => (
+                      <SelectItem key={b.name} value={b.name}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleAddManualSku} disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}>
+                Add SKU
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-200/70 dark:border-white/10">
         <CardContent className="p-0">
@@ -859,15 +1143,14 @@ function SkusSection({
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={brandAssignments[s.skuCode] ?? ''}
-                          onValueChange={(value) =>
-                            setBrandAssignments((prev) => ({ ...prev, [s.skuCode]: value }))
-                          }
+                          value={draftByKey.get(keyForTalos(s))?.brand ?? '__unassigned__'}
+                          onValueChange={(value) => handleAssignTalosSku(s, value)}
                         >
                           <SelectTrigger className="w-[200px]">
                             <SelectValue placeholder="Select brand…" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="__unassigned__">Unassigned</SelectItem>
                             {brandsForCountry(s.country).map((b) => (
                               <SelectItem key={b.name} value={b.name}>
                                 {b.name}
@@ -893,10 +1176,10 @@ function SkusSection({
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {assignedCount} of {talosSkus?.length ?? 0} SKUs assigned to brands
+          {draftSkus.length} configured SKU{draftSkus.length !== 1 ? 's' : ''}
         </p>
-        <Button onClick={handleSave} disabled={assignedCount === 0}>
-          Save SKU Assignments
+        <Button onClick={handleSave}>
+          Save SKUs
         </Button>
       </div>
     </div>
