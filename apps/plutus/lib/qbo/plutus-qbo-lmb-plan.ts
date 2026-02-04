@@ -94,9 +94,12 @@ export type AccountMappings = {
   cogsFreight: string;
   cogsDuty: string;
   cogsMfgAccessories: string;
-  cogsLandFreight: string;
-  cogsStorage3pl: string;
   cogsShrinkage: string;
+
+  // Warehousing buckets (COGS)
+  warehousing3pl: string;
+  warehousingAmazonFc: string;
+  warehousingAwd: string;
 
   // LMB Revenue/Fee accounts
   amazonSales: string;
@@ -143,9 +146,12 @@ export async function ensurePlutusQboLmbPlanAccounts(
     cogsFreight: requireAccountById(accounts, mappings.cogsFreight, 'COGS Freight'),
     cogsDuty: requireAccountById(accounts, mappings.cogsDuty, 'COGS Duty'),
     cogsMfgAccessories: requireAccountById(accounts, mappings.cogsMfgAccessories, 'COGS Mfg Accessories'),
-    cogsLandFreight: requireAccountById(accounts, mappings.cogsLandFreight, 'COGS Land Freight'),
-    cogsStorage3pl: requireAccountById(accounts, mappings.cogsStorage3pl, 'COGS Storage 3PL'),
     cogsShrinkage: requireAccountById(accounts, mappings.cogsShrinkage, 'COGS Shrinkage'),
+
+    // Warehousing buckets
+    warehousing3pl: requireAccountById(accounts, mappings.warehousing3pl, 'Warehousing 3PL'),
+    warehousingAmazonFc: requireAccountById(accounts, mappings.warehousingAmazonFc, 'Warehousing Amazon FC'),
+    warehousingAwd: requireAccountById(accounts, mappings.warehousingAwd, 'Warehousing AWD'),
 
     // LMB
     amazonSales: requireAccountById(accounts, mappings.amazonSales, 'Amazon Sales'),
@@ -174,9 +180,12 @@ export async function ensurePlutusQboLmbPlanAccounts(
     { label: 'Freight', parent: parents.cogsFreight },
     { label: 'Duty', parent: parents.cogsDuty },
     { label: 'Mfg Accessories', parent: parents.cogsMfgAccessories },
-    { label: 'Land Freight', parent: parents.cogsLandFreight },
-    { label: 'Storage 3PL', parent: parents.cogsStorage3pl },
     { label: 'Inventory Shrinkage', parent: parents.cogsShrinkage },
+
+    // Warehousing buckets (brand leaf accounts are just the brand name)
+    { label: 'Warehousing:3PL', parent: parents.warehousing3pl },
+    { label: 'Warehousing:Amazon FC', parent: parents.warehousingAmazonFc },
+    { label: 'Warehousing:AWD', parent: parents.warehousingAwd },
 
     // LMB P&L
     { label: 'Amazon Sales', parent: parents.amazonSales },
@@ -192,7 +201,7 @@ export async function ensurePlutusQboLmbPlanAccounts(
   // For each brand, create sub-accounts under each mapped parent
   for (const brandName of brandNames) {
     for (const spec of accountSpecs) {
-      const subAccountName = `${spec.label} - ${brandName}`;
+      const subAccountName = spec.label.startsWith('Warehousing:') ? brandName : `${spec.label} - ${brandName}`;
       const result = await ensureSubAccount(currentConnection, accounts, spec.parent, subAccountName);
 
       if (result.created && result.account) {

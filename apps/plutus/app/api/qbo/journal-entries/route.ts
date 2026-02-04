@@ -3,10 +3,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import type { QboJournalEntry, QboConnection } from '@/lib/qbo/api';
-import {
-  createJournalEntry,
-  fetchJournalEntries,
-} from '@/lib/qbo/api';
+import { createJournalEntry, fetchJournalEntries, QboAuthError } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-journal-entries' });
@@ -95,6 +92,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to fetch journal entries', error);
     return NextResponse.json(
       {
@@ -158,6 +159,10 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to create journal entry', error);
     return NextResponse.json(
       {

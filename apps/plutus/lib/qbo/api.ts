@@ -6,6 +6,10 @@ const logger = createLogger({ name: 'qbo-api' });
 // Default timeout for QBO API calls (60 seconds)
 const QBO_TIMEOUT_MS = 60000;
 
+export class QboAuthError extends Error {
+  name = 'QboAuthError';
+}
+
 /**
  * Fetch with timeout support
  */
@@ -334,7 +338,14 @@ export async function getValidToken(
   // If token expires in less than 5 minutes, refresh it
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     logger.info('Access token expired or expiring soon, refreshing...');
-    const newTokens = await refreshAccessToken(connection.refreshToken);
+    let newTokens: Awaited<ReturnType<typeof refreshAccessToken>>;
+    try {
+      newTokens = await refreshAccessToken(connection.refreshToken);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('QBO token refresh failed', { error: message });
+      throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
+    }
     const updatedConnection: QboConnection = {
       ...connection,
       accessToken: newTokens.accessToken,
