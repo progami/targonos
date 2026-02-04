@@ -138,6 +138,15 @@ const BASE_APPS: AppBase[] = [
     devPath: '/hermes',
     devUrl: 'http://localhost:3014',
   },
+  {
+    id: 'argus',
+    name: 'Argus',
+    description: 'Amazon listings + market watcher (screenshots + snapshots).',
+    url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
+    category: 'Account / Listing',
+    devPath: '/argus',
+    devUrl: 'http://localhost:3016',
+  },
 ]
 
 let manifestCache: AppManifest | null | undefined
