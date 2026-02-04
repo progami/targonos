@@ -180,7 +180,7 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  gap: 12px;
   position: relative;
   z-index: 1;
 }
@@ -190,6 +190,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  height: 188px;
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -210,9 +211,37 @@
   pointer-events: none;
 }
 
+.cardDisabled .arrow {
+  color: rgba(226, 232, 240, 0.32);
+}
+
+.cardDisabled .description {
+  color: rgba(226, 232, 240, 0.42);
+}
+
+.badgesRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+  align-items: center;
+}
+
+.lockBadge {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.14);
+  color: rgba(254, 202, 202, 0.92);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .lifecycleBadge {
   align-self: flex-start;
-  margin-top: 12px;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -221,6 +250,7 @@
   font-size: 11px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .card::before {
@@ -338,12 +368,20 @@
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .description {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-height: 3em;
+  overflow: hidden;
 }
 
 .empty {

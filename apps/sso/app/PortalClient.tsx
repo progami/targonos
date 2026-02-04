@@ -146,7 +146,8 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
                 <div className={styles.grid}>
 	                  {appsByCategory[category]?.map((app) => {
 	                    const isDevLifecycle = app.lifecycle === 'dev'
-	                    const isDisabled = isDevLifecycle && !allowDevApps
+	                    const isEntitled = Boolean(roleMap[app.id])
+	                    const isDisabled = !isEntitled || (isDevLifecycle && !allowDevApps)
 	                    const cardClassName = isDisabled
 	                      ? `${styles.card} ${styles.cardDisabled}`
 	                      : styles.card
@@ -177,7 +178,10 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
 	                            />
                           </svg>
                         </div>
-                        {isDevLifecycle && <span className={styles.lifecycleBadge}>In Development</span>}
+                        <div className={styles.badgesRow}>
+                          {!isEntitled && <span className={styles.lockBadge}>No Access</span>}
+                          {isDevLifecycle && <span className={styles.lifecycleBadge}>In Development</span>}
+                        </div>
                         <div className={styles.name}>{app.name}</div>
                         <p className={styles.description}>{app.description}</p>
                       </a>
