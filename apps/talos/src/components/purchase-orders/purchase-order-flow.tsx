@@ -393,13 +393,6 @@ interface PurchaseOrderDocumentSummary {
   viewUrl: string
 }
 
-type CostRateSummary = {
-  id: string
-  costName: string
-  costValue: number
-  unitOfMeasure: string
-}
-
 type PurchaseOrderForwardingCostSummary = {
   id: string
   purchaseOrderId: string
@@ -783,7 +776,7 @@ function formatTextOrDash(value: string | null | undefined) {
   return value
 }
 
-type CargoSubTabKey = 'details' | 'attributes' | 'receiving'
+type CargoSubTabKey = 'details' | 'attributes'
 
 const isIssuedShippingMarksKey = (key: string): boolean => {
   return (
@@ -800,7 +793,6 @@ const isIssuedShippingMarksKey = (key: string): boolean => {
 const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
   if (!key.startsWith('cargo.')) return null
   if (isIssuedShippingMarksKey(key)) return 'attributes'
-  if (key.includes('.quantityReceived')) return 'receiving'
   return 'details'
 }
 
@@ -889,25 +881,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>(
     []
   )
-  const [forwardingCostsLoading, setForwardingCostsLoading] = useState(false)
-  const [forwardingRates, setForwardingRates] = useState<CostRateSummary[]>([])
-  const [forwardingRatesLoading, setForwardingRatesLoading] = useState(false)
-  const [forwardingWarehouseCode, setForwardingWarehouseCode] = useState('')
-  const [newForwardingCostDraft, setNewForwardingCostDraft] = useState({
-    costName: '',
-    quantity: '',
-    notes: '',
-    currency: '',
-  })
-  const [forwardingCostSubmitting, setForwardingCostSubmitting] = useState(false)
-  const [editingForwardingCostId, setEditingForwardingCostId] = useState<string | null>(null)
-  const [editingForwardingCostDraft, setEditingForwardingCostDraft] = useState({
-    costName: '',
-    quantity: '',
-    notes: '',
-    currency: '',
-  })
-  const [forwardingCostDeletingId, setForwardingCostDeletingId] = useState<string | null>(null)
+  const [freightCostEditing, setFreightCostEditing] = useState(false)
+  const [freightCostDraft, setFreightCostDraft] = useState('')
+  const [freightCostSaving, setFreightCostSaving] = useState(false)
 
   const [gateIssues, setGateIssues] = useState<Record<string, string> | null>(null)
 
@@ -929,6 +905,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     notes: '',
   })
 
+  const [inboundBreakdownOpen, setInboundBreakdownOpen] = useState(false)
+  const [storageBreakdownOpen, setStorageBreakdownOpen] = useState(false)
+  const [supplierAdjustmentOpen, setSupplierAdjustmentOpen] = useState(false)
+  const [landedBreakdownOpen, setLandedBreakdownOpen] = useState(false)
+
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
   const [batchesBySkuId, setBatchesBySkuId] = useState<Record<string, BatchOption[]>>({})
@@ -939,7 +920,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     'details' | 'cargo' | 'costs' | 'documents' | 'history'
   >('details')
   const [productCostsEditing, setProductCostsEditing] = useState(false)
-  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes' | 'receiving'>('details')
+  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
     batchLot: '',
@@ -951,12 +932,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
-    type: 'cancel' | 'reject' | 'delete-line' | 'delete-forwarding-cost' | null
+    type: 'cancel' | 'reject' | 'delete-line' | null
     title: string
     message: string
     lineId?: string | null
-    forwardingCostId?: string | null
-  }>({ open: false, type: null, title: '', message: '', lineId: null, forwardingCostId: null })
+  }>({ open: false, type: null, title: '', message: '', lineId: null })
 
   // Stage-based navigation - which stage view is currently selected
   const [selectedStageView, setSelectedStageView] = useState<string | null>(null)
@@ -1224,20 +1204,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     [patchOrderLine, unitSystem]
   )
 
-  useEffect(() => {
-    const selected = forwardingWarehouseCode.trim()
-    if (selected) return
-    const next = order?.warehouseCode
-    if (!next) return
-    setForwardingWarehouseCode(next)
-  }, [forwardingWarehouseCode, order?.warehouseCode])
-
   const refreshForwardingCosts = useCallback(async () => {
     const orderId = order?.id
     if (!orderId) return
 
     try {
-      setForwardingCostsLoading(true)
       const response = await fetch(`/api/purchase-orders/${orderId}/forwarding-costs`)
       if (!response.ok) {
         setForwardingCosts([])
@@ -1249,8 +1220,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setForwardingCosts(Array.isArray(list) ? (list as PurchaseOrderForwardingCostSummary[]) : [])
     } catch {
       setForwardingCosts([])
-    } finally {
-      setForwardingCostsLoading(false)
     }
   }, [order?.id])
 
@@ -1439,86 +1408,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     supplierAdjustmentSaving,
   ])
 
-  const selectedForwardingWarehouse = useMemo(() => {
-    const code = forwardingWarehouseCode.trim()
-    if (!code) return null
-    const match = warehouses.find(row => row.code === code)
-    if (!match) return null
-    return match
-  }, [forwardingWarehouseCode, warehouses])
-
-  const forwardingWarehouseId = selectedForwardingWarehouse ? selectedForwardingWarehouse.id : null
-
-  useEffect(() => {
-    if (!forwardingWarehouseId) {
-      setForwardingRates([])
-      return
-    }
-
-    const loadRates = async () => {
-      try {
-        setForwardingRatesLoading(true)
-        const response = await fetch(
-          `/api/rates?warehouseId=${encodeURIComponent(forwardingWarehouseId)}&costCategory=Forwarding&activeOnly=true`
-        )
-
-        if (!response.ok) {
-          setForwardingRates([])
-          return
-        }
-
-        const payload: unknown = await response.json().catch(() => null)
-        if (!Array.isArray(payload)) {
-          setForwardingRates([])
-          return
-        }
-
-        const byName = new Map<string, CostRateSummary>()
-        for (const item of payload) {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-          const record = item as Record<string, unknown>
-          const id = record.id
-          const costName = record.costName
-          const unitOfMeasure = record.unitOfMeasure
-          const rawValue = record.costValue
-
-          if (typeof id !== 'string') continue
-          if (typeof costName !== 'string') continue
-          if (typeof unitOfMeasure !== 'string') continue
-
-          const parsedValue = typeof rawValue === 'number' ? rawValue : Number(rawValue)
-          if (!Number.isFinite(parsedValue)) continue
-
-          if (!byName.has(costName)) {
-            byName.set(costName, {
-              id,
-              costName,
-              unitOfMeasure,
-              costValue: parsedValue,
-            })
-          }
-        }
-
-        const nextRates = Array.from(byName.values()).sort((a, b) => a.costName.localeCompare(b.costName))
-        setForwardingRates(nextRates)
-      } catch {
-        setForwardingRates([])
-      } finally {
-        setForwardingRatesLoading(false)
-      }
-    }
-
-    void loadRates()
-  }, [forwardingWarehouseId])
-
-  const forwardingRateByName = useMemo(() => {
-    const map = new Map<string, CostRateSummary>()
-    for (const rate of forwardingRates) {
-      map.set(rate.costName, rate)
-    }
-    return map
-  }, [forwardingRates])
-
   const forwardingSubtotal = useMemo(
     () => forwardingCosts.reduce((sum, row) => sum + Number(row.totalCost), 0),
     [forwardingCosts]
@@ -1526,211 +1415,67 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const inboundCostRows = costLedgerSummary?.breakdown?.inbound ?? []
   const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
+  const storageCostRows = costLedgerSummary?.breakdown?.storage ?? []
+  const storageSubtotal = costLedgerSummary?.totals?.storage ?? 0
 
-  const createForwardingCost = useCallback(async () => {
+  const startEditFreightCost = useCallback(() => {
+    setFreightCostDraft(forwardingSubtotal > 0 ? forwardingSubtotal.toFixed(2) : '')
+    setFreightCostEditing(true)
+  }, [forwardingSubtotal])
+
+  const cancelEditFreightCost = useCallback(() => {
+    setFreightCostEditing(false)
+    setFreightCostDraft('')
+  }, [])
+
+  const saveFreightCost = useCallback(async () => {
     if (!order) return
-    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
-      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
+    if (freightCostSaving) return
+
+    const raw = freightCostDraft.trim()
+    if (!raw) {
+      toast.error('Freight cost is required')
       return
     }
 
-    const warehouseCode = forwardingWarehouseCode.trim()
-    if (!warehouseCode) {
-      toast.error('Select a warehouse to use its forwarding rates')
-      return
-    }
-
-    const costName = newForwardingCostDraft.costName.trim()
-    if (!costName) {
-      toast.error('Select a cost type')
-      return
-    }
-
-    const quantity = Number(newForwardingCostDraft.quantity)
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Quantity must be a positive number')
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast.error('Freight cost must be a positive number')
       return
     }
 
     try {
-      setForwardingCostSubmitting(true)
-      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/forwarding-costs`, {
-        method: 'POST',
+      setFreightCostSaving(true)
+      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/freight-cost`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          warehouseCode,
-          costName,
-          quantity,
-          notes: newForwardingCostDraft.notes,
-          currency: newForwardingCostDraft.currency,
-        }),
+        body: JSON.stringify({ amount: parsed }),
       })
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
-        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
-        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
-        if (errorMessage && detailsMessage) {
-          toast.error(`${errorMessage}: ${detailsMessage}`)
-        } else if (errorMessage) {
-          toast.error(errorMessage)
-        } else {
-          toast.error(`Failed to add cargo cost (HTTP ${response.status})`)
-        }
+        const message = typeof payload?.error === 'string' ? payload.error : null
+        toast.error(message ? message : `Failed to save freight cost (HTTP ${response.status})`)
         return
       }
 
-      const created = (await response.json()) as PurchaseOrderForwardingCostSummary
-      setForwardingCosts(prev => [...prev, created])
-      setNewForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
-      if (order.status === 'WAREHOUSE') {
-        void refreshCostLedgerSummary()
-      }
-      toast.success('Cargo cost added')
+      cancelEditFreightCost()
+      void refreshForwardingCosts()
+      void refreshCostLedgerSummary()
+      toast.success('Freight cost saved')
     } catch {
-      toast.error('Failed to add cargo cost')
+      toast.error('Failed to save freight cost')
     } finally {
-      setForwardingCostSubmitting(false)
+      setFreightCostSaving(false)
     }
   }, [
-    forwardingWarehouseCode,
-    newForwardingCostDraft.costName,
-    newForwardingCostDraft.currency,
-    newForwardingCostDraft.notes,
-    newForwardingCostDraft.quantity,
+    cancelEditFreightCost,
+    freightCostDraft,
+    freightCostSaving,
     order,
     refreshCostLedgerSummary,
+    refreshForwardingCosts,
   ])
-
-  const startEditForwardingCost = useCallback((row: PurchaseOrderForwardingCostSummary) => {
-    setEditingForwardingCostId(row.id)
-    setEditingForwardingCostDraft({
-      costName: row.costName,
-      quantity: String(row.quantity),
-      notes: row.notes ?? '',
-      currency: row.currency ?? '',
-    })
-  }, [])
-
-  const cancelEditForwardingCost = useCallback(() => {
-    setEditingForwardingCostId(null)
-    setEditingForwardingCostDraft({ costName: '', quantity: '', notes: '', currency: '' })
-  }, [])
-
-  const saveEditForwardingCost = useCallback(async () => {
-    if (!order) return
-    if (!editingForwardingCostId) return
-    if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
-      toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
-      return
-    }
-
-    const costName = editingForwardingCostDraft.costName.trim()
-    if (!costName) {
-      toast.error('Select a cost type')
-      return
-    }
-
-    const quantity = Number(editingForwardingCostDraft.quantity)
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Quantity must be a positive number')
-      return
-    }
-
-    try {
-      setForwardingCostSubmitting(true)
-      const response = await fetchWithCSRF(
-        `/api/purchase-orders/${order.id}/forwarding-costs/${editingForwardingCostId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            costName,
-            quantity,
-            notes: editingForwardingCostDraft.notes,
-            currency: editingForwardingCostDraft.currency,
-          }),
-        }
-      )
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const errorMessage = typeof payload?.error === 'string' ? payload.error : null
-        const detailsMessage = typeof payload?.details === 'string' ? payload.details : null
-        if (errorMessage && detailsMessage) {
-          toast.error(`${errorMessage}: ${detailsMessage}`)
-        } else if (errorMessage) {
-          toast.error(errorMessage)
-        } else {
-          toast.error(`Failed to update cargo cost (HTTP ${response.status})`)
-        }
-        return
-      }
-
-      const updated = (await response.json()) as PurchaseOrderForwardingCostSummary
-      setForwardingCosts(prev => prev.map(row => (row.id === updated.id ? updated : row)))
-      if (order.status === 'WAREHOUSE') {
-        void refreshCostLedgerSummary()
-      }
-      cancelEditForwardingCost()
-      toast.success('Cargo cost updated')
-    } catch {
-      toast.error('Failed to update cargo cost')
-    } finally {
-      setForwardingCostSubmitting(false)
-    }
-  }, [
-    cancelEditForwardingCost,
-    editingForwardingCostDraft.costName,
-    editingForwardingCostDraft.currency,
-    editingForwardingCostDraft.notes,
-    editingForwardingCostDraft.quantity,
-    editingForwardingCostId,
-    order,
-    refreshCostLedgerSummary,
-  ])
-
-  const deleteForwardingCost = useCallback(
-    async (row: PurchaseOrderForwardingCostSummary) => {
-      if (!order) return
-      if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
-        toast.error('Cargo costs can be edited during In Transit or At Warehouse stages')
-        return
-      }
-
-      try {
-        setForwardingCostDeletingId(row.id)
-        const response = await fetchWithCSRF(
-          `/api/purchase-orders/${order.id}/forwarding-costs/${row.id}`,
-          {
-            method: 'DELETE',
-          }
-        )
-
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null)
-          const errorMessage = typeof payload?.error === 'string' ? payload.error : null
-          if (errorMessage) {
-            toast.error(errorMessage)
-          } else {
-            toast.error(`Failed to delete cargo cost (HTTP ${response.status})`)
-          }
-          return
-        }
-
-        setForwardingCosts(prev => prev.filter(item => item.id !== row.id))
-        if (order.status === 'WAREHOUSE') {
-          void refreshCostLedgerSummary()
-        }
-        toast.success('Cargo cost deleted')
-      } catch {
-        toast.error('Failed to delete cargo cost')
-      } finally {
-        setForwardingCostDeletingId(null)
-      }
-    },
-    [order, refreshCostLedgerSummary]
-  )
 
   const handleDocumentUpload = useCallback(
     async (
@@ -2083,6 +1828,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   }, [selectedStageView, order])
 
   useEffect(() => {
+    setInboundBreakdownOpen(false)
+    setStorageBreakdownOpen(false)
+    setSupplierAdjustmentOpen(false)
+    setLandedBreakdownOpen(false)
+  }, [activeViewStage])
+
+  useEffect(() => {
     if (!order) return
 
     if (order.status !== 'MANUFACTURING') {
@@ -2197,12 +1949,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     })
   }, [activeViewStage, order])
 
-  useEffect(() => {
-    if (cargoSubTab !== 'receiving') return
-    if (activeViewStage === 'WAREHOUSE') return
-    setCargoSubTab('details')
-  }, [activeViewStage, cargoSubTab])
-
   const gateTabIssues = useMemo(() => {
     const details: Record<'details' | 'cargo' | 'costs' | 'documents', boolean> = {
       details: false,
@@ -2227,7 +1973,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     const issues: Record<CargoSubTabKey, boolean> = {
       details: false,
       attributes: false,
-      receiving: false,
     }
 
     if (!gateIssues) return issues
@@ -2274,11 +2019,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (targetTab === 'cargo') {
       const targetCargoSubTab = resolveCargoSubTabForGateKey(gateKey)
       if (targetCargoSubTab) {
-        if (targetCargoSubTab === 'receiving' && activeViewStage !== 'WAREHOUSE') {
-          setCargoSubTab('details')
-        } else {
-          setCargoSubTab(targetCargoSubTab)
-        }
+        setCargoSubTab(targetCargoSubTab)
       }
     }
 
@@ -2484,19 +2225,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (confirmDialog.type === 'delete-line' && confirmDialog.lineId) {
       await handleDeleteLine(confirmDialog.lineId)
     }
-    if (confirmDialog.type === 'delete-forwarding-cost' && confirmDialog.forwardingCostId) {
-      const row = forwardingCosts.find(item => item.id === confirmDialog.forwardingCostId)
-      if (row) {
-        await deleteForwardingCost(row)
-      }
-    }
     setConfirmDialog({
       open: false,
       type: null,
       title: '',
       message: '',
       lineId: null,
-      forwardingCostId: null,
     })
   }
 
@@ -2507,7 +2241,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       title: '',
       message: '',
       lineId: null,
-      forwardingCostId: null,
     })
   }
 
@@ -2534,7 +2267,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const supplierAdjustmentSubtotal = supplierAdjustment ? supplierAdjustment.amount : 0
   const dutySubtotal = order?.stageData.warehouse?.dutyAmount ?? 0
   const totalCostSummary =
-    productSubtotal + forwardingSubtotal + inboundSubtotal + dutySubtotal + supplierAdjustmentSubtotal
+    productSubtotal +
+    forwardingSubtotal +
+    inboundSubtotal +
+    storageSubtotal +
+    dutySubtotal +
+    supplierAdjustmentSubtotal
   const isTerminalStatus = order
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
@@ -2543,8 +2281,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const canEdit = isCreate ? true : !isReadOnly && order?.status === 'RFQ'
   const canEditDispatchAllocation =
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
-  const canEditForwardingCosts =
-    !isTerminalStatus && !isReceived && (flowStatus === 'OCEAN' || flowStatus === 'WAREHOUSE')
+  const canEditFreightCost =
+    !isCreate && !isTerminalStatus && !isReceived && flowStatus === 'OCEAN' && activeViewStage === 'OCEAN'
 
   const showProductCostsStage =
     activeViewStage === 'RFQ' ||
@@ -2555,26 +2293,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const showCargoCostsStage = activeViewStage === 'OCEAN'
   const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
-
-  const draftForwardingRate = forwardingRateByName.get(newForwardingCostDraft.costName.trim())
-  const draftForwardingUnitRate = draftForwardingRate ? draftForwardingRate.costValue : null
-  const draftForwardingQuantity = Number(newForwardingCostDraft.quantity)
-  const draftForwardingTotal =
-    draftForwardingUnitRate !== null &&
-    Number.isFinite(draftForwardingQuantity) &&
-    draftForwardingQuantity > 0
-      ? Number((draftForwardingUnitRate * draftForwardingQuantity).toFixed(2))
-      : null
-
-  const editingForwardingRate = forwardingRateByName.get(editingForwardingCostDraft.costName.trim())
-  const editingForwardingUnitRate = editingForwardingRate ? editingForwardingRate.costValue : null
-  const editingForwardingQuantity = Number(editingForwardingCostDraft.quantity)
-  const editingForwardingTotal =
-    editingForwardingUnitRate !== null &&
-    Number.isFinite(editingForwardingQuantity) &&
-    editingForwardingQuantity > 0
-      ? Number((editingForwardingUnitRate * editingForwardingQuantity).toFixed(2))
-      : null
   const showRfqPdfDownload = !isCreate && activeViewStage === 'RFQ' && order?.status === 'RFQ'
   const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED' && order?.status !== 'RFQ'
   const showShippingMarksDownload =
@@ -3422,272 +3140,341 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                       <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
                     )}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('attributes')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'attributes'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <Package2 className="h-4 w-4" />
-                    Attributes
-                    {cargoSubTabIssues.attributes && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-                  {activeViewStage === 'WAREHOUSE' && (
-                    <button
-                      type="button"
-                      onClick={() => setCargoSubTab('receiving')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                        cargoSubTab === 'receiving'
-                          ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                          : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                      }`}
-                    >
-                      <Warehouse className="h-4 w-4" />
-                      Receiving
-                      {cargoSubTabIssues.receiving && (
-                        <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                      )}
-                    </button>
-                  )}
-                </div>
+	                  <button
+	                    type="button"
+	                    onClick={() => setCargoSubTab('attributes')}
+	                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+	                      cargoSubTab === 'attributes'
+	                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
+	                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
+	                    }`}
+	                  >
+	                    <Package2 className="h-4 w-4" />
+	                    Attributes
+	                    {cargoSubTabIssues.attributes && (
+	                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+	                    )}
+	                  </button>
+	                </div>
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto" data-gate-key="cargo.lines">
-                    <table className="w-full text-sm min-w-[800px]">
+                  <div
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    data-gate-key="cargo.lines"
+                  >
+                    <table className="w-full table-fixed text-sm">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Description</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cartons</th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
+                            SKU
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                            Batch
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                            Units
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                            Units/Ctn
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                            Cartons
+                          </th>
                           {canEditDispatchAllocation && (
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
                               Ship Now
                             </th>
                           )}
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">PI #</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Received</th>
-                          {canEdit && <th className="w-[60px]"></th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flowLines.map((line) => (
-                          <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                              <div className="flex items-center gap-2">
-                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                  <span className="text-xs font-semibold text-rose-600">!</span>
-                                )}
-                                <span>{line.skuCode}</span>
-                              </div>
+	                          {activeViewStage === 'ISSUED' && (
+	                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+	                              PI #
+	                            </th>
+	                          )}
+	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+	                            <>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+	                                Recvd
+	                              </th>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
+	                                Delta
+	                              </th>
+	                            </>
+	                          )}
+	                          {canEdit && <th className="w-[70px]"></th>}
+	                        </tr>
+	                      </thead>
+	                      <tbody>
+	                        {flowLines.length === 0 ? (
+	                          <tr>
+	                            <td
+	                              colSpan={
+	                                5 +
+	                                (canEditDispatchAllocation ? 1 : 0) +
+	                                (activeViewStage === 'ISSUED' ? 1 : 0) +
+	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
+	                                (canEdit ? 1 : 0)
+	                              }
+	                              className="px-3 py-6 text-center text-muted-foreground"
+	                            >
+                              No lines added to this order yet.
                             </td>
-                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                              {line.batchLot ? line.batchLot : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
-                              {line.skuDescription ? line.skuDescription : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                              {canEdit ? (
-                                <div className="flex justify-end">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    defaultValue={String(line.unitsOrdered)}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) return
-                                      const parsed = Number.parseInt(trimmed, 10)
-                                      if (!Number.isInteger(parsed) || parsed <= 0) {
-                                        toast.error('Units must be a positive integer')
-                                        return
-                                      }
-                                      void patchOrderLine(line.id, { unitsOrdered: parsed })
-                                    }}
-                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                  />
-                                </div>
-                              ) : (
-                                line.unitsOrdered.toLocaleString()
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              {canEdit ? (
-                                <div className="flex justify-end">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    defaultValue={String(line.unitsPerCarton)}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) return
-                                      const parsed = Number.parseInt(trimmed, 10)
-                                      if (!Number.isInteger(parsed) || parsed <= 0) {
-                                        toast.error('Units per carton must be a positive integer')
-                                        return
-                                      }
-                                      void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                    }}
-                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                  />
-                                </div>
-                              ) : (
-                                line.unitsPerCarton.toLocaleString()
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                              {line.quantity.toLocaleString()}
-                            </td>
-                            {canEditDispatchAllocation && (
-                              <td
-                                className="px-3 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
-                                data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
-                              >
-                                {(() => {
-                                  const gateKey = `cargo.lines.${line.id}.shipNowCartons`
-                                  const issue = gateIssues ? gateIssues[gateKey] : null
-                                  return (
-                                    <div className="flex flex-col items-end space-y-1" data-gate-key={gateKey}>
-                                      <Input
-                                        type="number"
-                                        inputMode="numeric"
-                                        min="0"
-                                        step="1"
-                                        max={line.quantity}
-                                        value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
-                                        onChange={e =>
-                                          setDispatchSplitAllocations(prev => ({
-                                            ...prev,
-                                            [line.id]: e.target.value,
-                                          }))
-                                        }
-                                        className={cn(
-                                          'h-7 w-20 px-2 py-0 text-xs text-right',
-                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                        data-gate-key={gateKey}
-                                      />
-                                      {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                    </div>
-                                  )
-                                })()}
-                              </td>
-                            )}
-                            <td className="px-3 py-1 text-muted-foreground whitespace-nowrap min-w-[140px]">
-                              {(() => {
-                                const gateKey = `cargo.lines.${line.id}.piNumber`
-                                const issue = gateIssues ? gateIssues[gateKey] : null
-                                const canEditPiNumber =
-                                  canEdit && order.status === 'ISSUED' && activeViewStage === 'ISSUED'
-
-                                if (canEditPiNumber) {
-                                  return (
-                                    <div className="space-y-1" data-gate-key={gateKey}>
-                                      <Input
-                                        defaultValue={line.piNumber ?? ''}
-                                        placeholder="PI-..."
-                                        data-gate-key={gateKey}
-                                        onBlur={e => {
-                                          const trimmed = e.target.value.trim()
-                                          void patchOrderLine(line.id, {
-                                            piNumber: trimmed.length > 0 ? trimmed : null,
-                                          })
-                                        }}
-                                        className={cn(
-                                          'h-7 px-2 py-0 text-xs',
-                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                    </div>
-                                  )
-                                }
-
-                                return (
-                                  <span data-gate-key={gateKey}>
-                                    {line.piNumber ? line.piNumber : '—'}
-                                  </span>
-                                )
-                              })()}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground min-w-[140px]">
-                              {canEdit ? (
-                                <Input
-                                  defaultValue={line.lineNotes ?? ''}
-                                  placeholder="Notes"
-                                  onBlur={e => {
-                                    const trimmed = e.target.value.trim()
-                                    void patchOrderLine(line.id, {
-                                      notes: trimmed.length > 0 ? trimmed : null,
-                                    })
-                                  }}
-                                  className="h-7 px-2 py-0 text-xs"
-                                />
-                              ) : (
-                                <span className="truncate block max-w-[140px]">
-                                  {line.lineNotes ? line.lineNotes : '—'}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
-                            </td>
-                            {canEdit && (
-                              <td className="px-2 py-2 whitespace-nowrap text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
-                                    onClick={() => {
-                                      setProductCostsEditing(true)
-                                      jumpToGateKey(`costs.lines.${line.id}.totalCost`)
-                                    }}
-                                    title="Edit costs"
-                                  >
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                    onClick={() =>
-                                      setConfirmDialog({
-                                        open: true,
-                                        type: 'delete-line',
-                                        title: 'Remove line item',
-                                        message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
-                                        lineId: line.id,
-                                      })
-                                    }
-                                    title="Remove line"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </td>
-                            )}
                           </tr>
-                        ))}
+                        ) : (
+                          flowLines.map(line => (
+                            <tr
+                              key={line.id}
+                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                            >
+                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                    <span className="text-xs font-semibold text-rose-600">!</span>
+                                  )}
+                                  <span className="truncate" title={line.skuDescription ?? undefined}>
+                                    {line.skuCode}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
+                                  {line.batchLot ? line.batchLot : '—'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                {canEdit ? (
+                                  <div className="flex justify-end">
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={String(line.unitsOrdered)}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) return
+                                        const parsed = Number.parseInt(trimmed, 10)
+                                        if (!Number.isInteger(parsed) || parsed <= 0) {
+                                          toast.error('Units must be a positive integer')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { unitsOrdered: parsed })
+                                      }}
+                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                    />
+                                  </div>
+                                ) : (
+                                  line.unitsOrdered.toLocaleString()
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {canEdit ? (
+                                  <div className="flex justify-end">
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={String(line.unitsPerCarton)}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) return
+                                        const parsed = Number.parseInt(trimmed, 10)
+                                        if (!Number.isInteger(parsed) || parsed <= 0) {
+                                          toast.error('Units per carton must be a positive integer')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                      }}
+                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                    />
+                                  </div>
+                                ) : (
+                                  line.unitsPerCarton.toLocaleString()
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                {line.quantity.toLocaleString()}
+                              </td>
+                              {canEditDispatchAllocation && (
+                                <td
+                                  className="px-3 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
+                                  data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
+                                >
+                                  {(() => {
+                                    const gateKey = `cargo.lines.${line.id}.shipNowCartons`
+                                    const issue = gateIssues ? gateIssues[gateKey] : null
+                                    return (
+                                      <div className="flex flex-col items-end space-y-1" data-gate-key={gateKey}>
+                                        <Input
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="0"
+                                          step="1"
+                                          max={line.quantity}
+                                          value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
+                                          onChange={e =>
+                                            setDispatchSplitAllocations(prev => ({
+                                              ...prev,
+                                              [line.id]: e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            'h-7 w-20 px-2 py-0 text-xs text-right',
+                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                          )}
+                                          data-gate-key={gateKey}
+                                        />
+                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                      </div>
+                                    )
+                                  })()}
+                                </td>
+                              )}
+	                              {activeViewStage === 'ISSUED' && (
+	                                <td className="px-3 py-1 text-muted-foreground min-w-0">
+	                                  {(() => {
+                                    const gateKey = `cargo.lines.${line.id}.piNumber`
+                                    const issue = gateIssues ? gateIssues[gateKey] : null
+                                    const canEditPiNumber =
+                                      !isReadOnly && order.status === 'ISSUED' && activeViewStage === 'ISSUED'
+
+                                    if (canEditPiNumber) {
+                                      return (
+                                        <div className="space-y-1" data-gate-key={gateKey}>
+                                          <Input
+                                            defaultValue={line.piNumber ?? ''}
+                                            placeholder="PI-..."
+                                            data-gate-key={gateKey}
+                                            onBlur={e => {
+                                              const trimmed = e.target.value.trim()
+                                              void patchOrderLine(line.id, {
+                                                piNumber: trimmed.length > 0 ? trimmed : null,
+                                              })
+                                            }}
+                                            className={cn(
+                                              'h-7 px-2 py-0 text-xs',
+                                              issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                            )}
+                                          />
+                                          {issue && <p className="text-xs text-rose-600">{issue}</p>}
+                                        </div>
+                                      )
+                                    }
+
+                                    return (
+                                      <span data-gate-key={gateKey}>
+                                        {line.piNumber ? line.piNumber : '—'}
+                                      </span>
+                                    )
+	                                  })()}
+	                                </td>
+	                              )}
+	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
+	                                (() => {
+	                                  const gateKey = `cargo.lines.${line.id}.quantityReceived`
+	                                  const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+	                                  const canEditReceiving =
+	                                    !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+	                                  const received = line.quantityReceived ?? null
+	                                  const delta = received !== null ? received - line.quantity : null
+	                                  const displayedReceived = (line.quantityReceived ?? line.postedQuantity).toLocaleString()
+
+	                                  return (
+	                                    <>
+	                                      <td
+	                                        className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
+	                                        data-gate-key={gateKey}
+	                                      >
+	                                        {canEditReceiving ? (
+	                                          <div className="flex flex-col items-end gap-1">
+	                                            <Input
+	                                              type="number"
+	                                              inputMode="numeric"
+	                                              min="0"
+	                                              step="1"
+	                                              defaultValue={received !== null ? String(received) : ''}
+	                                              data-gate-key={gateKey}
+	                                              onBlur={e => {
+	                                                const trimmed = e.target.value.trim()
+	                                                if (!trimmed) {
+	                                                  void patchOrderLine(line.id, { quantityReceived: null })
+	                                                  return
+	                                                }
+	                                                const parsed = Number.parseInt(trimmed, 10)
+	                                                if (!Number.isInteger(parsed) || parsed < 0) {
+	                                                  toast.error('Received cartons must be a non-negative integer')
+	                                                  return
+	                                                }
+	                                                void patchOrderLine(line.id, { quantityReceived: parsed })
+	                                              }}
+	                                              className={cn(
+	                                                'h-7 w-24 px-2 py-0 text-xs text-right',
+	                                                issue && 'border-rose-500 focus-visible:ring-rose-500'
+	                                              )}
+	                                            />
+	                                            {issue && <p className="text-xs text-rose-600">{issue}</p>}
+	                                          </div>
+	                                        ) : (
+	                                          <span className="text-muted-foreground">{displayedReceived}</span>
+	                                        )}
+	                                      </td>
+	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+	                                        {delta !== null ? (
+	                                          <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
+	                                            {delta.toLocaleString()}
+	                                          </span>
+	                                        ) : (
+	                                          <span className="text-muted-foreground">—</span>
+	                                        )}
+	                                      </td>
+	                                    </>
+	                                  )
+	                                })()}
+	                              {canEdit && (
+	                                <td className="px-2 py-2 whitespace-nowrap text-right">
+	                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => {
+                                        setProductCostsEditing(true)
+                                        jumpToGateKey(`costs.lines.${line.id}.totalCost`)
+                                      }}
+                                      title="Edit costs"
+                                    >
+                                      <DollarSign className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                      onClick={() =>
+                                        setConfirmDialog({
+                                          open: true,
+                                          type: 'delete-line',
+                                          title: 'Remove line item',
+                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
+                                          lineId: line.id,
+                                        })
+                                      }
+                                      title="Remove line"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        )}
                         {/* Inline Add Row */}
                         {canEdit && (
                           <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                            <td className="px-3 py-2 min-w-[100px]">
+                            <td className="px-3 py-2 min-w-0">
                               <select
                                 value={newLineDraft.skuId}
                                 onChange={e => {
@@ -3713,7 +3500,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 ))}
                               </select>
                             </td>
-                            <td className="px-3 py-2 min-w-[100px]">
+                            <td className="px-3 py-2 min-w-0">
                               <select
                                 value={newLineDraft.batchLot}
                                 onChange={e => {
@@ -3748,11 +3535,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   <option value="">No batches</option>
                                 )}
                               </select>
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground text-sm">
-                              {selectedSku?.description ? (
-                                <span className="truncate max-w-[180px] block">{selectedSku.description}</span>
-                              ) : '—'}
                             </td>
                             <td className="px-3 py-2">
                               <Input
@@ -3801,18 +3583,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               })()}
                             </td>
                             {canEditDispatchAllocation && <td className="px-3 py-2">—</td>}
-                            <td className="px-3 py-2">—</td>
-                            <td className="px-3 py-2">
-                              <Input
-                                value={newLineDraft.notes}
-                                onChange={e =>
-                                  setNewLineDraft(prev => ({ ...prev, notes: e.target.value }))
-                                }
-                                placeholder="Notes"
-                                disabled={addLineSubmitting}
-                                className="h-7 w-24 px-2 py-0 text-xs"
-                              />
-                            </td>
+                            {activeViewStage === 'ISSUED' && <td className="px-3 py-2">—</td>}
                             <td className="px-3 py-2 text-right text-muted-foreground">—</td>
                             <td className="px-2 py-2 whitespace-nowrap text-right">
                               <Button
@@ -3842,126 +3613,163 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </table>
                   </div>
                 )}
-
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
-                    <table className="w-full text-sm min-w-[1100px]">
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size ({lengthUnit})</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net ({weightUnit})</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross ({weightUnit})</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flowLines.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                              No lines added to this order yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          flowLines.map(line => {
-                            const canEditAttributes =
-                              !isReadOnly &&
-                              order.status === activeViewStage &&
-                              (order.status === 'RFQ' || order.status === 'ISSUED')
+                  <div className="space-y-3">
+                    {flowLines.length === 0 ? (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                      </div>
+                    ) : (
+                      flowLines.map(line => {
+                        const canEditAttributes =
+                          !isReadOnly &&
+                          order.status === activeViewStage &&
+                          (order.status === 'RFQ' || order.status === 'ISSUED')
 
-                            const issuePrefix = `cargo.lines.${line.id}`
-                            const issue = (suffix: string): string | null => {
-                              const key = `${issuePrefix}.${suffix}`
-                              return gateIssues ? gateIssues[key] ?? null : null
-                            }
+                        const issuePrefix = `cargo.lines.${line.id}`
+                        const issue = (suffix: string): string | null => {
+                          const key = `${issuePrefix}.${suffix}`
+                          return gateIssues ? gateIssues[key] ?? null : null
+                        }
 
-                            const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
+                        const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
 
-                            const cartonTriplet = resolveDimensionTripletCm({
-                              side1Cm: line.cartonSide1Cm ?? null,
-                              side2Cm: line.cartonSide2Cm ?? null,
-                              side3Cm: line.cartonSide3Cm ?? null,
-                              legacy: line.cartonDimensionsCm ?? null,
-                            })
+                        const cartonTriplet = resolveDimensionTripletCm({
+                          side1Cm: line.cartonSide1Cm ?? null,
+                          side2Cm: line.cartonSide2Cm ?? null,
+                          side3Cm: line.cartonSide3Cm ?? null,
+                          legacy: line.cartonDimensionsCm ?? null,
+                        })
 
-                            return (
-                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                      <span className="text-xs font-semibold text-rose-600">!</span>
-                                    )}
-                                    <span>{line.skuCode}</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
+                        return (
+                          <div
+                            key={line.id}
+                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2">
+                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                  <span className="text-xs font-semibold text-rose-600">!</span>
+                                )}
+                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                  {line.skuCode}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {line.batchLot ? line.batchLot : '—'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Commodity Code
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
                                     <Input
                                       defaultValue={line.commodityCode ?? ''}
                                       data-gate-key={`${issuePrefix}.commodityCode`}
                                       onBlur={e => {
                                         const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
+                                        void patchOrderLine(line.id, {
+                                          commodityCode: trimmed.length > 0 ? trimmed : null,
+                                        })
                                       }}
-                                      className={`h-7 w-28 px-2 py-0 text-xs ${issue('commodityCode') ? 'border-rose-500' : ''}`}
+                                      className={cn(
+                                        'h-8 px-2 py-0 text-xs',
+                                        issue('commodityCode') && 'border-rose-500 focus-visible:ring-rose-500'
+                                      )}
                                     />
-                                  ) : (
-                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.commodityCode`}>
-                                      {line.commodityCode ? line.commodityCode : '—'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                  {(() => {
-                                    const countryIssue = issue('countryOfOrigin')
-                                    return (
-                                      <div className="space-y-1">
-                                        <span className={countryIssue ? 'text-rose-600' : 'text-foreground'}>
-                                          {supplierCountry ? supplierCountry : '—'}
-                                        </span>
-                                        {countryIssue && <p className="text-xs text-rose-600">{countryIssue}</p>}
-                                      </div>
-                                    )
-                                  })()}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
-                                    <div className="flex justify-end">
-                                      <Input
-                                        type="number"
-                                        inputMode="numeric"
-                                        min="1"
-                                        step="1"
-                                        defaultValue={String(line.unitsPerCarton)}
-                                        data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                        onBlur={e => {
-                                          const trimmed = e.target.value.trim()
-                                          if (!trimmed) return
-                                          const parsed = Number.parseInt(trimmed, 10)
-                                          if (!Number.isInteger(parsed) || parsed <= 0) {
-                                            toast.error('Units per carton must be a positive integer')
-                                            return
-                                          }
-                                          void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                        }}
-                                        className={`h-7 w-16 px-2 py-0 text-xs text-right ${issue('unitsPerCarton') ? 'border-rose-500' : ''}`}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.unitsPerCarton`}>
-                                      {line.unitsPerCarton.toLocaleString()}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
-                                    <div className="flex gap-1 justify-center">
+                                    {issue('commodityCode') && (
+                                      <p className="text-xs text-rose-600">{issue('commodityCode')}</p>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p
+                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                    data-gate-key={`${issuePrefix}.commodityCode`}
+                                  >
+                                    {line.commodityCode ? line.commodityCode : '—'}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Country
+                                </p>
+                                {(() => {
+                                  const countryIssue = issue('countryOfOrigin')
+                                  return (
+                                    <>
+                                      <p
+                                        className={cn(
+                                          'text-sm font-medium',
+                                          countryIssue ? 'text-rose-600' : 'text-slate-900 dark:text-slate-100'
+                                        )}
+                                      >
+                                        {supplierCountry ? supplierCountry : '—'}
+                                      </p>
+                                      {countryIssue && <p className="text-xs text-rose-600">{countryIssue}</p>}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Units/Ctn
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={String(line.unitsPerCarton)}
+                                      data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) return
+                                        const parsed = Number.parseInt(trimmed, 10)
+                                        if (!Number.isInteger(parsed) || parsed <= 0) {
+                                          toast.error('Units per carton must be a positive integer')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                      }}
+                                      className={cn(
+                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
+                                        issue('unitsPerCarton') && 'border-rose-500 focus-visible:ring-rose-500'
+                                      )}
+                                    />
+                                    {issue('unitsPerCarton') && (
+                                      <p className="text-xs text-rose-600">{issue('unitsPerCarton')}</p>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p
+                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
+                                    data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                  >
+                                    {line.unitsPerCarton.toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Carton Size ({lengthUnit})
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
+                                    <div
+                                      className="flex gap-1 justify-start"
+                                      data-gate-key={`${issuePrefix}.cartonDimensions`}
+                                    >
                                       <Input
                                         type="number"
                                         inputMode="decimal"
@@ -3969,11 +3777,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         step="0.01"
                                         placeholder="L"
                                         defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                        data-gate-key={`${issuePrefix}.cartonDimensions`}
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="1"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={cn(
+                                          'h-7 w-14 px-1 py-0 text-xs text-center',
+                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                       />
                                       <Input
                                         type="number"
@@ -3985,7 +3795,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="2"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={cn(
+                                          'h-7 w-14 px-1 py-0 text-xs text-center',
+                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                       />
                                       <Input
                                         type="number"
@@ -3997,81 +3810,115 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         data-carton-side-line={line.id}
                                         data-carton-side-axis="3"
                                         onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={`h-7 w-14 px-1 py-0 text-xs text-center ${cartonDimsIssue ? 'border-rose-500' : ''}`}
+                                        className={cn(
+                                          'h-7 w-14 px-1 py-0 text-xs text-center',
+                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
+                                        )}
                                       />
                                     </div>
-                                  ) : (
-                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                      {cartonTriplet ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}` : '—'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
-                                    <div className="flex justify-end">
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.001"
-                                        defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                        data-gate-key={`${issuePrefix}.netWeightKg`}
-                                        onBlur={e => {
-                                          const trimmed = e.target.value.trim()
-                                          if (!trimmed) {
-                                            void patchOrderLine(line.id, { netWeightKg: null })
-                                            return
-                                          }
-                                          const parsed = Number(trimmed)
-                                          if (!Number.isFinite(parsed) || parsed <= 0) {
-                                            toast.error('Net weight must be a positive number')
-                                            return
-                                          }
-                                          void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                        }}
-                                        className={`h-7 w-20 px-2 py-0 text-xs text-right ${issue('netWeightKg') ? 'border-rose-500' : ''}`}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.netWeightKg`}>
-                                      {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
-                                    <div className="flex justify-end">
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.001"
-                                        defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                        data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                        onBlur={e => {
-                                          const trimmed = e.target.value.trim()
-                                          if (!trimmed) {
-                                            void patchOrderLine(line.id, { cartonWeightKg: null })
-                                            return
-                                          }
-                                          const parsed = Number(trimmed)
-                                          if (!Number.isFinite(parsed) || parsed <= 0) {
-                                            toast.error('Gross weight must be a positive number')
-                                            return
-                                          }
-                                          void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                        }}
-                                        className={`h-7 w-20 px-2 py-0 text-xs text-right ${issue('cartonWeightKg') ? 'border-rose-500' : ''}`}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span className="text-foreground tabular-nums block text-right" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
-                                      {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {canEditAttributes ? (
+                                    {cartonDimsIssue && <p className="text-xs text-rose-600">{cartonDimsIssue}</p>}
+                                  </>
+                                ) : (
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                    {cartonTriplet
+                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
+                                      : '—'}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Net ({weightUnit})
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                      data-gate-key={`${issuePrefix}.netWeightKg`}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) {
+                                          void patchOrderLine(line.id, { netWeightKg: null })
+                                          return
+                                        }
+                                        const parsed = Number(trimmed)
+                                        if (!Number.isFinite(parsed) || parsed <= 0) {
+                                          toast.error('Net weight must be a positive number')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                      }}
+                                      className={cn(
+                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
+                                        issue('netWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
+                                      )}
+                                    />
+                                    {issue('netWeightKg') && <p className="text-xs text-rose-600">{issue('netWeightKg')}</p>}
+                                  </>
+                                ) : (
+                                  <p
+                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
+                                    data-gate-key={`${issuePrefix}.netWeightKg`}
+                                  >
+                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Gross ({weightUnit})
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                      data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                      onBlur={e => {
+                                        const trimmed = e.target.value.trim()
+                                        if (!trimmed) {
+                                          void patchOrderLine(line.id, { cartonWeightKg: null })
+                                          return
+                                        }
+                                        const parsed = Number(trimmed)
+                                        if (!Number.isFinite(parsed) || parsed <= 0) {
+                                          toast.error('Gross weight must be a positive number')
+                                          return
+                                        }
+                                        void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                      }}
+                                      className={cn(
+                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
+                                        issue('cartonWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
+                                      )}
+                                    />
+                                    {issue('cartonWeightKg') && <p className="text-xs text-rose-600">{issue('cartonWeightKg')}</p>}
+                                  </>
+                                ) : (
+                                  <p
+                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
+                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                  >
+                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Material
+                                </p>
+                                {canEditAttributes ? (
+                                  <>
                                     <Input
                                       defaultValue={line.material ?? ''}
                                       data-gate-key={`${issuePrefix}.material`}
@@ -4079,140 +3926,33 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         const trimmed = e.target.value.trim()
                                         void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
                                       }}
-                                      className={`h-7 w-24 px-2 py-0 text-xs ${issue('material') ? 'border-rose-500' : ''}`}
+                                      className={cn(
+                                        'h-8 px-2 py-0 text-xs',
+                                        issue('material') && 'border-rose-500 focus-visible:ring-rose-500'
+                                      )}
                                     />
-                                  ) : (
-                                    <span className="text-foreground" data-gate-key={`${issuePrefix}.material`}>
-                                      {line.material ? line.material : '—'}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {cargoSubTab === 'receiving' && activeViewStage === 'WAREHOUSE' && (
-                  <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
-                    data-gate-key="cargo.lines"
-                  >
-                    <table className="w-full table-fixed text-sm">
-                        <thead>
-                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                              SKU
-                            </th>
-                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                              Batch
-                            </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">
-                              Ordered
-                            </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                              Received
-                            </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">
-                              Delta
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {flowLines.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                                No lines added to this order yet.
-                              </td>
-                            </tr>
-                          ) : (
-                            flowLines.map(line => {
-                              const gateKey = `cargo.lines.${line.id}.quantityReceived`
-                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
-                              const canEditReceiving =
-                                !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
-
-                              const received = line.quantityReceived ?? null
-                              const delta = received !== null ? received - line.quantity : null
-
-                              return (
-                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                    <span className="block truncate" title={line.skuCode}>
-                                      {line.skuCode}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                    <span
-                                      className="block truncate"
-                                      title={line.batchLot ? line.batchLot : undefined}
-                                    >
-                                      {line.batchLot ? line.batchLot : '—'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                    {line.quantity.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" data-gate-key={gateKey}>
-                                    {canEditReceiving ? (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <Input
-                                          type="number"
-                                          inputMode="numeric"
-                                          min="0"
-                                          step="1"
-                                          defaultValue={received !== null ? String(received) : ''}
-                                          data-gate-key={gateKey}
-                                          onBlur={e => {
-                                            const trimmed = e.target.value.trim()
-                                            if (!trimmed) {
-                                              void patchOrderLine(line.id, { quantityReceived: null })
-                                              return
-                                            }
-                                            const parsed = Number.parseInt(trimmed, 10)
-                                            if (!Number.isInteger(parsed) || parsed < 0) {
-                                              toast.error('Received cartons must be a non-negative integer')
-                                              return
-                                            }
-                                            void patchOrderLine(line.id, { quantityReceived: parsed })
-                                          }}
-                                          className={cn(
-                                            'h-7 w-24 px-2 py-0 text-xs text-right',
-                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                          )}
-                                        />
-                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                      </div>
-                                    ) : (
-                                      <span className="text-muted-foreground">
-                                        {received !== null ? received.toLocaleString() : '—'}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                                    {delta !== null ? (
-                                      <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
-                                        {delta.toLocaleString()}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })
-                          )}
-                        </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                {/* Summary Stats */}
+                                    {issue('material') && <p className="text-xs text-rose-600">{issue('material')}</p>}
+                                  </>
+                                ) : (
+                                  <p
+                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                    data-gate-key={`${issuePrefix}.material`}
+                                  >
+                                    {line.material ? line.material : '—'}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+	                    )}
+	                  </div>
+	                )}
+	              </div>
+	            ) : (
+	              <div>
+	                {/* Summary Stats */}
                 <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     <div className="space-y-1">
@@ -4288,69 +4028,75 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                 {/* Details Sub-tab */}
                 {cargoSubTab === 'details' && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto" data-gate-key="cargo.lines">
-                    <table className="w-full text-sm min-w-[800px]">
+                  <div
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    data-gate-key="cargo.lines"
+                  >
+                    <table className="w-full table-fixed text-sm">
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
                             Batch
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Description
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
                             Units/Ctn
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Cartons
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            PI #
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Notes
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                            Received
-                          </th>
-                          {canEdit && <th className="w-[60px]"></th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {draftLines.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={canEdit ? 10 : 9}
-                              className="px-3 py-6 text-center text-muted-foreground"
-                            >
-                              No lines added to this order yet.
-                            </td>
-                          </tr>
+	                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+	                            Cartons
+	                          </th>
+	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+	                            <>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+	                                Recvd
+	                              </th>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
+	                                Delta
+	                              </th>
+	                            </>
+	                          )}
+	                          {canEdit && <th className="w-[70px]"></th>}
+	                        </tr>
+	                      </thead>
+	                      <tbody>
+	                        {draftLines.length === 0 ? (
+	                          <tr>
+	                            <td
+	                              colSpan={
+	                                5 +
+	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
+	                                (canEdit ? 1 : 0)
+	                              }
+	                              className="px-3 py-6 text-center text-muted-foreground"
+	                            >
+	                              No lines added to this order yet.
+	                            </td>
+	                          </tr>
                         ) : (
-                          draftLines.map((line) => (
+                          draftLines.map(line => (
                             <tr
                               key={line.id}
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                <div className="flex items-center gap-2">
+                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-2">
                                   {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
                                     <span className="text-xs font-semibold text-rose-600">!</span>
                                   )}
-                                  <span>{line.skuCode}</span>
+                                  <span className="truncate" title={line.skuDescription ?? undefined}>
+                                    {line.skuCode}
+                                  </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                {line.batchLot ? line.batchLot : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[180px] truncate">
-                                {line.skuDescription ? line.skuDescription : '—'}
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
+                                  {line.batchLot ? line.batchLot : '—'}
+                                </span>
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex justify-end">
@@ -4408,70 +4154,35 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   />
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {line.quantity.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-1 text-muted-foreground whitespace-nowrap min-w-[140px]">
-                                {(() => {
-                                  const piGateKey = `cargo.lines.${line.id}.piNumber`
-                                  const issue = gateIssues ? gateIssues[piGateKey] ?? null : null
+	                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+	                                {line.quantity.toLocaleString()}
+	                              </td>
+	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
+	                                (() => {
+	                                  const received = line.quantityReceived ?? null
+	                                  const delta = received !== null ? received - line.quantity : null
+	                                  const displayedReceived = (line.quantityReceived ?? line.postedQuantity).toLocaleString()
 
-                                  return (
-                                    <div className="space-y-1" data-gate-key={piGateKey}>
-                                      <Input
-                                        value={line.piNumber ?? ''}
-                                        placeholder="PI-..."
-                                        data-gate-key={piGateKey}
-                                        onChange={e => {
-                                          const value = e.target.value
-                                          setDraftLines(prev =>
-                                            prev.map(candidate =>
-                                              candidate.id === line.id
-                                                ? { ...candidate, piNumber: value.trim() ? value : null }
-                                                : candidate
-                                            )
-                                          )
-                                        }}
-                                        className={cn(
-                                          'h-7 px-2 py-0 text-xs',
-                                          issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      {issue && (
-                                        <p className="text-xs text-rose-600" data-gate-key={piGateKey}>
-                                          {issue}
-                                        </p>
-                                      )}
-                                    </div>
-                                  )
-                                  })()}
-                              </td>
-                              <td className="px-3 py-2 min-w-[140px]">
-                                <Input
-                                  value={line.lineNotes ?? ''}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    setDraftLines(prev =>
-                                      prev.map(candidate =>
-                                        candidate.id === line.id
-                                          ? {
-                                              ...candidate,
-                                              lineNotes: value.trim() ? value : null,
-                                            }
-                                          : candidate
-                                      )
-                                    )
-                                  }}
-                                  placeholder="Notes"
-                                  className="h-7 px-2 py-0 text-xs"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {(line.quantityReceived ?? line.postedQuantity).toLocaleString()}
-                              </td>
-                              {canEdit && (
-                                <td className="px-2 py-2 whitespace-nowrap text-right">
-                                  <div className="flex items-center justify-end gap-1">
+	                                  return (
+	                                    <>
+	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+	                                        <span className="text-muted-foreground">{displayedReceived}</span>
+	                                      </td>
+	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+	                                        {delta !== null ? (
+	                                          <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
+	                                            {delta.toLocaleString()}
+	                                          </span>
+	                                        ) : (
+	                                          <span className="text-muted-foreground">—</span>
+	                                        )}
+	                                      </td>
+	                                    </>
+	                                  )
+	                                })()}
+	                              {canEdit && (
+	                                <td className="px-2 py-2 whitespace-nowrap text-right">
+	                                  <div className="flex items-center justify-end gap-1">
                                     <Button
                                       type="button"
                                       size="sm"
@@ -4508,7 +4219,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         )}
                         {/* Inline Add Row for Create Mode */}
                         <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                          <td className="px-3 py-2 min-w-[100px]">
+                          <td className="px-3 py-2 min-w-0">
                             <select
                               value={newLineDraft.skuId}
                               onChange={e => {
@@ -4534,7 +4245,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 min-w-[100px]">
+                          <td className="px-3 py-2 min-w-0">
                             <select
                               value={newLineDraft.batchLot}
                               onChange={e => {
@@ -4569,11 +4280,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 <option value="">No batches</option>
                               )}
                             </select>
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground text-sm">
-                            {selectedSku?.description ? (
-                              <span className="truncate max-w-[180px] block">{selectedSku.description}</span>
-                            ) : '—'}
                           </td>
                           <td className="px-3 py-2">
                             <Input
@@ -4621,18 +4327,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
                             })()}
                           </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">
-                            <Input
-                              value={newLineDraft.notes}
-                              onChange={e =>
-                                setNewLineDraft(prev => ({ ...prev, notes: e.target.value }))
-                              }
-                              placeholder="Notes"
-                              disabled={addLineSubmitting}
-                              className="h-7 w-24 px-2 py-0 text-xs"
-                            />
-                          </td>
                           <td className="px-3 py-2 text-right text-muted-foreground">—</td>
                           <td className="px-2 py-2 whitespace-nowrap text-right">
                             <Button
@@ -4661,233 +4355,233 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </table>
                   </div>
                 )}
-
                 {/* Attributes Sub-tab */}
                 {cargoSubTab === 'attributes' && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
-                    <table className="w-full text-sm min-w-[1100px]">
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">SKU</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">Batch</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Commodity Code</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Country</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units/Ctn</th>
-                          <th className="text-center font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Carton Size ({lengthUnit})</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Net ({weightUnit})</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Gross ({weightUnit})</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Material</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {draftLines.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                              No lines added to this order yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          draftLines.map(line => {
-                            const issuePrefix = `cargo.lines.${line.id}`
+                  <div className="space-y-3">
+                    {draftLines.length === 0 ? (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                      </div>
+                    ) : (
+                      draftLines.map(line => {
+                        const issuePrefix = `cargo.lines.${line.id}`
 
-                            const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
-                              setDraftLines(prev =>
-                                prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
-                              )
-                            }
+                        const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
+                          setDraftLines(prev =>
+                            prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
+                          )
+                        }
 
-                            return (
-                              <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                      <span className="text-xs font-semibold text-rose-600">!</span>
-                                    )}
-                                    <span>{line.skuCode}</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{line.batchLot ? line.batchLot : '—'}</td>
-                                <td className="px-3 py-2">
+                        return (
+                          <div
+                            key={line.id}
+                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2">
+                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                  <span className="text-xs font-semibold text-rose-600">!</span>
+                                )}
+                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                  {line.skuCode}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {line.batchLot ? line.batchLot : '—'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commodity Code</p>
+                                <Input
+                                  value={line.commodityCode ?? ''}
+                                  data-gate-key={`${issuePrefix}.commodityCode`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                  }}
+                                  className="h-8 px-2 py-0 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Country</p>
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  {supplierCountry ? supplierCountry : '—'}
+                                </p>
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Units/Ctn</p>
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="1"
+                                  step="1"
+                                  value={String(line.unitsPerCarton)}
+                                  data-gate-key={`${issuePrefix}.unitsPerCarton`}
+                                  onChange={e => {
+                                    const parsed = Number.parseInt(e.target.value, 10)
+                                    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+                                    updateLine(current => ({ ...current, unitsPerCarton: next }))
+                                  }}
+                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Carton Size ({lengthUnit})</p>
+                                <div className="flex gap-1 justify-start" data-gate-key={`${issuePrefix}.cartonDimensions`}>
                                   <Input
-                                    value={line.commodityCode ?? ''}
-                                    data-gate-key={`${issuePrefix}.commodityCode`}
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="L"
+                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
                                     onChange={e => {
-                                      const value = e.target.value
-                                      updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: next,
+                                          side2Cm: current.cartonSide2Cm ?? null,
+                                          side3Cm: current.cartonSide3Cm ?? null,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide1Cm: next,
+                                          cartonDimensionsCm: triplet
+                                            ? formatDimensionTripletCm(triplet)
+                                            : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
                                     }}
-                                    className="h-7 w-28 px-2 py-0 text-xs"
+                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
                                   />
-                                </td>
-                                <td className="px-3 py-2" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                  <span className="text-foreground">{supplierCountry ? supplierCountry : '—'}</span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex justify-end">
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      value={String(line.unitsPerCarton)}
-                                      data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                      onChange={e => {
-                                        const parsed = Number.parseInt(e.target.value, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) return
-                                        updateLine(current => ({
-                                          ...current,
-                                          unitsPerCarton: parsed,
-                                          quantity: Math.ceil(current.unitsOrdered / parsed),
-                                        }))
-                                      }}
-                                      className="h-7 w-16 px-2 py-0 text-xs text-right"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex gap-1 justify-center">
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.01"
-                                      placeholder="L"
-                                      value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.cartonDimensions`}
-                                      onChange={e => {
-                                        const parsed = Number(e.target.value)
-                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                        updateLine(current => {
-                                          const triplet = resolveDimensionTripletCm({
-                                            side1Cm: next,
-                                            side2Cm: current.cartonSide2Cm ?? null,
-                                            side3Cm: current.cartonSide3Cm ?? null,
-                                            legacy: current.cartonDimensionsCm ?? null,
-                                          })
-                                          return {
-                                            ...current,
-                                            cartonSide1Cm: next,
-                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                          }
-                                        })
-                                      }}
-                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                    />
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.01"
-                                      placeholder="W"
-                                      value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                      onChange={e => {
-                                        const parsed = Number(e.target.value)
-                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                        updateLine(current => {
-                                          const triplet = resolveDimensionTripletCm({
-                                            side1Cm: current.cartonSide1Cm ?? null,
-                                            side2Cm: next,
-                                            side3Cm: current.cartonSide3Cm ?? null,
-                                            legacy: current.cartonDimensionsCm ?? null,
-                                          })
-                                          return {
-                                            ...current,
-                                            cartonSide2Cm: next,
-                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                          }
-                                        })
-                                      }}
-                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                    />
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.01"
-                                      placeholder="H"
-                                      value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                      onChange={e => {
-                                        const parsed = Number(e.target.value)
-                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                        const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                        updateLine(current => {
-                                          const triplet = resolveDimensionTripletCm({
-                                            side1Cm: current.cartonSide1Cm ?? null,
-                                            side2Cm: current.cartonSide2Cm ?? null,
-                                            side3Cm: next,
-                                            legacy: current.cartonDimensionsCm ?? null,
-                                          })
-                                          return {
-                                            ...current,
-                                            cartonSide3Cm: next,
-                                            cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null,
-                                          }
-                                        })
-                                      }}
-                                      className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex justify-end">
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.netWeightKg`}
-                                      onChange={e => {
-                                        const parsed = Number(e.target.value)
-                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                        updateLine(current => ({
-                                          ...current,
-                                          netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                        }))
-                                      }}
-                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex justify-end">
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                      onChange={e => {
-                                        const parsed = Number(e.target.value)
-                                        const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                        updateLine(current => ({
-                                          ...current,
-                                          cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                        }))
-                                      }}
-                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">
                                   <Input
-                                    value={line.material ?? ''}
-                                    data-gate-key={`${issuePrefix}.material`}
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="W"
+                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
                                     onChange={e => {
-                                      const value = e.target.value
-                                      updateLine(current => ({ ...current, material: value.trim() ? value : null }))
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: current.cartonSide1Cm ?? null,
+                                          side2Cm: next,
+                                          side3Cm: current.cartonSide3Cm ?? null,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide2Cm: next,
+                                          cartonDimensionsCm: triplet
+                                            ? formatDimensionTripletCm(triplet)
+                                            : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
                                     }}
-                                    className="h-7 w-24 px-2 py-0 text-xs"
+                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
                                   />
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="H"
+                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({
+                                          side1Cm: current.cartonSide1Cm ?? null,
+                                          side2Cm: current.cartonSide2Cm ?? null,
+                                          side3Cm: next,
+                                          legacy: current.cartonDimensionsCm ?? null,
+                                        })
+                                        return {
+                                          ...current,
+                                          cartonSide3Cm: next,
+                                          cartonDimensionsCm: triplet
+                                            ? formatDimensionTripletCm(triplet)
+                                            : current.cartonDimensionsCm ?? null,
+                                        }
+                                      })
+                                    }}
+                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net ({weightUnit})</p>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.001"
+                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                  data-gate-key={`${issuePrefix}.netWeightKg`}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({
+                                      ...current,
+                                      netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
+                                    }))
+                                  }}
+                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gross ({weightUnit})</p>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.001"
+                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                  data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({
+                                      ...current,
+                                      cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
+                                    }))
+                                  }}
+                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Material</p>
+                                <Input
+                                  value={line.material ?? ''}
+                                  data-gate-key={`${issuePrefix}.material`}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
+                                  }}
+                                  className="h-8 px-2 py-0 text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 )}
               </div>
@@ -5724,489 +5418,300 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
-                {!isCreate && order && (showCargoCostsStage || showWarehouseCostsStage) && (
-                  <div className="p-6">
+	                {!isCreate && order && (showCargoCostsStage || showWarehouseCostsStage) && (
+	                  <div className="p-6 space-y-4">
                     {showCargoCostsStage && (
-                      <>
-                        {/* Cargo Costs Section */}
-                        <div className="mb-6" data-gate-key="costs.forwarding">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Cargo Costs
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      {forwardingCosts.length} item{forwardingCosts.length === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  {gateIssues?.['costs.forwarding'] && (
-                    <p className="text-xs text-rose-600 mb-3" data-gate-key="costs.forwarding">
-                      {gateIssues['costs.forwarding']}
-                    </p>
-                  )}
+                      <div className="space-y-3" data-gate-key="costs.forwarding">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Freight Cost
+                          </h4>
+                          {canEditFreightCost && !freightCostEditing && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={startEditFreightCost}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                        </div>
 
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Warehouse
+                        {gateIssues?.['costs.forwarding'] && (
+                          <p className="text-xs text-rose-600" data-gate-key="costs.forwarding">
+                            {gateIssues['costs.forwarding']}
                           </p>
-                          <select
-                            value={forwardingWarehouseCode}
-                            onChange={e => setForwardingWarehouseCode(e.target.value)}
-                            disabled={
-                              !canEditForwardingCosts ||
-                              warehousesLoading ||
-                              (order.status === 'WAREHOUSE' && Boolean(order.warehouseCode))
-                            }
-                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                          >
-                            <option value="">
-                              {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
-                            </option>
-                            {warehouses.map(w => (
-                              <option key={w.code} value={w.code}>
-                                {w.name} ({w.code})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Cost Type
-                          </p>
-                          <select
-                            value={newForwardingCostDraft.costName}
-                            onChange={e =>
-                              setNewForwardingCostDraft(prev => ({ ...prev, costName: e.target.value }))
-                            }
-                            disabled={
-                              !canEditForwardingCosts ||
-                              forwardingRatesLoading ||
-                              forwardingRates.length === 0 ||
-                              !forwardingWarehouseId
-                            }
-                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                          >
-                            <option value="">
-                              {!forwardingWarehouseId
-                                ? 'Select warehouse first'
-                                : forwardingRatesLoading
-                                  ? 'Loading rates…'
-                                  : forwardingRates.length === 0
-                                    ? 'No forwarding rates'
-                                    : 'Select cost type'}
-                            </option>
-                            {forwardingRates.map(rate => (
-                              <option key={rate.id} value={rate.costName}>
-                                {rate.costName} ({rate.unitOfMeasure})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Quantity
-                          </p>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={newForwardingCostDraft.quantity}
-                            onChange={e =>
-                              setNewForwardingCostDraft(prev => ({ ...prev, quantity: e.target.value }))
-                            }
-                            disabled={!canEditForwardingCosts}
-                            placeholder="0"
-                          />
-                        </div>
-
-                        <div className="flex items-end">
-                          <Button
-                            type="button"
-                            className="w-full gap-2"
-                            onClick={() => void createForwardingCost()}
-                            disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                          >
-                            {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Add Cost
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Notes (Optional)
-                          </p>
-                          <Input
-                            value={newForwardingCostDraft.notes}
-                            onChange={e =>
-                              setNewForwardingCostDraft(prev => ({ ...prev, notes: e.target.value }))
-                            }
-                            disabled={!canEditForwardingCosts}
-                            placeholder="e.g. invoice #, vendor"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Currency (Optional)
-                          </p>
-                          <Input
-                            value={newForwardingCostDraft.currency}
-                            onChange={e =>
-                              setNewForwardingCostDraft(prev => ({ ...prev, currency: e.target.value }))
-                            }
-                            disabled={!canEditForwardingCosts}
-                            placeholder={tenantCurrency}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <p>
-                          Unit rate:{' '}
-                          {draftForwardingUnitRate !== null
-                            ? `${tenantCurrency} ${draftForwardingUnitRate.toFixed(4)}`
-                            : '—'}
-                        </p>
-                        <p className="tabular-nums">
-                          Total:{' '}
-                          {draftForwardingTotal !== null
-                            ? `${tenantCurrency} ${draftForwardingTotal.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}`
-                            : '—'}
-                        </p>
-                      </div>
-
-                    </div>
-
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Qty</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Rate</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Notes</th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {forwardingCostsLoading ? (
-                          <tr className="border-t border-slate-200 dark:border-slate-700">
-                            <td colSpan={6} className="px-3 py-2 text-sm text-muted-foreground">
-                              Loading cargo costs...
-                            </td>
-                          </tr>
-                        ) : forwardingCosts.length === 0 ? (
-                          <tr className="border-t border-slate-200 dark:border-slate-700">
-                            <td colSpan={6} className="px-3 py-2 text-sm text-muted-foreground">
-                              No cargo costs added.
-                            </td>
-                          </tr>
-                        ) : (
-                          forwardingCosts.map(row => {
-                            const currencyLabel = row.currency ? row.currency : tenantCurrency
-                            const isEditing = editingForwardingCostId === row.id
-                            const isDeleting = forwardingCostDeletingId === row.id
-
-                            return (
-                              <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                <td className="px-3 py-2">
-                                  {isEditing ? (
-                                    <select
-                                      value={editingForwardingCostDraft.costName}
-                                      onChange={e =>
-                                        setEditingForwardingCostDraft(prev => ({
-                                          ...prev,
-                                          costName: e.target.value,
-                                        }))
-                                      }
-                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                                      className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm disabled:opacity-50"
-                                    >
-                                      {forwardingRates.every(rate => rate.costName !== row.costName) && (
-                                        <option value={row.costName}>{row.costName}</option>
-                                      )}
-                                      {forwardingRates.map(rate => (
-                                        <option key={rate.id} value={rate.costName}>
-                                          {rate.costName} ({rate.unitOfMeasure})
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <p className="font-medium text-foreground">{row.costName}</p>
-                                  )}
-                                </td>
-
-                                <td className="px-3 py-2 text-right tabular-nums">
-                                  {isEditing ? (
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      value={editingForwardingCostDraft.quantity}
-                                      onChange={e =>
-                                        setEditingForwardingCostDraft(prev => ({
-                                          ...prev,
-                                          quantity: e.target.value,
-                                        }))
-                                      }
-                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                    />
-                                  ) : (
-                                    row.quantity.toLocaleString(undefined, {
-                                      minimumFractionDigits: 0,
-                                      maximumFractionDigits: 4,
-                                    })
-                                  )}
-                                </td>
-
-                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                  {isEditing ? (
-                                    editingForwardingUnitRate !== null
-                                      ? `${currencyLabel} ${editingForwardingUnitRate.toFixed(4)}`
-                                      : '—'
-                                  ) : (
-                                    `${currencyLabel} ${row.unitRate.toFixed(4)}`
-                                  )}
-                                </td>
-
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {isEditing ? (
-                                    editingForwardingTotal !== null
-                                      ? `${currencyLabel} ${editingForwardingTotal.toLocaleString(undefined, {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}`
-                                      : '—'
-                                  ) : (
-                                    `${currencyLabel} ${row.totalCost.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}`
-                                  )}
-                                </td>
-
-                                <td className="px-3 py-2">
-                                  {isEditing ? (
-                                    <Input
-                                      value={editingForwardingCostDraft.notes}
-                                      onChange={e =>
-                                        setEditingForwardingCostDraft(prev => ({
-                                          ...prev,
-                                          notes: e.target.value,
-                                        }))
-                                      }
-                                      disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                                      placeholder="Notes"
-                                      className="h-7 px-2 py-0 text-xs"
-                                    />
-                                  ) : (
-                                    <p className="text-muted-foreground">{row.notes ? row.notes : '—'}</p>
-                                  )}
-                                </td>
-
-                                <td className="px-3 py-2 text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    {isEditing ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={cancelEditForwardingCost}
-                                          disabled={forwardingCostSubmitting}
-                                        >
-                                          Cancel
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          onClick={() => void saveEditForwardingCost()}
-                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                                          className="gap-2"
-                                        >
-                                          {forwardingCostSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                                          Save
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => startEditForwardingCost(row)}
-                                          disabled={!canEditForwardingCosts || forwardingCostSubmitting}
-                                          className="gap-2"
-                                        >
-                                          <FileEdit className="h-4 w-4" />
-                                          Edit
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            setConfirmDialog({
-                                              open: true,
-                                              type: 'delete-forwarding-cost',
-                                              title: 'Delete cargo cost',
-                                              message: `Delete ${row.costName} from this order?`,
-                                              forwardingCostId: row.id,
-                                            })
-                                          }}
-                                          disabled={!canEditForwardingCosts || isDeleting}
-                                          className="gap-2"
-                                        >
-                                          {isDeleting ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                          ) : (
-                                            <Trash2 className="h-4 w-4" />
-                                          )}
-                                          Delete
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })
                         )}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                          <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
-                            Cargo Subtotal
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                            {tenantCurrency}{' '}
-                            {forwardingSubtotal.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </td>
-                          <td colSpan={2} />
-                        </tr>
-                      </tfoot>
-                    </table>
-                    </div>
-                  </div>
+
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                          <div className="flex flex-wrap items-end justify-between gap-4">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Amount ({tenantCurrency})
+                              </p>
+                              {freightCostEditing ? (
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step="0.01"
+                                  value={freightCostDraft}
+                                  onChange={e => setFreightCostDraft(e.target.value)}
+                                  disabled={!canEditFreightCost || freightCostSaving}
+                                  className="h-9 w-[160px] text-right tabular-nums"
+                                />
+                              ) : (
+                                <p className="text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                                  {forwardingSubtotal > 0
+                                    ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}`
+                                    : '—'}
+                                </p>
+                              )}
+                            </div>
+
+                            {freightCostEditing && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelEditFreightCost}
+                                  disabled={freightCostSaving}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void saveFreightCost()}
+                                  disabled={!canEditFreightCost || freightCostSaving}
+                                  className="gap-2"
+                                >
+                                  {freightCostSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                  Save
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </>
+                      </div>
                     )}
 
                     {showWarehouseCostsStage && (
-                      <>
-                        {/* Inbound Costs Section */}
-                        <div className="mb-6">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                    Inbound Costs
-                  </h4>
-                  {costLedgerLoading ? (
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                      <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
-                    </div>
-	                  ) : inboundCostRows.length === 0 ? (
-	                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-	                      <p className="text-sm text-muted-foreground">No inbound costs found for this receipt.</p>
-	                    </div>
-	                  ) : (
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {inboundCostRows.map(row => (
-                            <tr
-                              key={row.costName}
-                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                            >
-                              <td className="px-3 py-2 font-medium text-foreground">
-                                {row.costName}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                {tenantCurrency}{' '}
-                                {row.totalCost.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                            <td className="px-3 py-2 text-right font-medium text-muted-foreground">
-                              Inbound Subtotal
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                              {tenantCurrency}{' '}
-                              {inboundSubtotal.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                      <div className="space-y-4">
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Inbound
+                                </h4>
+                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                                  {costLedgerLoading
+                                    ? 'Loading…'
+                                    : inboundSubtotal > 0
+                                      ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}`
+                                      : '—'}
+                                </p>
+                              </div>
 
-	                {/* Customs/Duty Section */}
-	                {order.stageData.warehouse?.dutyAmount != null && (
-	                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-	                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-	                      Customs & Duty
-                    </h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Duty Amount
-                        </p>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setInboundBreakdownOpen(prev => !prev)}
+                              >
+                                {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
+                              </Button>
+                            </div>
+
+                            {inboundBreakdownOpen ? (
+                              costLedgerLoading ? (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                  <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
+                                </div>
+                              ) : inboundCostRows.length === 0 ? (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                  <p className="text-sm text-muted-foreground">
+                                    No inbound costs found for this receipt.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                          Cost
+                                        </th>
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                          Total
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {inboundCostRows.map(row => (
+                                        <tr
+                                          key={row.costName}
+                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                        >
+                                          <td className="px-3 py-2 font-medium text-foreground">
+                                            {row.costName}
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                            {tenantCurrency}{' '}
+                                            {row.totalCost.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Storage
+                                </h4>
+                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                                  {costLedgerLoading
+                                    ? 'Loading…'
+                                    : storageSubtotal > 0
+                                      ? `${tenantCurrency} ${storageSubtotal.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}`
+                                      : '—'}
+                                </p>
+                              </div>
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setStorageBreakdownOpen(prev => !prev)}
+                              >
+                                {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
+                              </Button>
+                            </div>
+
+                            {storageBreakdownOpen ? (
+                              costLedgerLoading ? (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                  <p className="text-sm text-muted-foreground">Loading storage costs…</p>
+                                </div>
+                              ) : storageCostRows.length === 0 ? (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                  <p className="text-sm text-muted-foreground">No storage costs recorded.</p>
+                                </div>
+                              ) : (
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                          Cost
+                                        </th>
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                          Total
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {storageCostRows.map(row => (
+                                        <tr
+                                          key={row.costName}
+                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                        >
+                                          <td className="px-3 py-2 font-medium text-foreground">
+                                            {row.costName}
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                            {tenantCurrency}{' '}
+                                            {row.totalCost.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+                        </div>
 
 	                {/* Supplier Credit/Debit Section */}
 	                {showWarehouseCostsStage && (
-	                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-	                    <div className="flex items-center justify-between mb-4">
+	                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+	                    <div className="flex items-start justify-between gap-3">
 	                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
 	                        Supplier Credit/Debit
                       </h4>
-                      {!supplierAdjustmentEditing && (
+                      <div className="flex items-center gap-2">
+                        {!supplierAdjustmentEditing && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSupplierAdjustmentOpen(true)
+                              setSupplierAdjustmentEditing(true)
+                            }}
+                            disabled={
+                              supplierAdjustmentLoading ||
+                              supplierAdjustmentSaving ||
+                              !order.warehouseCode ||
+                              !order.warehouseName
+                            }
+                          >
+                            {supplierAdjustment ? 'Edit' : 'Add'}
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          onClick={() => setSupplierAdjustmentEditing(true)}
-                          disabled={supplierAdjustmentLoading || supplierAdjustmentSaving || !order.warehouseCode || !order.warehouseName}
+                          variant="ghost"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
+                          disabled={supplierAdjustmentLoading}
                         >
-                          {supplierAdjustment ? 'Edit' : 'Add'}
+                          {supplierAdjustmentOpen ? 'Hide' : 'Details'}
                         </Button>
-                      )}
+                      </div>
                     </div>
 
-                    {supplierAdjustmentLoading ? (
+                    <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                      {supplierAdjustmentLoading
+                        ? 'Loading…'
+                        : supplierAdjustment
+                          ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`
+                          : '—'}
+                    </p>
+
+                    {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
+                      supplierAdjustmentLoading ? (
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                         <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
                       </div>
@@ -6351,83 +5856,130 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </div>
                         )}
                       </div>
-                    )}
+                    )
+                    ) : null}
                   </div>
                 )}
 
-	                {/* Landed Cost */}
-	                <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-	                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-	                    Landed Cost
-	                  </h4>
-	                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-	                    <table className="w-full text-sm">
-	                      <tbody>
-	                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                          <td className="px-3 py-2 text-muted-foreground">Product Costs</td>
-	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-	                            {tenantCurrency}{' '}
-	                            {productSubtotal.toLocaleString(undefined, {
-	                                minimumFractionDigits: 2,
-	                                maximumFractionDigits: 2,
-	                              })}
-	                          </td>
-	                        </tr>
-                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                          <td className="px-3 py-2 text-muted-foreground">Cargo Costs</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                            {forwardingSubtotal > 0
-                              ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
+                {showWarehouseCostsStage && (
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Landed Total
+                        </h4>
+                        <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                          {tenantCurrency}{' '}
+                          {totalCostSummary.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => setLandedBreakdownOpen(prev => !prev)}
+                      >
+                        {landedBreakdownOpen ? 'Hide' : 'Breakdown'}
+                      </Button>
+                    </div>
+
+                    {landedBreakdownOpen ? (
+                      <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody>
+                            <tr className="border-b border-slate-200 dark:border-slate-700">
+                              <td className="px-3 py-2 text-muted-foreground">Product</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                {tenantCurrency}{' '}
+                                {productSubtotal.toLocaleString(undefined, {
                                   minimumFractionDigits: 2,
                                   maximumFractionDigits: 2,
-                                })}`
-                              : '—'}
-                          </td>
-                        </tr>
-	                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                          <td className="px-3 py-2 text-muted-foreground">Inbound Costs</td>
-	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-	                            {inboundSubtotal > 0
-	                              ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
-	                                  minimumFractionDigits: 2,
-	                                  maximumFractionDigits: 2,
-	                                })}`
-	                              : '—'}
-	                          </td>
-	                        </tr>
-		                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-		                          <td className="px-3 py-2 text-muted-foreground">Supplier Adjustment</td>
-		                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-		                            {supplierAdjustment
-	                              ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
-	                                  minimumFractionDigits: 2,
-	                                  maximumFractionDigits: 2,
-	                                })}`
-	                              : '—'}
-	                          </td>
-	                        </tr>
-	                        {order.stageData.warehouse?.dutyAmount != null && (
-	                          <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                            <td className="px-3 py-2 text-muted-foreground">Customs & Duty</td>
-	                            <td className="px-3 py-2 text-right tabular-nums font-medium">
-	                              {order.stageData.warehouse.dutyCurrency ?? 'USD'} {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-	                            </td>
-	                          </tr>
-	                        )}
-                      </tbody>
-                      <tfoot>
-	                        <tr className="bg-slate-50/50 dark:bg-slate-700/50">
-	                          <td className="px-3 py-2 font-semibold">Total Cost</td>
-	                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-lg">
-	                            {tenantCurrency}{' '}
-	                            {totalCostSummary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-	                          </td>
-	                        </tr>
-	                      </tfoot>
-	                    </table>
-	                  </div>
-	                </div>
-	                      </>
+                                })}
+                              </td>
+                            </tr>
+                            {forwardingSubtotal > 0 && (
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-3 py-2 text-muted-foreground">Freight</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {tenantCurrency}{' '}
+                                  {forwardingSubtotal.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                              </tr>
+                            )}
+                            {inboundSubtotal > 0 && (
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-3 py-2 text-muted-foreground">Inbound</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {tenantCurrency}{' '}
+                                  {inboundSubtotal.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                              </tr>
+                            )}
+                            {storageSubtotal > 0 && (
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-3 py-2 text-muted-foreground">Storage</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {tenantCurrency}{' '}
+                                  {storageSubtotal.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                              </tr>
+                            )}
+                            {supplierAdjustment ? (
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-3 py-2 text-muted-foreground">Adjustment</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {supplierAdjustment.currency}{' '}
+                                  {supplierAdjustment.amount.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                              </tr>
+                            ) : null}
+                            {order.stageData.warehouse?.dutyAmount != null &&
+                            order.stageData.warehouse.dutyAmount !== 0 ? (
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-3 py-2 text-muted-foreground">Customs & Duty</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                  {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
+                                  {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </td>
+                              </tr>
+                            ) : null}
+                            <tr className="bg-slate-50/50 dark:bg-slate-700/50">
+                              <td className="px-3 py-2 font-semibold">Total</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                {tenantCurrency}{' '}
+                                {totalCostSummary.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+	                      </div>
 	                    )}
               </div>
                 )}
@@ -7621,21 +7173,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 ) : null}
 
                 {!isCreate && order && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                 {auditLogsLoading ? (
                   <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     Loading history…
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                         <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
+                        <th className="w-[220px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
                         <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Changes</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
+                        <th className="w-[180px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
+                        <th className="w-[110px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -7652,10 +7204,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               <td className="px-3 py-2">
                                 <Icon className={`h-4 w-4 ${iconClassName}`} />
                               </td>
-                              <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                                {title}
+                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                <span className="block truncate" title={title}>
+                                  {title}
+                                </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground max-w-[300px]">
+                              <td className="px-3 py-2 text-muted-foreground min-w-0 max-w-[360px]">
                                 {changes.length > 0 ? (
                                   <span className="line-clamp-2" title={changes.join(', ')}>
                                     {changes.join(', ')}
@@ -7664,8 +7218,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   '—'
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                {actor}
+                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                <span className="block truncate" title={actor}>
+                                  {actor}
+                                </span>
                               </td>
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                                 {formatDateOnly(entry.createdAt)}
@@ -7724,9 +7280,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 ? 'Mark Rejected'
                 : confirmDialog.type === 'delete-line'
                   ? 'Remove Line'
-                  : confirmDialog.type === 'delete-forwarding-cost'
-                    ? 'Delete Cost'
-                    : 'Confirm'
+                  : 'Confirm'
           }
           cancelText="Go Back"
         />
