@@ -11,6 +11,17 @@ import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/co
 
 const logger = createLogger({ name: 'qbo-journal-entries' });
 
+function shouldUseSecureCookies(req: NextRequest): boolean {
+  let isHttps = req.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = req.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -48,7 +59,7 @@ export async function GET(req: NextRequest) {
     if (updatedConnection) {
       cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldUseSecureCookies(req),
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
@@ -129,7 +140,7 @@ export async function POST(req: NextRequest) {
     if (updatedConnection) {
       cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldUseSecureCookies(req),
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 100,
         path: '/',

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import { getApiBaseUrl } from '@/lib/qbo/client';
@@ -8,7 +8,18 @@ import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/co
 
 const logger = createLogger({ name: 'qbo-status' });
 
-export async function GET() {
+function shouldUseSecureCookies(req: NextRequest): boolean {
+  let isHttps = req.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = req.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
+
+export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const connectionCookie = cookieStore.get('qbo_connection')?.value;
 
@@ -33,16 +44,16 @@ export async function GET() {
     const result = await getValidToken(connection);
     accessToken = result.accessToken;
 
-    // Update cookie if token was refreshed
-    if (result.updatedConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100, // 100 days
-        path: '/',
-      });
-      await saveServerQboConnection(result.updatedConnection);
+      // Update cookie if token was refreshed
+      if (result.updatedConnection) {
+        cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
+          httpOnly: true,
+          secure: shouldUseSecureCookies(req),
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 100, // 100 days
+          path: '/',
+        });
+        await saveServerQboConnection(result.updatedConnection);
       logger.info('QBO token refreshed successfully');
     }
   } catch (refreshError) {

@@ -5,6 +5,17 @@ import { createLogger } from '@targon/logger';
 
 const logger = createLogger({ name: 'qbo-connect' });
 
+function shouldUseSecureCookies(req: NextRequest): boolean {
+  let isHttps = req.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = req.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
+
 export async function GET(req: NextRequest) {
   try {
     // Generate CSRF state token
@@ -14,7 +25,7 @@ export async function GET(req: NextRequest) {
     const cookieStore = await cookies();
     cookieStore.set('qbo_oauth_state', state, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: shouldUseSecureCookies(req),
       sameSite: 'lax',
       maxAge: 600, // 10 minutes
       path: '/',
