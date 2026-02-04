@@ -420,7 +420,7 @@ export async function transitionFulfillmentOrderStage(
 
   const order = await prisma.fulfillmentOrder.findUnique({
     where: { id },
-    include: { lines: true },
+    include: { lines: true, documents: true },
   })
 
   if (!order) {
@@ -448,6 +448,41 @@ export async function transitionFulfillmentOrderStage(
   const shippedAt = shippedAtRaw instanceof Date ? shippedAtRaw : new Date(shippedAtRaw)
   if (Number.isNaN(shippedAt.getTime())) {
     throw new ValidationError('Invalid shipped date')
+  }
+
+  const normalizeText = (value: string | null | undefined) => {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed ? sanitizeForDisplay(trimmed) : null
+  }
+
+  if (order.destinationType === FulfillmentDestinationType.AMAZON_FBA) {
+    if (!order.amazonShipmentId?.trim()) {
+      throw new ValidationError('Amazon shipment ID is required to ship an Amazon FBA fulfillment order')
+    }
+  } else {
+    if (!order.destinationName?.trim()) {
+      throw new ValidationError('Destination name is required to ship a non-Amazon fulfillment order')
+    }
+  }
+
+  const resolvedCarrier = normalizeText(stageData.shippingCarrier) ?? normalizeText(order.shippingCarrier)
+  const resolvedMethod = normalizeText(stageData.shippingMethod) ?? normalizeText(order.shippingMethod)
+
+  if (!resolvedCarrier) {
+    throw new ValidationError('Shipping carrier is required to ship a fulfillment order')
+  }
+
+  if (!resolvedMethod) {
+    throw new ValidationError('Shipping method is required to ship a fulfillment order')
+  }
+
+  const hasBillOfLading = Boolean(
+    order.documents?.some(document => document.stage === 'SHIPPING' && document.documentType === 'bill_of_lading')
+  )
+
+  if (!hasBillOfLading) {
+    throw new ValidationError('Bill of Lading (BOL) document is required before shipping')
   }
 
   const warehouse = await prisma.warehouse.findFirst({

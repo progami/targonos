@@ -1949,7 +1949,12 @@ export default function FulfillmentOrderDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Shipping Carrier</label>
+                  <label className="block text-sm font-medium mb-1.5">
+                    Shipping Carrier *
+                    {canEdit && !shipForm.shippingCarrier.trim() && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
+                  </label>
                   <Input
                     value={shipForm.shippingCarrier}
                     onChange={e =>
@@ -1960,7 +1965,12 @@ export default function FulfillmentOrderDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Shipping Method</label>
+                  <label className="block text-sm font-medium mb-1.5">
+                    Shipping Method *
+                    {canEdit && !shipForm.shippingMethod.trim() && (
+                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
+                    )}
+                  </label>
                   <Input
                     value={shipForm.shippingMethod}
                     onChange={e =>
