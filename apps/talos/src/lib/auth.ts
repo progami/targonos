@@ -144,8 +144,8 @@ const baseAuthOptions: NextAuthConfig = {
 
       // Cache miss - fetch from DB
       const prisma = await getTenantPrisma()
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const user = await prisma.user.findFirst({
+        where: { email, isActive: true },
         select: { id: true, role: true, region: true, warehouseId: true },
       })
 
