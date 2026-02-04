@@ -12,12 +12,14 @@ type TransactionsState = {
   startDate: string;
   endDate: string;
   page: number;
+  pageSize: number;
   setTab: (tab: TransactionsTab) => void;
   setSearchInput: (value: string) => void;
   setSearch: (value: string) => void;
   setStartDate: (value: string) => void;
   setEndDate: (value: string) => void;
   setPage: (page: number) => void;
+  setPageSize: (pageSize: number) => void;
   clear: () => void;
 };
 
@@ -28,7 +30,11 @@ const DEFAULT_STATE = {
   startDate: '',
   endDate: '',
   page: 1,
-} satisfies Pick<TransactionsState, 'tab' | 'searchInput' | 'search' | 'startDate' | 'endDate' | 'page'>;
+  pageSize: 250,
+} satisfies Pick<
+  TransactionsState,
+  'tab' | 'searchInput' | 'search' | 'startDate' | 'endDate' | 'page' | 'pageSize'
+>;
 
 export const useTransactionsStore = create<TransactionsState>()(
   persist(
@@ -40,6 +46,7 @@ export const useTransactionsStore = create<TransactionsState>()(
       setStartDate: (startDate) => set({ startDate }),
       setEndDate: (endDate) => set({ endDate }),
       setPage: (page) => set({ page }),
+      setPageSize: (pageSize) => set({ pageSize }),
       clear: () => set({ ...DEFAULT_STATE }),
     }),
     {
@@ -52,8 +59,8 @@ export const useTransactionsStore = create<TransactionsState>()(
         startDate: state.startDate,
         endDate: state.endDate,
         page: state.page,
+        pageSize: state.pageSize,
       }),
     },
   ),
 );
-
