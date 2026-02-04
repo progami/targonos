@@ -2615,7 +2615,6 @@ export async function transitionPurchaseOrderStage(
       const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
         where: {
           purchaseOrderId: nextOrder.id,
-          warehouseId: warehouse.id,
         },
         select: {
           costName: true,
@@ -3027,7 +3026,7 @@ export async function receivePurchaseOrderInventory(params: {
 
   if (warehouse) {
     const forwardingCost = await prisma.purchaseOrderForwardingCost.findFirst({
-      where: { purchaseOrderId: order.id, warehouseId: warehouse.id },
+      where: { purchaseOrderId: order.id },
       select: { id: true },
     })
     if (!forwardingCost) {
@@ -3379,7 +3378,6 @@ export async function receivePurchaseOrderInventory(params: {
     const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
       where: {
         purchaseOrderId: order.id,
-        warehouseId: warehouse!.id,
       },
       select: {
         costName: true,
