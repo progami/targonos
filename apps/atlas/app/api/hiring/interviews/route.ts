@@ -206,6 +206,20 @@ export async function POST(req: Request) {
         skipDuplicates: true,
       })
 
+      await tx.hRCalendarEvent.create({
+        data: {
+          title: `Interview — ${candidate.fullName}`,
+          description: data.notes ?? null,
+          eventType: 'INTERVIEW',
+          startDate: startAt,
+          endDate: endAt,
+          allDay: false,
+          relatedRecordId: interview.id,
+          relatedRecordType: 'CANDIDATE_INTERVIEW',
+          googleEventId: calendarEvent.googleEventId,
+        },
+      })
+
       const hydrated = await tx.candidateInterview.findUnique({
         where: { id: interview.id },
         include: {
@@ -236,4 +250,3 @@ export async function POST(req: Request) {
     return safeErrorResponse(e, 'Failed to schedule interview')
   }
 }
-

@@ -32,7 +32,7 @@ import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { TabButton } from '@/components/ui/TabButton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmployeeDocumentsTab } from '@/components/employee/profile/tabs/DocumentsTab'
 import { EmployeeLeaveTab } from '@/components/employee/profile/tabs/LeaveTab'
 import { EmployeeOverviewTab } from '@/components/employee/profile/tabs/OverviewTab'
@@ -289,7 +289,8 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
       setUploading(true)
       setError(null)
 
-      const contentType = uploadFile.type || 'application/octet-stream'
+      const contentType = uploadFile.type ? uploadFile.type : 'application/octet-stream'
+      const trimmedTitle = uploadTitle.trim()
       const presign = await UploadsApi.presign({
         filename: uploadFile.name,
         contentType,
@@ -315,14 +316,14 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         size: uploadFile.size,
         target: { type: 'EMPLOYEE', id: employee.id },
         visibility: uploadVisibility,
-        title: uploadTitle.trim() || null,
+        title: trimmedTitle.length > 0 ? trimmedTitle : null,
       })
 
       setUploadFile(null)
       setUploadTitle('')
 
       const res = await EmployeeFilesApi.list(employee.id)
-      setFiles(res.items || [])
+      setFiles(res.items)
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to upload'
       setError(message)
@@ -506,67 +507,69 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         </Alert>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 pb-2">
-        {visibleTabs.map((tab) => (
-          <TabButton key={tab.id} active={activeTab === tab.id} onClick={() => setTab(tab.id)} icon={tab.icon}>
-            {tab.label}
-          </TabButton>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(value) => setTab(value as Tab)}>
+        <TabsList className="w-full h-auto flex-wrap justify-start bg-muted/30 border border-border/60 rounded-xl">
+          {visibleTabs.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="gap-2 data-[state=active]:bg-accent/10 data-[state=active]:text-accent data-[state=active]:shadow-none"
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {/* OVERVIEW TAB */}
-      <div className={activeTab === 'overview' ? '' : 'hidden'}>
-        <EmployeeOverviewTab employee={employee} />
-      </div>
+        <TabsContent value="overview">
+          <EmployeeOverviewTab employee={employee} />
+        </TabsContent>
 
-      {/* DOCUMENTS TAB */}
-      {canViewDocuments ? (
-        <div className={activeTab === 'documents' ? '' : 'hidden'}>
-          <EmployeeDocumentsTab
-            canUpload={isHROrAbove || isSelf}
-            canManageVisibility={isHROrAbove}
-            isSelf={isSelf}
-            uploadReady={Boolean(uploadFile)}
-            uploadTitle={uploadTitle}
-            setUploadTitle={setUploadTitle}
-            uploadVisibility={uploadVisibility}
-            setUploadVisibility={setUploadVisibility}
-            setUploadFile={setUploadFile}
-            uploading={uploading}
-            uploadDocument={uploadDocument}
-            files={files}
-            filesLoading={filesLoading}
-            downloadFile={downloadFile}
-          />
-        </div>
-      ) : null}
+        {canViewDocuments ? (
+          <TabsContent value="documents">
+            <EmployeeDocumentsTab
+              canUpload={isHROrAbove || isSelf}
+              canManageVisibility={isHROrAbove}
+              isSelf={isSelf}
+              uploadReady={Boolean(uploadFile)}
+              uploadTitle={uploadTitle}
+              setUploadTitle={setUploadTitle}
+              uploadVisibility={uploadVisibility}
+              setUploadVisibility={setUploadVisibility}
+              setUploadFile={setUploadFile}
+              uploading={uploading}
+              uploadDocument={uploadDocument}
+              files={files}
+              filesLoading={filesLoading}
+              downloadFile={downloadFile}
+            />
+          </TabsContent>
+        ) : null}
 
-      {/* REVIEWS TAB */}
-      {canViewPerformance ? (
-        <div className={activeTab === 'performance' ? '' : 'hidden'}>
-          <EmployeePerformanceTab reviews={reviews} loading={reviewsLoading} />
-        </div>
-      ) : null}
+        {canViewPerformance ? (
+          <TabsContent value="performance">
+            <EmployeePerformanceTab reviews={reviews} loading={reviewsLoading} />
+          </TabsContent>
+        ) : null}
 
-      {/* LEAVE TAB */}
-      {canViewLeave ? (
-        <div className={activeTab === 'leave' ? '' : 'hidden'}>
-          <EmployeeLeaveTab
-            groupedBalances={groupedLeaveBalances}
-            leaveBalances={leaveBalances}
-            leaveRequests={leaveRequests}
-            loading={leaveLoading}
-            isSelf={isSelf}
-          />
-        </div>
-      ) : null}
+        {canViewLeave ? (
+          <TabsContent value="leave">
+            <EmployeeLeaveTab
+              groupedBalances={groupedLeaveBalances}
+              leaveBalances={leaveBalances}
+              leaveRequests={leaveRequests}
+              loading={leaveLoading}
+              isSelf={isSelf}
+            />
+          </TabsContent>
+        ) : null}
 
-      {/* VIOLATIONS TAB */}
-      {canViewViolations ? (
-        <div className={activeTab === 'violations' ? '' : 'hidden'}>
-          <EmployeeViolationsTab violations={violations} loading={violationsLoading} />
-        </div>
-      ) : null}
+        {canViewViolations ? (
+          <TabsContent value="violations">
+            <EmployeeViolationsTab violations={violations} loading={violationsLoading} />
+          </TabsContent>
+        ) : null}
+      </Tabs>
 
       {/* Onboarding/Offboarding Modal */}
       <OnboardingOffboardingModal

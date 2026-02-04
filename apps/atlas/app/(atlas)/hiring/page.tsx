@@ -234,11 +234,6 @@ export default function HiringPage() {
                 Upcoming interviews live here. Click a candidate to prefill the scheduling form.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={load} disabled={loading}>
-                Refresh
-              </Button>
-            </div>
           </div>
         </Card>
 
@@ -291,4 +286,3 @@ export default function HiringPage() {
     </>
   )
 }
-
