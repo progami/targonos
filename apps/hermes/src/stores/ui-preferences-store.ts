@@ -67,7 +67,7 @@ type HermesUiPreferencesState = {
 };
 
 const DEFAULT_ORDERS: OrdersPreferences = {
-  pageSize: 50,
+  pageSize: 500,
   filterOrderId: "",
   filterMarketplaceId: "any",
   filterDelivery: "any",
@@ -103,6 +103,7 @@ function parsePageSize(raw: unknown): OrdersPreferences["pageSize"] {
   if (n === 50) return 50;
   if (n === 100) return 100;
   if (n === 200) return 200;
+  if (n === 500) return 500;
   return DEFAULT_ORDERS.pageSize;
 }
 
