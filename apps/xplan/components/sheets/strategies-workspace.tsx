@@ -661,7 +661,18 @@ export function StrategiesWorkspace({
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
-                              {isProtectedStrategyId(strategy.id) ? null : (
+                              {isProtectedStrategyId(strategy.id) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    toast.error('This strategy is protected and cannot be deleted.');
+                                  }}
+                                  className="rounded p-1.5 text-muted-foreground/50 transition hover:bg-muted"
+                                  title="Protected strategy cannot be deleted"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              ) : (
                                 <button
                                   type="button"
                                   onClick={() => requestDelete(strategy.id)}
