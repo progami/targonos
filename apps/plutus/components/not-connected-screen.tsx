@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -22,14 +21,6 @@ function QboLogo({ className }: { className?: string }) {
   );
 }
 
-function ArrowLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-    </svg>
-  );
-}
-
 interface NotConnectedScreenProps {
   title: string;
 }
@@ -40,53 +31,32 @@ export function NotConnectedScreen({ title }: NotConnectedScreenProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <header className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
-          >
-            <ArrowLeftIcon className="h-4 w-4" />
-            Back
-          </Link>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{title}</h1>
-        </header>
-
-        {/* Not Connected Card */}
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="max-w-md w-full">
-            <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-8 dark:border-white/10 dark:bg-white/5 text-center">
-              <div className="flex justify-center mb-6">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/50 dark:bg-white/5 dark:ring-white/10">
-                  <QboLogo className="h-10 w-10 text-slate-400 dark:text-slate-500" />
-                </div>
-              </div>
-
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                Not connected to QBO
-              </h2>
-              <p className="text-slate-500 dark:text-slate-400 mb-6">
-                Connect to QuickBooks Online to view your {title.toLowerCase()}.
-              </p>
-
-              <div className="space-y-3">
-                <Button
-                  onClick={handleConnect}
-                  className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
-                >
-                  Connect to QuickBooks
-                </Button>
-                <Button asChild variant="outline" className="w-full rounded-xl">
-                  <Link href="/setup">Open Setup</Link>
-                </Button>
-              </div>
-
-              <p className="mt-5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                You can still configure Brands and SKUs in Setup while disconnected. Dashboards stay hidden until QBO is connected.
-              </p>
+    <div className="flex items-center justify-center py-10 md:py-14">
+      <div className="max-w-md w-full px-4 sm:px-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-8 dark:border-white/10 dark:bg-white/5 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 ring-1 ring-slate-200/50 dark:bg-white/5 dark:ring-white/10">
+              <QboLogo className="h-10 w-10 text-slate-400 dark:text-slate-500" />
             </div>
+          </div>
+
+          <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
+            QuickBooks Online
+          </div>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+            Connect to continue
+          </h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Connect to QuickBooks Online to view your {title.toLowerCase()}.
+          </p>
+
+          <div className="mt-6">
+            <Button
+              onClick={handleConnect}
+              className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+            >
+              Connect to QuickBooks
+            </Button>
           </div>
         </div>
       </div>
