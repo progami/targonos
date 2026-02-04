@@ -155,10 +155,43 @@ export function InsightsClient() {
     };
   }, [uiHydrated, connectionId, rangeDays]);
 
-  const sentSeries = overview?.series ?? [];
-  const queueSeries = overview?.queue?.series ?? [];
+  const sentSeries = React.useMemo(() => (overview ? overview.series : []), [overview]);
+  const queueSeries = React.useMemo(() => (overview ? overview.queue.series : []), [overview]);
   const queuedTomorrow = queueSeries[0]?.queued ?? 0;
-  const sentInRange = overview?.summary?.sentInRange ?? 0;
+  const sentInRange = overview ? overview.summary.sentInRange : 0;
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const tomorrowUtc = queueSeries.length > 0 ? queueSeries[0].day : null;
+
+  const sentByDay = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of sentSeries) map.set(d.day, d.sent);
+    return map;
+  }, [sentSeries]);
+
+  const queuedByDay = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of queueSeries) map.set(d.day, d.queued);
+    return map;
+  }, [queueSeries]);
+
+  const tableDays = React.useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const d of queueSeries) {
+      if (seen.has(d.day)) continue;
+      seen.add(d.day);
+      out.push(d.day);
+    }
+
+    for (const d of sentSeries.slice().reverse()) {
+      if (seen.has(d.day)) continue;
+      seen.add(d.day);
+      out.push(d.day);
+    }
+
+    return out;
+  }, [queueSeries, sentSeries]);
 
   return (
     <div className="space-y-4">
@@ -215,7 +248,7 @@ export function InsightsClient() {
         <TabsContent value="table" className="m-0 space-y-4">
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Sent per day</CardTitle>
+              <CardTitle className="text-sm">Daily</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[60vh] overflow-auto">
@@ -224,56 +257,33 @@ export function InsightsClient() {
                     <TableRow>
                       <TableHead>Day (UTC)</TableHead>
                       <TableHead className="text-right">Sent</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sentSeries.slice().reverse().map((d) => (
-                      <TableRow key={d.day}>
-                        <TableCell className="font-mono text-[11px]">
-                          {d.day} <span className="text-muted-foreground">({fmtDayShort(d.day)})</span>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtInt(d.sent)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {sentSeries.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={2} className="py-10 text-center text-sm text-muted-foreground">
-                          {loading ? "Loading…" : "No data"}
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Queued (next {overview?.queue?.nextDays ?? 7} days)</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="max-h-[40vh] overflow-auto">
-                <Table className="text-xs">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Day (UTC)</TableHead>
                       <TableHead className="text-right">Queued</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {queueSeries.map((d) => (
-                      <TableRow key={d.day}>
-                        <TableCell className="font-mono text-[11px]">
-                          {d.day} <span className="text-muted-foreground">({fmtDayShort(d.day)})</span>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtInt(d.queued)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {queueSeries.length === 0 ? (
+                    {tableDays.map((day) => {
+                      const sent = sentByDay.get(day);
+                      const queued = queuedByDay.get(day);
+                      const keyDay = day === todayUtc || day === tomorrowUtc;
+
+                      return (
+                        <TableRow key={day} className={keyDay ? "bg-muted/30" : undefined}>
+                          <TableCell className="font-mono text-[11px]">
+                            {day} <span className="text-muted-foreground">({fmtDayShort(day)})</span>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {typeof sent === "number" ? fmtInt(sent) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {typeof queued === "number" ? fmtInt(queued) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {tableDays.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={2} className="py-10 text-center text-sm text-muted-foreground">
-                          {loading ? "Loading…" : "No queue"}
+                        <TableCell colSpan={3} className="py-10 text-center text-sm text-muted-foreground">
+                          {loading ? "Loading…" : "No data"}
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -315,4 +325,3 @@ export function InsightsClient() {
     </div>
   );
 }
-
