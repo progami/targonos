@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -73,6 +73,19 @@ function fmtIsoDay(iso: string | null): string {
   return iso;
 }
 
+const MARKETPLACE_LABELS: Record<string, string> = {
+  ATVPDKIKX0DER: "US",
+  A1F83G8C2ARO7P: "UK",
+};
+
+function connectionShortLabel(c: { marketplaceIds: string[]; accountName: string }): string {
+  for (const id of c.marketplaceIds) {
+    const label = MARKETPLACE_LABELS[id];
+    if (label) return label;
+  }
+  return c.accountName;
+}
+
 function SentChart({ series }: { series: Overview["series"] }) {
   const data = series.map((d) => ({ day: d.day, sent: d.sent }));
 
@@ -121,13 +134,67 @@ function QueueChart({ series }: { series: Overview["queue"]["series"] }) {
   );
 }
 
+function MultiSentChart(params: {
+  data: Array<{ day: string } & Record<string, number | string>>;
+  bars: Array<{ key: string; label: string; color: string }>;
+}) {
+  return (
+    <div className="h-[280px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis
+            dataKey="day"
+            tickFormatter={fmtDayShort}
+            className="text-[11px]"
+            interval="preserveStartEnd"
+            minTickGap={18}
+          />
+          <YAxis className="text-[11px]" width={36} />
+          <Tooltip
+            formatter={(value, name) => [fmtInt(Number(value ?? 0)), String(name)]}
+            labelFormatter={(label) => String(label)}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {params.bars.map((b) => (
+            <Bar key={b.key} dataKey={b.key} name={b.label} fill={b.color} radius={[3, 3, 0, 0]} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function MultiQueueChart(params: {
+  data: Array<{ day: string } & Record<string, number | string>>;
+  bars: Array<{ key: string; label: string; color: string }>;
+}) {
+  return (
+    <div className="h-[240px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis dataKey="day" tickFormatter={fmtDayShort} className="text-[11px]" />
+          <YAxis className="text-[11px]" width={36} />
+          <Tooltip
+            formatter={(value, name) => [fmtInt(Number(value ?? 0)), String(name)]}
+            labelFormatter={(label) => String(label)}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {params.bars.map((b) => (
+            <Bar key={b.key} dataKey={b.key} name={b.label} fill={b.color} radius={[3, 3, 0, 0]} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function InsightsClient() {
   const {
     connections,
     loading: connectionsLoading,
     hasHydrated: connectionsHydrated,
-    activeConnectionId,
-    setActiveConnectionId,
     fetch: fetchConnections,
   } = useConnectionsStore();
 
@@ -136,14 +203,11 @@ export function InsightsClient() {
     fetchConnections();
   }, [connectionsHydrated, fetchConnections]);
 
-  const connectionId = activeConnectionId ?? "";
-
   const uiHydrated = useHermesUiPreferencesStore((s) => s.hasHydrated);
   const rangeDays = useHermesUiPreferencesStore((s) => s.insights.rangeDays);
   const setInsightsPreferences = useHermesUiPreferencesStore((s) => s.setInsightsPreferences);
 
-  const [loading, setLoading] = React.useState(false);
-  const [overview, setOverview] = React.useState<Overview | null>(null);
+  const [scopeConnectionId, setScopeConnectionId] = React.useState<string>("all");
 
   const connectionIdsKey = React.useMemo(
     () => connections.map((c) => c.id).sort().join("|"),
@@ -154,36 +218,14 @@ export function InsightsClient() {
 
   React.useEffect(() => {
     if (!uiHydrated) return;
-    if (!connectionId) return;
-
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      try {
-        const qs = new URLSearchParams();
-        qs.set("rangeDays", String(rangeDays));
-        qs.set("connectionId", connectionId);
-
-        const res = await fetch(hermesApiUrl(`/api/analytics/overview?${qs.toString()}`));
-        const json = await res.json();
-        if (!res.ok || json?.ok !== true) {
-          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
-        }
-        if (!cancelled) setOverview(json.overview as Overview);
-      } catch (e: any) {
-        if (!cancelled) setOverview(null);
-        toast.error("Insights unavailable", { description: e?.message ?? "" });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [uiHydrated, connectionId, rangeDays]);
+    setScopeConnectionId((prev) => {
+      if (connections.length === 0) return prev;
+      if (connections.length === 1) return connections[0]!.id;
+      if (prev === "all") return prev;
+      const exists = connections.some((c) => c.id === prev);
+      return exists ? prev : "all";
+    });
+  }, [uiHydrated, connections]);
 
   React.useEffect(() => {
     if (!uiHydrated) return;
@@ -224,39 +266,158 @@ export function InsightsClient() {
     };
   }, [uiHydrated, rangeDays, connectionIdsKey, connections]);
 
-  const sentSeries = React.useMemo(() => (overview ? overview.series : []), [overview]);
-  const queueSeries = React.useMemo(() => (overview ? overview.queue.series : []), [overview]);
-  const queuedToday = queueSeries[0]?.queued ?? 0;
-  const queuedTomorrow = queueSeries[1]?.queued ?? 0;
-  const sentInRange = overview ? overview.summary.sentInRange : 0;
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const tomorrowUtc = queueSeries[1]?.day ?? null;
+  const tomorrowUtc = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const sentByDay = React.useMemo(() => {
-    const map = new Map<string, number>();
-    for (const d of sentSeries) map.set(d.day, d.sent);
-    return map;
-  }, [sentSeries]);
+  const scopedConnections = React.useMemo(() => {
+    if (scopeConnectionId === "all") return connections;
+    return connections.filter((c) => c.id === scopeConnectionId);
+  }, [connections, scopeConnectionId]);
 
-  const queuedByDay = React.useMemo(() => {
-    const map = new Map<string, number>();
-    for (const d of queueSeries) map.set(d.day, d.queued);
-    return map;
-  }, [queueSeries]);
+  const scopedOverviews = React.useMemo(() => {
+    return scopedConnections.map((c) => ({ connection: c, overview: allOverviews[c.id] ?? null }));
+  }, [scopedConnections, allOverviews]);
+
+  const hasMulti = scopedConnections.length > 1;
+
+  const bars = React.useMemo(() => {
+    const colors = [
+      "hsl(var(--chart-1))",
+      "hsl(var(--chart-2))",
+      "hsl(var(--chart-3))",
+      "hsl(var(--chart-4))",
+      "hsl(var(--chart-5))",
+    ];
+
+    return scopedConnections.map((c, idx) => ({
+      key: c.id,
+      label: connectionShortLabel(c),
+      color: colors[idx % colors.length],
+    }));
+  }, [scopedConnections]);
+
+  const sentSeriesByConnection = React.useMemo(() => {
+    const out = new Map<string, Map<string, number>>();
+    for (const { connection, overview } of scopedOverviews) {
+      const map = new Map<string, number>();
+      if (overview) {
+        for (const d of overview.series) map.set(d.day, d.sent);
+      }
+      out.set(connection.id, map);
+    }
+    return out;
+  }, [scopedOverviews]);
+
+  const queuedSeriesByConnection = React.useMemo(() => {
+    const out = new Map<string, Map<string, number>>();
+    for (const { connection, overview } of scopedOverviews) {
+      const map = new Map<string, number>();
+      if (overview) {
+        for (const d of overview.queue.series) map.set(d.day, d.queued);
+      }
+      out.set(connection.id, map);
+    }
+    return out;
+  }, [scopedOverviews]);
 
   const tableDays = React.useMemo(() => {
     const days = new Set<string>();
-    for (const d of queueSeries) days.add(d.day);
-    for (const d of sentSeries) days.add(d.day);
+    for (const map of sentSeriesByConnection.values()) {
+      for (const day of map.keys()) days.add(day);
+    }
+    for (const map of queuedSeriesByConnection.values()) {
+      for (const day of map.keys()) days.add(day);
+    }
 
     const out = Array.from(days);
     out.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
     return out;
-  }, [queueSeries, sentSeries]);
+  }, [sentSeriesByConnection, queuedSeriesByConnection]);
+
+  const sentInRange = React.useMemo(() => {
+    let sum = 0;
+    for (const { overview } of scopedOverviews) sum += overview ? overview.summary.sentInRange : 0;
+    return sum;
+  }, [scopedOverviews]);
+
+  const queuedToday = React.useMemo(() => {
+    let sum = 0;
+    for (const { overview } of scopedOverviews) sum += overview ? (overview.queue.series[0]?.queued ?? 0) : 0;
+    return sum;
+  }, [scopedOverviews]);
+
+  const queuedTomorrow = React.useMemo(() => {
+    let sum = 0;
+    for (const { overview } of scopedOverviews) sum += overview ? (overview.queue.series[1]?.queued ?? 0) : 0;
+    return sum;
+  }, [scopedOverviews]);
+
+  const hasAnyOverview = React.useMemo(() => scopedOverviews.some((x) => x.overview), [scopedOverviews]);
+
+  const overviewOrderRange = React.useMemo(() => {
+    let oldest: string | null = null;
+    let newest: string | null = null;
+    for (const { overview } of scopedOverviews) {
+      const nextOldest = overview?.summary.orders.oldestPurchaseIso ?? null;
+      const nextNewest = overview?.summary.orders.newestPurchaseIso ?? null;
+      if (typeof nextOldest === "string") {
+        if (oldest === null || nextOldest < oldest) oldest = nextOldest;
+      }
+      if (typeof nextNewest === "string") {
+        if (newest === null || nextNewest > newest) newest = nextNewest;
+      }
+    }
+    if (!oldest && !newest) return null;
+    return `${fmtIsoDay(oldest)} → ${fmtIsoDay(newest)}`;
+  }, [scopedOverviews]);
+
+  const sentChartData = React.useMemo(() => {
+    const dayToRow = new Map<string, { day: string } & Record<string, number | string>>();
+    for (const day of tableDays) {
+      if (day > todayUtc) continue;
+      dayToRow.set(day, { day });
+    }
+
+    for (const c of scopedConnections) {
+      const map = sentSeriesByConnection.get(c.id);
+      if (!map) continue;
+      for (const [day, sent] of map.entries()) {
+        if (day > todayUtc) continue;
+        const row = dayToRow.get(day);
+        if (row) row[c.id] = sent;
+      }
+    }
+
+    const out = Array.from(dayToRow.values());
+    out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+    return out;
+  }, [scopedConnections, sentSeriesByConnection, tableDays, todayUtc]);
+
+  const queueChartData = React.useMemo(() => {
+    const dayToRow = new Map<string, { day: string } & Record<string, number | string>>();
+    for (const day of tableDays) {
+      if (day < todayUtc) continue;
+      dayToRow.set(day, { day });
+    }
+
+    for (const c of scopedConnections) {
+      const map = queuedSeriesByConnection.get(c.id);
+      if (!map) continue;
+      for (const [day, queued] of map.entries()) {
+        if (day < todayUtc) continue;
+        const row = dayToRow.get(day);
+        if (row) row[c.id] = queued;
+      }
+    }
+
+    const out = Array.from(dayToRow.values());
+    out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+    return out;
+  }, [scopedConnections, queuedSeriesByConnection, tableDays, todayUtc]);
 
   const accountsTableRows = React.useMemo(() => {
-    return connections.map((c) => {
-      const ov = c.id === connectionId && overview ? overview : (allOverviews[c.id] ?? null);
+    const rows = connections.map((c) => {
+      const ov = allOverviews[c.id] ?? null;
       const sentAll = ov ? ov.summary.dispatchStateNow.sent : null;
       const sentRange = ov ? ov.summary.sentInRange : null;
       const queuedAll = ov ? ov.summary.dispatchStateNow.queued : null;
@@ -269,8 +430,8 @@ export function InsightsClient() {
 
       return {
         id: c.id,
-        label: `${c.accountName} • ${c.region}`,
-        active: c.id === connectionId,
+        label: `${connectionShortLabel(c)} • ${c.accountName}`,
+        active: scopeConnectionId === c.id,
         shipped,
         pending,
         canceled,
@@ -282,11 +443,51 @@ export function InsightsClient() {
         queuedNext7,
       };
     });
-  }, [connections, connectionId, overview, allOverviews]);
 
-  const overviewOrderRange = overview
-    ? `${fmtIsoDay(overview.summary.orders.oldestPurchaseIso)} → ${fmtIsoDay(overview.summary.orders.newestPurchaseIso)}`
-    : null;
+    if (connections.length <= 1) return rows;
+
+    let shipped = 0;
+    let pending = 0;
+    let canceled = 0;
+    let sentAll = 0;
+    let sentRange = 0;
+    let queuedAll = 0;
+    let queuedToday = 0;
+    let queuedTomorrow = 0;
+    let queuedNext7 = 0;
+    let seen = 0;
+
+    for (const r of rows) {
+      if (typeof r.shipped !== "number") continue;
+      seen += 1;
+      shipped += r.shipped;
+      pending += r.pending ?? 0;
+      canceled += r.canceled ?? 0;
+      sentAll += r.sentAll ?? 0;
+      sentRange += r.sentRange ?? 0;
+      queuedAll += r.queuedAll ?? 0;
+      queuedToday += r.queuedToday ?? 0;
+      queuedTomorrow += r.queuedTomorrow ?? 0;
+      queuedNext7 += r.queuedNext7 ?? 0;
+    }
+
+    const allRow = {
+      id: "all",
+      label: "All accounts",
+      active: scopeConnectionId === "all",
+      shipped: seen > 0 ? shipped : null,
+      pending: seen > 0 ? pending : null,
+      canceled: seen > 0 ? canceled : null,
+      sentAll: seen > 0 ? sentAll : null,
+      sentRange: seen > 0 ? sentRange : null,
+      queuedAll: seen > 0 ? queuedAll : null,
+      queuedToday: seen > 0 ? queuedToday : null,
+      queuedTomorrow: seen > 0 ? queuedTomorrow : null,
+      queuedNext7: seen > 0 ? queuedNext7 : null,
+    };
+
+    return [allRow, ...rows];
+  }, [connections, allOverviews, scopeConnectionId]);
 
   return (
     <div className="space-y-4">
@@ -305,18 +506,21 @@ export function InsightsClient() {
               </TabsList>
             </Tabs>
 
-            <Select value={connectionId} onValueChange={setActiveConnectionId}>
-              <SelectTrigger className="h-9 w-[240px]" disabled={connectionsLoading}>
-                <SelectValue placeholder={connectionsLoading ? "Loading…" : "Account"} />
-              </SelectTrigger>
-              <SelectContent>
-                {connections.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.accountName} • {c.region}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {connections.length > 1 ? (
+              <Select value={scopeConnectionId} onValueChange={setScopeConnectionId}>
+                <SelectTrigger className="h-9 w-[220px]" disabled={connectionsLoading}>
+                  <SelectValue placeholder={connectionsLoading ? "Loading…" : "Scope"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All accounts</SelectItem>
+                  {connections.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {connectionShortLabel(c)} • {c.accountName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
           </div>
         }
       />
@@ -347,12 +551,12 @@ export function InsightsClient() {
                     <TableRow
                       key={r.id}
                       className={r.active ? "bg-muted/30" : "cursor-pointer"}
-                      onClick={() => setActiveConnectionId(r.id)}
+                      onClick={() => setScopeConnectionId(r.id)}
                     >
                       <TableCell className="min-w-[220px]">
                         <div className="flex items-center gap-2">
                           <span className="truncate font-medium">{r.label}</span>
-                          {r.active ? <Badge variant="secondary" className="text-[10px]">Active</Badge> : null}
+                          {r.active ? <Badge variant="secondary" className="text-[10px]">Scope</Badge> : null}
                         </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -406,10 +610,10 @@ export function InsightsClient() {
 
           <div className="flex flex-wrap items-center gap-1.5">
             {overviewOrderRange ? <Badge variant="outline">Orders {overviewOrderRange}</Badge> : null}
-            <Badge variant="secondary">Sent ({rangeDays}d) {overview ? fmtInt(sentInRange) : "—"}</Badge>
-            <Badge variant="outline">Queued today {overview ? fmtInt(queuedToday) : "—"}</Badge>
-            <Badge variant="outline">Queued tomorrow {overview ? fmtInt(queuedTomorrow) : "—"}</Badge>
-            {loading || allLoading ? (
+            <Badge variant="secondary">Sent ({rangeDays}d) {hasAnyOverview ? fmtInt(sentInRange) : "—"}</Badge>
+            <Badge variant="outline">Queued today {hasAnyOverview ? fmtInt(queuedToday) : "—"}</Badge>
+            <Badge variant="outline">Queued tomorrow {hasAnyOverview ? fmtInt(queuedTomorrow) : "—"}</Badge>
+            {allLoading ? (
               <Badge variant="outline" className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Loading…
@@ -429,34 +633,86 @@ export function InsightsClient() {
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead>Day (UTC)</TableHead>
-                      <TableHead className="text-right">Sent</TableHead>
-                      <TableHead className="text-right">Queued</TableHead>
+                      {hasMulti ? (
+                        <>
+                          {scopedConnections.map((c) => (
+                            <TableHead key={`sent-${c.id}`} className="text-right whitespace-nowrap">
+                              Sent {connectionShortLabel(c)}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-right whitespace-nowrap">Sent</TableHead>
+                          {scopedConnections.map((c) => (
+                            <TableHead key={`queued-${c.id}`} className="text-right whitespace-nowrap">
+                              Queued {connectionShortLabel(c)}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-right whitespace-nowrap">Queued</TableHead>
+                        </>
+                      ) : (
+                        <>
+                          <TableHead className="text-right">Sent</TableHead>
+                          <TableHead className="text-right">Queued</TableHead>
+                        </>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {tableDays.map((day) => {
-                      const sent = sentByDay.get(day);
-                      const queued = queuedByDay.get(day);
                       const keyDay = day === todayUtc || day === tomorrowUtc;
+                      let sentTotal = 0;
+                      let queuedTotal = 0;
+
+                      for (const c of scopedConnections) {
+                        sentTotal += sentSeriesByConnection.get(c.id)?.get(day) ?? 0;
+                        queuedTotal += queuedSeriesByConnection.get(c.id)?.get(day) ?? 0;
+                      }
 
                       return (
                         <TableRow key={day} className={keyDay ? "bg-muted/30" : undefined}>
                           <TableCell className="font-mono text-[11px]">
                             {day} <span className="text-muted-foreground">({fmtDayShort(day)})</span>
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {typeof sent === "number" ? fmtInt(sent) : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {typeof queued === "number" ? fmtInt(queued) : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
+                          {hasMulti ? (
+                            <>
+                              {scopedConnections.map((c) => {
+                                const sent = sentSeriesByConnection.get(c.id)?.get(day);
+                                return (
+                                  <TableCell key={`sent-${c.id}-${day}`} className="text-right tabular-nums">
+                                    {typeof sent === "number" ? fmtInt(sent) : <span className="text-muted-foreground">—</span>}
+                                  </TableCell>
+                                );
+                              })}
+                              <TableCell className="text-right tabular-nums">{fmtInt(sentTotal)}</TableCell>
+                              {scopedConnections.map((c) => {
+                                const queued = queuedSeriesByConnection.get(c.id)?.get(day);
+                                return (
+                                  <TableCell key={`queued-${c.id}-${day}`} className="text-right tabular-nums">
+                                    {typeof queued === "number" ? fmtInt(queued) : <span className="text-muted-foreground">—</span>}
+                                  </TableCell>
+                                );
+                              })}
+                              <TableCell className="text-right tabular-nums">{fmtInt(queuedTotal)}</TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className="text-right tabular-nums">
+                                {fmtInt(sentTotal)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {fmtInt(queuedTotal)}
+                              </TableCell>
+                            </>
+                          )}
                         </TableRow>
                       );
                     })}
                     {tableDays.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="py-10 text-center text-sm text-muted-foreground">
-                          {loading ? "Loading…" : "No data"}
+                        <TableCell
+                          colSpan={hasMulti ? scopedConnections.length * 2 + 3 : 3}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
+                          {allLoading ? "Loading…" : "No data"}
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -474,9 +730,13 @@ export function InsightsClient() {
                 <CardTitle className="text-sm">Sent / day</CardTitle>
               </CardHeader>
               <CardContent className="p-3">
-                {sentSeries.length > 0 ? <SentChart series={sentSeries} /> : (
+                {sentChartData.length > 0 ? (
+                  hasMulti ? <MultiSentChart data={sentChartData} bars={bars} /> : (
+                    <SentChart series={(scopedOverviews[0]?.overview?.series ?? []) as Overview["series"]} />
+                  )
+                ) : (
                   <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                    {loading ? "Loading…" : "No data"}
+                    {allLoading ? "Loading…" : "No data"}
                   </div>
                 )}
               </CardContent>
@@ -487,9 +747,13 @@ export function InsightsClient() {
                 <CardTitle className="text-sm">Queued</CardTitle>
               </CardHeader>
               <CardContent className="p-3">
-                {queueSeries.length > 0 ? <QueueChart series={queueSeries} /> : (
+                {queueChartData.length > 0 ? (
+                  hasMulti ? <MultiQueueChart data={queueChartData} bars={bars} /> : (
+                    <QueueChart series={(scopedOverviews[0]?.overview?.queue.series ?? []) as Overview["queue"]["series"]} />
+                  )
+                ) : (
                   <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                    {loading ? "Loading…" : "No queue"}
+                    {allLoading ? "Loading…" : "No queue"}
                   </div>
                 )}
               </CardContent>

@@ -767,7 +767,7 @@ export function OrdersClient() {
 
               <div className="flex flex-wrap items-center gap-1.5">
                 <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                  <SelectTrigger className="h-8 w-[76px] whitespace-nowrap text-xs">
+                  <SelectTrigger className="h-8 w-[84px] whitespace-nowrap text-xs">
                     <SelectValue placeholder="Rows" />
                   </SelectTrigger>
                   <SelectContent>
@@ -775,6 +775,7 @@ export function OrdersClient() {
                     <SelectItem className="whitespace-nowrap" value="50">50</SelectItem>
                     <SelectItem className="whitespace-nowrap" value="100">100</SelectItem>
                     <SelectItem className="whitespace-nowrap" value="200">200</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="500">500</SelectItem>
                   </SelectContent>
                 </Select>
 
