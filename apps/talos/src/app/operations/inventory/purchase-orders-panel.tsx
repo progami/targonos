@@ -5,12 +5,21 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   DataTableContainer,
   DataTableEmpty,
   DataTableHead,
   DataTableHeaderCell,
 } from '@/components/ui/data-table-container'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
@@ -159,6 +168,47 @@ type TableColumn = {
   render: (order: PurchaseOrderSummary) => ReactNode
 }
 
+const FILTER_ALL = '__all__'
+
+function normalizeForMatch(value: string | null | undefined) {
+  if (typeof value !== 'string') return ''
+  return value.trim().toLowerCase()
+}
+
+function orderMatchesSearch(order: PurchaseOrderSummary, term: string) {
+  const needle = term.trim().toLowerCase()
+  if (needle.length === 0) return true
+
+  const matches = (value: string | null | undefined) => {
+    if (typeof value !== 'string') return false
+    return value.toLowerCase().includes(needle)
+  }
+
+  return (
+    matches(order.orderNumber) ||
+    matches(order.poNumber) ||
+    matches(order.counterpartyName) ||
+    matches(order.incoterms) ||
+    matches(order.paymentTerms) ||
+    matches(order.notes) ||
+    matches(order.receiveType) ||
+    matches(order.createdByName) ||
+    matches(order.stageData.manufacturing.proformaInvoiceNumber) ||
+    matches(order.stageData.manufacturing.factoryName) ||
+    matches(order.stageData.ocean.houseBillOfLading) ||
+    matches(order.stageData.ocean.masterBillOfLading) ||
+    matches(order.stageData.ocean.commercialInvoiceNumber) ||
+    matches(order.stageData.ocean.packingListRef) ||
+    matches(order.stageData.ocean.vesselName) ||
+    matches(order.stageData.ocean.voyageNumber) ||
+    matches(order.stageData.ocean.portOfLoading) ||
+    matches(order.stageData.ocean.portOfDischarge) ||
+    matches(order.stageData.warehouse.warehouseCode) ||
+    matches(order.stageData.warehouse.warehouseName) ||
+    matches(order.stageData.warehouse.customsEntryNumber)
+  )
+}
+
 export function PurchaseOrdersPanel({
   onPosted: _onPosted,
   statusFilter = 'RFQ',
@@ -166,6 +216,9 @@ export function PurchaseOrdersPanel({
 }: PurchaseOrdersPanelProps) {
   const [orders, setOrders] = useState<PurchaseOrderSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchFilter, setSearchFilter] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState(FILTER_ALL)
+  const [receiveTypeFilter, setReceiveTypeFilter] = useState(FILTER_ALL)
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -225,6 +278,48 @@ export function PurchaseOrdersPanel({
       }),
     [orders, statusFilter, typeFilter]
   )
+
+  const supplierOptions = useMemo(() => {
+    const values = visibleOrders
+      .map(order => (typeof order.counterpartyName === 'string' ? order.counterpartyName.trim() : ''))
+      .filter(name => name.length > 0)
+
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
+  }, [visibleOrders])
+
+  const receiveTypeOptions = useMemo(() => {
+    const values = visibleOrders
+      .map(order => (typeof order.receiveType === 'string' ? order.receiveType.trim() : ''))
+      .filter(name => name.length > 0)
+
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))
+  }, [visibleOrders])
+
+  const filteredOrders = useMemo(() => {
+    const supplierNeedle = supplierFilter === FILTER_ALL ? '' : normalizeForMatch(supplierFilter)
+    const receiveTypeNeedle = receiveTypeFilter === FILTER_ALL ? '' : normalizeForMatch(receiveTypeFilter)
+    const isWarehouseStage = statusFilter === 'WAREHOUSE'
+
+    return visibleOrders.filter(order => {
+      if (supplierNeedle.length > 0) {
+        const supplier = normalizeForMatch(order.counterpartyName)
+        if (supplier !== supplierNeedle) return false
+      }
+
+      if (isWarehouseStage && receiveTypeNeedle.length > 0) {
+        const receiveType = normalizeForMatch(order.receiveType)
+        if (receiveType !== receiveTypeNeedle) return false
+      }
+
+      return orderMatchesSearch(order, searchFilter)
+    })
+  }, [receiveTypeFilter, searchFilter, statusFilter, supplierFilter, visibleOrders])
+
+  const clearFilters = useCallback(() => {
+    setSearchFilter('')
+    setSupplierFilter(FILTER_ALL)
+    setReceiveTypeFilter(FILTER_ALL)
+  }, [])
 
   const columns = useMemo<TableColumn[]>(() => {
     const cols: TableColumn[] = []
@@ -684,6 +779,67 @@ export function PurchaseOrdersPanel({
           </div>
         }
       >
+        <div className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-4 py-3">
+          <div className="flex flex-1 flex-wrap items-end gap-3">
+            <div className="min-w-[220px] max-w-[360px] flex-1">
+              <Input
+                value={searchFilter}
+                onChange={event => setSearchFilter(event.target.value)}
+                placeholder="Search PO / RFQ #, supplier, docs…"
+              />
+            </div>
+            <div className="min-w-[220px]">
+              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FILTER_ALL}>All suppliers</SelectItem>
+                  {supplierOptions.map(option => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {statusFilter === 'WAREHOUSE' && (
+              <div className="min-w-[220px]">
+                <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Receive Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={FILTER_ALL}>All receive types</SelectItem>
+                    {receiveTypeOptions.map(option => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="hidden text-sm text-muted-foreground sm:block">
+              <span className="font-semibold text-foreground">{filteredOrders.length}</span> shown
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearFilters}
+              disabled={
+                searchFilter.length === 0 &&
+                supplierFilter === FILTER_ALL &&
+                (statusFilter !== 'WAREHOUSE' || receiveTypeFilter === FILTER_ALL)
+              }
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
         <table className="w-full table-auto text-sm">
           <DataTableHead>
             <tr className="border-b border-border">
@@ -701,10 +857,10 @@ export function PurchaseOrdersPanel({
           <tbody>
             {loading ? (
               <DataTableEmpty colSpan={columns.length} message="Loading purchase orders…" />
-            ) : visibleOrders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <DataTableEmpty colSpan={columns.length} message="No purchase orders found for this stage." />
             ) : (
-              visibleOrders.map(order => (
+              filteredOrders.map(order => (
                 <tr key={order.id} className="border-t border-border hover:bg-muted/30">
                   {columns.map(column => (
                     <td key={`${order.id}-${column.key}`} className={column.tdClassName ?? 'px-3 py-2 whitespace-nowrap'}>
