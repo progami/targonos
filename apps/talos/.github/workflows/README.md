@@ -1,4 +1,4 @@
-# WMS Repository Workflows
+# Talos Repository Workflows
 
 This repository uses shared workflows from [progami/shared-workflows](https://github.com/progami/shared-workflows) to standardize CI/CD processes across all Targon repositories.
 
@@ -32,10 +32,10 @@ This repository uses shared workflows from [progami/shared-workflows](https://gi
 - **Purpose**: Deploy application to production/staging server
 - **Shared Workflow**: `deploy-ssh.yml`
 - **Configuration**:
-  - PM2 app name: `wms-app`
-  - Deployment path: `/home/wms/app`
-  - Run as user: `wms`
-  - Health check: http://localhost:3001/api/health
+  - PM2 app name: `talos-app`
+  - Deployment path: `/home/talos/app`
+  - Run as user: `talos`
+  - Health check: http://localhost:3001/talos/api/health
   - Node.js 20
 
 ### PR Checks (`pr-checks.yml`)
@@ -86,7 +86,7 @@ The following npm scripts are expected to be available:
   - PR validation and commenting
   - Release management
 - Reduced workflow code by ~70% through reuse
-- Deployment process remains unchanged (PM2 as wms user)
+- Deployment process remains unchanged (PM2 as talos user)
 
 ## Custom Jobs
 
