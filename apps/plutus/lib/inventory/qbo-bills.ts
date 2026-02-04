@@ -71,12 +71,19 @@ export function parseSkuQuantityFromDescription(description: string): { sku: str
   return { sku, quantity: qty };
 }
 
-function classifyInventoryComponentFromAccountName(accountName: string): InventoryComponent | null {
-  const trimmed = accountName.trim();
-  if (trimmed.startsWith('Inv Manufacturing')) return 'manufacturing';
-  if (trimmed.startsWith('Inv Freight')) return 'freight';
-  if (trimmed.startsWith('Inv Duty')) return 'duty';
-  if (trimmed.startsWith('Inv Mfg Accessories')) return 'mfgAccessories';
+function classifyInventoryComponentFromAccount(account: QboAccount): InventoryComponent | null {
+  if (account.AccountType !== 'Other Current Asset') return null;
+  if (account.AccountSubType !== 'Inventory') return null;
+
+  let name = account.Name.trim();
+  if (name.startsWith('Inv ')) {
+    name = name.slice('Inv '.length).trimStart();
+  }
+
+  if (name.startsWith('Manufacturing')) return 'manufacturing';
+  if (name.startsWith('Freight')) return 'freight';
+  if (name.startsWith('Duty')) return 'duty';
+  if (name.startsWith('Mfg Accessories')) return 'mfgAccessories';
   return null;
 }
 
@@ -119,7 +126,7 @@ export function parseQboBillsToInventoryEvents(
       if (!account) {
         throw new Error(`Unknown QBO account referenced on bill line: billId=${bill.Id} accountId=${accountId}`);
       }
-      const component = classifyInventoryComponentFromAccountName(account.Name);
+      const component = classifyInventoryComponentFromAccount(account);
       if (!component) continue;
       candidateLines.push({ line, component });
     }
