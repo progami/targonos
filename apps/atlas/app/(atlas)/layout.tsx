@@ -266,7 +266,7 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
   const versionHref = explicitReleaseUrl ?? commitUrl ?? inferredReleaseUrl;
 
   const pathname = usePathname();
-  const isOrganogram = pathname === '/organogram' || pathname.startsWith('/organogram/');
+  const isOrganogram = pathname === '/organogram' ? true : pathname.startsWith('/organogram/');
   useEffect(() => {
     closeMobileMenu();
   }, [closeMobileMenu, pathname]);
@@ -324,13 +324,13 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
         <div className="md:pl-64 min-h-screen flex flex-col bg-background">
           <Header onMenuClick={openMobileMenu} />
 
-          <main className={cn('flex-1', isOrganogram && 'min-h-0')}>
+          <main className={cn('flex-1', isOrganogram ? 'min-h-0 flex flex-col' : undefined)}>
             <div
               key={pathname}
               className={cn(
                 'animate-in fade-in slide-in-from-bottom-2 duration-300',
                 isOrganogram
-                  ? 'h-full min-h-0 w-full max-w-none px-0 py-0'
+                  ? 'flex-1 min-h-0 w-full max-w-none px-0 py-0'
                   : 'px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto',
               )}
             >
