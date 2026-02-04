@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { fetchAccounts, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
@@ -7,6 +7,17 @@ import { getAccountSource } from '@/lib/lmb/default-accounts';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-accounts' });
+
+function shouldUseSecureCookies(request: NextRequest): boolean {
+  let isHttps = request.nextUrl.protocol === 'https:';
+  if (!isHttps) {
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    if (forwardedProto === 'https') {
+      isHttps = true;
+    }
+  }
+  return isHttps;
+}
 
 // QBO Account Type order (matches QuickBooks Online Chart of Accounts view)
 const ACCOUNT_TYPE_ORDER: Record<string, number> = {
@@ -27,7 +38,7 @@ const ACCOUNT_TYPE_ORDER: Record<string, number> = {
   'Other Expense': 15,
 };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const requestId = randomUUID();
 
   try {
@@ -56,7 +67,7 @@ export async function GET() {
       });
       cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldUseSecureCookies(request),
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 100,
         path: '/',
