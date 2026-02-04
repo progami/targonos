@@ -472,21 +472,31 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   const [levelScope, setLevelScope] = useState<LevelScope>('all')
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
+  const initialViewAppliedRef = useRef(false)
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     const node = canvasRef.current
     if (!node) return
 
+    let rafId = 0
     const update = () => {
       const rect = node.getBoundingClientRect()
       setCanvasSize({ w: rect.width, h: rect.height })
     }
 
-    update()
-    const observer = new ResizeObserver(() => update())
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(update)
+    }
+
+    scheduleUpdate()
+    const observer = new ResizeObserver(() => scheduleUpdate())
     observer.observe(node)
-    return () => observer.disconnect()
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
   }, [])
 
   const normalizedEmployees = useMemo<OrgEmployee[]>(() => {
@@ -1033,7 +1043,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
 
     const scaleX = (w - padding * 2) / contentW
     const scaleY = (h - padding * 2) / contentH
-    const nextScale = Math.max(0.3, Math.min(1.25, Math.min(scaleX, scaleY)))
+    const nextScale = Math.max(0.3, Math.min(1.0, Math.min(scaleX, scaleY)))
 
     const scaledW = contentW * nextScale
     const scaledH = contentH * nextScale
@@ -1055,20 +1065,51 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
     fitToView()
   }, [fitToView])
 
+  useEffect(() => {
+    if (initialViewAppliedRef.current) return
+    if (viewMode !== 'organization') return
+    if (!canvasSize.w || !canvasSize.h) return
+    if (nodes.length === 0) return
+
+    const target = (() => {
+      const byId = currentEmployeeId
+        ? nodes.find((n) => !n.isHeader && n.id === currentEmployeeId)
+        : undefined
+      if (byId) return byId
+
+      let best: OrgNode | null = null
+      for (const n of nodes) {
+        if (n.isHeader) continue
+        if (!best) {
+          best = n
+          continue
+        }
+        if (n.y < best.y) {
+          best = n
+          continue
+        }
+        if (n.y === best.y && n.x < best.x) {
+          best = n
+        }
+      }
+      return best
+    })()
+
+    if (!target) return
+
+    const nextScale = 0.95
+    setScale(nextScale)
+    setPan({
+      x: canvasSize.w / 2 - target.x * nextScale,
+      y: canvasSize.h / 2 - target.y * nextScale,
+    })
+    initialViewAppliedRef.current = true
+  }, [canvasSize.h, canvasSize.w, currentEmployeeId, nodes, viewMode])
+
   return (
-    <div style={{ position: 'relative', height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
-      <style>{`
-        .atlas-organogram-header {
-          padding-right: 16px;
-        }
-        @media (min-width: 768px) {
-          .atlas-organogram-header {
-            padding-right: 176px;
-          }
-        }
-      `}</style>
+    <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
       {/* Header */}
-      <div className="atlas-organogram-header" style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div>
