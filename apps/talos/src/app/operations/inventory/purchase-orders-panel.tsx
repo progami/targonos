@@ -13,6 +13,7 @@ import {
   DataTableHeaderCell,
 } from '@/components/ui/data-table-container'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Filter, Search } from '@/lib/lucide-icons'
 import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
@@ -176,13 +178,28 @@ type TableColumn = {
 }
 
 const FILTER_ALL = '__all__'
-const FIT_CELL_CLASSES = 'w-24'
+const FIT_CELL_CLASSES = 'w-[1%]'
+
+const RECEIVE_TYPE_LABELS: Record<string, string> = {
+  LCL: 'LCL',
+  CONTAINER_20: "20'",
+  CONTAINER_40: "40'",
+  CONTAINER_40_HQ: "40' HQ",
+  CONTAINER_45_HQ: "45' HQ",
+}
+
+function formatReceiveTypeDisplay(value: string | null | undefined) {
+  if (typeof value !== 'string') return '—'
+  const trimmed = value.trim()
+  if (!trimmed) return '—'
+  return RECEIVE_TYPE_LABELS[trimmed] ?? trimmed
+}
 
 function buildColumnHeader(label: ReactNode, control?: ReactNode) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="min-w-0 truncate">{label}</div>
-      {control ?? <div className="h-8" aria-hidden="true" />}
+    <div className="flex h-7 min-w-0 items-center justify-between gap-2">
+      <div className="min-w-0 truncate leading-none">{label}</div>
+      {control ? <div className="flex shrink-0 items-center">{control}</div> : null}
     </div>
   )
 }
@@ -369,24 +386,50 @@ export function PurchaseOrdersPanel({
   const columns = useMemo<TableColumn[]>(() => {
     const cols: TableColumn[] = []
 
-	    cols.push({
-	      key: 'po-number',
-	      header: buildColumnHeader(
-	        statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
-	        <Input
-	          value={searchFilter}
-	          onChange={event => setSearchFilter(event.target.value)}
-	          placeholder="Search…"
-	          className="h-8 w-full max-w-[120px] text-xs font-normal normal-case tracking-normal"
-	        />
-	      ),
-	      fit: true,
-	      thClassName: 'w-[140px]',
-	      tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
-	      render: order => (
-	        <Link
-	          href={`/operations/purchase-orders/${order.id}`}
-          className="text-primary hover:underline"
+    cols.push({
+      key: 'po-number',
+      header: buildColumnHeader(
+        statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title="Search"
+            >
+              <Search
+                className={[
+                  'h-4 w-4',
+                  searchFilter.trim().length > 0 ? 'text-primary' : 'text-muted-foreground',
+                ].join(' ')}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-3">
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                Search
+              </p>
+              <Input
+                value={searchFilter}
+                onChange={event => setSearchFilter(event.target.value)}
+                placeholder="Order #, supplier, notes…"
+                className="h-9 px-2 text-sm font-normal normal-case tracking-normal"
+                autoFocus
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
+      ),
+      fit: true,
+      thClassName: 'w-[116px]',
+      tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
+      render: order => (
+        <Link
+          href={`/operations/purchase-orders/${order.id}`}
+          className="block max-w-full truncate text-primary hover:underline"
           prefetch={false}
         >
           {order.status === 'RFQ' ? order.orderNumber : (order.poNumber ?? order.orderNumber)}
@@ -399,7 +442,7 @@ export function PurchaseOrdersPanel({
         key: 'type',
         header: buildColumnHeader('Type'),
         fit: true,
-        thClassName: 'w-[96px]',
+        thClassName: 'w-[88px]',
         tdClassName: 'px-3 py-2 whitespace-nowrap',
         render: order => (
           <Badge className={typeBadgeClasses(order.type)}>
@@ -413,190 +456,215 @@ export function PurchaseOrdersPanel({
       })
     }
 
-	    cols.push({
-	      key: 'supplier',
-	      header: buildColumnHeader(
-	        'Supplier',
-	        <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-	          <SelectTrigger className="h-8 w-full max-w-[128px] px-2 text-xs font-normal normal-case tracking-normal">
-	            <SelectValue />
-	          </SelectTrigger>
-	          <SelectContent>
-	            <SelectItem value={FILTER_ALL}>All</SelectItem>
-            {supplierOptions.map(option => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
-	          </SelectContent>
-	        </Select>
-	      ),
-	      thClassName: 'w-[clamp(180px,20vw,220px)]',
-	      tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-	      render: order => (
-	        <span className="block max-w-full truncate" title={order.counterpartyName ?? undefined}>
-	          {formatTextOrDash(order.counterpartyName)}
-	        </span>
-	      ),
-	    })
+    cols.push({
+      key: 'supplier',
+      header: buildColumnHeader(
+        'Supplier',
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title="Filter suppliers"
+            >
+              <Filter
+                className={[
+                  'h-4 w-4',
+                  supplierFilter !== FILTER_ALL ? 'text-primary' : 'text-muted-foreground',
+                ].join(' ')}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 p-3">
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                Supplier
+              </p>
+              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+                <SelectTrigger className="h-9 w-full px-2 text-sm font-normal normal-case tracking-normal">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FILTER_ALL}>All</SelectItem>
+                  {supplierOptions.map(option => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </PopoverContent>
+        </Popover>
+      ),
+      thClassName: 'w-[clamp(170px,22vw,240px)]',
+      tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
+      render: order => (
+        <span className="block max-w-full truncate" title={order.counterpartyName ?? undefined}>
+          {formatTextOrDash(order.counterpartyName)}
+        </span>
+      ),
+    })
 
-	    switch (statusFilter) {
-	      case 'RFQ': {
-	        cols.push(
-          {
-            key: 'cargo-ready',
-            header: buildColumnHeader('Cargo Ready'),
-            fit: true,
-            thClassName: 'w-[120px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-            render: order => formatDateDisplay(order.expectedDate),
-          },
-          {
-            key: 'incoterms',
-            header: buildColumnHeader('Incoterms'),
-            fit: true,
-            thClassName: 'w-[110px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
-            render: order => formatTextOrDash(order.incoterms),
-          },
-          {
-            key: 'units',
-            header: buildColumnHeader('Units'),
-            align: 'right',
-            fit: true,
-            thClassName: 'w-[92px]',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
-            render: order => sumLineUnits(order.lines).toLocaleString(),
-          },
+    switch (statusFilter) {
+      case 'RFQ': {
+        cols.push(
 	          {
-	            key: 'lines',
-	            header: buildColumnHeader('Lines'),
-	            align: 'right',
+	            key: 'cargo-ready',
+	            header: buildColumnHeader('Cargo Ready'),
 	            fit: true,
-	            thClassName: 'w-[80px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => order.lines.length.toLocaleString(),
-	          }
-	        )
-	        break
-	      }
-	      case 'ISSUED': {
-	        cols.push(
-          {
-            key: 'cargo-ready',
-            header: buildColumnHeader('Cargo Ready'),
-            fit: true,
-            thClassName: 'w-[120px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-            render: order => formatDateDisplay(order.expectedDate),
-          },
-          {
-            key: 'pi-number',
-            header: buildColumnHeader('PI #'),
-            fit: true,
-            thClassName: 'w-[120px]',
-            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
-            render: order => (
-              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
-              </span>
-            ),
-          },
-	          {
-	            key: 'factory',
-	            header: buildColumnHeader('Factory'),
-	            thClassName: 'w-[clamp(180px,18vw,220px)]',
-	            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-	            render: order => (
-	              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.factoryName ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.factoryName)}
-              </span>
-            ),
-          },
-          {
-            key: 'units',
-            header: buildColumnHeader('Units'),
-            align: 'right',
-            fit: true,
-            thClassName: 'w-[92px]',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
-            render: order => sumLineUnits(order.lines).toLocaleString(),
-          },
-          {
-	            key: 'lines',
-	            header: buildColumnHeader('Lines'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[80px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => order.lines.length.toLocaleString(),
-	          }
-	        )
-	        break
-	      }
-	      case 'MANUFACTURING': {
-	        cols.push(
-          {
-            key: 'pi-number',
-            header: buildColumnHeader('PI #'),
-            fit: true,
-            thClassName: 'w-[120px]',
-            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
-            render: order => (
-              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
-              </span>
-            ),
-          },
-	          {
-	            key: 'factory',
-	            header: buildColumnHeader('Factory'),
-	            thClassName: 'w-[clamp(180px,18vw,220px)]',
-	            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-	            render: order => (
-	              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.factoryName ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.factoryName)}
-              </span>
-            ),
+	            thClassName: 'w-[112px]',
+	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+	            render: order => formatDateDisplay(order.expectedDate),
 	          },
+	          {
+	            key: 'incoterms',
+	            header: buildColumnHeader('Incoterms'),
+	            fit: true,
+	            thClassName: 'w-[96px]',
+	            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
+	            render: order => formatTextOrDash(order.incoterms),
+	          },
+	          {
+	            key: 'units',
+	            header: buildColumnHeader('Units'),
+	            align: 'right',
+	            fit: true,
+	            thClassName: 'w-[88px]',
+	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
+	            render: order => sumLineUnits(order.lines).toLocaleString(),
+	          },
+	          {
+	            key: 'lines',
+	            header: buildColumnHeader('Lines'),
+	            align: 'right',
+	            fit: true,
+	            thClassName: 'w-[72px]',
+	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+	            render: order => order.lines.length.toLocaleString(),
+	          }
+        )
+        break
+      }
+      case 'ISSUED': {
+        cols.push(
+	          {
+	            key: 'cargo-ready',
+	            header: buildColumnHeader('Cargo Ready'),
+	            fit: true,
+	            thClassName: 'w-[112px]',
+	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+	            render: order => formatDateDisplay(order.expectedDate),
+	          },
+	          {
+	            key: 'pi-number',
+	            header: buildColumnHeader('PI #'),
+	            fit: true,
+	            thClassName: 'w-[140px]',
+	            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
+	            render: order => (
+              <span
+                className="block max-w-full truncate"
+                title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
+              >
+                {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
+              </span>
+            ),
+          },
+          {
+            key: 'factory',
+            header: buildColumnHeader('Factory'),
+            thClassName: 'w-[clamp(160px,18vw,220px)]',
+            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
+            render: order => (
+              <span
+                className="block max-w-full truncate"
+                title={order.stageData.manufacturing.factoryName ?? undefined}
+              >
+                {formatTextOrDash(order.stageData.manufacturing.factoryName)}
+              </span>
+            ),
+          },
+	          {
+	            key: 'units',
+	            header: buildColumnHeader('Units'),
+	            align: 'right',
+	            fit: true,
+	            thClassName: 'w-[88px]',
+	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
+	            render: order => sumLineUnits(order.lines).toLocaleString(),
+	          },
+	          {
+	            key: 'lines',
+	            header: buildColumnHeader('Lines'),
+	            align: 'right',
+	            fit: true,
+	            thClassName: 'w-[72px]',
+	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+	            render: order => order.lines.length.toLocaleString(),
+	          }
+        )
+        break
+      }
+      case 'MANUFACTURING': {
+        cols.push(
+	          {
+	            key: 'pi-number',
+	            header: buildColumnHeader('PI #'),
+	            fit: true,
+	            thClassName: 'w-[140px]',
+	            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
+	            render: order => (
+              <span
+                className="block max-w-full truncate"
+                title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
+              >
+                {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
+              </span>
+            ),
+          },
+          {
+            key: 'factory',
+            header: buildColumnHeader('Factory'),
+            thClassName: 'w-[clamp(160px,18vw,220px)]',
+            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
+            render: order => (
+              <span
+                className="block max-w-full truncate"
+                title={order.stageData.manufacturing.factoryName ?? undefined}
+              >
+                {formatTextOrDash(order.stageData.manufacturing.factoryName)}
+              </span>
+            ),
+          },
 	          {
 	            key: 'expected-completion',
 	            header: buildColumnHeader('Exp. Complete'),
 	            fit: true,
-            thClassName: 'w-[120px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
-          },
-          {
-            key: 'cartons',
-            header: buildColumnHeader('Cartons'),
-            align: 'right',
-            fit: true,
-            thClassName: 'w-[92px]',
+	            thClassName: 'w-[120px]',
+	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+	            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
+	          },
+	          {
+	            key: 'cartons',
+	            header: buildColumnHeader('Cartons'),
+	            align: 'right',
+	            fit: true,
+	            thClassName: 'w-[88px]',
 	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
 	            render: order => formatNumberDisplay(order.stageData.manufacturing.totalCartons),
 	          }
-	        )
-	        break
-	      }
-	      case 'OCEAN': {
-	        cols.push(
+        )
+        break
+      }
+      case 'OCEAN': {
+        cols.push(
           {
             key: 'hbl',
             header: buildColumnHeader('HBL'),
-            thClassName: 'w-[clamp(150px,16vw,200px)]',
+            thClassName: 'w-[clamp(130px,17vw,190px)]',
             tdClassName: 'px-3 py-2 min-w-0 font-medium text-foreground',
             render: order => {
               const value = formatTextOrDash(order.stageData.ocean.houseBillOfLading)
@@ -609,11 +677,11 @@ export function PurchaseOrdersPanel({
                 </span>
               )
             },
-	          },
-	          {
-	            key: 'route',
-	            header: buildColumnHeader('Route'),
-	            thClassName: 'w-[clamp(160px,18vw,220px)]',
+          },
+          {
+            key: 'route',
+            header: buildColumnHeader('Route'),
+            thClassName: 'w-[clamp(140px,18vw,220px)]',
             tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
             render: order => {
               const pol = formatTextOrEmpty(order.stageData.ocean.portOfLoading)
@@ -635,35 +703,35 @@ export function PurchaseOrdersPanel({
               )
             },
           },
-          {
-            key: 'etd',
-            header: buildColumnHeader('ETD'),
-            fit: true,
-            thClassName: 'w-[96px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-            render: order => formatDateDisplay(order.stageData.ocean.estimatedDeparture),
-          },
-          {
-            key: 'eta',
-            header: buildColumnHeader('ETA'),
+	          {
+	            key: 'etd',
+	            header: buildColumnHeader('ETD'),
+	            fit: true,
+	            thClassName: 'w-[96px]',
+	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+	            render: order => formatDateDisplay(order.stageData.ocean.estimatedDeparture),
+	          },
+	          {
+	            key: 'eta',
+	            header: buildColumnHeader('ETA'),
 	            fit: true,
 	            thClassName: 'w-[96px]',
 	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
 	            render: order => formatDateDisplay(order.stageData.ocean.estimatedArrival),
 	          }
-	        )
-	        break
-	      }
-	      case 'WAREHOUSE': {
-	        cols.push(
-	          {
-	            key: 'warehouse',
-	            header: buildColumnHeader(<span title="Warehouse">WH</span>),
-	            fit: true,
-	            thClassName: 'w-[88px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
-	            render: order => (
-	              <span
+        )
+        break
+      }
+      case 'WAREHOUSE': {
+        cols.push(
+          {
+            key: 'warehouse',
+            header: buildColumnHeader(<span title="Warehouse">WH</span>),
+            fit: true,
+            thClassName: 'w-[64px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
+            render: order => (
+              <span
                 className="block max-w-full truncate"
                 title={order.stageData.warehouse.warehouseName ?? undefined}
               >
@@ -671,39 +739,65 @@ export function PurchaseOrdersPanel({
               </span>
             ),
           },
-	          {
-	            key: 'receiving',
-	            header: buildColumnHeader(
-	              'Receiving',
-	              <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
-	                <SelectTrigger className="h-8 w-full max-w-[110px] px-2 text-xs font-normal normal-case tracking-normal">
-	                  <SelectValue />
-	                </SelectTrigger>
-	                <SelectContent>
-	                  <SelectItem value={FILTER_ALL}>All</SelectItem>
-                  {receiveTypeOptions.map(option => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-	              </Select>
-	            ),
-	            thClassName: 'w-[110px]',
-	            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-	            render: order => (
-	              <span className="block max-w-full truncate" title={order.receiveType ?? undefined}>
-	                {formatTextOrDash(order.receiveType)}
+          {
+            key: 'receiving',
+            header: buildColumnHeader(
+              'Receiving',
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    title="Filter receiving type"
+                  >
+                    <Filter
+                      className={[
+                        'h-4 w-4',
+                        receiveTypeFilter !== FILTER_ALL ? 'text-primary' : 'text-muted-foreground',
+                      ].join(' ')}
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-56 p-3">
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Receiving
+                    </p>
+                    <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
+                      <SelectTrigger className="h-9 w-full px-2 text-sm font-normal normal-case tracking-normal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={FILTER_ALL}>All</SelectItem>
+                        {receiveTypeOptions.map(option => (
+                          <SelectItem key={option} value={option}>
+                            {formatReceiveTypeDisplay(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ),
+            fit: true,
+            thClassName: 'w-[96px]',
+            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
+            render: order => (
+              <span className="block max-w-full truncate" title={order.receiveType ?? undefined}>
+                {formatReceiveTypeDisplay(order.receiveType)}
               </span>
             ),
           },
-	          {
-	            key: 'customs-entry',
-	            header: buildColumnHeader('Entry #'),
-	            thClassName: 'w-[120px]',
-	            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-	            render: order => (
-	              <span
+          {
+            key: 'customs-entry',
+            header: buildColumnHeader('Entry #'),
+            thClassName: 'w-[120px]',
+            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
+            render: order => (
+              <span
                 className="block max-w-full truncate"
                 title={order.stageData.warehouse.customsEntryNumber ?? undefined}
               >
@@ -711,45 +805,45 @@ export function PurchaseOrdersPanel({
               </span>
             ),
           },
-	          {
-	            key: 'customs-cleared',
-	            header: buildColumnHeader('Cleared'),
-	            fit: true,
-	            thClassName: 'w-[92px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-	            render: order => formatDateDisplay(order.stageData.warehouse.customsClearedDate),
-	          },
-	          {
-	            key: 'received-date',
-	            header: buildColumnHeader('Received'),
-	            fit: true,
-	            thClassName: 'w-[92px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-	            render: order => formatDateDisplay(order.stageData.warehouse.receivedDate),
-	          },
-	          {
-	            key: 'cartons-ordered',
-	            header: buildColumnHeader('Cartons'),
-	            align: 'right',
+          {
+            key: 'customs-cleared',
+            header: buildColumnHeader('Cleared'),
             fit: true,
-            thClassName: 'w-[80px]',
+            thClassName: 'w-[88px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+            render: order => formatDateDisplay(order.stageData.warehouse.customsClearedDate),
+          },
+          {
+            key: 'received-date',
+            header: buildColumnHeader('Received'),
+            fit: true,
+            thClassName: 'w-[88px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+            render: order => formatDateDisplay(order.stageData.warehouse.receivedDate),
+          },
+          {
+            key: 'cartons-ordered',
+            header: buildColumnHeader('Cartons'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[78px]',
             tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
             render: order => sumLineCartons(order.lines).toLocaleString(),
           },
           {
-	            key: 'cartons-received',
-	            header: buildColumnHeader('Recvd'),
-	            align: 'right',
-	            fit: true,
-            thClassName: 'w-[80px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => sumReceivedQuantities(order.lines).toLocaleString(),
-	          }
-	        )
-	        break
-	      }
-	      case 'REJECTED':
-	      case 'CANCELLED': {
+            key: 'cartons-received',
+            header: buildColumnHeader('Recvd'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[78px]',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => sumReceivedQuantities(order.lines).toLocaleString(),
+          }
+        )
+        break
+      }
+      case 'REJECTED':
+      case 'CANCELLED': {
         cols.push(
           {
             key: 'notes',
@@ -766,24 +860,35 @@ export function PurchaseOrdersPanel({
             header: buildColumnHeader('Units'),
             align: 'right',
             fit: true,
+            thClassName: 'w-[88px]',
             tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
             render: order => sumLineUnits(order.lines).toLocaleString(),
           },
-	          {
-	            key: 'lines',
-	            header: buildColumnHeader('Lines'),
-	            align: 'right',
-	            fit: true,
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => order.lines.length.toLocaleString(),
-	          }
-	        )
-	        break
-	      }
-	      default: {
-	        // No stage-specific columns for unknown statuses (ex: legacy / shipped)
-	      }
-	    }
+          {
+            key: 'lines',
+            header: buildColumnHeader('Lines'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[72px]',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => order.lines.length.toLocaleString(),
+          }
+        )
+        break
+      }
+      default: {
+        // No stage-specific columns for unknown statuses (ex: legacy / shipped)
+      }
+    }
+
+    cols.push({
+      key: 'created',
+      header: buildColumnHeader('Created'),
+      fit: true,
+      thClassName: 'w-[96px]',
+      tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+      render: order => formatDateDisplay(order.createdAt),
+    })
 
     return cols
   }, [
