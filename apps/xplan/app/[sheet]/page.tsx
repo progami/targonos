@@ -14,6 +14,7 @@ import {
   ProfitAndLossFiltersProvider,
   ProfitAndLossHeaderControls,
 } from '@/components/sheets/fin-planning-pl-grid';
+import { SellerboardSyncControl } from '@/components/sheets/sellerboard-sync-control';
 import { CashFlowGrid } from '@/components/sheets/fin-planning-cash-grid';
 import { SheetViewToggle, type SheetViewMode } from '@/components/sheet-view-toggle';
 import { SHEET_TOOLBAR_GROUP, SHEET_TOOLBAR_LABEL } from '@/components/sheet-toolbar';
@@ -2431,6 +2432,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       controls.push(
         <SalesPlanningFocusControl key="sales-focus" productOptions={view.productOptions} />,
       );
+      controls.push(
+        <SellerboardSyncControl
+          key="sellerboard-sync"
+          strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
+        />,
+      );
       wrapLayout = (node) => (
         <SalesPlanningFocusProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
@@ -2477,6 +2485,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       const data = await getFinancialData();
       const view = getProfitAndLossView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
       controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
+      controls.push(
+        <SellerboardSyncControl
+          key="sellerboard-sync"
+          strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
+        />,
+      );
       wrapLayout = (node) => (
         <ProfitAndLossFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
