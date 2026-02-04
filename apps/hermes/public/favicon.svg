@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="hermes-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#002C51" />
+      <stop offset="1" stop-color="#001f3a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#hermes-bg)" />
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#00C2B9" stroke-opacity="0.2" />
+
+  <!-- Hermes: Winged messenger shoe -->
+  <g fill="none" stroke="#00C2B9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Wing -->
+    <path d="M30 26C22 23 17 17 15 9C23 10 30 13 35 18" />
+    <path d="M34 22C29 20 25 16 23 11C28 11.4 32 13 36 15.5" opacity="0.75" />
+  </g>
+
+  <path
+    d="M20 48H40C49 48 56 41 56 33C56 29 54.4 25.4 51.6 22.6L48.4 19.4C46.6 17.6 44.2 16.6 41.7 16.6H31.5C28.5 16.6 25.6 17.8 23.5 19.9L19.8 23.6C17.8 25.6 16.7 28.3 16.7 31.1V48Z"
+    fill="#00C2B9"
+    opacity="0.14"
+  />
+  <g fill="none" stroke="#00C2B9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M20 48H40C49 48 56 41 56 33C56 29 54.4 25.4 51.6 22.6L48.4 19.4C46.6 17.6 44.2 16.6 41.7 16.6H31.5C28.5 16.6 25.6 17.8 23.5 19.9L19.8 23.6C17.8 25.6 16.7 28.3 16.7 31.1V48"
+    />
+    <path d="M20 48H56" opacity="0.6" />
+  </g>
+</svg>
