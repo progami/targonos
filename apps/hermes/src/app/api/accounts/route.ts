@@ -28,24 +28,6 @@ async function handleGet(_req: Request) {
   const targets = listConnectionTargets();
   const nowIso = new Date().toISOString();
 
-  let mappingById: Map<string, any> | null = null;
-  const mappingRaw = process.env.HERMES_CONNECTIONS_JSON;
-  if (typeof mappingRaw === "string" && mappingRaw.trim().length > 0) {
-    try {
-      const parsed = JSON.parse(mappingRaw);
-      if (Array.isArray(parsed)) {
-        mappingById = new Map<string, any>();
-        for (const x of parsed) {
-          const id = typeof x?.connectionId === "string" ? x.connectionId : null;
-          if (!id) continue;
-          mappingById.set(id, x);
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   const accounts = targets.map((t) => {
     let region: string = "NA";
     let status: "connected" | "needs_reauth" | "disconnected" = "connected";
@@ -57,14 +39,7 @@ async function handleGet(_req: Request) {
       status = "disconnected";
     }
 
-    const mapping = mappingById?.get(t.connectionId) ?? null;
-    const explicitName = typeof mapping?.accountName === "string"
-      ? mapping.accountName.trim()
-      : typeof mapping?.name === "string"
-        ? mapping.name.trim()
-        : null;
-
-    const accountName = explicitName && explicitName.length > 0 ? explicitName : deriveAccountName({ region, marketplaceIds: t.marketplaceIds });
+    const accountName = deriveAccountName({ region, marketplaceIds: t.marketplaceIds });
 
     return {
       id: t.connectionId,
