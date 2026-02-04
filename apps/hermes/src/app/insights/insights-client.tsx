@@ -36,6 +36,13 @@ type Overview = {
   };
   summary: {
     sentInRange: number;
+    dispatchStateNow: {
+      queued: number;
+      sending: number;
+      sent: number;
+      skipped: number;
+      failed: number;
+    };
   };
   series: Array<{ day: string; sent: number }>;
 };
@@ -122,6 +129,13 @@ export function InsightsClient() {
   const [loading, setLoading] = React.useState(false);
   const [overview, setOverview] = React.useState<Overview | null>(null);
 
+  const connectionIdsKey = React.useMemo(
+    () => connections.map((c) => c.id).sort().join("|"),
+    [connections]
+  );
+  const [allOverviews, setAllOverviews] = React.useState<Record<string, Overview | null>>({});
+  const [allLoading, setAllLoading] = React.useState(false);
+
   React.useEffect(() => {
     if (!uiHydrated) return;
     if (!connectionId) return;
@@ -154,6 +168,45 @@ export function InsightsClient() {
       cancelled = true;
     };
   }, [uiHydrated, connectionId, rangeDays]);
+
+  React.useEffect(() => {
+    if (!uiHydrated) return;
+    if (connections.length === 0) return;
+
+    let cancelled = false;
+    async function loadAll() {
+      setAllLoading(true);
+      try {
+        const results = await Promise.all(
+          connections.map(async (c) => {
+            const qs = new URLSearchParams();
+            qs.set("rangeDays", String(rangeDays));
+            qs.set("connectionId", c.id);
+
+            const res = await fetch(hermesApiUrl(`/api/analytics/overview?${qs.toString()}`));
+            const json = await res.json();
+            if (!res.ok || json?.ok !== true) {
+              return [c.id, null] as const;
+            }
+            return [c.id, json.overview as Overview] as const;
+          })
+        );
+
+        if (cancelled) return;
+        const next: Record<string, Overview | null> = {};
+        for (const [id, ov] of results) next[id] = ov;
+        setAllOverviews(next);
+      } finally {
+        if (!cancelled) setAllLoading(false);
+      }
+    }
+
+    loadAll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uiHydrated, rangeDays, connectionIdsKey, connections]);
 
   const sentSeries = React.useMemo(() => (overview ? overview.series : []), [overview]);
   const queueSeries = React.useMemo(() => (overview ? overview.queue.series : []), [overview]);
@@ -193,6 +246,26 @@ export function InsightsClient() {
     return out;
   }, [queueSeries, sentSeries]);
 
+  const accountsTableRows = React.useMemo(() => {
+    return connections.map((c) => {
+      const ov = c.id === connectionId && overview ? overview : (allOverviews[c.id] ?? null);
+      const sent = ov ? ov.summary.sentInRange : null;
+      const queuedTotal = ov ? ov.summary.dispatchStateNow.queued : null;
+      const queuedTomorrow = ov ? (ov.queue.series[0]?.queued ?? 0) : null;
+      const queuedNext7 = ov ? ov.queue.queuedTotal : null;
+
+      return {
+        id: c.id,
+        label: `${c.accountName} • ${c.region}`,
+        active: c.id === connectionId,
+        sent,
+        queuedTotal,
+        queuedTomorrow,
+        queuedNext7,
+      };
+    });
+  }, [connections, connectionId, overview, allOverviews]);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -226,6 +299,64 @@ export function InsightsClient() {
         }
       />
 
+      {connections.length > 1 ? (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">Accounts</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-auto">
+              <Table className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Account</TableHead>
+                    <TableHead className="text-right">Sent ({rangeDays}d)</TableHead>
+                    <TableHead className="text-right">Queued (total)</TableHead>
+                    <TableHead className="text-right">Queued (tomorrow)</TableHead>
+                    <TableHead className="text-right">Queued (next 7d)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accountsTableRows.map((r) => (
+                    <TableRow
+                      key={r.id}
+                      className={r.active ? "bg-muted/30" : "cursor-pointer"}
+                      onClick={() => setActiveConnectionId(r.id)}
+                    >
+                      <TableCell className="min-w-[220px]">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium">{r.label}</span>
+                          {r.active ? <Badge variant="secondary" className="text-[10px]">Active</Badge> : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.sent === "number" ? fmtInt(r.sent) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.queuedTotal === "number" ? fmtInt(r.queuedTotal) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.queuedTomorrow === "number" ? fmtInt(r.queuedTomorrow) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.queuedNext7 === "number" ? fmtInt(r.queuedNext7) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {accountsTableRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                        {connectionsLoading ? "Loading…" : "No accounts"}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Tabs defaultValue="table">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
@@ -236,7 +367,7 @@ export function InsightsClient() {
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">Sent ({rangeDays}d) {overview ? fmtInt(sentInRange) : "—"}</Badge>
             <Badge variant="outline">Queued tomorrow {overview ? fmtInt(queuedTomorrow) : "—"}</Badge>
-            {loading ? (
+            {loading || allLoading ? (
               <Badge variant="outline" className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Loading…
