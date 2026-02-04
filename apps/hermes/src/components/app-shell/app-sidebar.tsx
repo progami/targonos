@@ -25,17 +25,24 @@ export function AppSidebar() {
               className="text-foreground"
             >
               <path
-                d="M9.6 10.2c-2.6-1.1-4.2-3-4.8-5.6c2.6 0.2 4.9 1.2 6.6 2.9"
+                d="M9.6 10.4c-2.6-1.1-4.3-3-4.9-5.7c2.7 0.2 5.1 1.2 6.9 3"
                 stroke="currentColor"
                 strokeWidth="1.7"
                 strokeLinecap="round"
               />
               <path
-                d="M10.2 8.9c-1.5-0.8-2.6-1.8-3.2-3.2c1.6 0.1 3.0 0.6 4.2 1.5"
+                d="M10.4 9.0c-1.6-0.8-2.7-1.9-3.3-3.3c1.7 0.1 3.1 0.6 4.4 1.6"
                 stroke="currentColor"
                 strokeWidth="1.7"
                 strokeLinecap="round"
-                opacity="0.7"
+                opacity="0.75"
+              />
+              <path
+                d="M10.9 7.7c-1.2-.6-2-1.4-2.5-2.3c1.2.1 2.3.4 3.4 1"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                opacity="0.55"
               />
               <path
                 d="M7.6 16h8.1c2.4 0 4.3-1.6 4.3-3.9c0-1-0.4-1.9-1.1-2.6l-1.1-1.1c-.6-.6-1.4-.9-2.2-.9h-3.4c-1 0-1.9.4-2.6 1.1l-1.7 1.7c-.8.8-1.2 1.6-1.2 2.7V16"

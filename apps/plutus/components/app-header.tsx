@@ -28,25 +28,36 @@ function TargonWordmark({ className }: { className?: string }) {
 function LogoIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" aria-hidden="true">
-      {/* Cornucopia (horn of abundance) */}
       <path
-        d="M6.8 14.9C6.8 10.2 10.6 6.4 15.2 6.4c2.7 0 4.8 1.7 4.8 4.3c0 4.7-4.8 8.9-10.9 8.9c-1.6 0-2.9-.5-3.8-1.4c-.7-.8-1-1.7-1-2.3Z"
+        d="M7 15.2c0-5 4-9 9-9c2.8 0 4.9 1.8 4.9 4.6c0 5.2-5.2 9.8-12 9.8c-1.9 0-3.4-.6-4.4-1.7c-.7-.8-1-1.7-1-2.7Z"
+        fill="currentColor"
+        opacity="0.18"
+      />
+      <path
+        d="M7 15.2c0-5 4-9 9-9c2.8 0 4.9 1.8 4.9 4.6c0 5.2-5.2 9.8-12 9.8c-1.9 0-3.4-.6-4.4-1.7c-.7-.8-1-1.7-1-2.7Z"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M10.7 14.6c0-2.3 1.9-4.1 4.2-4.1c1.7 0 3.1 1.1 3.1 2.7c0 2.6-2.7 5-6.3 5c-.5 0-1-.1-1.5-.3"
+        d="M11 14.9c0-2.4 2-4.3 4.4-4.3c1.8 0 3.2 1.1 3.2 2.9c0 2.7-2.7 5.2-6.6 5.2c-.6 0-1.1-.1-1.6-.3"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
         opacity="0.7"
       />
-      <circle cx="6.6" cy="8.2" r="1.35" fill="currentColor" opacity="0.95" />
-      <circle cx="8.8" cy="6.5" r="1.05" fill="currentColor" opacity="0.8" />
-      <circle cx="9.3" cy="9.1" r="0.85" fill="currentColor" opacity="0.7" />
+      <path
+        d="M14.3 9.2c.6-.5 1.3-.9 2-.9"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
+      <circle cx="6.7" cy="8.0" r="1.35" fill="currentColor" opacity="0.95" />
+      <circle cx="8.9" cy="6.3" r="1.05" fill="currentColor" opacity="0.8" />
+      <circle cx="9.5" cy="8.9" r="0.85" fill="currentColor" opacity="0.7" />
     </svg>
   );
 }
