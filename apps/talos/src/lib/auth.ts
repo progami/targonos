@@ -179,7 +179,7 @@ export const authOptions: NextAuthConfig = withSharedAuth(
   baseAuthOptions,
   {
     cookieDomain: process.env.COOKIE_DOMAIN || '.targonglobal.com',
-    // Use portal cookie prefix so NextAuth reads the same dev cookie as ecomOS
+    // Use portal cookie prefix so NextAuth reads the same dev cookie as Targon OS
     appId: 'targon',
   }
 )

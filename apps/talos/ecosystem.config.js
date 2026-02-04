@@ -19,6 +19,9 @@ module.exports = {
     env_production: {
       NODE_ENV: 'production',
       PORT: 3001,
+      BASE_PATH: '/talos',
+      NEXT_PUBLIC_BASE_PATH: '/talos',
+      NEXT_PUBLIC_APP_URL: 'https://os.targonglobal.com/talos',
       NEXTAUTH_URL: 'https://os.targonglobal.com/talos'
     }
   }]
