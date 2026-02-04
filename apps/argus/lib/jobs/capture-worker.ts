@@ -105,6 +105,8 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log('[argus-capture] starting', { workerId, argusEnv });
+  // eslint-disable-next-line no-console
+  console.log('[argus-capture] s3 config', { bucket: (s3 as any).bucket, region: (s3 as any).region });
 
   const browser = await launchDefaultBrowser();
 
