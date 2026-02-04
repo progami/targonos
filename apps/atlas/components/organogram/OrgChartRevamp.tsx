@@ -473,6 +473,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
   const initialViewAppliedRef = useRef(false)
+  const pendingFitToViewRef = useRef(false)
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
@@ -1062,7 +1063,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   }
 
   useEffect(() => {
+    if (!pendingFitToViewRef.current) return
     fitToView()
+    pendingFitToViewRef.current = false
   }, [fitToView])
 
   useEffect(() => {
@@ -1121,7 +1124,17 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
             {[{ id: 'organization', label: 'Organization', icon: Users }, { id: 'project', label: 'Projects', icon: FolderKanban }].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setViewMode(tab.id as 'organization' | 'project'); resetView(); setSelected(null) }}
+                onClick={() => {
+                  const nextMode = tab.id as 'organization' | 'project'
+                  if (viewMode === nextMode) {
+                    resetView()
+                    setSelected(null)
+                    return
+                  }
+                  pendingFitToViewRef.current = true
+                  setViewMode(nextMode)
+                  setSelected(null)
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1150,7 +1163,14 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                 {levelOptions.map(option => (
                   <button
                     key={String(option.value)}
-                    onClick={() => { setLevelScope(option.value); resetView() }}
+                    onClick={() => {
+                      if (levelScope === option.value) {
+                        resetView()
+                        return
+                      }
+                      pendingFitToViewRef.current = true
+                      setLevelScope(option.value)
+                    }}
                     style={{
                       padding: '6px 10px',
                       border: 'none',
