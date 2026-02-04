@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useConnectionsStore } from "@/stores/connections-store";
+import { useHermesUiPreferencesStore, type LogsPreferences } from "@/stores/ui-preferences-store";
 
 type AttemptRow = {
   id: string;
@@ -60,9 +61,13 @@ export function LogsClient() {
 
   const connectionId = activeConnectionId ?? "";
 
-  const [type, setType] = React.useState<"any" | "request_review" | "buyer_message">("request_review");
-  const [status, setStatus] = React.useState<"any" | AttemptRow["status"]>("any");
-  const [orderIdQuery, setOrderIdQuery] = React.useState("");
+  const uiHydrated = useHermesUiPreferencesStore((s) => s.hasHydrated);
+  const logsPrefs = useHermesUiPreferencesStore((s) => s.logs);
+  const setLogsPreferences = useHermesUiPreferencesStore((s) => s.setLogsPreferences);
+
+  const type = logsPrefs.type;
+  const status = logsPrefs.status;
+  const orderIdQuery = logsPrefs.orderIdQuery;
 
   const [rows, setRows] = React.useState<AttemptRow[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -128,9 +133,10 @@ export function LogsClient() {
   }
 
   React.useEffect(() => {
+    if (!uiHydrated) return;
     loadFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId, type, status]);
+  }, [uiHydrated, connectionId, type, status]);
 
   return (
     <div className="space-y-4">
@@ -151,7 +157,7 @@ export function LogsClient() {
               </SelectContent>
             </Select>
 
-            <Select value={type} onValueChange={(v) => setType(v as any)}>
+            <Select value={type} onValueChange={(v) => setLogsPreferences({ type: v as LogsPreferences["type"] })}>
               <SelectTrigger className="h-9 w-[150px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
@@ -162,7 +168,7 @@ export function LogsClient() {
               </SelectContent>
             </Select>
 
-            <Select value={status} onValueChange={(v) => setStatus(v as any)}>
+            <Select value={status} onValueChange={(v) => setLogsPreferences({ status: v as LogsPreferences["status"] })}>
               <SelectTrigger className="h-9 w-[140px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -177,7 +183,7 @@ export function LogsClient() {
 
             <Input
               value={orderIdQuery}
-              onChange={(e) => setOrderIdQuery(e.target.value)}
+              onChange={(e) => setLogsPreferences({ orderIdQuery: e.target.value })}
               placeholder="Order id…"
               className="h-9 w-[200px] font-mono text-xs"
               onKeyDown={(e) => {
@@ -245,4 +251,3 @@ export function LogsClient() {
     </div>
   );
 }
-

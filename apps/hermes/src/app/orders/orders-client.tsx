@@ -698,60 +698,151 @@ export function OrdersClient() {
 
       <div className="grid gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
-            <CardTitle className="text-sm">Orders</CardTitle>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {ordersTotalCount !== null ? (
-                <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
-              ) : null}
-              <Badge variant="outline">{pageLabel}</Badge>
-              <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                <SelectTrigger className="h-8 w-[96px] flex-none whitespace-nowrap text-xs">
-                  <SelectValue placeholder="Rows/pg" />
+          <CardHeader className="gap-2 space-y-0 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-sm">Orders</CardTitle>
+                {ordersTotalCount !== null ? (
+                  <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
+                ) : null}
+                <Badge variant="outline">{pageLabel}</Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
+                  <SelectTrigger className="h-8 w-[76px] whitespace-nowrap text-xs">
+                    <SelectValue placeholder="Rows" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem className="whitespace-nowrap" value="25">25</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="50">50</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="100">100</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="200">200</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (!canPrev) return;
+                    const prevCursor = ordersCursorStack[ordersCursorStack.length - 1] ?? null;
+                    const nextStack = ordersCursorStack.slice(0, -1);
+                    loadOrdersPage({ cursor: prevCursor, stack: nextStack });
+                  }}
+                  disabled={!canPrev || loadingOrders}
+                >
+                  Prev
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (!ordersNextCursor) return;
+                    const nextStack = [...ordersCursorStack, ordersCursor];
+                    loadOrdersPage({ cursor: ordersNextCursor, stack: nextStack });
+                  }}
+                  disabled={!canNext || loadingOrders}
+                >
+                  Next
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
+                    loadOrdersTotal();
+                  }}
+                  disabled={loadingOrders || loadingOrdersTotal}
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={filterOrderId}
+                onChange={(e) => setOrdersPreferences({ filterOrderId: e.target.value })}
+                placeholder="Order id…"
+                className="h-8 w-[220px] font-mono text-xs"
+              />
+
+              <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
+                <SelectTrigger className="h-8 w-[140px] text-xs">
+                  <SelectValue placeholder="Marketplace" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem className="whitespace-nowrap" value="25">25/pg</SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="50">50/pg</SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="100">100/pg</SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="200">200/pg</SelectItem>
+                  <SelectItem value="any">All marketplaces</SelectItem>
+                  {(connection?.marketplaceIds ?? []).map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {marketplaceDisplay(id)} • {shortMarketplace(id)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+
+              <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">All statuses</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Unshipped">Unshipped</SelectItem>
+                  <SelectItem value="PartiallyShipped">PartiallyShipped</SelectItem>
+                  <SelectItem value="Shipped">Shipped</SelectItem>
+                  <SelectItem value="Canceled">Canceled</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterReviewState}
+                onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}
+              >
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Review" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">All review states</SelectItem>
+                  <SelectItem value="not_queued">Not queued</SelectItem>
+                  <SelectItem value="queued">Queued</SelectItem>
+                  <SelectItem value="sending">Sending</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="skipped">Skipped</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterDelivery}
+                onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}
+              >
+                <SelectTrigger className="h-8 w-[120px] text-xs">
+                  <SelectValue placeholder="Delivery" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any delivery</SelectItem>
+                  <SelectItem value="has">Has date</SelectItem>
+                  <SelectItem value="missing">Missing</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  if (!canPrev) return;
-                  const prevCursor = ordersCursorStack[ordersCursorStack.length - 1] ?? null;
-                  const nextStack = ordersCursorStack.slice(0, -1);
-                  loadOrdersPage({ cursor: prevCursor, stack: nextStack });
-                }}
-                disabled={!canPrev || loadingOrders}
+                onClick={() =>
+                  setOrdersPreferences({
+                    filterOrderId: "",
+                    filterMarketplaceId: "any",
+                    filterDelivery: "any",
+                    filterOrderStatus: "any",
+                    filterReviewState: "any",
+                  })
+                }
               >
-                Prev
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  if (!ordersNextCursor) return;
-                  const nextStack = [...ordersCursorStack, ordersCursor];
-                  loadOrdersPage({ cursor: ordersNextCursor, stack: nextStack });
-                }}
-                disabled={!canNext || loadingOrders}
-              >
-                Next
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
-                  loadOrdersTotal();
-                }}
-                disabled={loadingOrders || loadingOrdersTotal}
-              >
-                <CalendarClock className="h-4 w-4" />
-                Refresh
+                Clear
               </Button>
             </div>
           </CardHeader>
@@ -759,88 +850,12 @@ export function OrdersClient() {
             <Table className="text-xs">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="h-9 px-3">
-                    <div className="flex flex-col gap-1">
-                      <div>Order</div>
-                      <Input
-                        value={filterOrderId}
-                        onChange={(e) => setOrdersPreferences({ filterOrderId: e.target.value })}
-                        placeholder="Search…"
-                        className="h-8 w-[190px] font-mono text-xs"
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="hidden h-9 px-3 sm:table-cell">
-                    <div className="flex flex-col gap-1">
-                      <div>Marketplace</div>
-                      <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
-                        <SelectTrigger className="h-8 w-[140px] text-xs">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          {(connection?.marketplaceIds ?? []).map((id) => (
-                            <SelectItem key={id} value={id}>
-                              {marketplaceDisplay(id)} • {shortMarketplace(id)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-9 px-3">Purchase</TableHead>
-                  <TableHead className="h-9 px-3">
-                    <div className="flex flex-col gap-1">
-                      <div>Delivery</div>
-                      <Select value={filterDelivery} onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}>
-                        <SelectTrigger className="h-8 w-[130px] text-xs">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="has">Has date</SelectItem>
-                          <SelectItem value="missing">Missing</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-9 px-3">
-                    <div className="flex flex-col gap-1">
-                      <div>Status</div>
-                      <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
-                        <SelectTrigger className="h-8 w-[160px] text-xs">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="Pending">Pending</SelectItem>
-                          <SelectItem value="Unshipped">Unshipped</SelectItem>
-                          <SelectItem value="PartiallyShipped">PartiallyShipped</SelectItem>
-                          <SelectItem value="Shipped">Shipped</SelectItem>
-                          <SelectItem value="Canceled">Canceled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-9 px-3 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      <div>Review request</div>
-                      <Select value={filterReviewState} onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}>
-                        <SelectTrigger className="h-8 w-[160px] text-xs">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="not_queued">Not queued</SelectItem>
-                          <SelectItem value="queued">Queued</SelectItem>
-                          <SelectItem value="sending">Sending</SelectItem>
-                          <SelectItem value="sent">Sent</SelectItem>
-                          <SelectItem value="failed">Failed</SelectItem>
-                          <SelectItem value="skipped">Skipped</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
+                  <TableHead>Order</TableHead>
+                  <TableHead className="hidden sm:table-cell">Marketplace</TableHead>
+                  <TableHead>Purchase</TableHead>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Review</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -851,13 +866,13 @@ export function OrdersClient() {
 
                   return (
                     <TableRow key={o.orderId}>
-                      <TableCell className="px-3 py-2 font-mono text-[11px]">{o.orderId}</TableCell>
-                      <TableCell className="hidden px-3 py-2 sm:table-cell">
+                      <TableCell className="font-mono text-[11px]">{o.orderId}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <Badge variant="secondary" title={marketplaceTitle}>
                           {marketplaceDisplay(o.marketplaceId)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-3 py-2">
+                      <TableCell>
                         {purchase ? (
                           <div className="leading-tight">
                             <div>{purchase.date}</div>
@@ -867,11 +882,11 @@ export function OrdersClient() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell className="px-3 py-2">{fmtDateShort(o.latestDeliveryDate)}</TableCell>
-                      <TableCell className="px-3 py-2">
+                      <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
+                      <TableCell>
                         <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
                       </TableCell>
-                      <TableCell className="px-3 py-2 text-right">{stateBadge(o.dispatchState)}</TableCell>
+                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
                     </TableRow>
                   );
                 })}

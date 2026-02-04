@@ -210,10 +210,11 @@ export function InsightsClient() {
 
   const sentSeries = React.useMemo(() => (overview ? overview.series : []), [overview]);
   const queueSeries = React.useMemo(() => (overview ? overview.queue.series : []), [overview]);
-  const queuedTomorrow = queueSeries[0]?.queued ?? 0;
+  const queuedToday = queueSeries[0]?.queued ?? 0;
+  const queuedTomorrow = queueSeries[1]?.queued ?? 0;
   const sentInRange = overview ? overview.summary.sentInRange : 0;
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const tomorrowUtc = queueSeries.length > 0 ? queueSeries[0].day : null;
+  const tomorrowUtc = queueSeries[1]?.day ?? null;
 
   const sentByDay = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -228,38 +229,33 @@ export function InsightsClient() {
   }, [queueSeries]);
 
   const tableDays = React.useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
+    const days = new Set<string>();
+    for (const d of queueSeries) days.add(d.day);
+    for (const d of sentSeries) days.add(d.day);
 
-    for (const d of queueSeries) {
-      if (seen.has(d.day)) continue;
-      seen.add(d.day);
-      out.push(d.day);
-    }
-
-    for (const d of sentSeries.slice().reverse()) {
-      if (seen.has(d.day)) continue;
-      seen.add(d.day);
-      out.push(d.day);
-    }
-
+    const out = Array.from(days);
+    out.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
     return out;
   }, [queueSeries, sentSeries]);
 
   const accountsTableRows = React.useMemo(() => {
     return connections.map((c) => {
       const ov = c.id === connectionId && overview ? overview : (allOverviews[c.id] ?? null);
-      const sent = ov ? ov.summary.sentInRange : null;
-      const queuedTotal = ov ? ov.summary.dispatchStateNow.queued : null;
-      const queuedTomorrow = ov ? (ov.queue.series[0]?.queued ?? 0) : null;
+      const sentAll = ov ? ov.summary.dispatchStateNow.sent : null;
+      const sentRange = ov ? ov.summary.sentInRange : null;
+      const queuedAll = ov ? ov.summary.dispatchStateNow.queued : null;
+      const queuedToday = ov ? (ov.queue.series[0]?.queued ?? 0) : null;
+      const queuedTomorrow = ov ? (ov.queue.series[1]?.queued ?? 0) : null;
       const queuedNext7 = ov ? ov.queue.queuedTotal : null;
 
       return {
         id: c.id,
         label: `${c.accountName} • ${c.region}`,
         active: c.id === connectionId,
-        sent,
-        queuedTotal,
+        sentAll,
+        sentRange,
+        queuedAll,
+        queuedToday,
         queuedTomorrow,
         queuedNext7,
       };
@@ -310,8 +306,10 @@ export function InsightsClient() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Account</TableHead>
+                    <TableHead className="text-right">Sent (all)</TableHead>
                     <TableHead className="text-right">Sent ({rangeDays}d)</TableHead>
-                    <TableHead className="text-right">Queued (total)</TableHead>
+                    <TableHead className="text-right">Queued (all)</TableHead>
+                    <TableHead className="text-right">Queued (today)</TableHead>
                     <TableHead className="text-right">Queued (tomorrow)</TableHead>
                     <TableHead className="text-right">Queued (next 7d)</TableHead>
                   </TableRow>
@@ -330,10 +328,16 @@ export function InsightsClient() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {typeof r.sent === "number" ? fmtInt(r.sent) : <span className="text-muted-foreground">—</span>}
+                        {typeof r.sentAll === "number" ? fmtInt(r.sentAll) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {typeof r.queuedTotal === "number" ? fmtInt(r.queuedTotal) : <span className="text-muted-foreground">—</span>}
+                        {typeof r.sentRange === "number" ? fmtInt(r.sentRange) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.queuedAll === "number" ? fmtInt(r.queuedAll) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {typeof r.queuedToday === "number" ? fmtInt(r.queuedToday) : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {typeof r.queuedTomorrow === "number" ? fmtInt(r.queuedTomorrow) : <span className="text-muted-foreground">—</span>}
@@ -343,15 +347,15 @@ export function InsightsClient() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {accountsTableRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                        {connectionsLoading ? "Loading…" : "No accounts"}
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
+                {accountsTableRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                      {connectionsLoading ? "Loading…" : "No accounts"}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
             </div>
           </CardContent>
         </Card>
@@ -366,6 +370,7 @@ export function InsightsClient() {
 
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">Sent ({rangeDays}d) {overview ? fmtInt(sentInRange) : "—"}</Badge>
+            <Badge variant="outline">Queued today {overview ? fmtInt(queuedToday) : "—"}</Badge>
             <Badge variant="outline">Queued tomorrow {overview ? fmtInt(queuedTomorrow) : "—"}</Badge>
             {loading || allLoading ? (
               <Badge variant="outline" className="inline-flex items-center gap-2">
@@ -425,32 +430,34 @@ export function InsightsClient() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="chart" className="m-0 space-y-4">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Sent per day</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3">
-              {sentSeries.length > 0 ? <SentChart series={sentSeries} /> : (
-                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                  {loading ? "Loading…" : "No data"}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="chart" className="m-0">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Sent / day</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3">
+                {sentSeries.length > 0 ? <SentChart series={sentSeries} /> : (
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    {loading ? "Loading…" : "No data"}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Queued</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3">
-              {queueSeries.length > 0 ? <QueueChart series={queueSeries} /> : (
-                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-                  {loading ? "Loading…" : "No queue"}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Queued</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3">
+                {queueSeries.length > 0 ? <QueueChart series={queueSeries} /> : (
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    {loading ? "Loading…" : "No queue"}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
