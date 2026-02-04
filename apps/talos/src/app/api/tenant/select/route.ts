@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { auth } from '@/lib/auth'
+import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import {
   TenantCode,
   isValidTenantCode,
@@ -13,20 +15,36 @@ import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
 export const dynamic = 'force-dynamic'
 
 /**
- * Check if user exists in the specified tenant's database
+ * Ensure an active user exists in the specified tenant database.
+ * - If the user record exists but is inactive, returns false.
+ * - If the user record does not exist, provisions a default staff user and returns true.
  */
-async function userExistsInTenant(email: string, tenantCode: TenantCode): Promise<boolean> {
-  try {
-    const prisma = await getTenantPrismaClient(tenantCode)
-    const user = await prisma.user.findFirst({
-      where: { email, isActive: true },
-      select: { id: true },
-    })
-    return !!user
-  } catch (error) {
-    console.error(`[tenant/select] Error checking user in ${tenantCode}:`, error)
-    return false
+async function ensureActiveUserInTenant(email: string, fullName: string, tenantCode: TenantCode): Promise<boolean> {
+  const prisma = await getTenantPrismaClient(tenantCode)
+
+  const existing = await prisma.user.findFirst({
+    where: { email },
+    select: { id: true, isActive: true },
+  })
+
+  if (existing) {
+    return existing.isActive
   }
+
+  await prisma.user.create({
+    data: {
+      email,
+      fullName,
+      passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+      role: 'staff',
+      region: tenantCode,
+      isActive: true,
+      isDemo: false,
+    },
+    select: { id: true },
+  })
+
+  return true
 }
 
 /**
@@ -63,7 +81,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const hasAccess = await userExistsInTenant(userEmail, tenantCode)
+    const normalizedEmail = userEmail.trim().toLowerCase()
+    if (!normalizedEmail) {
+      return NextResponse.json(
+        { error: 'User email not found in session' },
+        { status: 400 }
+      )
+    }
+
+    const rawName = session.user?.name
+    const fullName = typeof rawName === 'string' && rawName.trim()
+      ? rawName.trim()
+      : normalizedEmail
+
+    const hasAccess = await ensureActiveUserInTenant(normalizedEmail, fullName, tenantCode)
     if (!hasAccess) {
       return NextResponse.json(
         { error: `Access denied: Your account is not authorized for the ${tenantCode} region` },
