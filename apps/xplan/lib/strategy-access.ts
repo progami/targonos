@@ -5,6 +5,7 @@ import { buildPortalUrl } from '@targon/auth';
 import { getPortalAuthPrisma } from '@targon/auth/server';
 import { Prisma } from '@targon/prisma-xplan';
 import prisma from '@/lib/prisma';
+import { DEMO_STRATEGY_ID } from '@/lib/protected-strategies';
 
 type StrategyActor = {
   id: string | null;
@@ -94,6 +95,7 @@ export function buildStrategyAccessWhere(actor: StrategyActor) {
     return { id: FORBIDDEN_STRATEGY_ID };
   }
 
+  or.push({ id: DEMO_STRATEGY_ID });
   return { OR: or };
 }
 
