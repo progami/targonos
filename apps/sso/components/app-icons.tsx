@@ -17,7 +17,7 @@ export const TalosIcon = (
   </svg>
 )
 
-/** Atlas (HRMS): Circle resting in chevron - titan holding the heavens */
+/** Atlas: Circle resting in chevron - titan holding the heavens */
 export const AtlasIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
     {/* The sphere (organization/people being upheld) */}
