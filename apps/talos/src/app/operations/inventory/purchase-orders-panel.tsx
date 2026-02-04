@@ -153,6 +153,12 @@ function formatTextOrDash(value: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : '—'
 }
 
+function formatTextOrEmpty(value: string | null | undefined) {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : ''
+}
+
 function formatNumberDisplay(value: number | null | undefined, options?: { maximumFractionDigits?: number }) {
   if (value === null || value === undefined) return '—'
   if (!Number.isFinite(value)) return '—'
@@ -361,11 +367,10 @@ export function PurchaseOrdersPanel({
             value={searchFilter}
             onChange={event => setSearchFilter(event.target.value)}
             placeholder="Search…"
-            className="h-8 text-xs font-normal normal-case tracking-normal"
+            className="h-8 w-full max-w-[160px] text-xs font-normal normal-case tracking-normal"
           />
         </div>
       ),
-      thClassName: 'whitespace-normal align-top min-w-[220px]',
       tdClassName: 'px-3 py-2 font-medium text-foreground whitespace-nowrap',
       render: order => (
         <Link
@@ -401,7 +406,7 @@ export function PurchaseOrdersPanel({
         <div className="flex flex-col gap-1">
           <div>Supplier</div>
           <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-            <SelectTrigger className="h-8 px-2 text-xs font-normal normal-case tracking-normal">
+            <SelectTrigger className="h-8 w-full max-w-[160px] px-2 text-xs font-normal normal-case tracking-normal">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -415,10 +420,9 @@ export function PurchaseOrdersPanel({
           </Select>
         </div>
       ),
-      thClassName: 'whitespace-normal align-top min-w-[220px]',
       tdClassName: 'px-3 py-2 text-muted-foreground',
       render: order => (
-        <span className="block max-w-[220px] truncate" title={order.counterpartyName ?? undefined}>
+        <span className="block max-w-full truncate" title={order.counterpartyName ?? undefined}>
           {formatTextOrDash(order.counterpartyName)}
         </span>
       ),
@@ -429,7 +433,7 @@ export function PurchaseOrdersPanel({
       header: 'Created',
       tdClassName: 'px-3 py-2 whitespace-nowrap',
       render: order => (
-        <div className="min-w-[140px]">
+        <div className="min-w-0">
           <div className="text-sm text-foreground">{formatDateDisplay(order.createdAt)}</div>
           <div className="text-xs text-muted-foreground">
             {order.createdByName ? `by ${order.createdByName}` : '—'}
@@ -448,34 +452,35 @@ export function PurchaseOrdersPanel({
             render: order => formatDateDisplay(order.expectedDate),
           },
           {
-            key: 'incoterms',
-            header: 'Incoterms',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatTextOrDash(order.incoterms),
-          },
-          {
-            key: 'payment-terms',
-            header: 'Payment Terms',
+            key: 'terms',
+            header: 'Terms',
             tdClassName: 'px-3 py-2 text-muted-foreground',
             render: order => (
-              <span className="block max-w-[180px] truncate" title={order.paymentTerms ?? undefined}>
-                {formatTextOrDash(order.paymentTerms)}
-              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.incoterms)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.paymentTerms)}
+                </div>
+              </div>
             ),
           },
           {
-            key: 'lines',
-            header: 'Lines',
+            key: 'qty',
+            header: 'Qty',
             align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order => order.lines.length,
-          },
-          {
-            key: 'units',
-            header: 'Units',
-            align: 'right',
-            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
-            render: order => sumLineUnits(order.lines).toLocaleString(),
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-foreground tabular-nums">
+                  {sumLineUnits(order.lines).toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground tabular-nums">
+                  {order.lines.length} lines
+                </div>
+              </div>
+            ),
           },
           createdColumn
         )
@@ -490,19 +495,18 @@ export function PurchaseOrdersPanel({
             render: order => formatDateDisplay(order.expectedDate),
           },
           {
-            key: 'incoterms',
-            header: 'Incoterms',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatTextOrDash(order.incoterms),
-          },
-          {
-            key: 'payment-terms',
-            header: 'Payment Terms',
+            key: 'terms',
+            header: 'Terms',
             tdClassName: 'px-3 py-2 text-muted-foreground',
             render: order => (
-              <span className="block max-w-[180px] truncate" title={order.paymentTerms ?? undefined}>
-                {formatTextOrDash(order.paymentTerms)}
-              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.incoterms)}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {formatTextOrDash(order.paymentTerms)}
+                </div>
+              </div>
             ),
           },
           {
@@ -510,7 +514,7 @@ export function PurchaseOrdersPanel({
             header: 'PI #',
             tdClassName: 'px-3 py-2',
             render: order => (
-              <div className="min-w-[180px]">
+              <div className="min-w-0">
                 <div className="text-sm font-medium text-foreground">
                   {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
                 </div>
@@ -521,18 +525,20 @@ export function PurchaseOrdersPanel({
             ),
           },
           {
-            key: 'lines',
-            header: 'Lines',
+            key: 'qty',
+            header: 'Qty',
             align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order => order.lines.length,
-          },
-          {
-            key: 'units',
-            header: 'Units',
-            align: 'right',
-            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
-            render: order => sumLineUnits(order.lines).toLocaleString(),
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-foreground tabular-nums">
+                  {sumLineUnits(order.lines).toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground tabular-nums">
+                  {order.lines.length} lines
+                </div>
+              </div>
+            ),
           },
           createdColumn
         )
@@ -545,7 +551,7 @@ export function PurchaseOrdersPanel({
             header: 'PI #',
             tdClassName: 'px-3 py-2',
             render: order => (
-              <div className="min-w-[200px]">
+              <div className="min-w-0">
                 <div className="text-sm font-medium text-foreground">
                   {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
                 </div>
@@ -556,62 +562,72 @@ export function PurchaseOrdersPanel({
             ),
           },
           {
-            key: 'mfg-start',
-            header: 'Mfg Start',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.manufacturing.manufacturingStartDate),
+            key: 'schedule',
+            header: 'Schedule',
+            tdClassName: 'px-3 py-2 text-muted-foreground',
+            render: order => (
+              <div className="min-w-0">
+                <div className="text-sm text-foreground">
+                  {formatDateDisplay(order.stageData.manufacturing.manufacturingStartDate)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Exp: {formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate)}
+                </div>
+              </div>
+            ),
           },
           {
-            key: 'expected-completion',
-            header: 'Exp. Complete',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
-          },
-          {
-            key: 'cartons',
-            header: 'Cartons',
+            key: 'load',
+            header: 'Load',
             align: 'right',
             tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
             render: order => {
-              const ordered = sumLineCartons(order.lines)
+              const pallets = order.stageData.manufacturing.totalPallets
+              const orderedCartons = sumLineCartons(order.lines)
+              const detailParts: string[] = []
+              if (pallets !== null && pallets !== undefined) {
+                detailParts.push(`${pallets.toLocaleString()} pallets`)
+              }
+              detailParts.push(`${orderedCartons.toLocaleString()} ordered`)
+
               return (
-                <div className="min-w-[140px] text-right">
+                <div className="text-right">
                   <div className="text-sm font-semibold text-foreground tabular-nums">
                     {formatNumberDisplay(order.stageData.manufacturing.totalCartons)}
                   </div>
                   <div className="text-xs text-muted-foreground tabular-nums">
-                    Ordered: {ordered.toLocaleString()}
+                    {detailParts.join(' • ')}
                   </div>
                 </div>
               )
             },
           },
           {
-            key: 'pallets',
-            header: 'Pallets',
+            key: 'weight-volume',
+            header: 'KG / CBM',
             align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order => formatNumberDisplay(order.stageData.manufacturing.totalPallets),
-          },
-          {
-            key: 'weight',
-            header: 'KG',
-            align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order =>
-              formatNumberDisplay(order.stageData.manufacturing.totalWeightKg, {
-                maximumFractionDigits: 2,
-              }),
-          },
-          {
-            key: 'volume',
-            header: 'CBM',
-            align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order =>
-              formatNumberDisplay(order.stageData.manufacturing.totalVolumeCbm, {
-                maximumFractionDigits: 3,
-              }),
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => {
+              const weightKg = order.stageData.manufacturing.totalWeightKg
+              const volumeCbm = order.stageData.manufacturing.totalVolumeCbm
+              const weightText =
+                weightKg === null || weightKg === undefined
+                  ? '—'
+                  : weightKg.toLocaleString(undefined, { maximumFractionDigits: 2 })
+              const volumeText =
+                volumeCbm === null || volumeCbm === undefined
+                  ? '—'
+                  : volumeCbm.toLocaleString(undefined, { maximumFractionDigits: 3 })
+
+              return (
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-foreground tabular-nums">{weightText}</div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    {volumeText === '—' ? '—' : `${volumeText} cbm`}
+                  </div>
+                </div>
+              )
+            },
           },
           createdColumn
         )
@@ -620,75 +636,96 @@ export function PurchaseOrdersPanel({
       case 'OCEAN': {
         cols.push(
           {
-            key: 'bill-of-lading',
-            header: 'B/L',
+            key: 'shipment',
+            header: 'Shipment',
             tdClassName: 'px-3 py-2',
-            render: order => (
-              <div className="min-w-[200px]">
-                <div className="text-sm font-medium text-foreground">
-                  {formatTextOrDash(order.stageData.ocean.houseBillOfLading)}
+            render: order => {
+              const vessel = formatTextOrEmpty(order.stageData.ocean.vesselName)
+              const voyage = formatTextOrEmpty(order.stageData.ocean.voyageNumber)
+
+              let vesselLine = '—'
+              if (vessel.length > 0 && voyage.length > 0) {
+                vesselLine = `${vessel} • ${voyage}`
+              } else if (vessel.length > 0) {
+                vesselLine = vessel
+              } else if (voyage.length > 0) {
+                vesselLine = voyage
+              }
+
+              const pol = formatTextOrEmpty(order.stageData.ocean.portOfLoading)
+              const pod = formatTextOrEmpty(order.stageData.ocean.portOfDischarge)
+
+              let routeLine = '—'
+              if (pol.length > 0 && pod.length > 0) {
+                routeLine = `${pol} → ${pod}`
+              } else if (pol.length > 0) {
+                routeLine = pol
+              } else if (pod.length > 0) {
+                routeLine = pod
+              }
+
+              return (
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate" title={vesselLine}>
+                    {vesselLine}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate" title={routeLine}>
+                    {routeLine}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {formatTextOrDash(order.stageData.ocean.masterBillOfLading)}
-                </div>
-              </div>
-            ),
+              )
+            },
           },
           {
             key: 'docs',
             header: 'Docs',
             tdClassName: 'px-3 py-2',
-            render: order => (
-              <div className="min-w-[220px]">
-                <div className="text-sm font-medium text-foreground">
-                  {formatTextOrDash(order.stageData.ocean.commercialInvoiceNumber)}
+            render: order => {
+              const houseBill = formatTextOrEmpty(order.stageData.ocean.houseBillOfLading)
+              const masterBill = formatTextOrEmpty(order.stageData.ocean.masterBillOfLading)
+              const commercialInvoice = formatTextOrEmpty(order.stageData.ocean.commercialInvoiceNumber)
+              const packingList = formatTextOrEmpty(order.stageData.ocean.packingListRef)
+
+              let blLine = '—'
+              if (houseBill.length > 0 && masterBill.length > 0) {
+                blLine = `${houseBill} • ${masterBill}`
+              } else if (houseBill.length > 0) {
+                blLine = houseBill
+              } else if (masterBill.length > 0) {
+                blLine = masterBill
+              }
+
+              const docsParts: string[] = []
+              if (commercialInvoice.length > 0) docsParts.push(commercialInvoice)
+              if (packingList.length > 0) docsParts.push(packingList)
+              const docsLine = docsParts.length > 0 ? docsParts.join(' • ') : '—'
+
+              return (
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate" title={blLine}>
+                    {blLine}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate" title={docsLine}>
+                    {docsLine}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {formatTextOrDash(order.stageData.ocean.packingListRef)}
+              )
+            },
+          },
+          {
+            key: 'dates',
+            header: 'ETD / ETA',
+            tdClassName: 'px-3 py-2 text-muted-foreground',
+            render: order => (
+              <div className="min-w-0">
+                <div className="text-sm text-foreground">
+                  {formatDateDisplay(order.stageData.ocean.estimatedDeparture)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  ETA: {formatDateDisplay(order.stageData.ocean.estimatedArrival)}
                 </div>
               </div>
             ),
-          },
-          {
-            key: 'vessel',
-            header: 'Vessel',
-            tdClassName: 'px-3 py-2 whitespace-nowrap',
-            render: order => {
-              const vessel = formatTextOrDash(order.stageData.ocean.vesselName)
-              const voyage = order.stageData.ocean.voyageNumber
-              return (
-                <span className="block min-w-[200px] text-sm font-medium text-foreground">
-                  {voyage ? `${vessel} • ${voyage}` : vessel}
-                </span>
-              )
-            },
-          },
-          {
-            key: 'route',
-            header: 'Route',
-            tdClassName: 'px-3 py-2 text-muted-foreground',
-            render: order => {
-              const pol = formatTextOrDash(order.stageData.ocean.portOfLoading)
-              const pod = formatTextOrDash(order.stageData.ocean.portOfDischarge)
-              const title = `${pol} → ${pod}`
-              return (
-                <span className="block min-w-[220px] truncate" title={title}>
-                  {title}
-                </span>
-              )
-            },
-          },
-          {
-            key: 'etd',
-            header: 'ETD',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.ocean.estimatedDeparture),
-          },
-          {
-            key: 'eta',
-            header: 'ETA',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.ocean.estimatedArrival),
           },
           createdColumn
         )
@@ -699,9 +736,9 @@ export function PurchaseOrdersPanel({
           {
             key: 'warehouse',
             header: 'Warehouse',
-            tdClassName: 'px-3 py-2 whitespace-nowrap',
+            tdClassName: 'px-3 py-2',
             render: order => (
-              <div className="min-w-[160px]">
+              <div className="min-w-0">
                 <div className="text-sm font-medium text-foreground">
                   {formatTextOrDash(order.stageData.warehouse.warehouseCode)}
                 </div>
@@ -712,12 +749,12 @@ export function PurchaseOrdersPanel({
             ),
           },
           {
-            key: 'receive-type',
+            key: 'receiving',
             header: (
               <div className="flex flex-col gap-1">
-                <div>Receive Type</div>
+                <div>Receiving</div>
                 <Select value={receiveTypeFilter} onValueChange={setReceiveTypeFilter}>
-                  <SelectTrigger className="h-8 px-2 text-xs font-normal normal-case tracking-normal">
+                  <SelectTrigger className="h-8 w-full max-w-[140px] px-2 text-xs font-normal normal-case tracking-normal">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -731,27 +768,35 @@ export function PurchaseOrdersPanel({
                 </Select>
               </div>
             ),
-            thClassName: 'whitespace-normal align-top min-w-[160px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatTextOrDash(order.receiveType),
+            tdClassName: 'px-3 py-2',
+            render: order => (
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {formatTextOrDash(order.receiveType)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Received: {formatDateDisplay(order.stageData.warehouse.receivedDate)}
+                </div>
+              </div>
+            ),
           },
           {
-            key: 'customs-entry',
-            header: 'Import Entry #',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatTextOrDash(order.stageData.warehouse.customsEntryNumber),
-          },
-          {
-            key: 'customs-cleared',
-            header: 'Customs Cleared',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.warehouse.customsClearedDate),
-          },
-          {
-            key: 'received',
-            header: 'Received',
-            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
-            render: order => formatDateDisplay(order.stageData.warehouse.receivedDate),
+            key: 'customs',
+            header: 'Customs',
+            tdClassName: 'px-3 py-2',
+            render: order => (
+              <div className="min-w-0">
+                <div
+                  className="text-sm font-medium text-foreground truncate"
+                  title={order.stageData.warehouse.customsEntryNumber ?? undefined}
+                >
+                  {formatTextOrDash(order.stageData.warehouse.customsEntryNumber)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Cleared: {formatDateDisplay(order.stageData.warehouse.customsClearedDate)}
+                </div>
+              </div>
+            ),
           },
           {
             key: 'duty',
@@ -771,16 +816,20 @@ export function PurchaseOrdersPanel({
             header: 'Cartons',
             align: 'right',
             tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
-            render: order => (
-              <div className="min-w-[140px] text-right">
-                <div className="text-sm font-semibold text-foreground tabular-nums">
-                  {sumReceivedQuantities(order.lines).toLocaleString()}
+            render: order => {
+              const received = sumReceivedQuantities(order.lines)
+              const ordered = sumLineCartons(order.lines)
+              return (
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-foreground tabular-nums">
+                    {received.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    / {ordered.toLocaleString()}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground tabular-nums">
-                  / {sumLineCartons(order.lines).toLocaleString()}
-                </div>
-              </div>
-            ),
+              )
+            },
           },
           createdColumn
         )
@@ -798,18 +847,20 @@ export function PurchaseOrdersPanel({
             ),
           },
           {
-            key: 'lines',
-            header: 'Lines',
+            key: 'qty',
+            header: 'Qty',
             align: 'right',
-            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-            render: order => order.lines.length,
-          },
-          {
-            key: 'units',
-            header: 'Units',
-            align: 'right',
-            tdClassName: 'px-3 py-2 text-right font-semibold whitespace-nowrap tabular-nums',
-            render: order => sumLineUnits(order.lines).toLocaleString(),
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap',
+            render: order => (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-foreground tabular-nums">
+                  {sumLineUnits(order.lines).toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground tabular-nums">
+                  {order.lines.length} lines
+                </div>
+              </div>
+            ),
           },
           createdColumn
         )
@@ -868,7 +919,7 @@ export function PurchaseOrdersPanel({
         }
         className="flex-1"
       >
-        <table className="w-full table-auto text-sm">
+        <table className="w-full table-fixed text-sm">
           <DataTableHead>
             <tr className="border-b border-border">
               {columns.map(column => (
