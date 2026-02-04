@@ -1,9 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -206,21 +204,8 @@ export default function BillsPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-3">
-          <BackButton />
-        </div>
-        <PageHeader
-          className="mt-4"
-          title="Bills"
-          kicker="Inventory"
-          description="Audit QBO bills for PO memo + manufacturing line compliance so Plutus can build cost basis."
-          actions={
-            <Button asChild variant="outline">
-              <Link href="/setup">Setup</Link>
-            </Button>
-          }
-        />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <PageHeader title="Bills" variant="accent" />
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'guide' | 'scanner')}>
           <TabsList>

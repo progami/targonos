@@ -58,6 +58,11 @@ model SetupConfig {
   cogsLandFreight     String?
   cogsStorage3pl      String?
   cogsShrinkage       String?
+
+  // Warehousing buckets (COGS)
+  warehousing3pl      String?
+  warehousingAmazonFc String?
+  warehousingAwd      String?
   
   // LMB Revenue/Fee accounts
   amazonSales                      String?

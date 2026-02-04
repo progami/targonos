@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import type { QboConnection } from '@/lib/qbo/api';
+import { QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { ensurePlutusQboLmbPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-lmb-plan';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { randomUUID } from 'crypto';
@@ -83,6 +83,10 @@ export async function POST(request: NextRequest) {
       requestId,
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message, requestId }, { status: 401 });
+    }
+
     logger.error('Failed to create Plutus LMB plan accounts', { requestId, error });
     return NextResponse.json(
       {

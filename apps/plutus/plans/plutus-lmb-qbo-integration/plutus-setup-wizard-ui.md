@@ -156,9 +156,14 @@ Once connected, unlock the Accounts section (QBO account selectors + “Create S
 │                    │   │ Freight          │ [Select account...     ▼] │     │
 │                    │   │ Duty             │ [Select account...     ▼] │     │
 │                    │   │ Mfg Accessories  │ [Select account...     ▼] │     │
-│                    │   │ Land Freight     │ [Select account...     ▼] │     │
-│                    │   │ Storage 3PL      │ [Select account...     ▼] │     │
 │                    │   │ Shrinkage        │ [Select account...     ▼] │     │
+│                    │   └───────────────────────────────────────────────┘     │
+│                    │                                                         │
+│                    │   WAREHOUSING                                            │
+│                    │   ┌───────────────────────────────────────────────┐     │
+│                    │   │ 3PL             │ [Select account...     ▼] │     │
+│                    │   │ Amazon FC       │ [Select account...     ▼] │     │
+│                    │   │ AWD             │ [Select account...     ▼] │     │
 │                    │   └───────────────────────────────────────────────┘     │
 │                    │                                                         │
 │                    │   REVENUE & FEES (LMB)                                  │
@@ -191,7 +196,7 @@ Once connected, unlock the Accounts section (QBO account selectors + “Create S
 | invDuty | Duty | Other Current Asset | Inventory |
 | invMfgAccessories | Mfg Accessories | Other Current Asset | Inventory |
 
-**Cost of Goods Sold (7 accounts)**
+**Cost of Goods Sold (5 accounts)**
 
 | Key | Label | QBO Account Type | Detail Type |
 |-----|-------|------------------|-------------|
@@ -199,9 +204,15 @@ Once connected, unlock the Accounts section (QBO account selectors + “Create S
 | cogsFreight | Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 | cogsDuty | Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 | cogsMfgAccessories | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS |
-| cogsLandFreight | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
-| cogsStorage3pl | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 | cogsShrinkage | Shrinkage | Cost of Goods Sold | Other Costs of Services - COS |
+
+**Warehousing (3 accounts)**
+
+| Key | Label | QBO Account Type | Detail Type |
+|-----|-------|------------------|-------------|
+| warehousing3pl | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| warehousingAmazonFc | Warehousing:Amazon FC | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| warehousingAwd | Warehousing:AWD | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 
 **Revenue & Fees - LMB (8 accounts)**
 
@@ -227,12 +238,13 @@ Plutus creates QBO **sub-accounts** under each selected parent account.
 
 For 2 brands, the API creates:
 - 8 Inventory Asset sub-accounts (4 components × 2 brands)
-- 14 COGS sub-accounts (7 components × 2 brands)
+- 10 COGS sub-accounts (5 components × 2 brands)
+- 6 Warehousing leaf accounts (3 buckets × 2 brands)
 - 16 Revenue/Fee sub-accounts (8 categories × 2 brands)
-- **Total: 38 sub-accounts**
+- **Total: 40 sub-accounts**
 
 **Validation:**
-- All 19 parent accounts must be selected
+- All 20 parent accounts must be selected
 - Brands must be configured first (navigate to Brands section if empty)
 
 **API Endpoint:** `POST /api/qbo/accounts/create-plutus-qbo-lmb-plan`
@@ -250,9 +262,10 @@ For 2 brands, the API creates:
     cogsFreight: string,
     cogsDuty: string,
     cogsMfgAccessories: string,
-    cogsLandFreight: string,
-    cogsStorage3pl: string,
     cogsShrinkage: string,
+    warehousing3pl: string,
+    warehousingAmazonFc: string,
+    warehousingAwd: string,
     amazonSales: string,
     amazonRefunds: string,
     amazonFbaInventoryReimbursement: string,
@@ -267,9 +280,9 @@ For 2 brands, the API creates:
 // Response
 {
   success: true,
-  created: 38,
+  created: 40,
   accounts: [
-    { name: "Inv Manufacturing - US-Dust Sheets", qboId: "123" },
+    { name: "Manufacturing - US-Dust Sheets", qboId: "123" },
     // ...
   ]
 }
