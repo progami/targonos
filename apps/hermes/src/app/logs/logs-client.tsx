@@ -205,7 +205,7 @@ export function LogsClient() {
         <CardContent className="p-0">
           <div className="max-h-[70vh] overflow-auto">
             <Table className="text-xs">
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>At</TableHead>
                   <TableHead>Type</TableHead>

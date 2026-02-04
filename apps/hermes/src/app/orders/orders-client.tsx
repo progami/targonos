@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, Loader2, PackageSearch, RefreshCw, Send, Sparkles } from "lucide-react";
+import { CalendarClock, Loader2, RefreshCw, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
@@ -27,10 +27,23 @@ type RecentOrder = {
   latestDeliveryDate: string | null;
   orderStatus: string | null;
   fulfillmentChannel: string | null;
+  dispatchId: string | null;
   dispatchState: string | null;
   dispatchScheduledAt: string | null;
   dispatchExpiresAt: string | null;
   dispatchSentAt: string | null;
+};
+
+type AttemptRow = {
+  id: string;
+  dispatchId: string;
+  attemptNo: number;
+  status: "sent" | "ineligible" | "throttled" | "failed";
+  httpStatus: number | null;
+  spapiRequestId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
 };
 
 function fmtDateShort(iso: string | null): string {
@@ -94,6 +107,13 @@ function stateBadge(state: string | null) {
   if (state === "failed") return <Badge variant="destructive">Failed</Badge>;
   if (state === "skipped") return <Badge variant="outline">Skipped</Badge>;
   return <Badge variant="outline">{state}</Badge>;
+}
+
+function attemptBadge(status: AttemptRow["status"]) {
+  if (status === "sent") return <Badge variant="secondary">sent</Badge>;
+  if (status === "ineligible") return <Badge variant="outline">ineligible</Badge>;
+  if (status === "throttled") return <Badge variant="outline">throttled</Badge>;
+  return <Badge variant="destructive">failed</Badge>;
 }
 
 type BackfillPreset = { label: string; days: number };
@@ -174,6 +194,12 @@ export function OrdersClient() {
   const [ordersTotalCount, setOrdersTotalCount] = React.useState<number | null>(null);
   const [loadingOrdersTotal, setLoadingOrdersTotal] = React.useState(false);
   const totalSeqRef = React.useRef(0);
+
+  // Order drilldown (request_review dispatch attempts)
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [detailsOrder, setDetailsOrder] = React.useState<RecentOrder | null>(null);
+  const [detailsAttempts, setDetailsAttempts] = React.useState<AttemptRow[]>([]);
+  const [detailsAttemptsLoading, setDetailsAttemptsLoading] = React.useState(false);
 
   // Table filters
   const filterOrderId = ordersPrefs.filterOrderId;
@@ -303,6 +329,37 @@ export function OrdersClient() {
     loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uiHydrated, connectionId, pageSize, filterOrderId, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
+
+  React.useEffect(() => {
+    const dispatchId = detailsOrder?.dispatchId;
+    if (!detailsOpen || !detailsOrder || !dispatchId) return;
+    if (!connectionId) return;
+
+    setDetailsAttemptsLoading(true);
+    setDetailsAttempts([]);
+
+    const qs = new URLSearchParams();
+    qs.set("connectionId", connectionId);
+    qs.set("dispatchId", dispatchId);
+    qs.set("limit", "50");
+
+    fetch(hermesApiUrl(`/api/logs/attempts?${qs.toString()}`))
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || json?.ok !== true) {
+          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+        }
+
+        const attempts = Array.isArray(json.attempts) ? (json.attempts as AttemptRow[]) : [];
+        setDetailsAttempts(attempts);
+      })
+      .catch((e: any) => {
+        toast.error("Failed to load attempts", { description: e?.message ?? "" });
+      })
+      .finally(() => {
+        setDetailsAttemptsLoading(false);
+      });
+  }, [detailsOpen, detailsOrder, connectionId]);
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -865,7 +922,14 @@ export function OrdersClient() {
                   const purchase = fmtDateTimeShort(o.purchaseDate);
 
                   return (
-                    <TableRow key={o.orderId}>
+                    <TableRow
+                      key={o.orderId}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setDetailsOrder(o);
+                        setDetailsOpen(true);
+                      }}
+                    >
                       <TableCell className="font-mono text-[11px]">{o.orderId}</TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant="secondary" title={marketplaceTitle}>
@@ -893,14 +957,8 @@ export function OrdersClient() {
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="px-3 py-10 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
-                          <PackageSearch className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <div className="text-sm font-medium">No orders yet</div>
-                        <div className="text-xs text-muted-foreground">Run a sync to import orders from Amazon.</div>
-                      </div>
+                    <TableCell colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                      No orders
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -917,6 +975,106 @@ export function OrdersClient() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={detailsOpen}
+        onOpenChange={(next) => {
+          setDetailsOpen(next);
+          if (!next) {
+            setDetailsOrder(null);
+            setDetailsAttempts([]);
+            setDetailsAttemptsLoading(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">{detailsOrder?.orderId ?? "Order"}</DialogTitle>
+          </DialogHeader>
+
+          {detailsOrder ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{marketplaceDisplay(detailsOrder.marketplaceId)}</Badge>
+                {detailsOrder.orderStatus ? <Badge variant="outline">{detailsOrder.orderStatus}</Badge> : null}
+                {detailsOrder.purchaseDate ? (
+                  <Badge variant="outline">Purchase {fmtDateShort(detailsOrder.purchaseDate)}</Badge>
+                ) : null}
+                {detailsOrder.latestDeliveryDate ? (
+                  <Badge variant="outline">Delivery {fmtDateShort(detailsOrder.latestDeliveryDate)}</Badge>
+                ) : null}
+                <span className="ml-auto">{stateBadge(detailsOrder.dispatchState)}</span>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Dispatch</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchId ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Scheduled</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchScheduledAt ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Sent</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchSentAt ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Expires</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchExpiresAt ?? "—"}</div>
+                </div>
+              </div>
+
+              <Card>
+                <CardHeader className="py-2">
+                  <CardTitle className="text-sm">Attempts</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="max-h-[50vh] overflow-auto">
+                    <Table className="text-xs">
+                      <TableHeader className="sticky top-0 z-10 bg-background">
+                        <TableRow>
+                          <TableHead>At</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden md:table-cell text-right">HTTP</TableHead>
+                          <TableHead className="hidden md:table-cell">Code</TableHead>
+                          <TableHead className="hidden lg:table-cell">Message</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detailsAttempts.map((a) => (
+                          <TableRow key={a.id}>
+                            <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                              {a.createdAt}
+                            </TableCell>
+                            <TableCell>{attemptBadge(a.status)}</TableCell>
+                            <TableCell className="hidden md:table-cell text-right tabular-nums">{a.httpStatus ?? "—"}</TableCell>
+                            <TableCell className="hidden md:table-cell">{a.errorCode ?? "—"}</TableCell>
+                            <TableCell className="hidden lg:table-cell text-muted-foreground">{a.errorMessage ?? "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                        {detailsAttempts.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                              {detailsAttemptsLoading ? "Loading…" : (detailsOrder.dispatchId ? "No attempts" : "Not queued")}
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

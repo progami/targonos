@@ -33,6 +33,11 @@ export type AnalyticsOverview = {
     };
     orders: {
       total: number;
+      shipped: number;
+      pending: number;
+      canceled: number;
+      oldestPurchaseIso: string | null;
+      newestPurchaseIso: string | null;
       importedInRange: number;
       withAnyDispatch: number;
     };
@@ -253,8 +258,72 @@ export async function getAnalyticsOverview(params: {
         `
       );
 
+  const ordersStatusRows = connectionId
+    ? await pool.query(
+        `
+        SELECT COALESCE(order_status, '(null)') AS status, COUNT(1)::int AS n
+          FROM hermes_orders
+         WHERE connection_id = $1
+         GROUP BY 1;
+        `,
+        [connectionId]
+      )
+    : await pool.query(
+        `
+        SELECT COALESCE(order_status, '(null)') AS status, COUNT(1)::int AS n
+          FROM hermes_orders
+         GROUP BY 1;
+        `
+      );
+
+  const ordersPurchaseRangeRow = connectionId
+    ? await pool.query(
+        `
+        SELECT
+          MIN(purchase_date)::text AS oldest,
+          MAX(purchase_date)::text AS newest
+        FROM hermes_orders
+        WHERE connection_id = $1;
+        `,
+        [connectionId]
+      )
+    : await pool.query(
+        `
+        SELECT
+          MIN(purchase_date)::text AS oldest,
+          MAX(purchase_date)::text AS newest
+        FROM hermes_orders;
+        `
+      );
+
+  let shipped = 0;
+  let pending = 0;
+  let canceled = 0;
+  for (const r of ordersStatusRows.rows as any[]) {
+    const status = String(r.status);
+    const n = intOr0(r.n);
+    if (status === "Shipped" || status === "PartiallyShipped") shipped += n;
+    else if (status === "Pending") pending += n;
+    else if (status === "Canceled") canceled += n;
+  }
+
+  const oldestPurchaseIso =
+    typeof (ordersPurchaseRangeRow.rows[0] as any)?.oldest === "string"
+      ? ((ordersPurchaseRangeRow.rows[0] as any).oldest as string)
+      : null;
+
+  const newestPurchaseIso =
+    typeof (ordersPurchaseRangeRow.rows[0] as any)?.newest === "string"
+      ? ((ordersPurchaseRangeRow.rows[0] as any).newest as string)
+      : null;
+
   const orders = {
     total: intOr0((ordersTotalRow.rows[0] as any)?.n),
+    shipped,
+    pending,
+    canceled,
+    oldestPurchaseIso,
+    newestPurchaseIso,
     importedInRange: intOr0((ordersImportedRow.rows[0] as any)?.n),
     withAnyDispatch: intOr0((ordersWithDispatchRow.rows[0] as any)?.n),
   };
