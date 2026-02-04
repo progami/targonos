@@ -2546,6 +2546,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const canEditForwardingCosts =
     !isTerminalStatus && !isReceived && (flowStatus === 'OCEAN' || flowStatus === 'WAREHOUSE')
 
+  const showProductCostsStage =
+    activeViewStage === 'RFQ' ||
+    activeViewStage === 'ISSUED' ||
+    activeViewStage === 'MANUFACTURING' ||
+    activeViewStage === 'REJECTED' ||
+    activeViewStage === 'CANCELLED'
+
+  const showCargoCostsStage = activeViewStage === 'OCEAN'
+  const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
+
   const draftForwardingRate = forwardingRateByName.get(newForwardingCostDraft.costName.trim())
   const draftForwardingUnitRate = draftForwardingRate ? draftForwardingRate.costValue : null
   const draftForwardingQuantity = Number(newForwardingCostDraft.quantity)
@@ -4087,24 +4097,26 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 )}
 
                 {cargoSubTab === 'receiving' && activeViewStage === 'WAREHOUSE' && (
-                  <div className="p-4">
-                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                      <table className="w-full text-sm min-w-[700px]">
+                  <div
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    data-gate-key="cargo.lines"
+                  >
+                    <table className="w-full table-fixed text-sm">
                         <thead>
                           <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
                               SKU
                             </th>
-                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs min-w-[100px]">
+                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
                               Batch
                             </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                              Ordered (ctns)
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">
+                              Ordered
                             </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                              Received (ctns)
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                              Received
                             </th>
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">
                               Delta
                             </th>
                           </tr>
@@ -4128,11 +4140,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                               return (
                                 <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap min-w-[100px]">
-                                    {line.skuCode}
+                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                    <span className="block truncate" title={line.skuCode}>
+                                      {line.skuCode}
+                                    </span>
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                    {line.batchLot ? line.batchLot : '—'}
+                                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                                    <span
+                                      className="block truncate"
+                                      title={line.batchLot ? line.batchLot : undefined}
+                                    >
+                                      {line.batchLot ? line.batchLot : '—'}
+                                    </span>
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                     {line.quantity.toLocaleString()}
@@ -4161,7 +4180,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                             void patchOrderLine(line.id, { quantityReceived: parsed })
                                           }}
                                           className={cn(
-                                            'h-7 w-20 px-2 py-0 text-xs text-right',
+                                            'h-7 w-24 px-2 py-0 text-xs text-right',
                                             issue && 'border-rose-500 focus-visible:ring-rose-500'
                                           )}
                                         />
@@ -4187,8 +4206,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             })
                           )}
                         </tbody>
-                      </table>
-                    </div>
+                    </table>
                   </div>
                 )}
               </div>
@@ -5436,36 +5454,45 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
               <>
                 {isCreate && (
                   <div className="p-6">
-                    {draftLines.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
-                    ) : (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Target Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {draftLines.map(line => {
+	                    {draftLines.length === 0 ? (
+	                      <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
+	                    ) : (
+	                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+	                        <table className="w-full table-fixed text-sm">
+	                          <thead>
+	                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
+	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Cost</th>
+	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Target Total</th>
+	                            </tr>
+	                          </thead>
+	                          <tbody>
+	                            {draftLines.map(line => {
                               const totalCost = line.totalCost !== null ? line.totalCost : null
                               const unitCost = totalCost !== null && line.unitsOrdered > 0 ? totalCost / line.unitsOrdered : null
                               const gateKey = `costs.lines.${line.id}.totalCost`
                               const issue = gateIssues ? gateIssues[gateKey] ?? null : null
 
-                              return (
-                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
-                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                    {line.batchLot ? line.batchLot : '—'}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                    {line.unitsOrdered.toLocaleString()}
-                                  </td>
+	                              return (
+	                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+	                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
+	                                    <span className="block truncate" title={line.skuCode}>
+	                                      {line.skuCode}
+	                                    </span>
+	                                  </td>
+	                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
+	                                    <span
+	                                      className="block truncate"
+	                                      title={line.batchLot ? line.batchLot : undefined}
+	                                    >
+	                                      {line.batchLot ? line.batchLot : '—'}
+	                                    </span>
+	                                  </td>
+	                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+	                                    {line.unitsOrdered.toLocaleString()}
+	                                  </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
                                     {unitCost !== null ? unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                                   </td>
@@ -5546,7 +5573,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
-                {!isCreate && order && (
+                {!isCreate && order && showProductCostsStage && (
                   <div className="p-6">
                     {flowLines.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
@@ -5565,15 +5592,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </div>
                         )}
 
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto">
-                        <table className="w-full text-sm">
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <table className="w-full table-fixed text-sm">
                           <thead>
                             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">SKU</th>
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Batch</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Units</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Unit Cost</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Total</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Unit Cost</th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -5597,9 +5624,18 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
                               return (
                                 <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{line.skuCode}</td>
-                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                    {line.batchLot ? line.batchLot : '—'}
+                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                    <span className="block truncate" title={line.skuCode}>
+                                      {line.skuCode}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                    <span
+                                      className="block truncate"
+                                      title={line.batchLot ? line.batchLot : undefined}
+                                    >
+                                      {line.batchLot ? line.batchLot : '—'}
+                                    </span>
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                     {line.unitsOrdered.toLocaleString()}
@@ -5688,13 +5724,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
-                {!isCreate &&
-                  order &&
-                  (activeViewStage === 'OCEAN' || activeViewStage === 'WAREHOUSE') && (
-              <div className="p-6 pt-0">
-
-                {/* Cargo Costs Section */}
-                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700" data-gate-key="costs.forwarding">
+                {!isCreate && order && (showCargoCostsStage || showWarehouseCostsStage) && (
+                  <div className="p-6">
+                    {showCargoCostsStage && (
+                      <>
+                        {/* Cargo Costs Section */}
+                        <div className="mb-6" data-gate-key="costs.forwarding">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Cargo Costs
@@ -6066,10 +6101,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     </table>
                     </div>
                   </div>
-                </div>
+                        </div>
+                      </>
+                    )}
 
-                {/* Inbound Costs Section */}
-                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    {showWarehouseCostsStage && (
+                      <>
+                        {/* Inbound Costs Section */}
+                        <div className="mb-6">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                     Inbound Costs
                   </h4>
@@ -6077,15 +6116,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                       <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
                     </div>
-                  ) : inboundCostRows.length === 0 ? (
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                      <p className="text-sm text-muted-foreground">
-                        {order.status === 'WAREHOUSE'
-                          ? 'No inbound costs found for this receipt.'
-                          : 'Inbound costs will be calculated when the PO is received at warehouse.'}
-                      </p>
-                    </div>
-                  ) : (
+	                  ) : inboundCostRows.length === 0 ? (
+	                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+	                      <p className="text-sm text-muted-foreground">No inbound costs found for this receipt.</p>
+	                    </div>
+	                  ) : (
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
@@ -6132,35 +6167,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )}
                 </div>
 
-                {/* Storage Costs Section */}
-                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                    Storage Costs
-                  </h4>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Storage costs accrue daily based on warehouse rates.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Outbound Costs Section */}
-                <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                    Outbound Costs
-                  </h4>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Outbound costs will be calculated when inventory is shipped.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Customs/Duty Section */}
-                {order.stageData.warehouse?.dutyAmount != null && (
-                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                      Customs & Duty
+	                {/* Customs/Duty Section */}
+	                {order.stageData.warehouse?.dutyAmount != null && (
+	                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+	                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+	                      Customs & Duty
                     </h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
                       <div className="space-y-1">
@@ -6175,12 +6186,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
-                {/* Supplier Credit/Debit Section */}
-                {activeViewStage === 'WAREHOUSE' && (
-                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Supplier Credit/Debit
+	                {/* Supplier Credit/Debit Section */}
+	                {showWarehouseCostsStage && (
+	                  <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+	                    <div className="flex items-center justify-between mb-4">
+	                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+	                        Supplier Credit/Debit
                       </h4>
                       {!supplierAdjustmentEditing && (
                         <Button
@@ -6344,14 +6355,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   </div>
                 )}
 
-                {/* Cost Summary */}
-                <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                    Cost Summary
-                  </h4>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-sm">
-                      <tbody>
+	                {/* Landed Cost */}
+	                <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+	                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+	                    Landed Cost
+	                  </h4>
+	                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+	                    <table className="w-full text-sm">
+	                      <tbody>
 	                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
 	                          <td className="px-3 py-2 text-muted-foreground">Product Costs</td>
 	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
@@ -6373,29 +6384,21 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               : '—'}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                          <td className="px-3 py-2 text-muted-foreground">Inbound Costs</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                            {inboundSubtotal > 0
-                              ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}`
-                              : '—'}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                          <td className="px-3 py-2 text-muted-foreground">Storage Costs</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
-                        </tr>
 	                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                          <td className="px-3 py-2 text-muted-foreground">Outbound Costs</td>
-	                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
-	                        </tr>
-	                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                          <td className="px-3 py-2 text-muted-foreground">Supplier Adjustment</td>
+	                          <td className="px-3 py-2 text-muted-foreground">Inbound Costs</td>
 	                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-	                            {supplierAdjustment
+	                            {inboundSubtotal > 0
+	                              ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
+	                                  minimumFractionDigits: 2,
+	                                  maximumFractionDigits: 2,
+	                                })}`
+	                              : '—'}
+	                          </td>
+	                        </tr>
+		                        <tr className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+		                          <td className="px-3 py-2 text-muted-foreground">Supplier Adjustment</td>
+		                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+		                            {supplierAdjustment
 	                              ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
 	                                  minimumFractionDigits: 2,
 	                                  maximumFractionDigits: 2,
@@ -6424,6 +6427,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	                    </table>
 	                  </div>
 	                </div>
+	                      </>
+	                    )}
               </div>
                 )}
 
