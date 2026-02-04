@@ -29,9 +29,7 @@ export function AppSidebar() {
         <nav className="px-3 py-3">
           <ul className="space-y-1">
             {navItems.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/" && pathname?.startsWith(item.href));
+              const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
               const Icon = item.icon;
 
               return (
