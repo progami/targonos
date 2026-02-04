@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import {
   ZoomIn,
   ZoomOut,
@@ -461,8 +461,8 @@ const DetailPanel = ({
 
 export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props) {
   const [viewMode, setViewMode] = useState<'organization' | 'project'>('organization')
-  const [scale, setScale] = useState(0.85)
-  const [pan, setPan] = useState({ x: 60, y: 30 })
+  const [scale, setScale] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [hovered, setHovered] = useState<OrgNode | null>(null)
@@ -470,8 +470,24 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   const [search, setSearch] = useState('')
   const [mounted, setMounted] = useState(false)
   const [levelScope, setLevelScope] = useState<LevelScope>('all')
+  const canvasRef = useRef<HTMLDivElement | null>(null)
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
 
   useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    const node = canvasRef.current
+    if (!node) return
+
+    const update = () => {
+      const rect = node.getBoundingClientRect()
+      setCanvasSize({ w: rect.width, h: rect.height })
+    }
+
+    update()
+    const observer = new ResizeObserver(() => update())
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   const normalizedEmployees = useMemo<OrgEmployee[]>(() => {
     return employees.map((emp) => {
@@ -986,22 +1002,77 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
     return []
   }
 
+  const fitToView = useCallback(() => {
+    const w = canvasSize.w
+    const h = canvasSize.h
+    if (!w || !h) return
+    if (nodes.length === 0) return
+
+    const padding = 48
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    for (const node of nodes) {
+      const nodeW = NODE_W
+      const nodeH = node.isHeader ? HEADER_H : NODE_H
+      const left = node.x - nodeW / 2
+      const right = node.x + nodeW / 2
+      const top = node.y
+      const bottom = node.y + nodeH
+      if (left < minX) minX = left
+      if (right > maxX) maxX = right
+      if (top < minY) minY = top
+      if (bottom > maxY) maxY = bottom
+    }
+
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+    if (contentW <= 0 || contentH <= 0) return
+
+    const scaleX = (w - padding * 2) / contentW
+    const scaleY = (h - padding * 2) / contentH
+    const nextScale = Math.max(0.3, Math.min(1.25, Math.min(scaleX, scaleY)))
+
+    const scaledW = contentW * nextScale
+    const scaledH = contentH * nextScale
+    const extraX = (w - scaledW) / 2
+    const extraY = (h - scaledH) / 2
+
+    setScale(nextScale)
+    setPan({
+      x: extraX - minX * nextScale,
+      y: extraY - minY * nextScale,
+    })
+  }, [canvasSize.h, canvasSize.w, nodes])
+
   const resetView = () => {
-    setScale(0.85)
-    setPan({ x: 60, y: 30 })
+    fitToView()
   }
+
+  useEffect(() => {
+    fitToView()
+  }, [fitToView])
 
   return (
     <div style={{ position: 'relative', height: '100%', minHeight: 640, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
+      <style>{`
+        .atlas-organogram-header {
+          padding-right: 16px;
+        }
+        @media (min-width: 768px) {
+          .atlas-organogram-header {
+            padding-right: 176px;
+          }
+        }
+      `}</style>
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
+      <div className="atlas-organogram-header" style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={COLORS.white} strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="6" r="2.5" /><circle cx="6" cy="17" r="2.5" /><circle cx="18" cy="17" r="2.5" /><path d="M12 8.5V12M12 12L6 14.5M12 12L18 14.5" /></svg>
-            </div>
             <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Targon Global</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Org chart</h1>
               <p style={{ fontSize: 12, color: COLORS.slate, margin: 0 }}>{normalizedEmployees.length} people · {deptCount} teams</p>
             </div>
           </div>
@@ -1079,6 +1150,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
 
       {/* Canvas */}
       <div
+        ref={canvasRef}
         style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab' }}
         onMouseDown={(e) => { setDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }) }}
         onMouseMove={(e) => { if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }) }}
@@ -1121,7 +1193,6 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
         </div>
 
         <div style={{ position: 'absolute', bottom: 16, left: 16, padding: '6px 12px', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 11, color: COLORS.slate, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span>{viewMode === 'organization' ? '🔗' : '📁'}</span>
           {viewMode === 'organization' ? 'Hover to trace reporting chain' : 'Grouped by project'}
         </div>
 
@@ -1156,7 +1227,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
                 onClick={() => {
                   setSelected(node)
-                  setPan({ x: 400 - node.x * scale, y: 200 - node.y * scale })
+                  const centerX = canvasSize.w ? canvasSize.w / 2 : 400
+                  const centerY = canvasSize.h ? canvasSize.h / 2 : 200
+                  setPan({ x: centerX - node.x * scale, y: centerY - node.y * scale })
                   setSearch('')
                 }}
               >
