@@ -9,6 +9,7 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -89,6 +90,7 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
 async function fetchTransactions(input: {
   type: 'journalEntry' | 'bill' | 'purchase';
   page: number;
+  pageSize: number;
   search: string;
   startDate: string | null;
   endDate: string | null;
@@ -96,7 +98,7 @@ async function fetchTransactions(input: {
   const params = new URLSearchParams();
   params.set('type', input.type);
   params.set('page', String(input.page));
-  params.set('pageSize', '25');
+  params.set('pageSize', String(input.pageSize));
   if (input.search.trim() !== '') params.set('search', input.search.trim());
   if (input.startDate !== null && input.startDate.trim() !== '') params.set('startDate', input.startDate.trim());
   if (input.endDate !== null && input.endDate.trim() !== '') params.set('endDate', input.endDate.trim());
@@ -117,12 +119,14 @@ export default function TransactionsPage() {
   const startDate = useTransactionsStore((s) => s.startDate);
   const endDate = useTransactionsStore((s) => s.endDate);
   const page = useTransactionsStore((s) => s.page);
+  const pageSize = useTransactionsStore((s) => s.pageSize);
   const setTab = useTransactionsStore((s) => s.setTab);
   const setSearchInput = useTransactionsStore((s) => s.setSearchInput);
   const setSearch = useTransactionsStore((s) => s.setSearch);
   const setStartDate = useTransactionsStore((s) => s.setStartDate);
   const setEndDate = useTransactionsStore((s) => s.setEndDate);
   const setPage = useTransactionsStore((s) => s.setPage);
+  const setPageSize = useTransactionsStore((s) => s.setPageSize);
   const clear = useTransactionsStore((s) => s.clear);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -146,11 +150,12 @@ export default function TransactionsPage() {
 
   const apiType = tab;
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-transactions', apiType, page, search, normalizedStartDate, normalizedEndDate],
+    queryKey: ['plutus-transactions', apiType, page, pageSize, search, normalizedStartDate, normalizedEndDate],
     queryFn: () =>
       fetchTransactions({
         type: apiType,
         page,
+        pageSize,
         search,
         startDate: normalizedStartDate,
         endDate: normalizedEndDate,
@@ -186,7 +191,7 @@ export default function TransactionsPage() {
         <div className="mt-6 grid gap-4">
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1.4fr,0.55fr,0.55fr,auto] md:items-end">
+              <div className="grid gap-3 md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto] md:items-end">
                 <div className="space-y-1">
                   <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
                     Search
@@ -232,6 +237,30 @@ export default function TransactionsPage() {
                   />
                 </div>
 
+                <div className="space-y-1">
+                  <div className="text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
+                    Rows
+                  </div>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(value) => {
+                      setPageSize(Number(value));
+                      setExpanded({});
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="bg-white dark:bg-white/5">
+                      <SelectValue placeholder="Rows…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="250">250</SelectItem>
+                      <SelectItem value="500">500</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -265,15 +294,17 @@ export default function TransactionsPage() {
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:px-2 [&_td]:py-1.5">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10"> </TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Doc #</TableHead>
-                      <TableHead>Entity</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>No.</TableHead>
+                      <TableHead>Payee</TableHead>
+                      <TableHead>Memo</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -281,7 +312,7 @@ export default function TransactionsPage() {
                       <>
                         {Array.from({ length: 8 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={6} className="py-4">
+                            <TableCell colSpan={8} className="py-3">
                               <Skeleton className="h-10 w-full" />
                             </TableCell>
                           </TableRow>
@@ -291,7 +322,7 @@ export default function TransactionsPage() {
 
                     {!isLoading && error && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={8} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -299,7 +330,7 @@ export default function TransactionsPage() {
 
                     {!isLoading && !error && rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                        <TableCell colSpan={8} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                           No transactions found in QBO for this filter.
                         </TableCell>
                       </TableRow>
@@ -310,6 +341,36 @@ export default function TransactionsPage() {
                       rows.map((row) => {
                         const isExpanded = expanded[row.id] === true;
                         const docNumber = row.docNumber.trim() === '' ? '—' : row.docNumber;
+                        const memo = row.memo.trim() === '' ? '—' : row.memo;
+
+                        const uniqueAccounts = Array.from(
+                          new Set(
+                            row.lines
+                              .map((line) =>
+                                line.accountFullyQualifiedName
+                                  ? line.accountFullyQualifiedName
+                                  : line.accountName
+                                    ? line.accountName
+                                    : '',
+                              )
+                              .map((name) => name.trim())
+                              .filter((name) => name !== ''),
+                          ),
+                        );
+
+                        let accountLabel = '—';
+                        if (uniqueAccounts.length === 1) {
+                          accountLabel = uniqueAccounts[0] as string;
+                        } else if (uniqueAccounts.length > 1) {
+                          accountLabel = `Split (${uniqueAccounts.length})`;
+                        }
+
+                        const typeLabel =
+                          row.type === 'JournalEntry'
+                            ? 'Journal Entry'
+                            : row.type === 'Purchase'
+                              ? 'Expense'
+                              : row.type;
 
                         return (
                           <Fragment key={row.id}>
@@ -334,31 +395,38 @@ export default function TransactionsPage() {
                                   />
                                 </button>
                               </TableCell>
-                              <TableCell className="align-top text-sm text-slate-700 dark:text-slate-200">
+                              <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
                                 {new Date(`${row.txnDate}T00:00:00Z`).toLocaleDateString('en-US')}
                               </TableCell>
-                              <TableCell className="align-top text-sm text-slate-700 dark:text-slate-200">
-                                {row.type}
+                              <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                                {typeLabel}
                               </TableCell>
                               <TableCell className="align-top">
                                 <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
-                                {row.memo.trim() !== '' && (
-                                  <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 line-clamp-1">
-                                    {row.memo}
-                                  </div>
-                                )}
                               </TableCell>
-                              <TableCell className="align-top text-sm text-slate-700 dark:text-slate-200">
+                              <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
                                 {row.entityName.trim() === '' ? '—' : row.entityName}
                               </TableCell>
-                              <TableCell className="align-top text-right text-sm font-medium text-slate-900 dark:text-white">
+                              <TableCell
+                                className="align-top text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                title={memo === '—' ? undefined : memo}
+                              >
+                                {memo}
+                              </TableCell>
+                              <TableCell
+                                className="align-top text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                title={accountLabel === '—' ? undefined : accountLabel}
+                              >
+                                {accountLabel}
+                              </TableCell>
+                              <TableCell className="align-top text-right text-xs font-semibold text-slate-900 dark:text-white">
                                 {formatMoney(row.totalAmount, currency)}
                               </TableCell>
                             </TableRow>
 
                             {isExpanded && (
                               <TableRow className="bg-slate-50/50 dark:bg-white/[0.03]">
-                                <TableCell colSpan={6} className="p-0">
+                                <TableCell colSpan={8} className="p-0">
                                   <div className="p-4">
                                     <div className="rounded-xl border border-slate-200/70 bg-white dark:border-white/10 dark:bg-slate-950/40 overflow-hidden">
                                       <div className="px-4 py-3 border-b border-slate-200/70 dark:border-white/10">
@@ -367,10 +435,11 @@ export default function TransactionsPage() {
                                         </div>
                                       </div>
                                       <div className="overflow-x-auto">
-                                        <Table>
+                                        <Table className="text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:px-2 [&_td]:py-1.5">
                                           <TableHeader>
                                             <TableRow>
                                               <TableHead>Account</TableHead>
+                                              <TableHead>Description</TableHead>
                                               <TableHead>Type</TableHead>
                                               <TableHead>Posting</TableHead>
                                               <TableHead className="text-right">Amount</TableHead>
@@ -380,7 +449,7 @@ export default function TransactionsPage() {
                                             {row.lines.length === 0 && (
                                               <TableRow>
                                                 <TableCell
-                                                  colSpan={4}
+                                                  colSpan={5}
                                                   className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
                                                 >
                                                   No line items found for this transaction.
@@ -398,22 +467,23 @@ export default function TransactionsPage() {
                                               return (
                                                 <TableRow key={line.id}>
                                                   <TableCell className="min-w-[340px]">
-                                                    <div className="text-sm font-medium text-slate-900 dark:text-white">
+                                                    <div className="text-xs font-medium text-slate-900 dark:text-white line-clamp-1" title={accountLabel}>
                                                       {accountLabel}
                                                     </div>
-                                                    {line.description && line.description.trim() !== '' && (
-                                                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                                                        {line.description}
-                                                      </div>
-                                                    )}
                                                   </TableCell>
-                                                  <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                                                  <TableCell
+                                                    className="min-w-[280px] text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                                    title={line.description && line.description.trim() !== '' ? line.description : undefined}
+                                                  >
+                                                    {line.description && line.description.trim() !== '' ? line.description : '—'}
+                                                  </TableCell>
+                                                  <TableCell className="text-xs text-slate-600 dark:text-slate-300">
                                                     {line.accountType ? line.accountType : '—'}
                                                   </TableCell>
-                                                  <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                                                  <TableCell className="text-xs text-slate-600 dark:text-slate-300">
                                                     {line.postingType ? line.postingType : '—'}
                                                   </TableCell>
-                                                  <TableCell className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                                  <TableCell className="text-right text-xs font-semibold text-slate-900 dark:text-white">
                                                     {formatMoney(
                                                       line.postingType === 'Credit' ? -line.amount : line.amount,
                                                       currency,
@@ -437,10 +507,10 @@ export default function TransactionsPage() {
                 </Table>
               </div>
 
-              {data && data.pagination.totalPages > 1 && (
+              {data && (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Page {data.pagination.page} of {data.pagination.totalPages} • {data.pagination.totalCount} transactions
+                    Showing {(data.pagination.page - 1) * data.pagination.pageSize + 1}–{Math.min(data.pagination.page * data.pagination.pageSize, data.pagination.totalCount)} of {data.pagination.totalCount}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
@@ -463,4 +533,3 @@ export default function TransactionsPage() {
     </main>
   );
 }
-
