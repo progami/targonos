@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/hermes/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -106,23 +107,35 @@ export function MessagingClient() {
     return connections[0];
   }, [connections, connectionId]);
 
+  const [orderIdQuery, setOrderIdQuery] = useState("");
   const [orders, setOrders] = useState<RecentOrder[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
 
   const [history, setHistory] = useState<DispatchRow[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  const [historyOrderQuery, setHistoryOrderQuery] = useState("");
+  const [historyState, setHistoryState] = useState<"any" | "queued" | "sending" | "sent" | "failed" | "skipped">("any");
+
   const [activeOrder, setActiveOrder] = useState<RecentOrder | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedDispatch, setSelectedDispatch] = useState<DispatchRow | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   async function refreshOrders() {
     if (!connectionId) return;
     setIsLoadingOrders(true);
     try {
+      const qs = new URLSearchParams();
+      qs.set("connectionId", connectionId);
+      qs.set("limit", "50");
+      if (orderIdQuery.trim().length > 0) qs.set("orderIdQuery", orderIdQuery.trim());
+
       const data = await fetchJson<{ ok: boolean; orders: RecentOrder[] }>(
-        `/api/orders/recent?connectionId=${encodeURIComponent(connectionId)}&limit=30`
+        `/api/orders/list?${qs.toString()}`
       );
-      setOrders(data.orders ?? []);
+
+      setOrders(Array.isArray(data.orders) ? data.orders : []);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to load orders");
     } finally {
@@ -159,167 +172,226 @@ export function MessagingClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionId]);
 
-  const connectionLabel = connection
-    ? `${connection.accountName} · ${connection.region}`
-    : connectionId;
+  const filteredHistory = useMemo(() => {
+    const q = historyOrderQuery.trim().toLowerCase();
+    return history.filter((d) => {
+      if (historyState !== "any" && d.state !== historyState) return false;
+      if (q.length === 0) return true;
+      return d.order_id.toLowerCase().includes(q);
+    });
+  }, [history, historyOrderQuery, historyState]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Messaging" subtitle="Buyer-Seller messaging (Messaging API)" />
+    <div className="space-y-4">
+      <PageHeader
+        title="Messaging"
+        right={
+          <Select value={connectionId} onValueChange={setActiveConnectionId}>
+            <SelectTrigger className="h-9 w-[240px]">
+              <SelectValue placeholder={connectionsLoading ? "Loading…" : "Account"} />
+            </SelectTrigger>
+            <SelectContent>
+              {connections.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.accountName} • {c.region}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-base">Orders</CardTitle>
-              <div className="text-xs text-muted-foreground">
-                Pick an order, then choose an allowed message type.
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={connectionId} onValueChange={setActiveConnectionId}>
-                <SelectTrigger className="w-[240px]">
-                  <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select account"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {connections.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.accountName} · {c.region}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={refreshOrders} disabled={isLoadingOrders}>
-                Refresh
+      <Tabs defaultValue="orders">
+        <TabsList>
+          <TabsTrigger value="orders">Orders</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="orders" className="mt-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between py-3">
+              <CardTitle className="text-sm">Orders</CardTitle>
+              <Button variant="outline" size="sm" onClick={refreshOrders} disabled={isLoadingOrders}>
+                {isLoadingOrders ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead className="hidden md:table-cell">Marketplace</TableHead>
-                  <TableHead className="hidden md:table-cell">Purchased</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((o) => (
-                  <TableRow key={o.orderId}>
-                    <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Badge variant="secondary">{shortMarketplace(o.marketplaceId)}</Badge>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {o.purchaseDate ? formatDate(o.purchaseDate) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="max-h-[70vh] overflow-auto">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <div className="flex flex-col gap-1">
+                          <div>Order</div>
+                          <Input
+                            value={orderIdQuery}
+                            onChange={(e) => setOrderIdQuery(e.target.value)}
+                            placeholder="Search…"
+                            className="h-8 w-[220px] font-mono text-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") refreshOrders();
+                            }}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell">Marketplace</TableHead>
+                      <TableHead className="hidden md:table-cell">Purchased</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[1%] text-right">Message</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((o) => (
+                      <TableRow key={o.orderId}>
+                        <TableCell className="font-mono text-[11px]">{o.orderId}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Badge variant="secondary">{shortMarketplace(o.marketplaceId)}</Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">
+                          {o.purchaseDate ? formatDate(o.purchaseDate) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setActiveOrder(o);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            Message
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {orders.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                          {isLoadingOrders ? "Loading…" : "No orders"}
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between py-3">
+              <CardTitle className="text-sm">Messages</CardTitle>
+              <Button variant="outline" size="sm" onClick={refreshHistory} disabled={isLoadingHistory}>
+                {isLoadingHistory ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="max-h-[70vh] overflow-auto">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <div className="flex flex-col gap-1">
+                          <div>Order</div>
+                          <Input
+                            value={historyOrderQuery}
+                            onChange={(e) => setHistoryOrderQuery(e.target.value)}
+                            placeholder="Search…"
+                            className="h-8 w-[220px] font-mono text-xs"
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex flex-col gap-1">
+                          <div>State</div>
+                          <Select value={historyState} onValueChange={(v) => setHistoryState(v as any)}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">any</SelectItem>
+                              <SelectItem value="queued">queued</SelectItem>
+                              <SelectItem value="sending">sending</SelectItem>
+                              <SelectItem value="sent">sent</SelectItem>
+                              <SelectItem value="failed">failed</SelectItem>
+                              <SelectItem value="skipped">skipped</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell">Kind</TableHead>
+                      <TableHead className="hidden md:table-cell">Updated</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredHistory.map((d) => (
+                      <TableRow
+                        key={d.id}
+                        className="cursor-pointer"
                         onClick={() => {
-                          setActiveOrder(o);
-                          setDialogOpen(true);
+                          setSelectedDispatch(d);
+                          setDetailsOpen(true);
                         }}
                       >
-                        Message
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        <TableCell className="font-mono text-[11px]">{d.order_id}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={d.state === "sent" ? "secondary" : d.state === "failed" ? "destructive" : "outline"}
+                            className="text-[10px]"
+                          >
+                            {d.state}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {d.message_kind ?? "—"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground">{formatDate(d.updated_at)}</TableCell>
+                      </TableRow>
+                    ))}
 
-                {orders.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center">
-                      {isLoadingOrders ? (
-                        <span className="text-sm text-muted-foreground">Loading…</span>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
-                            <PackageCheck className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div className="text-sm font-medium">No orders found</div>
-                          <div className="text-xs text-muted-foreground">Sync orders first from the Orders page.</div>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    {filteredHistory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="py-12 text-center text-sm text-muted-foreground">
+                          {isLoadingHistory ? "Loading…" : "No messages"}
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent messages</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="history" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="history">History</TabsTrigger>
-                <TabsTrigger value="refresh">Reload</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="history" className="mt-4">
-                <div className="space-y-3">
-                  {history.slice(0, 8).map((d) => (
-                    <div key={d.id} className="rounded-lg border p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate font-mono text-xs">{d.order_id}</div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <Badge variant="secondary" className="text-[10px]">
-                              {d.message_kind ?? "—"}
-                            </Badge>
-                            <Badge
-                              variant={d.state === "sent" ? "default" : d.state === "failed" ? "destructive" : "outline"}
-                              className="text-[10px]"
-                            >
-                              {d.state}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">{formatDate(d.updated_at)}</div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {history.length === 0 && (
-                    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center">
-                      {isLoadingHistory ? (
-                        <span className="text-sm text-muted-foreground">Loading…</span>
-                      ) : (
-                        <>
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
-                            <MessagesSquare className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div className="text-sm font-medium">No messages yet</div>
-                          <div className="text-xs text-muted-foreground">Messages you send will appear here.</div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="refresh" className="mt-4">
-                <Button className="w-full" variant="outline" onClick={refreshHistory} disabled={isLoadingHistory}>
-                  Reload history
-                </Button>
-              </TabsContent>
-            </Tabs>
-
-            <div className="mt-4 text-xs text-muted-foreground">
-              {connectionLabel}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Message</DialogTitle>
+          </DialogHeader>
+          {selectedDispatch ? (
+            <div className="grid gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="font-mono text-xs">{selectedDispatch.order_id}</Badge>
+                <Badge variant="outline" className="text-xs">{selectedDispatch.state}</Badge>
+                <Badge variant="outline" className="text-xs">{selectedDispatch.message_kind ?? "—"}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">Updated {formatDate(selectedDispatch.updated_at)}</div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BuyerMessageDialog
         open={dialogOpen}
@@ -491,9 +563,6 @@ function BuyerMessageDialog(props: {
                 rows={6}
                 disabled={!selectedKind || isLoading}
               />
-              <div className="mt-2 text-xs text-muted-foreground">
-                Amazon restricts content. Hermes blocks links, contact info, and review solicitations.
-              </div>
             </div>
           </div>
         ) : (
