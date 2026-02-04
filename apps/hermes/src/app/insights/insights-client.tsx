@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/hermes/page-header";
 import { KpiCard } from "@/components/hermes/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectionsStore } from "@/stores/connections-store";
 import { useHermesUiPreferencesStore } from "@/stores/ui-preferences-store";
@@ -44,11 +45,21 @@ type Overview = {
   toIso: string;
   summary: {
     sentInRange: number;
+    attemptedDispatchesInRange: number;
+    ineligibleDispatchesInRange: number;
     attemptsInRange: { sent: number; ineligible: number; throttled: number; failed: number };
     dispatchStateNow: { queued: number; sending: number; sent: number; skipped: number; failed: number };
     orders: { total: number; importedInRange: number; withAnyDispatch: number };
   };
-  series: Array<{ day: string; sent: number; ineligible: number; throttled: number; failed: number }>;
+  series: Array<{
+    day: string;
+    sent: number;
+    ineligible: number;
+    ineligibleUnique: number;
+    throttled: number;
+    failed: number;
+    attemptedUnique: number;
+  }>;
 };
 
 function fmtDayShort(day: string): string {
@@ -138,6 +149,7 @@ export function InsightsClient() {
       return {
         sent: 0,
         ineligible: 0,
+        ineligibleUnique: 0,
         throttled: 0,
         failed: 0,
         orders: 0,
@@ -146,6 +158,7 @@ export function InsightsClient() {
     return {
       sent: overview.summary.sentInRange,
       ineligible: overview.summary.attemptsInRange.ineligible,
+      ineligibleUnique: overview.summary.ineligibleDispatchesInRange,
       throttled: overview.summary.attemptsInRange.throttled,
       failed: overview.summary.attemptsInRange.failed,
       orders: overview.summary.orders.total,
@@ -192,9 +205,10 @@ export function InsightsClient() {
           icon={MailCheck}
         />
         <KpiCard
-          label="Ineligible"
+          label="Ineligible (attempts)"
           value={loading ? "—" : compact(kpis.ineligible)}
           icon={Ban}
+          hint={overview ? `${compact(kpis.ineligibleUnique)} orders` : undefined}
         />
         <KpiCard
           label="Throttled"
@@ -213,6 +227,55 @@ export function InsightsClient() {
           hint={overview ? `${compact(overview.summary.orders.importedInRange)} imported` : undefined}
         />
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Daily outcomes (UTC)</CardTitle>
+          {overview ? (
+            <div className="text-xs text-muted-foreground">
+              Ineligible is a preflight outcome; Hermes retries until the review action appears or the dispatch expires.
+            </div>
+          ) : null}
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table className="text-xs">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="h-9 px-3">Day</TableHead>
+                <TableHead className="h-9 px-3 text-right">Sent</TableHead>
+                <TableHead className="h-9 px-3 text-right">Ineligible (attempts)</TableHead>
+                <TableHead className="h-9 px-3 text-right">Ineligible (orders)</TableHead>
+                <TableHead className="h-9 px-3 text-right">Throttled</TableHead>
+                <TableHead className="h-9 px-3 text-right">Failed</TableHead>
+                <TableHead className="h-9 px-3 text-right">Orders touched</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {series
+                .slice()
+                .reverse()
+                .map((d) => (
+                  <TableRow key={d.day}>
+                    <TableCell className="px-3 py-2 font-medium">{fmtDayShort(d.day)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.sent)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.ineligible)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.ineligibleUnique)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.throttled)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.failed)}</TableCell>
+                    <TableCell className="px-3 py-2 text-right tabular-nums">{compact(d.attemptedUnique)}</TableCell>
+                  </TableRow>
+                ))}
+              {series.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                    No data in range
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

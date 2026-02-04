@@ -6,6 +6,8 @@ export type AnalyticsOverview = {
   toIso: string;
   summary: {
     sentInRange: number;
+    attemptedDispatchesInRange: number;
+    ineligibleDispatchesInRange: number;
     attemptsInRange: {
       sent: number;
       ineligible: number;
@@ -29,8 +31,10 @@ export type AnalyticsOverview = {
     day: string; // YYYY-MM-DD (UTC)
     sent: number;
     ineligible: number;
+    ineligibleUnique: number;
     throttled: number;
     failed: number;
+    attemptedUnique: number;
   }>;
 };
 
@@ -72,11 +76,11 @@ export async function getAnalyticsOverview(params: {
   // ---- Dispatch state snapshot ("now")
   const dispatchStateRows = connectionId
     ? await pool.query(
-        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 GROUP BY state;`,
+        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 AND type = 'request_review' GROUP BY state;`,
         [connectionId]
       )
     : await pool.query(
-        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches GROUP BY state;`
+        `SELECT state, COUNT(1)::int AS n FROM hermes_dispatches WHERE type = 'request_review' GROUP BY state;`
       );
 
   const stateNow = {
@@ -95,15 +99,67 @@ export async function getAnalyticsOverview(params: {
   // ---- Sent in range (dispatches)
   const sentInRangeRow = connectionId
     ? await pool.query(
-        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 AND sent_at >= $2 AND sent_at <= $3;`,
+        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE connection_id = $1 AND type = 'request_review' AND sent_at >= $2 AND sent_at <= $3;`,
         [connectionId, from, to]
       )
     : await pool.query(
-        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE sent_at >= $1 AND sent_at <= $2;`,
+        `SELECT COUNT(1)::int AS n FROM hermes_dispatches WHERE type = 'request_review' AND sent_at >= $1 AND sent_at <= $2;`,
         [from, to]
       );
 
   const sentInRange = intOr0((sentInRangeRow.rows[0] as any)?.n);
+
+  // ---- Distinct dispatches attempted / ineligible in range
+  const attemptedDispatchesInRangeRow = connectionId
+    ? await pool.query(
+        `
+        SELECT COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND d.type = 'request_review'
+           AND a.created_at >= $2 AND a.created_at <= $3;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.type = 'request_review'
+           AND a.created_at >= $1 AND a.created_at <= $2;
+        `,
+        [from, to]
+      );
+
+  const ineligibleDispatchesInRangeRow = connectionId
+    ? await pool.query(
+        `
+        SELECT COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND d.type = 'request_review'
+           AND a.status = 'ineligible'
+           AND a.created_at >= $2 AND a.created_at <= $3;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.type = 'request_review'
+           AND a.status = 'ineligible'
+           AND a.created_at >= $1 AND a.created_at <= $2;
+        `,
+        [from, to]
+      );
+
+  const attemptedDispatchesInRange = intOr0((attemptedDispatchesInRangeRow.rows[0] as any)?.n);
+  const ineligibleDispatchesInRange = intOr0((ineligibleDispatchesInRangeRow.rows[0] as any)?.n);
 
   // ---- Attempts in range (joined to dispatches for connection scoping)
   const attemptsByStatusRows = connectionId
@@ -113,6 +169,7 @@ export async function getAnalyticsOverview(params: {
           FROM hermes_dispatch_attempts a
           JOIN hermes_dispatches d ON d.id = a.dispatch_id
          WHERE d.connection_id = $1
+           AND d.type = 'request_review'
            AND a.created_at >= $2 AND a.created_at <= $3
          GROUP BY a.status;
         `,
@@ -122,7 +179,9 @@ export async function getAnalyticsOverview(params: {
         `
         SELECT a.status, COUNT(1)::int AS n
           FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
          WHERE a.created_at >= $1 AND a.created_at <= $2
+           AND d.type = 'request_review'
          GROUP BY a.status;
         `,
         [from, to]
@@ -194,7 +253,7 @@ export async function getAnalyticsOverview(params: {
   const series: AnalyticsOverview["series"] = [];
   for (let i = 0; i < rangeDays; i += 1) {
     const day = dayKeyUtc(addUtcDays(from, i));
-    series.push({ day, sent: 0, ineligible: 0, throttled: 0, failed: 0 });
+    series.push({ day, sent: 0, ineligible: 0, ineligibleUnique: 0, throttled: 0, failed: 0, attemptedUnique: 0 });
   }
   const byDay = new Map(series.map((d) => [d.day, d]));
 
@@ -205,6 +264,7 @@ export async function getAnalyticsOverview(params: {
         SELECT date_trunc('day', sent_at) AS day, COUNT(1)::int AS n
           FROM hermes_dispatches
          WHERE connection_id = $1
+           AND type = 'request_review'
            AND sent_at >= $2 AND sent_at <= $3
          GROUP BY 1
          ORDER BY 1;
@@ -215,7 +275,8 @@ export async function getAnalyticsOverview(params: {
         `
         SELECT date_trunc('day', sent_at) AS day, COUNT(1)::int AS n
           FROM hermes_dispatches
-         WHERE sent_at >= $1 AND sent_at <= $2
+         WHERE type = 'request_review'
+           AND sent_at >= $1 AND sent_at <= $2
          GROUP BY 1
          ORDER BY 1;
         `,
@@ -236,6 +297,7 @@ export async function getAnalyticsOverview(params: {
           FROM hermes_dispatch_attempts a
           JOIN hermes_dispatches d ON d.id = a.dispatch_id
          WHERE d.connection_id = $1
+           AND d.type = 'request_review'
            AND a.created_at >= $2 AND a.created_at <= $3
          GROUP BY 1, 2
          ORDER BY 1;
@@ -246,7 +308,9 @@ export async function getAnalyticsOverview(params: {
         `
         SELECT date_trunc('day', a.created_at) AS day, a.status, COUNT(1)::int AS n
           FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
          WHERE a.created_at >= $1 AND a.created_at <= $2
+           AND d.type = 'request_review'
          GROUP BY 1, 2
          ORDER BY 1;
         `,
@@ -263,12 +327,82 @@ export async function getAnalyticsOverview(params: {
     if (status === "failed") bucket.failed += intOr0(r.n);
   }
 
+  const ineligibleUniqueSeriesRows = connectionId
+    ? await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND d.type = 'request_review'
+           AND a.status = 'ineligible'
+           AND a.created_at >= $2 AND a.created_at <= $3
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.type = 'request_review'
+           AND a.status = 'ineligible'
+           AND a.created_at >= $1 AND a.created_at <= $2
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [from, to]
+      );
+
+  for (const r of ineligibleUniqueSeriesRows.rows as any[]) {
+    const day = dayKeyUtc(new Date(r.day));
+    const bucket = byDay.get(day);
+    if (bucket) bucket.ineligibleUnique = intOr0(r.n);
+  }
+
+  const attemptedUniqueSeriesRows = connectionId
+    ? await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.connection_id = $1
+           AND d.type = 'request_review'
+           AND a.created_at >= $2 AND a.created_at <= $3
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [connectionId, from, to]
+      )
+    : await pool.query(
+        `
+        SELECT date_trunc('day', a.created_at) AS day, COUNT(DISTINCT a.dispatch_id)::int AS n
+          FROM hermes_dispatch_attempts a
+          JOIN hermes_dispatches d ON d.id = a.dispatch_id
+         WHERE d.type = 'request_review'
+           AND a.created_at >= $1 AND a.created_at <= $2
+         GROUP BY 1
+         ORDER BY 1;
+        `,
+        [from, to]
+      );
+
+  for (const r of attemptedUniqueSeriesRows.rows as any[]) {
+    const day = dayKeyUtc(new Date(r.day));
+    const bucket = byDay.get(day);
+    if (bucket) bucket.attemptedUnique = intOr0(r.n);
+  }
+
   return {
     rangeDays,
     fromIso: from.toISOString(),
     toIso: to.toISOString(),
     summary: {
       sentInRange,
+      attemptedDispatchesInRange,
+      ineligibleDispatchesInRange,
       attemptsInRange,
       dispatchStateNow: stateNow,
       orders,
