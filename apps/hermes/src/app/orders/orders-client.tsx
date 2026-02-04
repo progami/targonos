@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, PackageSearch, RefreshCw, Send, Sparkles } from "lucide-react";
+import { CalendarClock, Loader2, PackageSearch, RefreshCw, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
@@ -491,8 +491,17 @@ export function OrdersClient() {
   const totalPages = ordersTotalCount !== null ? Math.ceil(ordersTotalCount / pageSize) : null;
   const pageLabel = totalPages !== null && totalPages > 0 ? `Page ${pageNumber} of ${totalPages}` : `Page ${pageNumber}`;
 
+  if (!uiHydrated) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Orders"
         right={
@@ -685,30 +694,22 @@ export function OrdersClient() {
 
       <div className="grid gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Orders</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
+          <CardHeader className="flex flex-row items-center justify-between px-4 py-3">
+            <CardTitle className="text-sm">Orders</CardTitle>
+            <div className="flex flex-wrap items-center gap-1.5">
               {ordersTotalCount !== null ? (
                 <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
               ) : null}
               <Badge variant="outline">{pageLabel}</Badge>
               <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                <SelectTrigger className="h-9 w-[120px] flex-none">
-                  <SelectValue placeholder="Rows" />
+                <SelectTrigger className="h-8 w-[96px] flex-none text-xs">
+                  <SelectValue placeholder="Rows/pg" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem className="whitespace-nowrap" value="25">
-                    25 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="50">
-                    50 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="100">
-                    100 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="200">
-                    200 / page
-                  </SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="25">25/pg</SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="50">50/pg</SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="100">100/pg</SelectItem>
+                  <SelectItem className="whitespace-nowrap" value="200">200/pg</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -750,16 +751,16 @@ export function OrdersClient() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            <Table>
+          <CardContent className="p-0">
+            <Table className="text-xs">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead className="hidden sm:table-cell">
+                  <TableHead className="h-9 px-3">Order</TableHead>
+                  <TableHead className="hidden h-9 px-3 sm:table-cell">
                     <div className="flex flex-col gap-1">
                       <div>Marketplace</div>
                       <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
-                        <SelectTrigger className="h-8 w-[140px]">
+                        <SelectTrigger className="h-8 w-[140px] text-xs">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
                         <SelectContent>
@@ -773,12 +774,12 @@ export function OrdersClient() {
                       </Select>
                     </div>
                   </TableHead>
-                  <TableHead>Purchase</TableHead>
-                  <TableHead>
+                  <TableHead className="h-9 px-3">Purchase</TableHead>
+                  <TableHead className="h-9 px-3">
                     <div className="flex flex-col gap-1">
                       <div>Delivery</div>
                       <Select value={filterDelivery} onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}>
-                        <SelectTrigger className="h-8 w-[130px]">
+                        <SelectTrigger className="h-8 w-[130px] text-xs">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
                         <SelectContent>
@@ -789,11 +790,11 @@ export function OrdersClient() {
                       </Select>
                     </div>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="h-9 px-3">
                     <div className="flex flex-col gap-1">
                       <div>Status</div>
                       <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
-                        <SelectTrigger className="h-8 w-[160px]">
+                        <SelectTrigger className="h-8 w-[160px] text-xs">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
                         <SelectContent>
@@ -807,11 +808,11 @@ export function OrdersClient() {
                       </Select>
                     </div>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="h-9 px-3 text-right">
                     <div className="flex flex-col items-end gap-1">
                       <div>Review request</div>
                       <Select value={filterReviewState} onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}>
-                        <SelectTrigger className="h-8 w-[160px]">
+                        <SelectTrigger className="h-8 w-[160px] text-xs">
                           <SelectValue placeholder="All" />
                         </SelectTrigger>
                         <SelectContent>
@@ -836,13 +837,13 @@ export function OrdersClient() {
 
                   return (
                     <TableRow key={o.orderId}>
-                      <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
-                      <TableCell className="hidden sm:table-cell">
+                      <TableCell className="px-3 py-2 font-mono text-[11px]">{o.orderId}</TableCell>
+                      <TableCell className="hidden px-3 py-2 sm:table-cell">
                         <Badge variant="secondary" title={marketplaceTitle}>
                           {marketplaceDisplay(o.marketplaceId)}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         {purchase ? (
                           <div className="leading-tight">
                             <div>{purchase.date}</div>
@@ -852,18 +853,18 @@ export function OrdersClient() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">{fmtDateShort(o.latestDeliveryDate)}</TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                      <TableCell className="px-3 py-2 text-right">{stateBadge(o.dispatchState)}</TableCell>
                     </TableRow>
                   );
                 })}
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
+                    <TableCell colSpan={6} className="px-3 py-10 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
                           <PackageSearch className="h-5 w-5 text-muted-foreground" />
@@ -877,7 +878,7 @@ export function OrdersClient() {
 
                 {loadingOrders ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>

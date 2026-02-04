@@ -58,10 +58,10 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Hermes"
-        subtitle={<span className="inline-flex items-center gap-2">Request-a-review automation</span>}
+        subtitle={<span className="inline-flex items-center gap-2">Amazon Request-a-Review</span>}
         right={
           <>
             <Button asChild variant="outline" size="sm">
@@ -98,33 +98,33 @@ export default function DashboardPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <Table>
+                <Table className="text-xs">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Order</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden sm:table-cell">Created</TableHead>
+                      <TableHead className="h-9 px-3">Order</TableHead>
+                      <TableHead className="h-9 px-3">Status</TableHead>
+                      <TableHead className="hidden h-9 px-3 sm:table-cell">Created</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {recent.map((d) => (
                       <TableRow key={d.id}>
-                        <TableCell className="font-medium">{d.orderId}</TableCell>
-                        <TableCell>{dispatchBadge(d.state)}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-muted-foreground">
+                        <TableCell className="px-3 py-2 font-mono text-[11px]">{d.orderId}</TableCell>
+                        <TableCell className="px-3 py-2">{dispatchBadge(d.state)}</TableCell>
+                        <TableCell className="hidden px-3 py-2 sm:table-cell text-muted-foreground">
                           {formatDateTime(d.createdAt)}
                         </TableCell>
                       </TableRow>
                     ))}
                     {recent.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="py-12 text-center">
+                        <TableCell colSpan={3} className="px-3 py-10 text-center">
                           <div className="flex flex-col items-center gap-2">
                             <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
                               <Mail className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div className="text-sm font-medium">No activity yet</div>
-                            <div className="text-xs text-muted-foreground">Dispatches will appear here once campaigns are running.</div>
+                            <div className="text-xs text-muted-foreground">Dispatches appear after order sync / campaigns enqueue sends.</div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -136,32 +136,26 @@ export default function DashboardPage() {
 
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-base">Next up</CardTitle>
+                <CardTitle className="text-base">Shortcuts</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Default guardrails</div>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center rounded-md border px-2 py-1 text-xs">1 / order</span>
-                    <span className="inline-flex items-center rounded-md border px-2 py-1 text-xs">5–30 days</span>
-                    <span className="inline-flex items-center rounded-md border px-2 py-1 text-xs">Rate-limited</span>
-                  </div>
-                </div>
-
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Quick actions</div>
-                  <div className="mt-3 grid gap-2">
-                    <Button asChild variant="outline" size="sm" className="justify-between">
-                      <Link href="/accounts">
-                        Connect Amazon <ArrowUpRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline" size="sm" className="justify-between">
-                      <Link href="/experiments">
-                        Run an A/B test <ArrowUpRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
+              <CardContent className="grid gap-2">
+                <Button asChild variant="outline" size="sm" className="justify-between">
+                  <Link href="/orders">
+                    Orders (sync / queue) <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="justify-between">
+                  <Link href="/reviews">
+                    Review outcomes <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="justify-between">
+                  <Link href="/accounts">
+                    Accounts / SP-API test <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <div className="mt-2 rounded-md border px-3 py-2 text-xs text-muted-foreground">
+                  Request-a-Review is 1/order and only sends when Amazon exposes the eligible action.
                 </div>
               </CardContent>
             </Card>

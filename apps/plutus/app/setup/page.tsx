@@ -50,6 +50,136 @@ type QboAccount = {
   active: boolean;
 };
 
+function normalizeForMatch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function accountDepth(account: QboAccount): number {
+  return account.fullyQualifiedName.split(':').length - 1;
+}
+
+function findAccountByExactName(
+  accounts: QboAccount[],
+  input: {
+    name: string;
+    type: string;
+  },
+): QboAccount | undefined {
+  const expectedName = normalizeForMatch(input.name);
+  const expectedType = input.type;
+
+  const candidates = accounts.filter((account) => {
+    if (account.type !== expectedType) return false;
+    if (normalizeForMatch(account.name) !== expectedName) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) return undefined;
+
+  const activeCandidates = candidates.filter((account) => account.active);
+  const preferred = activeCandidates.length > 0 ? activeCandidates : candidates;
+
+  const sorted = [...preferred].sort((a, b) => {
+    const depthA = accountDepth(a);
+    const depthB = accountDepth(b);
+    if (depthA !== depthB) return depthA - depthB;
+    return a.fullyQualifiedName.localeCompare(b.fullyQualifiedName);
+  });
+
+  return sorted[0];
+}
+
+function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, string> {
+  const suggestions: Record<string, string> = {};
+
+  const inventoryAsset = findAccountByExactName(accounts, {
+    name: 'Inventory Asset',
+    type: 'Other Current Asset',
+  });
+  if (inventoryAsset) {
+    suggestions.invManufacturing = inventoryAsset.id;
+    suggestions.invFreight = inventoryAsset.id;
+    suggestions.invDuty = inventoryAsset.id;
+    suggestions.invMfgAccessories = inventoryAsset.id;
+  }
+
+  const freightAndDuty = findAccountByExactName(accounts, {
+    name: 'Freight & Custom Duty',
+    type: 'Cost of Goods Sold',
+  });
+  if (freightAndDuty) {
+    suggestions.cogsFreight = freightAndDuty.id;
+    suggestions.cogsDuty = freightAndDuty.id;
+  }
+
+  const manufacturing = findAccountByExactName(accounts, { name: 'Manufacturing', type: 'Cost of Goods Sold' });
+  if (manufacturing) {
+    suggestions.cogsManufacturing = manufacturing.id;
+  }
+
+  const mfgAccessories = findAccountByExactName(accounts, { name: 'Mfg Accessories', type: 'Cost of Goods Sold' });
+  if (mfgAccessories) {
+    suggestions.cogsMfgAccessories = mfgAccessories.id;
+  }
+
+  const landFreight = findAccountByExactName(accounts, { name: 'Land Freight', type: 'Cost of Goods Sold' });
+  if (landFreight) {
+    suggestions.cogsLandFreight = landFreight.id;
+  }
+
+  const storage3pl = findAccountByExactName(accounts, { name: 'Storage 3PL', type: 'Cost of Goods Sold' });
+  if (storage3pl) {
+    suggestions.cogsStorage3pl = storage3pl.id;
+  }
+
+  const shrinkage = findAccountByExactName(accounts, { name: 'Inventory Shrinkage', type: 'Cost of Goods Sold' });
+  if (shrinkage) {
+    suggestions.cogsShrinkage = shrinkage.id;
+  }
+
+  const amazonSales = findAccountByExactName(accounts, { name: 'Amazon Sales', type: 'Income' });
+  if (amazonSales) {
+    suggestions.amazonSales = amazonSales.id;
+  }
+
+  const amazonRefunds = findAccountByExactName(accounts, { name: 'Amazon Refunds', type: 'Income' });
+  if (amazonRefunds) {
+    suggestions.amazonRefunds = amazonRefunds.id;
+  }
+
+  const reimbursement = findAccountByExactName(accounts, { name: 'Amazon FBA Inventory Reimbursement', type: 'Other Income' });
+  if (reimbursement) {
+    suggestions.amazonFbaInventoryReimbursement = reimbursement.id;
+  }
+
+  const sellerFees = findAccountByExactName(accounts, { name: 'Amazon Seller Fees', type: 'Cost of Goods Sold' });
+  if (sellerFees) {
+    suggestions.amazonSellerFees = sellerFees.id;
+  }
+
+  const fbaFees = findAccountByExactName(accounts, { name: 'Amazon FBA Fees', type: 'Cost of Goods Sold' });
+  if (fbaFees) {
+    suggestions.amazonFbaFees = fbaFees.id;
+  }
+
+  const storageFees = findAccountByExactName(accounts, { name: 'Amazon Storage Fees', type: 'Cost of Goods Sold' });
+  if (storageFees) {
+    suggestions.amazonStorageFees = storageFees.id;
+  }
+
+  const advertisingCosts = findAccountByExactName(accounts, { name: 'Amazon Advertising Costs', type: 'Cost of Goods Sold' });
+  if (advertisingCosts) {
+    suggestions.amazonAdvertisingCosts = advertisingCosts.id;
+  }
+
+  const promotions = findAccountByExactName(accounts, { name: 'Amazon Promotions', type: 'Cost of Goods Sold' });
+  if (promotions) {
+    suggestions.amazonPromotions = promotions.id;
+  }
+
+  return suggestions;
+}
+
 // Icons
 function CheckIcon({ className }: { className?: string }) {
   return (
@@ -359,12 +489,40 @@ function AccountsSection({
 }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoFillApplied, setAutoFillApplied] = useState<{ appliedCount: number; suggestedCount: number } | null>(null);
+  const [createSummary, setCreateSummary] = useState<{ createdCount: number; skippedCount: number } | null>(null);
 
   const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
   const allMapped = mappedCount === ALL_ACCOUNTS.length;
 
   const updateAccount = (key: string, id: string) => {
     onAccountMappingsChange({ ...accountMappings, [key]: id });
+  };
+
+  const suggestedMappings = useMemo(() => suggestPlutusAccountMappings(accounts), [accounts]);
+  const suggestedCount = Object.keys(suggestedMappings).length;
+  const suggestedFillableKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const [key, value] of Object.entries(suggestedMappings)) {
+      const current = accountMappings[key];
+      const isEmpty = current === undefined ? true : current === '';
+      if (isEmpty && value !== '') {
+        keys.push(key);
+      }
+    }
+    return keys;
+  }, [accountMappings, suggestedMappings]);
+
+  const applyAutoFill = () => {
+    const next = { ...accountMappings };
+    for (const key of suggestedFillableKeys) {
+      const value = suggestedMappings[key];
+      if (value !== undefined && value !== '') {
+        next[key] = value;
+      }
+    }
+    onAccountMappingsChange(next);
+    setAutoFillApplied({ appliedCount: suggestedFillableKeys.length, suggestedCount });
   };
 
   const handleConnect = () => {
@@ -374,6 +532,7 @@ function AccountsSection({
   const createAccounts = async () => {
     setCreating(true);
     setError(null);
+    setCreateSummary(null);
     try {
       const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
         method: 'POST',
@@ -388,6 +547,9 @@ function AccountsSection({
         const message = data.error ? data.error : 'Failed to create accounts';
         throw new Error(message);
       }
+      const createdCount = Array.isArray(data.created) ? data.created.length : 0;
+      const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
+      setCreateSummary({ createdCount, skippedCount });
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -514,6 +676,14 @@ function AccountsSection({
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO
         </p>
+        {createSummary && (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+            Created {createSummary.createdCount} • Skipped {createSummary.skippedCount} existing
+          </p>
+        )}
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          Safe to run again: Plutus skips existing sub-accounts under the same parent.
+        </p>
       </div>
     );
   }
@@ -579,6 +749,71 @@ function AccountsSection({
               <div className="text-sm font-semibold text-slate-900 dark:text-white">Prerequisite</div>
               <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Run the Link My Books Accounts &amp; Taxes wizard first so the base Amazon accounts exist in QBO. Then map those parent accounts here.
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden border-slate-200/70 dark:border-white/10">
+        <CardContent className="relative p-0">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(26rem_18rem_at_10%_0%,rgba(0,194,185,0.18),transparent_60%),radial-gradient(22rem_18rem_at_90%_110%,rgba(255,122,62,0.14),transparent_55%)] dark:bg-[radial-gradient(26rem_18rem_at_10%_0%,rgba(0,194,185,0.22),transparent_60%),radial-gradient(22rem_18rem_at_90%_110%,rgba(255,122,62,0.18),transparent_55%)]"
+          />
+          <div className="relative p-5 sm:p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-slate-200/60 text-slate-700 shadow-sm backdrop-blur dark:bg-white/5 dark:ring-white/10 dark:text-slate-200">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h8" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v8" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">Auto-map from QBO</div>
+                <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Plutus can pre-fill parent account selections using common Link My Books defaults found in your Chart of Accounts.
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Suggested</div>
+                    <div className="mt-0.5 font-semibold">
+                      {suggestedCount}/{ALL_ACCOUNTS.length}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Fillable</div>
+                    <div className="mt-0.5 font-semibold">{suggestedFillableKeys.length}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-sm text-slate-700 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Mapped</div>
+                    <div className="mt-0.5 font-semibold">
+                      {mappedCount}/{ALL_ACCOUNTS.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={applyAutoFill}
+                    disabled={suggestedFillableKeys.length === 0}
+                    className="rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+                  >
+                    Auto-fill {suggestedFillableKeys.length} field{suggestedFillableKeys.length === 1 ? '' : 's'}
+                  </Button>
+                  <Button variant="outline" className="rounded-xl" onClick={() => setAutoFillApplied(null)}>
+                    Dismiss
+                  </Button>
+                </div>
+
+                {autoFillApplied && (
+                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    Auto-filled {autoFillApplied.appliedCount} field{autoFillApplied.appliedCount === 1 ? '' : 's'}.
+                    Review the selections, then create your brand sub-accounts.
+                  </div>
+                )}
               </div>
             </div>
           </div>
