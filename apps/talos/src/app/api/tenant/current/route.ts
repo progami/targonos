@@ -24,8 +24,8 @@ async function getUserAccessibleTenants(email: string): Promise<TenantCode[]> {
   for (const tenantCode of TENANT_CODES) {
     try {
       const prisma = await getTenantPrismaClient(tenantCode)
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const user = await prisma.user.findFirst({
+        where: { email, isActive: true },
         select: { id: true },
       })
       if (user) {
