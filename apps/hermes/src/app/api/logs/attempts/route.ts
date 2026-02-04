@@ -31,6 +31,7 @@ async function handleGet(req: Request) {
     type: z.enum(["request_review", "buyer_message"]).optional(),
     status: z.enum(["sent", "ineligible", "throttled", "failed"]).optional(),
     orderIdQuery: z.string().min(1).optional(),
+    dispatchId: z.string().min(1).optional(),
     cursor: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
   });
@@ -40,6 +41,7 @@ async function handleGet(req: Request) {
     type: url.searchParams.get("type") ?? undefined,
     status: url.searchParams.get("status") ?? undefined,
     orderIdQuery: url.searchParams.get("orderIdQuery") ?? undefined,
+    dispatchId: url.searchParams.get("dispatchId") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
   });
@@ -71,6 +73,11 @@ async function handleGet(req: Request) {
   if (parsed.data.orderIdQuery) {
     values.push(parsed.data.orderIdQuery);
     where.push(`d.order_id ILIKE ('%' || $${values.length} || '%')`);
+  }
+
+  if (parsed.data.dispatchId) {
+    values.push(parsed.data.dispatchId);
+    where.push(`a.dispatch_id = $${values.length}`);
   }
 
   if (cursor) {
@@ -164,4 +171,3 @@ async function handleGet(req: Request) {
 }
 
 export const GET = withApiLogging("GET /api/logs/attempts", handleGet);
-
