@@ -10,17 +10,33 @@
   <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#plutus-bg)" />
   <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#00C2B9" stroke-opacity="0.2" />
 
-  <!-- Plutus: Cornucopia (Horn of abundance) -->
-  <g fill="#00C2B9">
-    <!-- Horn silhouette with hollow opening -->
+  <!-- Plutus: Cornucopia (horn of abundance) -->
+  <path
+    d="M19 44c0-14 11.3-25 25.3-25c7.9 0 13.7 5 13.7 12.7c0 14.3-14.2 26.4-33.0 26.4c-5.1 0-9.1-1.5-11.8-4.4c-2.0-2.2-3.0-5.0-3.0-9.7Z"
+    fill="#00C2B9"
+    opacity="0.14"
+  />
+  <g fill="none" stroke="#00C2B9" stroke-linecap="round" stroke-linejoin="round">
     <path
-      fill-rule="evenodd"
-      d="M19 44C19 30 30 19 44 19C51 19 55 24 55 31C55 43 44 54 32 54C25 54 19 50 19 44ZM27 42C27 35 33 29 40 29C44 29 47 32 47 36C47 43 39 48 33 48C29 48 27 45.5 27 42Z"
+      d="M19 44c0-14 11.3-25 25.3-25c7.9 0 13.7 5 13.7 12.7c0 14.3-14.2 26.4-33.0 26.4c-5.1 0-9.1-1.5-11.8-4.4c-2.0-2.2-3.0-5.0-3.0-9.7Z"
+      stroke-width="4.6"
     />
+    <path
+      d="M30.5 43.2c0-6.9 5.6-12.4 12.5-12.4c5.1 0 9.1 3.1 9.1 8.2c0 7.8-7.8 14.6-19.0 14.6c-1.7 0-3.3-.3-4.6-.8"
+      stroke-width="4.2"
+      opacity="0.72"
+    />
+    <path
+      d="M39.8 27.2c1.7-1.4 3.7-2.4 5.8-2.6"
+      stroke-width="4"
+      opacity="0.45"
+    />
+  </g>
 
-    <!-- Abundance (coins) -->
-    <circle cx="18" cy="20" r="4" />
-    <circle cx="28" cy="15" r="3" opacity="0.85" />
-    <circle cx="30" cy="23" r="2.5" opacity="0.7" />
+  <!-- Abundance (coins) -->
+  <g fill="#00C2B9">
+    <circle cx="17.7" cy="20.5" r="4.1" />
+    <circle cx="28.3" cy="14.9" r="3.1" opacity="0.86" />
+    <circle cx="30.4" cy="23.1" r="2.55" opacity="0.7" />
   </g>
 </svg>

@@ -180,7 +180,11 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
                         </div>
                         <div className={styles.badgesRow}>
                           {!isEntitled && <span className={styles.lockBadge}>No Access</span>}
-                          {isDevLifecycle && <span className={styles.lifecycleBadge}>In Development</span>}
+                          {isDevLifecycle && (
+                            <span className={styles.lifecycleBadge} title="In Development">
+                              DEV
+                            </span>
+                          )}
                         </div>
                         <div className={styles.name}>{app.name}</div>
                         <p className={styles.description}>{app.description}</p>
