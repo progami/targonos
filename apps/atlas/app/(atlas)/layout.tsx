@@ -303,9 +303,11 @@ export default function ATLASLayout({ children }: { children: ReactNode }) {
         </Suspense>
 
         {/* Desktop Targon wordmark - TOP RIGHT */}
-        <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
-          <TargonWordmark className="shrink-0" />
-        </div>
+        {!isOrganogram && (
+          <div className="hidden md:block md:fixed md:top-4 md:right-4 md:z-50">
+            <TargonWordmark className="shrink-0" />
+          </div>
+        )}
 
         {/* Desktop Sidebar */}
         <div className="hidden md:fixed md:inset-y-0 md:z-50 md:flex md:w-64 md:flex-col">
