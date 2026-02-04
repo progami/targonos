@@ -97,7 +97,7 @@ function strategyAccessUnavailableResponse() {
 
 export const GET = withXPlanAuth(async (_request, session) => {
   const actor = getStrategyActor(session);
-  const orderBy = [{ updatedAt: 'desc' }];
+  const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
 
   let strategies: any[];
   if (areStrategyAssignmentFieldsAvailable()) {
