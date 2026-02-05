@@ -25,7 +25,6 @@ import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { DashboardSkeleton } from '@/components/common/loading-state'
 import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
-import { withBasePath } from '@/lib/utils/base-path'
 
 interface DashboardStats {
  totalInventory: number
@@ -346,7 +345,7 @@ export default function DashboardPage() {
  subtitle="need attention"
  icon={AlertTriangle}
  variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
- onClick={() => router.push(withBasePath('/amazon/fba-fee-discrepancies'))}
+ onClick={() => router.push('/amazon/fba-fee-discrepancies')}
  />
  </StatsCardGrid>
 
