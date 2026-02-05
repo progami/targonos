@@ -16,7 +16,7 @@ Nginx access logs confirmed the HTTP `DELETE /xplan/api/v1/xplan/strategies` cal
 
 - Implemented: app-level console audit log for strategy deletes (includes actor + request metadata).
 - Implemented: manual Sellerboard sync routes log actor + strategyId + duration + update counts.
-- Missing: nginx access log format that captures forwarded client IP + CF request id.
+- Implemented: nginx access log format captures forwarded client IP + CF ray.
 - Missing: DB-backed audit table (optional).
 
 ## Goals
