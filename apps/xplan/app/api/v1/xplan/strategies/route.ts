@@ -358,10 +358,6 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
 
-  if (existing.isDefault) {
-    return NextResponse.json({ error: 'Default strategy cannot be deleted' }, { status: 400 });
-  }
-
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
   await prismaAny.$transaction(async (tx: any) => {
     await tx.batchTableRow.deleteMany({
