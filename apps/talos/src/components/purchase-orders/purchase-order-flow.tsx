@@ -1937,14 +1937,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (activeViewStage !== 'WAREHOUSE') return
 
     const wh = order.stageData.warehouse
+    const dutyAmount = wh?.dutyAmount
+    const normalizedDutyAmount = dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
+    const dutyCurrency = wh?.dutyCurrency
+    const normalizedDutyCurrency =
+      typeof dutyCurrency === 'string' && dutyCurrency.trim().length > 0 ? dutyCurrency : ''
+
     setReceiveFormData({
       warehouseCode: order.warehouseCode ?? '',
       receiveType: order.receiveType ?? '',
       customsEntryNumber: wh?.customsEntryNumber ?? '',
       customsClearedDate: formatDateOnly(wh?.customsClearedDate ?? null),
       receivedDate: formatDateOnly(wh?.receivedDate ?? null),
-      dutyAmount: wh?.dutyAmount != null ? String(wh.dutyAmount) : '',
-      dutyCurrency: wh?.dutyCurrency ?? '',
+      dutyAmount: normalizedDutyAmount,
+      dutyCurrency: normalizedDutyCurrency,
       discrepancyNotes: wh?.discrepancyNotes ?? '',
     })
   }, [activeViewStage, order])
@@ -2156,12 +2162,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     try {
       setReceivingInventory(true)
 
-      const dutyAmount = receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null
-      if (receiveFormData.dutyAmount.trim().length > 0 && (!Number.isFinite(dutyAmount) || dutyAmount < 0)) {
-        toast.error('Duty amount must be a positive number')
-        return
-      }
-
       const lineReceipts = order.lines
         .filter(line => line.status !== 'CANCELLED')
         .map(line => ({
@@ -2173,13 +2173,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          dutyAmount:
+            receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null,
+          dutyCurrency:
+            receiveFormData.dutyCurrency.trim().length > 0
+              ? receiveFormData.dutyCurrency.trim().toUpperCase()
+              : null,
           warehouseCode: receiveFormData.warehouseCode,
           receiveType: receiveFormData.receiveType,
           customsEntryNumber: receiveFormData.customsEntryNumber,
           customsClearedDate: receiveFormData.customsClearedDate,
           receivedDate: receiveFormData.receivedDate,
-          dutyAmount,
-          dutyCurrency: receiveFormData.dutyCurrency,
           discrepancyNotes: receiveFormData.discrepancyNotes,
           lineReceipts,
         }),
@@ -2903,23 +2907,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 )}
 	              </div>
 
-	              {order && order.status === 'WAREHOUSE' && (
-	                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-4">
-	                  <div>
-	                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-	                      Shipping is handled via Fulfillment Orders
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Create a fulfillment order (FO) to ship inventory out of this warehouse.
-                    </p>
-                  </div>
-                  <Button asChild variant="outline">
-                    <Link href="/operations/fulfillment-orders/new" prefetch={false}>
-                      Create Fulfillment Order
-                    </Link>
-                  </Button>
-                </div>
-              )}
             </div>
 	          )}
 
@@ -6424,9 +6411,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                           Supplier Banking
                         </p>
-                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                          {formatTextOrDash(order.supplier?.bankingDetails)}
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.supplier?.bankingDetails?.trim() ? 'Configured' : 'Not configured'}
                         </p>
+                        {!order.supplier?.bankingDetails?.trim() && (
+                          <p className="text-xs text-muted-foreground">
+                            Set supplier banking details in Suppliers.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -6964,35 +6956,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             )}
                           </div>
 
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Duty Amount (optional)
-                            </p>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={receiveFormData.dutyAmount}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, dutyAmount: e.target.value }))
-                              }
-                              placeholder="0.00"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Duty Currency (optional)
-                            </p>
-                            <Input
-                              value={receiveFormData.dutyCurrency}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, dutyCurrency: e.target.value }))
-                              }
-                              placeholder="USD"
-                            />
-                          </div>
-
                           <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4" data-gate-key="details.discrepancyNotes">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                               Discrepancy Notes
@@ -7041,16 +7004,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               </p>
                               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatTextOrDash(formatDateOnly(wh?.customsClearedDate ?? null))}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Duty Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {wh?.dutyAmount != null
-                                  ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency ?? ''}`
-                                  : '—'}
                               </p>
                             </div>
                             <div className="space-y-1">
