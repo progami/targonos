@@ -419,10 +419,10 @@ export function WorkbookLayout({
         <section className="flex flex-1 overflow-hidden">
           <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-auto">
             <header
-              className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
+              className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
               role="banner"
             >
-              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                 {/* App branding - LEFT */}
                 <div className="flex items-center gap-2">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
@@ -486,13 +486,13 @@ export function WorkbookLayout({
               </div>
 
               {hasControls && (
-                <div className="mt-2 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+                <div className="mt-1.5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-1.5 dark:border-slate-800">
                   {headerControls}
                   {yearSwitcher}
                 </div>
               )}
             </header>
-            <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+            <div className="px-4 py-4 sm:px-6 lg:px-8">{children}</div>
           </div>
           {hasContextPane && (
             <div
