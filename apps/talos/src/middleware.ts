@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
-import { withoutBasePath, withBasePath } from '@/lib/utils/base-path'
+import { getBasePath, withoutBasePath, withBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
 
@@ -60,16 +60,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const normalizedPath = withoutBasePath(pathname)
 
-  const rawBasePath = (process.env.BASE_PATH ?? process.env.NEXT_PUBLIC_BASE_PATH ?? '').trim()
-  const normalizedBasePath = rawBasePath && rawBasePath !== '/'
-    ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
-    : ''
-  const basePath = normalizedBasePath.endsWith('/') ? normalizedBasePath.slice(0, -1) : normalizedBasePath
+  const basePath = getBasePath()
 
   if (basePath) {
     const doubleBasePrefix = `${basePath}${basePath}`
     if (pathname === doubleBasePrefix || pathname.startsWith(`${doubleBasePrefix}/`)) {
-      const url = request.nextUrl.clone()
+      const url = new URL(request.url)
       url.pathname = pathname.replace(doubleBasePrefix, basePath)
       return NextResponse.redirect(url)
     }
@@ -77,7 +73,7 @@ export async function middleware(request: NextRequest) {
 
   const isUnderBasePath = !basePath || pathname === basePath || pathname.startsWith(`${basePath}/`)
   if (!isUnderBasePath && normalizedPath.startsWith('/amazon')) {
-    const url = request.nextUrl.clone()
+    const url = new URL(request.url)
     url.pathname = withBasePath(normalizedPath)
     return NextResponse.redirect(url)
   }
