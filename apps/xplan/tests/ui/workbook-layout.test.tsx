@@ -7,7 +7,7 @@ import type { WorkbookSheetStatus } from '@/lib/workbook'
 
 const pushMock = vi.fn()
 let searchParamsInstance: URLSearchParams
-let mockedPathname = '/2-product-setup'
+let mockedPathname = '/1-setup'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -75,7 +75,7 @@ describe('WorkbookLayout year navigation', () => {
   })
 
   it('hides year controls on time-agnostic sheets', () => {
-    renderLayout(2026, '2-product-setup')
+    renderLayout(2026, '1-setup')
 
     expect(screen.queryByRole('combobox', { name: 'Select year' })).not.toBeInTheDocument()
   })

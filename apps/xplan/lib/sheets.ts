@@ -3,15 +3,13 @@ import {
   ClipboardList,
   FileSpreadsheet,
   LineChart,
-  Package,
-  Target,
+  Settings2,
   TrendingUp,
   Wallet2,
 } from 'lucide-react';
 
 export type SheetSlug =
-  | '1-strategies'
-  | '2-product-setup'
+  | '1-setup'
   | '3-ops-planning'
   | '4-sales-planning'
   | '5-fin-planning-pl'
@@ -20,6 +18,8 @@ export type SheetSlug =
 
 export type LegacySheetSlug =
   | '0-strategies'
+  | '1-strategies'
+  | '2-product-setup'
   | '1-product-setup'
   | '2-ops-planning'
   | '3-sales-planning'
@@ -39,18 +39,11 @@ export interface SheetConfig {
 
 export const SHEETS: SheetConfig[] = [
   {
-    slug: '1-strategies',
-    label: 'Strategies',
-    shortLabel: 'Strat',
-    description: '',
-    icon: Target,
-  },
-  {
-    slug: '2-product-setup',
-    label: 'Product Setup',
+    slug: '1-setup',
+    label: 'Setup',
     shortLabel: 'Setup',
     description: '',
-    icon: Package,
+    icon: Settings2,
   },
   {
     slug: '3-ops-planning',
@@ -90,8 +83,10 @@ export const SHEETS: SheetConfig[] = [
 ];
 
 export const LEGACY_SHEET_SLUG_REDIRECTS: Readonly<Record<LegacySheetSlug, SheetSlug>> = {
-  '0-strategies': '1-strategies',
-  '1-product-setup': '2-product-setup',
+  '0-strategies': '1-setup',
+  '1-strategies': '1-setup',
+  '2-product-setup': '1-setup',
+  '1-product-setup': '1-setup',
   '2-ops-planning': '3-ops-planning',
   '3-sales-planning': '4-sales-planning',
   '4-fin-planning-pl': '5-fin-planning-pl',

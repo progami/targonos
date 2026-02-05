@@ -82,23 +82,14 @@ export async function getWorkbookStatus(): Promise<WorkbookStatus> {
     const cashUpdatedAt = latestDate([cashAgg._max.updatedAt, businessAgg._max.updatedAt]);
 
     const sheetStatus: Record<SheetSlug, WorkbookSheetStatus> = {
-      '1-strategies': {
-        slug: '1-strategies',
-        label: 'Strategies',
+      '1-setup': {
+        slug: '1-setup',
+        label: 'Setup',
         description: '',
-        recordCount: strategyAgg._count.id,
-        lastUpdated: formatIso(strategyAgg._max.updatedAt),
-        relativeUpdatedAt: formatRelative(strategyAgg._max.updatedAt),
+        recordCount: strategyAgg._count.id + productAgg._count.id,
+        lastUpdated: formatIso(latestDate([strategyAgg._max.updatedAt, productUpdatedAt])),
+        relativeUpdatedAt: formatRelative(latestDate([strategyAgg._max.updatedAt, productUpdatedAt])),
         status: strategyAgg._count.id > 0 ? 'complete' : 'todo',
-      },
-      '2-product-setup': {
-        slug: '2-product-setup',
-        label: 'Product Setup',
-        description: '',
-        recordCount: productAgg._count.id,
-        lastUpdated: formatIso(productUpdatedAt ?? productAgg._max.updatedAt),
-        relativeUpdatedAt: formatRelative(productUpdatedAt ?? productAgg._max.updatedAt),
-        status: productAgg._count.id > 0 ? 'complete' : 'todo',
       },
       '3-ops-planning': {
         slug: '3-ops-planning',
