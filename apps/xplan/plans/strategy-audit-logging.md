@@ -12,6 +12,13 @@ Nginx access logs confirmed the HTTP `DELETE /xplan/api/v1/xplan/strategies` cal
 - the real client IP is not visible (requests arrive via `cloudflared` → `nginx`, so `$remote_addr`
   is `127.0.0.1`)
 
+## Current status
+
+- Implemented: app-level console audit log for strategy deletes (includes actor + request metadata).
+- Implemented: manual Sellerboard sync routes log actor + strategyId + duration + update counts.
+- Missing: nginx access log format that captures forwarded client IP + CF request id.
+- Missing: DB-backed audit table (optional).
+
 ## Goals
 
 Be able to answer “who deleted strategy X?” quickly and confidently, with:
@@ -67,4 +74,3 @@ Add a retention policy (e.g. 90 days) and index by `(strategyId, createdAt)`.
 
 - After a delete, we can identify the actor email and strategy id from logs within ~1 minute.
 - Nginx access logs show the real client IP (via CF/XFF), not only `127.0.0.1`.
-
