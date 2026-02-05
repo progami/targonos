@@ -79,8 +79,8 @@ export function SalesPlanningVisual({
 }: SalesPlanningVisualProps) {
   const searchParams = useSearchParams();
   const productSetupHref = searchParams
-    ? `/2-product-setup?${searchParams.toString()}`
-    : '/2-product-setup';
+    ? `/1-setup?${searchParams.toString()}`
+    : '/1-setup';
   const defaultProductId = productOptions[0]?.id ?? '';
 
   const focusContext = useSalesPlanningFocus();
