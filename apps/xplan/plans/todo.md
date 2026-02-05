@@ -10,4 +10,4 @@
 
 6. COMPLETED - ops planning table not honoring multi select - uses browser select as well
 
-7. TODO - add audit logging for strategy deletes (actor + strategyId) + improve nginx access logs with forwarded IP headers
+7. COMPLETED - add audit logging for strategy deletes (actor + strategyId) + improve nginx access logs with forwarded IP headers
