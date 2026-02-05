@@ -83,8 +83,9 @@ export function ProductSetupWorkspace({
                 <Tabs.Trigger
                   key={tab.value}
                   value={tab.value}
+                  title={tab.description}
                   className={cn(
-                    'group relative overflow-hidden rounded-xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/70 dark:focus-visible:ring-[#00C2B9]/70',
+                    'group relative overflow-hidden rounded-lg border px-2.5 py-1.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/70 dark:focus-visible:ring-[#00C2B9]/70',
                     isActive
                       ? 'border-cyan-500 bg-cyan-600 text-white shadow-md shadow-cyan-500/10 dark:border-[#00C2B9]/60 dark:bg-[#00C2B9] dark:text-[#002430] dark:shadow-[0_18px_50px_rgba(0,194,185,0.25)]'
                       : 'border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50/50 dark:border-[#244a63] dark:bg-[#0a2438] dark:hover:border-[#00C2B9]/35 dark:hover:bg-[#0f2d45]',
@@ -93,26 +94,16 @@ export function ProductSetupWorkspace({
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-lg border transition',
+                        'flex h-6 w-6 items-center justify-center rounded-lg border transition',
                         isActive
                           ? 'border-white/20 bg-white/10 dark:border-[#002430]/15 dark:bg-[#002430]/10'
                           : 'border-slate-200 bg-slate-50 text-slate-700 group-hover:border-cyan-200 group-hover:bg-cyan-50 group-hover:text-cyan-800 dark:border-[#244a63] dark:bg-[#051b2f] dark:text-slate-200 dark:group-hover:border-[#00C2B9]/25 dark:group-hover:bg-[#00c2b9]/10',
                       )}
                     >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                     </span>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold leading-tight">
-                        {tab.label}
-                      </div>
-                      <div
-                        className={cn(
-                          'truncate text-xs',
-                          isActive ? 'text-white/80 dark:text-[#002430]/70' : 'text-slate-500',
-                        )}
-                      >
-                        {tab.description}
-                      </div>
+                    <div className="truncate text-sm font-semibold leading-tight">
+                      {tab.label}
                     </div>
                   </div>
                 </Tabs.Trigger>
