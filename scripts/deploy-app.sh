@@ -330,6 +330,26 @@ ensure_portal_db_url() {
   return 1
 }
 
+ensure_app_env_loaded() {
+  local candidates=()
+
+  if [[ "$environment" == "dev" ]]; then
+    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
+  else
+    candidates=("$app_dir/.env.local" "$app_dir/.env.production" "$app_dir/.env")
+  fi
+
+  local file
+  for file in "${candidates[@]}"; do
+    if load_env_file "$file"; then
+      log "Loaded app env from $(basename "$file")"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 log "=========================================="
 log "Starting deployment of $app_key to $environment"
 log "Repository: $REPO_DIR"
@@ -582,6 +602,12 @@ fi
 # Step 6: Build the app
 log "Step 6: Building $app_key"
 cd "$REPO_DIR"
+
+if ! ensure_app_env_loaded; then
+  error "No env file found for $app_key ($environment); cannot build"
+  exit 1
+fi
+
 set +e
 (
   export NODE_ENV=production

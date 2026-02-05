@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
-import { isProtectedStrategyId } from '@/lib/protected-strategies';
+import { buildAuditRequestMeta, emitAuditEvent } from '@/lib/audit-log';
 import {
   areStrategyAssignmentFieldsAvailable,
   buildStrategyAccessWhere,
@@ -188,6 +188,20 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     return strategyAccessUnavailableResponse();
   }
 
+  emitAuditEvent({
+    event: 'xplan.strategy.create',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+    },
+    request: buildAuditRequestMeta(request),
+  });
+
   return NextResponse.json({ strategy });
 });
 
@@ -305,6 +319,21 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     select: writeSelect,
   });
 
+  emitAuditEvent({
+    event: 'xplan.strategy.update',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+    },
+    changes: updateData,
+    request: buildAuditRequestMeta(request),
+  });
+
   return NextResponse.json({ strategy });
 });
 
@@ -330,6 +359,8 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
       where: { id },
       select: {
         id: true,
+        name: true,
+        region: true,
         isDefault: true,
         createdById: true,
         createdByEmail: true,
@@ -359,13 +390,19 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
 
-  if (existing.isDefault) {
-    return NextResponse.json({ error: 'Default strategy cannot be deleted' }, { status: 400 });
-  }
-
-  if (isProtectedStrategyId(existing.id)) {
-    return NextResponse.json({ error: 'Protected strategy cannot be deleted' }, { status: 400 });
-  }
+  emitAuditEvent({
+    event: 'xplan.strategy.delete',
+    actor,
+    strategy: {
+      id,
+      name: existing.name,
+      region: existing.region,
+      isDefault: existing.isDefault,
+      createdByEmail: existing.createdByEmail,
+      assigneeEmail: existing.assigneeEmail,
+    },
+    request: buildAuditRequestMeta(request),
+  });
 
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
   await prismaAny.$transaction(async (tx: any) => {

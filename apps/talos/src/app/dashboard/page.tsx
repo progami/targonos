@@ -345,7 +345,7 @@ export default function DashboardPage() {
  subtitle="need attention"
  icon={AlertTriangle}
  variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
- onClick={() => window.location.href = '/amazon/fba-fee-discrepancies'}
+ onClick={() => router.push('/amazon/fba-fee-discrepancies')}
  />
  </StatsCardGrid>
 

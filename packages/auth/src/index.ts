@@ -299,6 +299,9 @@ export interface PortalJwtPayload extends Record<string, unknown> {
   sub?: string;
   email?: string;
   name?: string;
+  authz?: PortalAuthz;
+  globalRoles?: string[];
+  authzVersion?: number;
   roles?: RolesClaim;
   apps?: string[];
   exp?: number;
@@ -609,28 +612,443 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
 }
 
 // ===== Entitlement / Roles claim helpers =====
+export type AppRole = 'viewer' | 'member' | 'admin';
+
+export type AuthzAppGrant = {
+  role: AppRole;
+  departments: string[];
+};
+
+export type PortalAuthz = {
+  version: number;
+  globalRoles: string[];
+  apps: Record<string, AuthzAppGrant>;
+};
+
 export type AppEntitlement = {
+  role?: AppRole;
   departments?: string[];
   depts?: string[];
 };
 
-export type RolesClaim = Record<string, AppEntitlement>; // { talos: { depts }, fcc: { ... } }
+export type RolesClaim = Record<string, AppEntitlement>; // legacy alias: { talos: { depts }, xplan: { ... } }
 
-export function getAppEntitlement(roles: unknown, appId: string): AppEntitlement | undefined {
-  if (!roles || typeof roles !== 'object') return undefined;
-  const rec = roles as Record<string, any>;
+export type AppLifecycle = 'active' | 'dev' | 'archive';
+export type AppEntryPolicy = 'role_gated' | 'public';
+
+export type AuthDecision = {
+  allowed: boolean;
+  status: 'ok' | 'unauthenticated' | 'forbidden';
+  reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_role';
+  authz: PortalAuthz | null;
+};
+
+const APP_ROLE_RANK: Record<AppRole, number> = {
+  viewer: 1,
+  member: 2,
+  admin: 3,
+};
+
+const AUTHZ_CACHE_TTL_MS = 30_000;
+const authzCache = new Map<string, { authz: PortalAuthz; expiresAt: number }>();
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeAppRole(value: unknown): AppRole {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+    return normalized;
+  }
+  return 'member';
+}
+
+function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
+  if (!value || typeof value !== 'object') return {};
+  const raw = value as Record<string, unknown>;
+  const apps: Record<string, AuthzAppGrant> = {};
+
+  for (const [appId, grant] of Object.entries(raw)) {
+    if (!grant || typeof grant !== 'object') continue;
+    const rawGrant = grant as Record<string, unknown>;
+    const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
+    apps[appId] = {
+      role: normalizeAppRole(rawGrant.role),
+      departments,
+    };
+  }
+
+  return apps;
+}
+
+export function normalizePortalAuthz(value: unknown): PortalAuthz | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const rawVersion = raw.version;
+  const version = typeof rawVersion === 'number' && Number.isFinite(rawVersion)
+    ? Math.max(1, Math.floor(rawVersion))
+    : 1;
+
+  return {
+    version,
+    globalRoles: normalizeStringArray(raw.globalRoles),
+    apps: normalizeAuthzApps(raw.apps),
+  };
+}
+
+function normalizeAuthzFromClaims(payload: PortalJwtPayload | null): PortalAuthz | null {
+  if (!payload) return null;
+
+  const directAuthz = normalizePortalAuthz(payload.authz);
+  if (directAuthz) {
+    return directAuthz;
+  }
+
+  const version =
+    typeof payload.authzVersion === 'number' && Number.isFinite(payload.authzVersion)
+      ? Math.max(1, Math.floor(payload.authzVersion))
+      : 1;
+
+  if (!payload.roles || typeof payload.roles !== 'object') {
+    return null;
+  }
+
+  return {
+    version,
+    globalRoles: normalizeStringArray(payload.globalRoles),
+    apps: normalizeAuthzApps(payload.roles),
+  };
+}
+
+function getSessionTokenCacheKey(
+  cookieHeader: string | null,
+  cookieNames: string[],
+): string | null {
+  if (!cookieHeader) return null;
+  const cookies = parseCookieHeader(cookieHeader);
+  for (const cookieName of cookieNames) {
+    const values = cookies.get(cookieName);
+    if (!values || values.length === 0) continue;
+    const token = values[0];
+    if (!token) continue;
+    return `${cookieName}:${token.slice(0, 96)}`;
+  }
+  return null;
+}
+
+function resolveCookieNames(appId?: string, provided?: string[]): string[] {
+  if (provided && provided.length > 0) {
+    return Array.from(new Set(provided));
+  }
+  return Array.from(new Set([
+    ...getCandidateSessionCookieNames(appId),
+    ...getCandidateSessionCookieNames('targon'),
+  ]));
+}
+
+function normalizeAuthzApiResponse(value: unknown): PortalAuthz | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if ('authz' in raw) {
+    return normalizePortalAuthz(raw.authz);
+  }
+  return normalizePortalAuthz(value);
+}
+
+async function fetchPortalAuthz(options: {
+  request: Request;
+  cookieHeader: string;
+  debug: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<PortalAuthz | null> {
+  const { request, cookieHeader, debug, fetchImpl } = options;
+
+  let portalBase: string;
+  try {
+    portalBase = resolvePortalAuthOrigin({ request: request as unknown as PortalUrlRequestLike });
+  } catch (error) {
+    if (debug) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn('[auth] unable to resolve portal auth origin for authz fetch', detail);
+    }
+    return null;
+  }
+
+  try {
+    const endpoint = new URL('/api/v1/authz/me', portalBase);
+    const response = await (fetchImpl ?? fetch)(endpoint, {
+      method: 'GET',
+      headers: {
+        cookie: cookieHeader,
+        accept: 'application/json',
+        'x-targon-authz-probe': '1',
+      },
+      cache: 'no-store',
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return null;
+    }
+    if (!response.ok) {
+      if (debug) {
+        console.warn('[auth] portal authz endpoint returned status', response.status);
+      }
+      return null;
+    }
+
+    const payload = await response.json().catch(() => null);
+    const authz = normalizeAuthzApiResponse(payload);
+    if (!authz && debug) {
+      console.warn('[auth] portal authz endpoint returned invalid payload', payload);
+    }
+    return authz;
+  } catch (error) {
+    if (debug) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn('[auth] portal authz fetch failed', detail);
+    }
+    return null;
+  }
+}
+
+export async function getCurrentAuthz(
+  request: Request,
+  options?: {
+    appId?: string;
+    cookieNames?: string[];
+    secret?: string;
+    debug?: boolean;
+    fetchImpl?: typeof fetch;
+  },
+): Promise<PortalAuthz> {
+  const debug = options?.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
+  const cookieNames = resolveCookieNames(options?.appId, options?.cookieNames);
+  const cookieHeader = request.headers.get('cookie');
+
+  const decoded = await decodePortalSession({
+    cookieHeader,
+    cookieNames,
+    appId: options?.appId,
+    secret: options?.secret,
+    debug,
+  });
+
+  const cacheKey = getSessionTokenCacheKey(cookieHeader, cookieNames);
+  const now = Date.now();
+  if (cacheKey) {
+    const cached = authzCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.authz;
+    }
+  }
+
+  if (!decoded) {
+    const authzFromPortalWithoutDecode =
+      cookieHeader
+        ? await fetchPortalAuthz({
+            request,
+            cookieHeader,
+            debug,
+            fetchImpl: options?.fetchImpl,
+          })
+        : null;
+
+    if (authzFromPortalWithoutDecode) {
+      if (cacheKey) {
+        authzCache.set(cacheKey, {
+          authz: authzFromPortalWithoutDecode,
+          expiresAt: now + AUTHZ_CACHE_TTL_MS,
+        });
+      }
+      return authzFromPortalWithoutDecode;
+    }
+
+    throw new Error('AUTH_UNAUTHENTICATED');
+  }
+
+  const authzFromPortal =
+    cookieHeader
+      ? await fetchPortalAuthz({
+          request,
+          cookieHeader,
+          debug,
+          fetchImpl: options?.fetchImpl,
+        })
+      : null;
+
+  const authz = authzFromPortal ?? normalizeAuthzFromClaims(decoded);
+  if (!authz) {
+    throw new Error('AUTH_MISSING_AUTHZ');
+  }
+
+  if (cacheKey) {
+    authzCache.set(cacheKey, { authz, expiresAt: now + AUTHZ_CACHE_TTL_MS });
+    if (authzCache.size > 5000) {
+      for (const [key, value] of authzCache) {
+        if (value.expiresAt <= now) {
+          authzCache.delete(key);
+        }
+      }
+    }
+  }
+
+  return authz;
+}
+
+export async function requireAppEntry(options: {
+  request: Request;
+  appId: string;
+  lifecycle: AppLifecycle;
+  entryPolicy?: AppEntryPolicy;
+  cookieNames?: string[];
+  secret?: string;
+  debug?: boolean;
+}): Promise<AuthDecision> {
+  if (options.lifecycle === 'archive') {
+    return {
+      allowed: false,
+      status: 'forbidden',
+      reason: 'app_archived',
+      authz: null,
+    };
+  }
+
+  let authz: PortalAuthz;
+  try {
+    authz = await getCurrentAuthz(options.request, {
+      appId: options.appId,
+      cookieNames: options.cookieNames,
+      secret: options.secret,
+      debug: options.debug,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AUTH_UNAUTHENTICATED') {
+      return {
+        allowed: false,
+        status: 'unauthenticated',
+        reason: 'unauthenticated',
+        authz: null,
+      };
+    }
+
+    return {
+      allowed: false,
+      status: 'forbidden',
+      reason: 'missing_authz',
+      authz: null,
+    };
+  }
+
+  const isPlatformAdmin = authz.globalRoles.includes('platform_admin');
+  if (options.lifecycle === 'dev' && !isPlatformAdmin) {
+    return {
+      allowed: false,
+      status: 'forbidden',
+      reason: 'dev_app_restricted',
+      authz,
+    };
+  }
+
+  const entryPolicy = options.entryPolicy ?? 'role_gated';
+  if (entryPolicy === 'public' || isPlatformAdmin) {
+    return {
+      allowed: true,
+      status: 'ok',
+      reason: 'ok',
+      authz,
+    };
+  }
+
+  const grant = authz.apps[options.appId];
+  if (!grant) {
+    return {
+      allowed: false,
+      status: 'forbidden',
+      reason: 'no_app_role',
+      authz,
+    };
+  }
+
+  return {
+    allowed: true,
+    status: 'ok',
+    reason: 'ok',
+    authz,
+  };
+}
+
+function normalizeAuthzFromSessionLike(session: unknown): PortalAuthz | null {
+  if (!session || typeof session !== 'object') return null;
+  const raw = session as Record<string, unknown>;
+  return (
+    normalizePortalAuthz(raw.authz)
+    ?? normalizePortalAuthz({
+      version: typeof raw.authzVersion === 'number' ? raw.authzVersion : 1,
+      globalRoles: raw.globalRoles,
+      apps: raw.roles,
+    })
+  );
+}
+
+export function hasCapability(options: {
+  session: unknown;
+  appId: string;
+  capability: string;
+}): boolean {
+  const authz = normalizeAuthzFromSessionLike(options.session);
+  if (!authz) return false;
+
+  if (authz.globalRoles.includes('platform_admin')) {
+    return true;
+  }
+
+  const grant = authz.apps[options.appId];
+  if (!grant) {
+    return false;
+  }
+
+  const capability = options.capability.trim().toLowerCase();
+  let requiredRank = 1;
+  if (capability === 'write' || capability === 'edit' || capability === 'member') {
+    requiredRank = 2;
+  } else if (capability === 'admin' || capability === 'manage') {
+    requiredRank = 3;
+  } else if (capability.startsWith('role:')) {
+    const requiredRole = normalizeAppRole(capability.slice('role:'.length));
+    requiredRank = APP_ROLE_RANK[requiredRole];
+  }
+
+  return APP_ROLE_RANK[grant.role] >= requiredRank;
+}
+
+export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEntitlement | undefined {
+  if (!rolesOrAuthz || typeof rolesOrAuthz !== 'object') return undefined;
+
+  const authz = normalizePortalAuthz(rolesOrAuthz);
+  if (authz) {
+    const grant = authz.apps[appId];
+    if (!grant) return undefined;
+    return {
+      role: grant.role,
+      departments: grant.departments,
+      depts: grant.departments,
+    };
+  }
+
+  const rec = rolesOrAuthz as Record<string, unknown>;
   let ent = rec[appId];
   if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
     const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
     ent = rec[legacyKey];
   }
   if (!ent || typeof ent !== 'object') return undefined;
-  const departments = Array.isArray(ent.departments)
-    ? ent.departments.map(String)
-    : Array.isArray(ent.depts)
-      ? ent.depts.map(String)
-      : undefined;
+  const raw = ent as Record<string, unknown>;
+  const departments = normalizeStringArray(raw.departments ?? raw.depts);
   return {
+    role: normalizeAppRole(raw.role),
     departments,
     depts: departments,
   };
