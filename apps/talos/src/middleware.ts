@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
-import { getBasePath, withoutBasePath, withBasePath } from '@/lib/utils/base-path'
+import { getBasePath, withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
 
@@ -58,25 +58,19 @@ async function getCachedSession(
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const normalizedPath = withoutBasePath(pathname)
 
   const basePath = getBasePath()
-
   if (basePath) {
     const doubleBasePrefix = `${basePath}${basePath}`
-    if (pathname === doubleBasePrefix || pathname.startsWith(`${doubleBasePrefix}/`)) {
-      const url = new URL(request.url)
-      url.pathname = pathname.replace(doubleBasePrefix, basePath)
+    const url = new URL(request.url)
+    const rawPathname = url.pathname
+    if (rawPathname === doubleBasePrefix || rawPathname.startsWith(`${doubleBasePrefix}/`)) {
+      url.pathname = rawPathname.replace(doubleBasePrefix, basePath)
       return NextResponse.redirect(url)
     }
   }
 
-  const isUnderBasePath = !basePath || pathname === basePath || pathname.startsWith(`${basePath}/`)
-  if (!isUnderBasePath && normalizedPath.startsWith('/amazon')) {
-    const url = new URL(request.url)
-    url.pathname = withBasePath(normalizedPath)
-    return NextResponse.redirect(url)
-  }
+  const normalizedPath = withoutBasePath(pathname)
 
   // Redirect /operations to /operations/inventory (base-path aware)
   if (normalizedPath === '/operations') {
