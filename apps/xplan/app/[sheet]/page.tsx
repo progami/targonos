@@ -2289,6 +2289,14 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyAssignees: {
+          select: {
+            id: true,
+            assigneeId: true,
+            assigneeEmail: true,
+          },
+          orderBy: { assigneeEmail: 'asc' },
+        },
         createdAt: true,
         updatedAt: true,
         _count: { select: countsSelect },
@@ -2345,6 +2353,11 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: string | null;
         assigneeId: string | null;
         assigneeEmail: string | null;
+        strategyAssignees: Array<{
+          id: string;
+          assigneeId: string;
+          assigneeEmail: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         _count: {
@@ -2365,6 +2378,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: s.createdByEmail ?? null,
         assigneeId: s.assigneeId ?? null,
         assigneeEmail: s.assigneeEmail ?? null,
+        strategyAssignees: Array.isArray(s.strategyAssignees) ? s.strategyAssignees : [],
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
         _count: s._count,
