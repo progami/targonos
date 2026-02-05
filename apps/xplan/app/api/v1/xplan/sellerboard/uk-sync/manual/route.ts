@@ -17,6 +17,11 @@ export const POST = withXPlanAuth(
     const { response } = await requireXPlanStrategyAccess(strategyId, session);
     if (response) return response;
 
+    const actorEmail = (session as any).user?.email ?? null;
+    console.log(
+      `[sellerboard-sync/manual] actor=${actorEmail ?? 'unknown'} strategyId=${strategyId} region=UK`,
+    );
+
     const strategy = await prisma.strategy.findUnique({
       where: { id: strategyId! },
       select: { region: true },
@@ -73,6 +78,12 @@ export const POST = withXPlanAuth(
         newestDateUtc: dashboardResult.newestDateUtc?.toISOString() ?? null,
       };
 
+      console.log(
+        `[sellerboard-sync/manual] ok actor=${actorEmail ?? 'unknown'} strategyId=${strategyId} region=UK durationMs=${
+          Date.now() - startedAt
+        } actualUpdates=${actualSales.updates} dashboardUpdates=${dashboard.updates}`,
+      );
+
       return NextResponse.json({
         ok: true,
         durationMs: Date.now() - startedAt,
@@ -87,4 +98,3 @@ export const POST = withXPlanAuth(
   },
   { rateLimit: RATE_LIMIT_PRESETS.expensive },
 );
-
