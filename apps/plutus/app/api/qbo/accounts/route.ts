@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { fetchAccounts, type QboConnection } from '@/lib/qbo/api';
+import { fetchAccounts, QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { getAccountSource } from '@/lib/lmb/default-accounts';
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           isSubAccount: a.SubAccount === true,
           parentName,
           depth,
-          source: getAccountSource(a.Name),
+          source: getAccountSource(fullyQualifiedName),
         };
       })
       // Sort by Account Type (QBO order), then by FullyQualifiedName within each type
@@ -116,6 +116,14 @@ export async function GET(request: NextRequest) {
     logger.info('Fetched QBO accounts', { requestId, total: allAccounts.length });
     return NextResponse.json({ accounts: allAccounts, total: allAccounts.length, requestId });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      logger.warn('QBO auth required', { requestId });
+      return NextResponse.json(
+        { error: error.message, requestId },
+        { status: 401 },
+      );
+    }
+
     logger.error('Failed to fetch accounts', { requestId, error });
     return NextResponse.json(
       {

@@ -559,6 +559,16 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
+    const defaultStrategy = await prismaAny.strategy.findFirst({
+      where: {
+        isDefault: true,
+        ...buildStrategyAccessWhere(actor),
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (defaultStrategy) return defaultStrategy.id;
+
     const firstStrategy = await prismaAny.strategy.findFirst({
       where: buildStrategyAccessWhere(actor),
       orderBy: { updatedAt: 'desc' },
@@ -587,6 +597,16 @@ async function resolveStrategyId(
       });
       if (exists) return searchParamStrategy;
     }
+
+    const defaultStrategy = await prismaAny.strategy.findFirst({
+      where: {
+        isDefault: true,
+        ...where,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (defaultStrategy) return defaultStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where,
@@ -2256,7 +2276,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         salesWeeks: true,
       };
 
-      const orderBy = [{ updatedAt: 'desc' }];
+      const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
 
       const strategySelect = {
         id: true,

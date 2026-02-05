@@ -6,6 +6,10 @@ const logger = createLogger({ name: 'qbo-api' });
 // Default timeout for QBO API calls (60 seconds)
 const QBO_TIMEOUT_MS = 60000;
 
+export class QboAuthError extends Error {
+  name = 'QboAuthError';
+}
+
 /**
  * Fetch with timeout support
  */
@@ -311,6 +315,7 @@ export interface QboQueryResponse {
 export interface FetchPurchasesOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -318,6 +323,7 @@ export interface FetchPurchasesOptions {
 export interface FetchBillsOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -334,7 +340,14 @@ export async function getValidToken(
   // If token expires in less than 5 minutes, refresh it
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     logger.info('Access token expired or expiring soon, refreshing...');
-    const newTokens = await refreshAccessToken(connection.refreshToken);
+    let newTokens: Awaited<ReturnType<typeof refreshAccessToken>>;
+    try {
+      newTokens = await refreshAccessToken(connection.refreshToken);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('QBO token refresh failed', { error: message });
+      throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
+    }
     const updatedConnection: QboConnection = {
       ...connection,
       accessToken: newTokens.accessToken,
@@ -357,7 +370,7 @@ export async function fetchPurchases(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   // Build query
   let query = `SELECT * FROM Purchase`;
@@ -368,6 +381,9 @@ export async function fetchPurchases(
   }
   if (endDate) {
     conditions.push(`TxnDate <= '${endDate}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${docNumberContains}%'`);
   }
 
   if (conditions.length > 0) {
@@ -443,7 +459,7 @@ export async function fetchBills(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   let query = `SELECT * FROM Bill`;
   const conditions: string[] = [];
@@ -453,6 +469,9 @@ export async function fetchBills(
   }
   if (endDate) {
     conditions.push(`TxnDate <= '${endDate}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${docNumberContains}%'`);
   }
 
   if (conditions.length > 0) {

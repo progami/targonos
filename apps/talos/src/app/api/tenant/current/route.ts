@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { auth } from '@/lib/auth'
 import {
   TENANT_COOKIE_NAME,
+  TENANT_COOKIE_MAX_AGE,
   DEFAULT_TENANT,
   isValidTenantCode,
   getTenantConfig,
@@ -24,8 +25,8 @@ async function getUserAccessibleTenants(email: string): Promise<TenantCode[]> {
   for (const tenantCode of TENANT_CODES) {
     try {
       const prisma = await getTenantPrismaClient(tenantCode)
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const user = await prisma.user.findFirst({
+        where: { email, isActive: true },
         select: { id: true },
       })
       if (user) {
@@ -56,11 +57,6 @@ export async function GET() {
     const cookieStore = await cookies()
     const tenantCookie = cookieStore.get(TENANT_COOKIE_NAME)?.value
 
-    // Validate and get tenant code
-    const tenantCode = isValidTenantCode(tenantCookie) ? tenantCookie : DEFAULT_TENANT
-
-    const current = getTenantConfig(tenantCode)
-
     // Get user's email from session to check which tenants they can access
     const userEmail = session.user?.email
     let accessibleCodes: TenantCode[] = []
@@ -69,6 +65,26 @@ export async function GET() {
       // Query all tenant databases to find where this user exists
       accessibleCodes = await getUserAccessibleTenants(userEmail)
     }
+
+    const cookieTenantCode = isValidTenantCode(tenantCookie) ? tenantCookie : null
+    const defaultTenant = DEFAULT_TENANT
+    const resolvedTenantCode = (() => {
+      if (accessibleCodes.length === 0) {
+        return cookieTenantCode ?? defaultTenant
+      }
+
+      if (cookieTenantCode && accessibleCodes.includes(cookieTenantCode)) {
+        return cookieTenantCode
+      }
+
+      if (accessibleCodes.includes(defaultTenant)) {
+        return defaultTenant
+      }
+
+      return accessibleCodes[0]
+    })()
+
+    const current = getTenantConfig(resolvedTenantCode)
 
     // Map accessible tenants to response format
     const available = getAllTenants()
@@ -80,7 +96,7 @@ export async function GET() {
         flag: t.flag,
       }))
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       current: {
         code: current.code,
         name: current.name,
@@ -91,6 +107,18 @@ export async function GET() {
       },
       available,
     })
+
+    if (resolvedTenantCode !== cookieTenantCode) {
+      response.cookies.set(TENANT_COOKIE_NAME, resolvedTenantCode, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: TENANT_COOKIE_MAX_AGE,
+        path: '/',
+      })
+    }
+
+    return response
   } catch (error) {
     console.error('[tenant/current] Error:', error)
     return NextResponse.json(

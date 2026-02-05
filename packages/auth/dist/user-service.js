@@ -96,6 +96,71 @@ async function ensureBootstrapPortalAdminUser(normalizedEmail) {
         }
     });
 }
+export async function provisionPortalUser(options) {
+    const normalizedEmail = options.email.trim().toLowerCase();
+    if (!normalizedEmail) {
+        throw new Error('Portal user provisioning requires an email address.');
+    }
+    if (!process.env.PORTAL_DB_URL) {
+        throw new Error('PORTAL_DB_URL must be configured to provision portal users.');
+    }
+    const prisma = getPortalAuthPrisma();
+    const provisioned = await prisma.$transaction(async (tx) => {
+        const existingUser = await tx.user.findUnique({
+            where: { email: normalizedEmail },
+            select: { id: true },
+        });
+        const updateData = {
+            isActive: true,
+        };
+        if (options.firstName !== undefined) {
+            updateData.firstName = options.firstName;
+        }
+        if (options.lastName !== undefined) {
+            updateData.lastName = options.lastName;
+        }
+        const userId = existingUser
+            ? (await tx.user.update({
+                where: { email: normalizedEmail },
+                data: updateData,
+                select: { id: true },
+            })).id
+            : (await tx.user.create({
+                data: {
+                    email: normalizedEmail,
+                    username: null,
+                    passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+                    firstName: options.firstName ?? null,
+                    lastName: options.lastName ?? null,
+                    isActive: true,
+                    isDemo: false,
+                },
+                select: { id: true },
+            })).id;
+        for (const app of options.apps) {
+            const appRecord = await tx.app.upsert({
+                where: { slug: app.slug },
+                update: {},
+                create: { slug: app.slug, name: app.name, description: null },
+                select: { id: true },
+            });
+            await tx.userApp.upsert({
+                where: { userId_appId: { userId, appId: appRecord.id } },
+                update: { departments: app.departments },
+                create: { userId, appId: appRecord.id, departments: app.departments },
+            });
+        }
+        const user = await tx.user.findUnique({
+            where: { id: userId },
+            select: userSelect,
+        });
+        if (!user) {
+            throw new Error('PortalUserMissing');
+        }
+        return user;
+    });
+    return mapPortalUser(provisioned);
+}
 export async function authenticateWithPortalDirectory(input) {
     const { emailOrUsername, password } = credentialsSchema.parse(input);
     const loginValue = emailOrUsername.trim().toLowerCase();

@@ -57,13 +57,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
       >
         <Providers>
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-0 -z-10 opacity-70 dark:opacity-50"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(60rem_40rem_at_20%_-10%,rgba(0,194,185,0.18),transparent_60%),radial-gradient(50rem_36rem_at_85%_0%,rgba(0,102,193,0.12),transparent_55%)] dark:bg-[radial-gradient(60rem_40rem_at_20%_-10%,rgba(0,194,185,0.20),transparent_60%),radial-gradient(50rem_36rem_at_85%_0%,rgba(0,102,193,0.16),transparent_55%)]" />
-            <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.7),transparent_24%)] dark:bg-[linear-gradient(to_bottom,rgba(0,0,0,0.0),transparent_24%)]" />
-          </div>
           <AppHeader />
           {children}
         </Providers>

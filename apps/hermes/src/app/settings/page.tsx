@@ -1,127 +1,103 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
-import { ShieldCheck, Timer } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/hermes/page-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useConnectionsStore } from "@/stores/connections-store";
+import { useHermesUiPreferencesStore } from "@/stores/ui-preferences-store";
 
 export default function SettingsPage() {
-  const [quietHoursEnabled, setQuietHoursEnabled] = React.useState(true);
-  const [qhStart, setQhStart] = React.useState("21");
-  const [qhEnd, setQhEnd] = React.useState("7");
-  const [qhTz, setQhTz] = React.useState("America/Los_Angeles");
+  const {
+    connections,
+    loading: connectionsLoading,
+    hasHydrated: connectionsHydrated,
+    activeConnectionId,
+    setActiveConnectionId,
+    fetch: fetchConnections,
+  } = useConnectionsStore();
 
-  const [dailyCapEnabled, setDailyCapEnabled] = React.useState(true);
-  const [dailyCap, setDailyCap] = React.useState("2000");
+  React.useEffect(() => {
+    if (!connectionsHydrated) return;
+    fetchConnections();
+  }, [connectionsHydrated, fetchConnections]);
 
-  const [defaultHoldout, setDefaultHoldout] = React.useState("5");
-  const [dedupeEnabled, setDedupeEnabled] = React.useState(true);
+  const uiHydrated = useHermesUiPreferencesStore((s) => s.hasHydrated);
+  const rangeDays = useHermesUiPreferencesStore((s) => s.insights.rangeDays);
+  const pageSize = useHermesUiPreferencesStore((s) => s.orders.pageSize);
+  const setOrdersPreferences = useHermesUiPreferencesStore((s) => s.setOrdersPreferences);
+  const setInsightsPreferences = useHermesUiPreferencesStore((s) => s.setInsightsPreferences);
+
+  const connectionId = activeConnectionId ?? "";
+
+  if (!uiHydrated) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Settings"
-        right={
-          <Button size="sm" onClick={() => toast.success("Saved (mock)")}>
-            Save
-          </Button>
-        }
-      />
+    <div className="space-y-4">
+      <PageHeader title="Settings" />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Timer className="h-4 w-4" /> Quiet hours
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <Label className="m-0">Enabled</Label>
-              <Switch checked={quietHoursEnabled} onCheckedChange={setQuietHoursEnabled} />
-            </div>
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Defaults</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 p-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">Account</div>
+            <Select value={connectionId} onValueChange={setActiveConnectionId}>
+              <SelectTrigger className="h-9" disabled={connectionsLoading}>
+                <SelectValue placeholder={connectionsLoading ? "Loading…" : "Select"} />
+              </SelectTrigger>
+              <SelectContent>
+                {connections.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.accountName} • {c.region}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Start (hour)</Label>
-                <Input type="number" min={0} max={23} value={qhStart} onChange={(e) => setQhStart(e.target.value)} disabled={!quietHoursEnabled} />
-                <div className="text-xs text-muted-foreground">0–23, e.g. 21 = 9 PM</div>
-              </div>
-              <div className="space-y-2">
-                <Label>End (hour)</Label>
-                <Input type="number" min={0} max={23} value={qhEnd} onChange={(e) => setQhEnd(e.target.value)} disabled={!quietHoursEnabled} />
-                <div className="text-xs text-muted-foreground">0–23, e.g. 7 = 7 AM</div>
-              </div>
-              <div className="space-y-2">
-                <Label>TZ</Label>
-                <Select value={qhTz} onValueChange={setQhTz} disabled={!quietHoursEnabled}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="America/Los_Angeles">America/Los_Angeles</SelectItem>
-                    <SelectItem value="America/New_York">America/New_York</SelectItem>
-                    <SelectItem value="Europe/London">Europe/London</SelectItem>
-                    <SelectItem value="Europe/Berlin">Europe/Berlin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">Insights range</div>
+            <Tabs
+              value={String(rangeDays)}
+              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 })}
+            >
+              <TabsList className="h-9">
+                <TabsTrigger value="7">7d</TabsTrigger>
+                <TabsTrigger value="30">30d</TabsTrigger>
+                <TabsTrigger value="90">90d</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4" /> Guardrails
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <Label className="m-0">Dedupe (1 / order)</Label>
-              <Switch checked={dedupeEnabled} onCheckedChange={setDedupeEnabled} />
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Daily cap</Label>
-                <Input
-                  value={dailyCap}
-                  onChange={(e) => setDailyCap(e.target.value)}
-                  disabled={!dailyCapEnabled}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-md border p-3">
-                <Label className="m-0">Cap enabled</Label>
-                <Switch checked={dailyCapEnabled} onCheckedChange={setDailyCapEnabled} />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Default holdout</Label>
-              <Select value={defaultHoldout} onValueChange={setDefaultHoldout}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["0", "5", "10", "20"].map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {v}%
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">Orders rows / page</div>
+            <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+                <SelectItem value="200">200</SelectItem>
+                <SelectItem value="500">500</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

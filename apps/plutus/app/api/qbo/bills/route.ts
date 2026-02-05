@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { fetchBills, type QboConnection } from '@/lib/qbo/api';
+import { fetchBills, QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -102,6 +102,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to fetch bills', error);
     return NextResponse.json(
       {

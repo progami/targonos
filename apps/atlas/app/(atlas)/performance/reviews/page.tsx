@@ -8,25 +8,18 @@ import { ClipboardDocumentCheckIcon, PlusIcon, StarFilledIcon, ClockIcon, Exclam
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
-import { DataTable, type FilterOption } from '@/components/ui/DataTable'
+import { DataTable } from '@/components/ui/DataTable'
 import { ResultsCount } from '@/components/ui/table'
 import { TableEmptyContent } from '@/components/ui/EmptyState'
+import { Card } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/select'
 import {
   REVIEW_STATUS_LABELS,
   REVIEW_STATUS_OPTIONS,
   REVIEW_TYPE_LABELS,
   REVIEW_TYPE_OPTIONS,
 } from '@/lib/domain/performance/constants'
-
-const REVIEW_TYPE_FILTER_OPTIONS: FilterOption[] = REVIEW_TYPE_OPTIONS.map((o) => ({
-  value: o.value,
-  label: o.label,
-}))
-
-const REVIEW_STATUS_FILTER_OPTIONS: FilterOption[] = REVIEW_STATUS_OPTIONS.map((o) => ({
-  value: o.value,
-  label: o.label,
-}))
 
 function DeadlineBadge({ review }: { review: PerformanceReview }) {
   const deadline = review.deadline ?? (review as { quarterlyCycle?: { deadline?: string } }).quarterlyCycle?.deadline
@@ -110,8 +103,8 @@ export default function PerformanceReviewsPage() {
     try {
       setLoading(true)
       const data = await PerformanceReviewsApi.list({
-        status: filters.status || undefined,
-        reviewType: filters.reviewType || undefined,
+        status: filters.status ? filters.status : undefined,
+        reviewType: filters.reviewType ? filters.reviewType : undefined,
       })
       setItems(data.items)
     } catch (err) {
@@ -125,6 +118,32 @@ export default function PerformanceReviewsPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  const stats = useMemo(() => {
+    const now = Date.now()
+    let completed = 0
+    let open = 0
+    let escalated = 0
+    let overdue = 0
+
+    for (const review of items) {
+      const status = review.status
+      if (status === 'COMPLETED' || status === 'ACKNOWLEDGED') completed += 1
+      else open += 1
+      if (review.escalatedToHR) escalated += 1
+
+      const deadline = review.deadline ?? (review as { quarterlyCycle?: { deadline?: string } }).quarterlyCycle?.deadline ?? null
+      if (status === 'DRAFT' && deadline) {
+        const dt = new Date(deadline).getTime()
+        if (!Number.isNaN(dt) && dt < now) overdue += 1
+      }
+    }
+
+    return { completed, open, escalated, overdue }
+  }, [items])
+
+  const statusFilter = filters.status ?? ''
+  const typeFilter = filters.reviewType ?? ''
 
   const columns = useMemo<ColumnDef<PerformanceReview>[]>(
     () => [
@@ -153,10 +172,6 @@ export default function PerformanceReviewsPage() {
       {
         accessorKey: 'reviewType',
         header: 'Type',
-        meta: {
-          filterKey: 'reviewType',
-          filterOptions: REVIEW_TYPE_FILTER_OPTIONS,
-        },
         cell: ({ getValue }) => {
           const type = getValue<string>()
           return (
@@ -192,10 +207,6 @@ export default function PerformanceReviewsPage() {
       {
         accessorKey: 'status',
         header: 'Status',
-        meta: {
-          filterKey: 'status',
-          filterOptions: REVIEW_STATUS_FILTER_OPTIONS,
-        },
         cell: ({ getValue }) => {
           const status = getValue<string>()
           return (
@@ -238,6 +249,76 @@ export default function PerformanceReviewsPage() {
       />
 
       <div className="space-y-4">
+        <Card padding="md">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border/60 bg-card p-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Total</p>
+                <p className="mt-1 text-xl font-semibold text-foreground tabular-nums">{items.length}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card p-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Open</p>
+                <p className="mt-1 text-xl font-semibold text-foreground tabular-nums">{stats.open}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card p-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Completed</p>
+                <p className="mt-1 text-xl font-semibold text-foreground tabular-nums">{stats.completed}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card p-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Escalated</p>
+                <p className="mt-1 text-xl font-semibold text-foreground tabular-nums">{stats.escalated}</p>
+                {stats.overdue > 0 ? (
+                  <p className="mt-1 text-xs text-danger-700">{stats.overdue} overdue</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+              <div className="min-w-[200px]">
+                <Label className="text-xs">Status</Label>
+                <NativeSelect
+                  value={statusFilter}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    setFilters((prev) => ({ ...prev, status: next }))
+                  }}
+                  className="mt-1"
+                >
+                  <option value="">All statuses</option>
+                  {REVIEW_STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="min-w-[200px]">
+                <Label className="text-xs">Type</Label>
+                <NativeSelect
+                  value={typeFilter}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    setFilters((prev) => ({ ...prev, reviewType: next }))
+                  }}
+                  className="mt-1"
+                >
+                  <option value="">All types</option>
+                  {REVIEW_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              {(statusFilter !== '' || typeFilter !== '') ? (
+                <Button variant="secondary" onClick={() => setFilters({})}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
         <ResultsCount
           count={items.length}
           singular="review"
@@ -251,8 +332,6 @@ export default function PerformanceReviewsPage() {
           loading={loading}
           skeletonRows={5}
           onRowClick={handleRowClick}
-          filters={filters}
-          onFilterChange={setFilters}
           addRow={{ label: 'New Review', onClick: () => router.push('/performance/reviews/add') }}
           emptyState={
             <TableEmptyContent

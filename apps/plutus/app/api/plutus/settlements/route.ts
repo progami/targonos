@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import type { QboAccount, QboConnection, QboJournalEntry } from '@/lib/qbo/api';
-import { fetchAccounts, fetchJournalEntries } from '@/lib/qbo/api';
+import { fetchAccounts, fetchJournalEntries, QboAuthError } from '@/lib/qbo/api';
 import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { db } from '@/lib/db';
 
@@ -296,6 +296,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to list settlements', error);
     return NextResponse.json(
       {

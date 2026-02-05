@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
-import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -151,18 +149,23 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
     type: 'Cost of Goods Sold',
   });
   if (warehousing3pl) {
-    suggestions.cogsLandFreight = warehousing3pl.id;
-    suggestions.cogsStorage3pl = warehousing3pl.id;
-  } else {
-    const landFreight = findAccountByExactName(accounts, { name: 'Land Freight', type: 'Cost of Goods Sold' });
-    if (landFreight) {
-      suggestions.cogsLandFreight = landFreight.id;
-    }
+    suggestions.warehousing3pl = warehousing3pl.id;
+  }
 
-    const storage3pl = findAccountByExactName(accounts, { name: 'Storage 3PL', type: 'Cost of Goods Sold' });
-    if (storage3pl) {
-      suggestions.cogsStorage3pl = storage3pl.id;
-    }
+  const warehousingAmazonFc = findAccountByFullyQualifiedName(accounts, {
+    fullyQualifiedName: 'Warehousing:Amazon FC',
+    type: 'Cost of Goods Sold',
+  });
+  if (warehousingAmazonFc) {
+    suggestions.warehousingAmazonFc = warehousingAmazonFc.id;
+  }
+
+  const warehousingAwd = findAccountByFullyQualifiedName(accounts, {
+    fullyQualifiedName: 'Warehousing:AWD',
+    type: 'Cost of Goods Sold',
+  });
+  if (warehousingAwd) {
+    suggestions.warehousingAwd = warehousingAwd.id;
   }
 
   const shrinkage = findAccountByExactName(accounts, { name: 'Inventory Shrinkage', type: 'Cost of Goods Sold' });
@@ -259,9 +262,13 @@ const COGS_ACCOUNTS = [
   { key: 'cogsFreight', label: 'Freight', type: 'Cost of Goods Sold' },
   { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
   { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
-  { key: 'cogsLandFreight', label: 'Land Freight', type: 'Cost of Goods Sold' },
-  { key: 'cogsStorage3pl', label: 'Storage 3PL', type: 'Cost of Goods Sold' },
   { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
+];
+
+const WAREHOUSING_ACCOUNTS = [
+  { key: 'warehousing3pl', label: '3PL', type: 'Cost of Goods Sold' },
+  { key: 'warehousingAmazonFc', label: 'Amazon FC', type: 'Cost of Goods Sold' },
+  { key: 'warehousingAwd', label: 'AWD', type: 'Cost of Goods Sold' },
 ];
 
 const LMB_ACCOUNTS = [
@@ -275,7 +282,7 @@ const LMB_ACCOUNTS = [
   { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
 ];
 
-const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...LMB_ACCOUNTS];
+const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...WAREHOUSING_ACCOUNTS, ...LMB_ACCOUNTS];
 
 // Sidebar
 function Sidebar({
@@ -293,35 +300,58 @@ function Sidebar({
 }) {
   const items = [
     { id: 'brands' as const, label: 'Brands', complete: brandsComplete },
-    { id: 'accounts' as const, label: 'Accounts', complete: accountsComplete },
-    { id: 'skus' as const, label: 'SKUs', complete: skusComplete },
+    { id: 'accounts' as const, label: 'Map accounts', complete: accountsComplete },
+    { id: 'skus' as const, label: 'Inventory', complete: skusComplete },
   ];
 
   return (
-    <nav className="w-full md:w-56 flex-shrink-0 border-b border-slate-200/70 dark:border-white/10 md:border-b-0 md:border-r p-4">
-      <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Setup</h2>
-      <ul className="flex gap-2 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible md:pb-0">
-        {items.map((item) => (
-          <li key={item.id}>
-            <button
-              onClick={() => onSectionChange(item.id)}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors whitespace-nowrap',
-                section === item.id
-                  ? 'bg-brand-teal-50 dark:bg-brand-teal-900/20 text-brand-teal-700 dark:text-brand-teal-300 font-medium'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+    <nav className="w-full md:w-72 flex-shrink-0 border-b border-slate-200/70 dark:border-white/10 md:border-b-0 md:border-r bg-white/60 dark:bg-white/[0.02]">
+      <div className="px-5 pt-5 pb-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Wizard
+        </div>
+      </div>
+
+      <ol className="relative px-5 pb-5">
+        {items.map((item, index) => {
+          const isActive = section === item.id;
+          const isLast = index === items.length - 1;
+
+          return (
+            <li key={item.id} className={cn('relative pl-9', !isLast && 'pb-6')}>
+              {!isLast && (
+                <div className="absolute left-[13px] top-7 h-full w-px bg-slate-200 dark:bg-white/10" />
               )}
-            >
-              {item.complete ? (
-                <CheckIcon className="w-4 h-4 text-green-500" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />
-              )}
-              {item.label}
-            </button>
-          </li>
-        ))}
-      </ul>
+
+              <div
+                className={cn(
+                  'absolute left-2 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border',
+                  item.complete
+                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : isActive
+                      ? 'bg-white border-brand-teal-500 text-brand-teal-600 dark:bg-slate-950 dark:border-brand-cyan dark:text-brand-cyan'
+                      : 'bg-white border-slate-300 text-slate-400 dark:bg-slate-950 dark:border-white/10 dark:text-slate-500',
+                )}
+              >
+                {item.complete ? <CheckIcon className="h-4 w-4" /> : <span className="text-xs font-semibold">{index + 1}</span>}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onSectionChange(item.id)}
+                className={cn(
+                  'w-full text-left text-sm transition-colors',
+                  isActive
+                    ? 'font-semibold text-slate-900 dark:text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+                )}
+              >
+                {item.label}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
 }
@@ -354,9 +384,6 @@ function BrandsSection({
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Brands</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Add brands for separate P&L tracking. Plutus creates sub-accounts for each brand.
-        </p>
       </div>
 
       {brands.length > 0 && (
@@ -511,6 +538,7 @@ function AccountsSection({
 }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastEnsureSummary, setLastEnsureSummary] = useState<{ created: number; skipped: number } | null>(null);
 
   const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
   const allMapped = mappedCount === ALL_ACCOUNTS.length;
@@ -563,6 +591,12 @@ function AccountsSection({
         const message = data.error ? data.error : 'Failed to create accounts';
         throw new Error(message);
       }
+
+      if (!Array.isArray(data.created) || !Array.isArray(data.skipped)) {
+        throw new Error('Unexpected response from account creation endpoint');
+      }
+
+      setLastEnsureSummary({ created: data.created.length, skipped: data.skipped.length });
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -613,21 +647,7 @@ function AccountsSection({
     );
   }
 
-  if (accountsCreated) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 mb-4">
-          <CheckIcon className="w-8 h-8 text-green-500" />
-        </div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Accounts Created</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Sub-accounts for {brands.length} brand{brands.length > 1 ? 's' : ''} are ready in QBO
-        </p>
-      </div>
-    );
-  }
-
-  const renderAccountGroup = (title: string, accountList: typeof INVENTORY_ACCOUNTS) => (
+  const renderAccountGroup = (title: string, accountList: Array<{ key: string; label: string; type: string }>) => (
     <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
       <CardContent className="p-0">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
@@ -665,14 +685,30 @@ function AccountsSection({
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Select your QBO parent accounts. Plutus creates brand sub-accounts under each.
-        </p>
       </div>
+
+      {accountsCreated && (
+        <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-4 text-sm text-emerald-900 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-white/5 dark:text-emerald-300 dark:ring-emerald-900/30">
+              <CheckIcon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold">Sub-accounts ensured in QBO</div>
+              <div className="mt-0.5 text-emerald-800/80 dark:text-emerald-200/80">
+                {lastEnsureSummary
+                  ? `Created ${lastEnsureSummary.created}, skipped ${lastEnsureSummary.skipped}.`
+                  : `Ready for ${brands.length} brand${brands.length > 1 ? 's' : ''}.`}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4">
         {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
+        {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
         {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
       </div>
 
@@ -687,19 +723,17 @@ function AccountsSection({
         disabled={!allMapped || creating}
         className="w-full"
       >
-        {creating ? 'Creating…' : `Create Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+        {creating ? 'Ensuring…' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
       </Button>
     </div>
   );
 }
 
-// Marketplace to country mapping for Talos DB queries
+// Marketplace to country mapping for SKU scoping
 const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
   'amazon.com': 'US',
   'amazon.co.uk': 'UK',
 };
-
-type TalosSku = { skuCode: string; asin: string | null; description: string; country: 'US' | 'UK' };
 
 // SKUs Section
 function SkusSection({
@@ -711,6 +745,8 @@ function SkusSection({
   onSkusChange: (skus: Sku[]) => void;
   brands: Brand[];
 }) {
+  const normalizeSkuKey = useCallback((raw: string) => raw.trim().replace(/\s+/g, '-').toUpperCase(), []);
+
   // Derive unique countries from brands
   const countries = useMemo(() => {
     const set = new Set<'US' | 'UK'>();
@@ -721,59 +757,115 @@ function SkusSection({
     return Array.from(set);
   }, [brands]);
 
-  // Fetch Talos SKUs for each country
-  const { data: talosSkus, isLoading: isLoadingTalos } = useQuery({
-    queryKey: ['talos-skus', countries],
-    queryFn: async () => {
-      const results: TalosSku[] = [];
-      for (const country of countries) {
-        const res = await fetch(`${basePath}/api/setup/talos-skus?country=${country}`);
-        if (!res.ok) throw new Error(`Failed to fetch ${country} SKUs`);
-        const data = await res.json() as { skus: { skuCode: string; asin: string | null; description: string }[] };
-        for (const s of data.skus) {
-          results.push({ ...s, country });
-        }
-      }
-      return results;
-    },
-    enabled: countries.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
+  const [draftSkus, setDraftSkus] = useState<Sku[]>(skus);
 
-  // Brand assignments: skuCode -> brand name
-  const [brandAssignments, setBrandAssignments] = useState<Record<string, string>>({});
-
-  // Initialize assignments from existing saved SKUs
   useEffect(() => {
-    if (skus.length > 0 && talosSkus && talosSkus.length > 0) {
-      const initial: Record<string, string> = {};
-      for (const s of skus) {
-        initial[s.sku] = s.brand;
-      }
-      setBrandAssignments(initial);
-    }
-  }, [skus, talosSkus]);
+    setDraftSkus(skus);
+  }, [skus]);
 
   // Get brands for a given country
   const brandsForCountry = useCallback((country: 'US' | 'UK') => {
     return brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] === country);
   }, [brands]);
 
-  // Save assigned SKUs
-  const handleSave = useCallback(() => {
-    if (!talosSkus) return;
-    const skusToSave: Sku[] = talosSkus
-      .filter((s) => brandAssignments[s.skuCode])
-      .map((s) => ({
-        sku: s.skuCode,
-        productName: s.description,
-        asin: s.asin ?? undefined,
-        brand: brandAssignments[s.skuCode],
-      }));
-    onSkusChange(skusToSave);
-  }, [talosSkus, brandAssignments, onSkusChange]);
+  const brandByName = useMemo(() => new Map(brands.map((b) => [b.name, b])), [brands]);
 
-  const assignedCount = Object.values(brandAssignments).filter(Boolean).length;
+  const keyForSku = useCallback(
+    (sku: Sku) => {
+      const brand = brandByName.get(sku.brand);
+      if (!brand) {
+        throw new Error(`Unknown brand: ${sku.brand}`);
+      }
+      const country = MARKETPLACE_COUNTRY[brand.marketplace];
+      if (!country) {
+        throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
+      }
+  return `${country}::${normalizeSkuKey(sku.sku)}`;
+    },
+    [brandByName, normalizeSkuKey],
+  );
+
+  const draftByKey = useMemo(() => {
+    const map = new Map<string, Sku>();
+    for (const sku of draftSkus) {
+      map.set(keyForSku(sku), sku);
+    }
+    return map;
+  }, [draftSkus, keyForSku]);
+
+  const handleRemoveConfiguredSku = useCallback(
+    (key: string) => {
+      setDraftSkus((prev) => prev.filter((sku) => keyForSku(sku) !== key));
+    },
+    [keyForSku],
+  );
+
+  const handleUpdateConfiguredSku = useCallback(
+    (key: string, patch: Partial<Sku>) => {
+      setDraftSkus((prev) => {
+        const next = [...prev];
+        const index = next.findIndex((sku) => keyForSku(sku) === key);
+        if (index === -1) return prev;
+
+        const current = next[index];
+        if (!current) return prev;
+
+        next[index] = { ...current, ...patch };
+        return next;
+      });
+    },
+    [keyForSku],
+  );
+
+  const supportedBrands = useMemo(
+    () => brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] !== undefined),
+    [brands],
+  );
+
+  const [manualSku, setManualSku] = useState<{ sku: string; productName: string; asin: string; brand: string }>({
+    sku: '',
+    productName: '',
+    asin: '',
+    brand: '',
+  });
+
+  const handleAddManualSku = useCallback(() => {
+    const sku = manualSku.sku.trim();
+    if (sku === '') return;
+    if (manualSku.brand.trim() === '') return;
+
+    const brand = brandByName.get(manualSku.brand);
+    if (!brand) {
+      throw new Error(`Unknown brand: ${manualSku.brand}`);
+    }
+    const country = MARKETPLACE_COUNTRY[brand.marketplace];
+    if (!country) {
+      throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
+    }
+
+    const key = `${country}::${normalizeSkuKey(sku)}`;
+    if (draftByKey.has(key)) return;
+
+    const productName = manualSku.productName.trim() === '' ? sku : manualSku.productName.trim();
+    const asin = manualSku.asin.trim() === '' ? undefined : manualSku.asin.trim();
+
+    setDraftSkus((prev) => [
+      ...prev,
+      {
+        sku,
+        productName,
+        asin,
+        brand: manualSku.brand.trim(),
+      },
+    ]);
+
+    setManualSku({ sku: '', productName: '', asin: '', brand: manualSku.brand });
+  }, [brandByName, draftByKey, manualSku, normalizeSkuKey]);
+
+  // Save configured SKUs
+  const handleSave = useCallback(() => {
+    onSkusChange(draftSkus);
+  }, [draftSkus, onSkusChange]);
 
   if (brands.length === 0) {
     return (
@@ -791,25 +883,19 @@ function SkusSection({
     );
   }
 
-  if (isLoadingTalos) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">Loading SKUs from Talos…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">SKUs</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          SKUs imported from Talos. Assign each SKU to a brand for COGS tracking.
-        </p>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Inventory</h2>
       </div>
 
-      <Card className="border-slate-200/70 dark:border-white/10">
+      <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
         <CardContent className="p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Configured SKUs</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">{draftSkus.length} total</div>
+          </div>
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -819,62 +905,135 @@ function SkusSection({
                   <TableHead>ASIN</TableHead>
                   <TableHead>Country</TableHead>
                   <TableHead>Brand</TableHead>
+                  <TableHead className="w-12 text-right"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {talosSkus && talosSkus.length > 0 ? (
-                  talosSkus.map((s) => (
-                    <TableRow key={`${s.country}-${s.skuCode}`}>
-                      <TableCell className="font-mono text-sm text-slate-900 dark:text-white">{s.skuCode}</TableCell>
-                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">{s.description}</TableCell>
-                      <TableCell className="font-mono text-sm text-slate-500 dark:text-slate-400">
-                        {s.asin ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                          {s.country}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={brandAssignments[s.skuCode] ?? ''}
-                          onValueChange={(value) =>
-                            setBrandAssignments((prev) => ({ ...prev, [s.skuCode]: value }))
-                          }
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Select brand…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {brandsForCountry(s.country).map((b) => (
-                              <SelectItem key={b.name} value={b.name}>
-                                {b.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                {draftSkus.length > 0 ? (
+                  draftSkus
+                    .map((sku) => {
+                      const key = keyForSku(sku);
+                      const [country] = key.split('::');
+                      return { sku, key, country: country as 'US' | 'UK' };
+                    })
+                    .sort((a, b) => a.key.localeCompare(b.key))
+                    .map(({ sku, key, country }) => (
+                      <TableRow key={key}>
+                        <TableCell className="font-mono text-sm text-slate-900 dark:text-white whitespace-nowrap">{sku.sku}</TableCell>
+                        <TableCell className="min-w-[220px]">
+                          <Input
+                            value={sku.productName}
+                            onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
+                            placeholder="Product name"
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-[170px]">
+                          <Input
+                            value={sku.asin ? sku.asin : ''}
+                            onChange={(e) =>
+                              handleUpdateConfiguredSku(
+                                key,
+                                e.target.value.trim() === '' ? { asin: undefined } : { asin: e.target.value },
+                              )
+                            }
+                            placeholder="ASIN"
+                            className="font-mono"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                            {country}
+                          </span>
+                        </TableCell>
+                        <TableCell className="min-w-[220px]">
+                          <Select value={sku.brand} onValueChange={(value) => handleUpdateConfiguredSku(key, { brand: value })}>
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue placeholder="Select brand…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {brandsForCountry(country).map((b) => (
+                                <SelectItem key={b.name} value={b.name}>
+                                  {b.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleRemoveConfiguredSku(key)} aria-label={`Remove SKU ${sku.sku}`}>
+                            <XIcon className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No SKUs found in Talos for {countries.join(', ')}.
+                    <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                      No SKUs configured yet.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+
+          <div className="border-t border-slate-200/70 dark:border-white/10 bg-white/60 dark:bg-white/[0.02] px-4 py-4">
+            <div className="grid gap-3 md:grid-cols-[1.2fr,2fr,1.2fr,1.2fr,auto] md:items-end">
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SKU</div>
+                <Input
+                  value={manualSku.sku}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, sku: e.target.value }))}
+                  placeholder="e.g. CSTDS001002"
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Product name</div>
+                <Input
+                  value={manualSku.productName}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, productName: e.target.value }))}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">ASIN</div>
+                <Input
+                  value={manualSku.asin}
+                  onChange={(e) => setManualSku((prev) => ({ ...prev, asin: e.target.value }))}
+                  placeholder="Optional"
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</div>
+                <Select value={manualSku.brand} onValueChange={(value) => setManualSku((prev) => ({ ...prev, brand: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select brand…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supportedBrands.map((b) => (
+                      <SelectItem key={b.name} value={b.name}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleAddManualSku} disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}>
+                Add SKU
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {assignedCount} of {talosSkus?.length ?? 0} SKUs assigned to brands
+          {draftSkus.length} configured SKU{draftSkus.length !== 1 ? 's' : ''}
         </p>
-        <Button onClick={handleSave} disabled={assignedCount === 0}>
-          Save SKU Assignments
+        <Button onClick={handleSave}>
+          Save SKUs
         </Button>
       </div>
     </div>
@@ -1063,15 +1222,10 @@ export default function SetupPage() {
   if (isCheckingConnection || isLoadingSetup) {
     return (
       <main className="flex-1">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between gap-3">
-            <BackButton />
-          </div>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           <PageHeader
-            className="mt-4"
-            title="Setup"
-            kicker="Plutus"
-            description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
+            title="Accounts & Taxes Setup Wizard"
+            variant="accent"
           />
           <div className="mt-6">
             <Card className="border-slate-200/70 dark:border-white/10">
@@ -1087,36 +1241,10 @@ export default function SetupPage() {
 
   return (
     <main className="flex-1">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-3">
-          <BackButton />
-        </div>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
-          className="mt-4"
-          title="Setup"
-          kicker="Plutus"
-          description="Configure brands, map QBO parent accounts, and assign SKUs to build brand-level P&Ls."
-          actions={
-            connectionStatus?.connected === true ? (
-              <>
-                <Button asChild variant="outline">
-                  <Link href="/settlements">Settlements</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href="/bills">Bills</Link>
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={() => {
-                  window.location.href = `${basePath}/api/qbo/connect`;
-                }}
-                className="bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white"
-              >
-                Connect QBO
-              </Button>
-            )
-          }
+          title="Accounts & Taxes Setup Wizard"
+          variant="accent"
         />
 
         {connectionStatus?.connected !== true && (
@@ -1127,10 +1255,9 @@ export default function SetupPage() {
                   <InfoIcon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Offline setup mode</div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Not connected to QuickBooks</div>
                   <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Brands and SKUs are available without QuickBooks. Dashboards and account mapping stay locked until
-                    you connect QBO.
+                    You can still add brands and inventory. Connect QBO to map accounts and use dashboards.
                   </div>
                 </div>
               </div>
@@ -1145,7 +1272,7 @@ export default function SetupPage() {
                 section={state.section}
                 onSectionChange={(s) => saveState({ section: s })}
                 brandsComplete={state.brands.length > 0}
-                accountsComplete={state.accountsCreated}
+                accountsComplete={state.accountsCreated && mappedCount === ALL_ACCOUNTS.length}
                 skusComplete={state.skus.length > 0}
               />
 
