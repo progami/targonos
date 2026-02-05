@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkbookLayout } from '@/components/workbook-layout'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { YearSegment } from '@/lib/calculations/calendar'
 import { SHEETS } from '@/lib/sheets'
 import type { WorkbookSheetStatus } from '@/lib/workbook'
@@ -37,14 +38,16 @@ function renderLayout(activeYear: number | null, activeSlug: WorkbookSheetStatus
   mockedPathname = `/${activeSlug}`
 
   render(
-    <WorkbookLayout
-      sheets={sheetStatus}
-      activeSlug={activeSlug}
-      planningYears={planningYears}
-      activeYear={activeYear}
-    >
-      <div>content</div>
-    </WorkbookLayout>,
+    <TooltipProvider>
+      <WorkbookLayout
+        sheets={sheetStatus}
+        activeSlug={activeSlug}
+        planningYears={planningYears}
+        activeYear={activeYear}
+      >
+        <div>content</div>
+      </WorkbookLayout>
+    </TooltipProvider>,
   )
 }
 

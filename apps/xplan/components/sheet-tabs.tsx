@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { ChevronRight } from 'lucide-react';
 import type { SheetConfig, SheetSlug } from '@/lib/sheets';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type SheetTab = SheetConfig & { href?: string; prefetch?: boolean };
 
@@ -71,54 +71,33 @@ export function SheetTabs({
   return (
     <div className="flex w-full items-center justify-between gap-2 py-1">
       <nav className="flex items-center overflow-x-auto">
-        <ol className="flex items-center gap-0.5">
+        <ol className="flex items-center gap-1">
           {sheets.map((sheet, index) => {
+            const Icon = sheet.icon;
             const href = sheet.href ?? `/${sheet.slug}`;
             const isActive = activeSlug === sheet.slug || pathname === href;
             const isCompleted = index < activeIndex;
-            const stepNumber = index + 1;
 
             return (
               <li key={sheet.slug} className="flex items-center">
-                <Link
-                  href={href}
-                  prefetch={sheet.prefetch}
-                  onClick={onSheetSelect ? (event) => handleClick(sheet.slug, event) : undefined}
-                  title={sheet.label}
-                  className={clsx(
-                    'group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400',
-                    isActive
-                      ? 'bg-cyan-600 text-white shadow-md dark:bg-cyan-500 dark:text-white'
-                      : isCompleted
-                        ? 'text-cyan-700 hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/20'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5',
-                  )}
-                >
-                  <span
+                <Tooltip content={sheet.label} position="bottom">
+                  <Link
+                    href={href}
+                    prefetch={sheet.prefetch}
+                    onClick={onSheetSelect ? (event) => handleClick(sheet.slug, event) : undefined}
                     className={clsx(
-                      'flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold transition-all',
+                      'group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400',
                       isActive
-                        ? 'bg-white text-cyan-600 dark:bg-white dark:text-cyan-600'
+                        ? 'bg-cyan-600 text-white shadow-md dark:bg-cyan-500 dark:text-white'
                         : isCompleted
-                          ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300'
-                          : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+                          ? 'text-cyan-700 hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/20'
+                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5',
                     )}
                   >
-                    {stepNumber}
-                  </span>
-                  <span className="whitespace-nowrap">{sheet.shortLabel}</span>
-                </Link>
-                {index < sheets.length - 1 && (
-                  <ChevronRight
-                    className={clsx(
-                      'mx-0.5 h-3.5 w-3.5 flex-shrink-0',
-                      isCompleted
-                        ? 'text-cyan-600 dark:text-cyan-400'
-                        : 'text-slate-300 dark:text-slate-600',
-                    )}
-                    aria-hidden
-                  />
-                )}
+                    {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden /> : null}
+                    <span className="whitespace-nowrap">{sheet.shortLabel}</span>
+                  </Link>
+                </Tooltip>
               </li>
             );
           })}
