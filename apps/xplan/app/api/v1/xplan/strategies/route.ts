@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
+import { buildAuditRequestMeta, emitAuditEvent } from '@/lib/audit-log';
 import {
   areStrategyAssignmentFieldsAvailable,
   buildStrategyAccessWhere,
@@ -187,6 +188,20 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     return strategyAccessUnavailableResponse();
   }
 
+  emitAuditEvent({
+    event: 'xplan.strategy.create',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+    },
+    request: buildAuditRequestMeta(request),
+  });
+
   return NextResponse.json({ strategy });
 });
 
@@ -304,6 +319,21 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     select: writeSelect,
   });
 
+  emitAuditEvent({
+    event: 'xplan.strategy.update',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+    },
+    changes: updateData,
+    request: buildAuditRequestMeta(request),
+  });
+
   return NextResponse.json({ strategy });
 });
 
@@ -360,29 +390,19 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
 
-  const requestMeta = {
-    userAgent: request.headers.get('user-agent'),
-    xForwardedFor: request.headers.get('x-forwarded-for'),
-    cfConnectingIp: request.headers.get('cf-connecting-ip'),
-    cfRay: request.headers.get('cf-ray'),
-  };
-
-  console.log(
-    JSON.stringify({
-      event: 'xplan.strategy.delete',
-      actor,
-      strategy: {
-        id,
-        name: existing.name,
-        region: existing.region,
-        isDefault: existing.isDefault,
-        createdByEmail: existing.createdByEmail,
-        assigneeEmail: existing.assigneeEmail,
-      },
-      request: requestMeta,
-      at: new Date().toISOString(),
-    }),
-  );
+  emitAuditEvent({
+    event: 'xplan.strategy.delete',
+    actor,
+    strategy: {
+      id,
+      name: existing.name,
+      region: existing.region,
+      isDefault: existing.isDefault,
+      createdByEmail: existing.createdByEmail,
+      assigneeEmail: existing.assigneeEmail,
+    },
+    request: buildAuditRequestMeta(request),
+  });
 
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
   await prismaAny.$transaction(async (tx: any) => {
