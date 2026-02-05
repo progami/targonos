@@ -6,39 +6,43 @@ import { ensurePlanningCalendarCoverage } from '@/lib/planning'
 describe('planning calendar coverage', () => {
   it('generates default weeks when no sales data exists', () => {
     const weeksUk = ensurePlanningCalendarCoverage([], 1)
-    expect(weeksUk).toHaveLength(261)
+    expect(weeksUk).toHaveLength(365)
 
     const calendarUk = buildWeekCalendar(weeksUk, 1)
     const segmentsUk = buildYearSegments(calendarUk)
 
-    expect(segmentsUk.map((segment) => segment.year)).toEqual([2023, 2024, 2025, 2026, 2027])
-    expect(segmentsUk.map((segment) => segment.weekCount)).toEqual([52, 53, 52, 52, 52])
+    expect(segmentsUk.map((segment) => segment.year)).toEqual([
+      2021, 2022, 2023, 2024, 2025, 2026, 2027,
+    ])
+    expect(segmentsUk.map((segment) => segment.weekCount)).toEqual([52, 52, 52, 53, 52, 52, 52])
 
-    const first2023WeekDateUk = getCalendarDateForWeek(-104, calendarUk)
+    const first2021WeekDateUk = getCalendarDateForWeek(-208, calendarUk)
     const firstWeekDateUk = getCalendarDateForWeek(1, calendarUk)
     const lastWeekDateUk = getCalendarDateForWeek(156, calendarUk)
 
-    expect(first2023WeekDateUk?.toISOString()).toBe('2023-01-02T00:00:00.000Z')
+    expect(first2021WeekDateUk?.toISOString()).toBe('2021-01-04T00:00:00.000Z')
     expect(firstWeekDateUk?.toISOString()).toBe('2025-01-06T00:00:00.000Z')
     expect(lastWeekDateUk?.toISOString()).toBe('2027-12-27T00:00:00.000Z')
 
     // US now also uses Monday start (weekStartsOn=1) to align with Sellerboard
     // Test that default (no weekStartsOn) uses Monday
     const weeksDefault = ensurePlanningCalendarCoverage([])
-    expect(weeksDefault).toHaveLength(261)
+    expect(weeksDefault).toHaveLength(365)
 
     const calendarDefault = buildWeekCalendar(weeksDefault)
     const segmentsDefault = buildYearSegments(calendarDefault)
 
     // Default should match UK (Monday start)
-    expect(segmentsDefault.map((segment) => segment.year)).toEqual([2023, 2024, 2025, 2026, 2027])
-    expect(segmentsDefault.map((segment) => segment.weekCount)).toEqual([52, 53, 52, 52, 52])
+    expect(segmentsDefault.map((segment) => segment.year)).toEqual([
+      2021, 2022, 2023, 2024, 2025, 2026, 2027,
+    ])
+    expect(segmentsDefault.map((segment) => segment.weekCount)).toEqual([52, 52, 52, 53, 52, 52, 52])
 
-    const first2023WeekDateDefault = getCalendarDateForWeek(-104, calendarDefault)
+    const first2021WeekDateDefault = getCalendarDateForWeek(-208, calendarDefault)
     const firstWeekDateDefault = getCalendarDateForWeek(1, calendarDefault)
     const lastWeekDateDefault = getCalendarDateForWeek(156, calendarDefault)
 
-    expect(first2023WeekDateDefault?.toISOString()).toBe('2023-01-02T00:00:00.000Z')
+    expect(first2021WeekDateDefault?.toISOString()).toBe('2021-01-04T00:00:00.000Z')
     expect(firstWeekDateDefault?.toISOString()).toBe('2025-01-06T00:00:00.000Z')
     expect(lastWeekDateDefault?.toISOString()).toBe('2027-12-27T00:00:00.000Z')
   })

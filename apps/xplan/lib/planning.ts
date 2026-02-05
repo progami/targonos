@@ -9,7 +9,7 @@ import type { SalesWeekInput } from '@/lib/calculations/types';
 
 const DEFAULT_PLANNING_ANCHOR_REFERENCE = new Date('2025-01-06T00:00:00.000Z');
 const DEFAULT_PLANNING_ANCHOR_WEEK = 1;
-const DEFAULT_PLANNING_MIN_WEEK_NUMBER = -104; // covers 2023-01-02
+const DEFAULT_PLANNING_MIN_WEEK_NUMBER = -208; // covers 2021-01-04 (Monday start)
 const DEFAULT_PLANNING_MAX_WEEK_NUMBER = 156; // 2025–2027 inclusive
 const DEFAULT_PLANNING_PRODUCT_ID = '__planning__';
 const EXTRA_PLANNING_YEARS = [2023, 2024] as const;
