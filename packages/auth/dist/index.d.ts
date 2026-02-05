@@ -96,7 +96,7 @@ export declare function buildPortalUrl(path: string, options?: PortalUrlOptions)
  *   environments where app-specific secrets differ from the portal.
  */
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
-export type AppRole = 'viewer' | 'member' | 'admin';
+export type AppRole = 'viewer';
 export type AuthzAppGrant = {
     role: AppRole;
     departments: string[];

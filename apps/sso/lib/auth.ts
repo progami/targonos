@@ -153,7 +153,7 @@ const baseAuthOptions: NextAuthConfig = {
             firstName,
             lastName,
             apps: [
-              { slug: 'talos', name: 'Talos', role: 'member', departments: [] },
+              { slug: 'talos', name: 'Talos', role: 'viewer', departments: [] },
             ],
           })
         }
