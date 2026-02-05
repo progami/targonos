@@ -612,7 +612,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
 }
 
 // ===== Entitlement / Roles claim helpers =====
-export type AppRole = 'viewer' | 'member' | 'admin';
+export type AppRole = 'viewer';
 
 export type AuthzAppGrant = {
   role: AppRole;
@@ -643,12 +643,6 @@ export type AuthDecision = {
   authz: PortalAuthz | null;
 };
 
-const APP_ROLE_RANK: Record<AppRole, number> = {
-  viewer: 1,
-  member: 2,
-  admin: 3,
-};
-
 const AUTHZ_CACHE_TTL_MS = 30_000;
 const authzCache = new Map<string, { authz: PortalAuthz; expiresAt: number }>();
 
@@ -659,11 +653,13 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 function normalizeAppRole(value: unknown): AppRole {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
-    return normalized;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+      return 'viewer';
+    }
   }
-  return 'member';
+  return 'viewer';
 }
 
 function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
@@ -1010,18 +1006,8 @@ export function hasCapability(options: {
     return false;
   }
 
-  const capability = options.capability.trim().toLowerCase();
-  let requiredRank = 1;
-  if (capability === 'write' || capability === 'edit' || capability === 'member') {
-    requiredRank = 2;
-  } else if (capability === 'admin' || capability === 'manage') {
-    requiredRank = 3;
-  } else if (capability.startsWith('role:')) {
-    const requiredRole = normalizeAppRole(capability.slice('role:'.length));
-    requiredRank = APP_ROLE_RANK[requiredRole];
-  }
-
-  return APP_ROLE_RANK[grant.role] >= requiredRank;
+  void options.capability;
+  return true;
 }
 
 export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEntitlement | undefined {

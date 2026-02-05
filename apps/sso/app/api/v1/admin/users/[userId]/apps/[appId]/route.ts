@@ -7,7 +7,7 @@ import { isPlatformAdminSession } from '@/lib/platform-admin'
 
 const updateGrantSchema = z.object({
   mode: z.enum(['grant', 'deny']).default('grant'),
-  role: z.enum(['viewer', 'member', 'admin']).optional(),
+  role: z.enum(['viewer']).optional(),
   appName: z.string().min(1).optional(),
   locked: z.boolean().optional(),
   departments: z.array(z.string().min(1)).optional(),
@@ -50,7 +50,7 @@ export async function PUT(request: Request, context: { params: Promise<unknown> 
     userId,
     appSlug: appId,
     appName: parsed.data.appName,
-    role: parsed.data.role ?? 'member',
+    role: parsed.data.role ?? 'viewer',
     departments: parsed.data.departments ?? [],
     locked: parsed.data.locked ?? true,
   })
