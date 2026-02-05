@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 export type AppLifecycle = 'active' | 'dev' | 'archive'
+export type AppEntryPolicy = 'role_gated' | 'public'
 
 function normalizeOrigin(raw: string | undefined | null): string | undefined {
   if (!raw) return undefined
@@ -55,6 +56,7 @@ type AppBase = {
   name: string
   description: string
   url: string
+  entryPolicy?: AppEntryPolicy
   category: string
   icon?: string
   devPath?: string
@@ -77,6 +79,7 @@ type AppOverrideConfig = {
 
 export type AppDef = AppBase & {
   lifecycle: AppLifecycle
+  entryPolicy: AppEntryPolicy
 }
 
 const PORTAL_BASE_URL = resolvePortalBaseUrl()
@@ -102,6 +105,7 @@ const BASE_APPS: AppBase[] = [
     name: 'Website',
     description: 'Marketing website and CMS.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/'),
+    entryPolicy: 'public',
     category: 'Product',
   },
   {
@@ -250,6 +254,7 @@ const SOURCE_APPS = overrideAppIds ? BASE_APPS.filter((app) => overrideAppIds.ha
 export const ALL_APPS: AppDef[] = SOURCE_APPS.map((app) => ({
   ...app,
   lifecycle: resolveLifecycle(app.id),
+  entryPolicy: app.entryPolicy ?? 'role_gated',
 }))
 
 export function filterAppsForUser(allowedAppIds: string[]) {
@@ -257,6 +262,9 @@ export function filterAppsForUser(allowedAppIds: string[]) {
   return ALL_APPS.filter(app => {
     if (app.lifecycle === 'archive') {
       return false
+    }
+    if (app.entryPolicy === 'public') {
+      return true
     }
     return set.has(app.id)
   })

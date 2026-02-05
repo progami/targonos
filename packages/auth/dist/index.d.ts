@@ -55,6 +55,9 @@ export interface PortalJwtPayload extends Record<string, unknown> {
     sub?: string;
     email?: string;
     name?: string;
+    authz?: PortalAuthz;
+    globalRoles?: string[];
+    authzVersion?: number;
     roles?: RolesClaim;
     apps?: string[];
     exp?: number;
@@ -93,9 +96,50 @@ export declare function buildPortalUrl(path: string, options?: PortalUrlOptions)
  *   environments where app-specific secrets differ from the portal.
  */
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
+export type AppRole = 'viewer' | 'member' | 'admin';
+export type AuthzAppGrant = {
+    role: AppRole;
+    departments: string[];
+};
+export type PortalAuthz = {
+    version: number;
+    globalRoles: string[];
+    apps: Record<string, AuthzAppGrant>;
+};
 export type AppEntitlement = {
+    role?: AppRole;
     departments?: string[];
     depts?: string[];
 };
 export type RolesClaim = Record<string, AppEntitlement>;
-export declare function getAppEntitlement(roles: unknown, appId: string): AppEntitlement | undefined;
+export type AppLifecycle = 'active' | 'dev' | 'archive';
+export type AppEntryPolicy = 'role_gated' | 'public';
+export type AuthDecision = {
+    allowed: boolean;
+    status: 'ok' | 'unauthenticated' | 'forbidden';
+    reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_role';
+    authz: PortalAuthz | null;
+};
+export declare function normalizePortalAuthz(value: unknown): PortalAuthz | null;
+export declare function getCurrentAuthz(request: Request, options?: {
+    appId?: string;
+    cookieNames?: string[];
+    secret?: string;
+    debug?: boolean;
+    fetchImpl?: typeof fetch;
+}): Promise<PortalAuthz>;
+export declare function requireAppEntry(options: {
+    request: Request;
+    appId: string;
+    lifecycle: AppLifecycle;
+    entryPolicy?: AppEntryPolicy;
+    cookieNames?: string[];
+    secret?: string;
+    debug?: boolean;
+}): Promise<AuthDecision>;
+export declare function hasCapability(options: {
+    session: unknown;
+    appId: string;
+    capability: string;
+}): boolean;
+export declare function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEntitlement | undefined;
