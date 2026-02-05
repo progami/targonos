@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
 import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -44,6 +44,11 @@ type Strategy = {
   createdByEmail?: string | null;
   assigneeId?: string | null;
   assigneeEmail?: string | null;
+  strategyAssignees?: Array<{
+    id: string;
+    assigneeId: string;
+    assigneeEmail: string;
+  }>;
   createdAt: string;
   updatedAt: string;
   _count: {
@@ -76,12 +81,12 @@ export function StrategiesWorkspace({
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newRegion, setNewRegion] = useState<'US' | 'UK'>('US');
-  const [newAssigneeId, setNewAssigneeId] = useState<string>('');
+  const [newAssigneeIds, setNewAssigneeIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editRegion, setEditRegion] = useState<'US' | 'UK'>('US');
-  const [editAssigneeId, setEditAssigneeId] = useState<string>('');
+  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>([]);
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Strategy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -155,13 +160,37 @@ export function StrategiesWorkspace({
 
   useEffect(() => {
     if (!isAdding) return;
-    if (!newAssigneeId && viewer.id) {
-      setNewAssigneeId(viewer.id);
+    if (newAssigneeIds.length === 0 && viewer.id) {
+      setNewAssigneeIds([viewer.id]);
     }
-  }, [isAdding, newAssigneeId, viewer.id]);
+  }, [isAdding, newAssigneeIds.length, viewer.id]);
+
+  const parseSelectedAssigneeIds = (event: ChangeEvent<HTMLSelectElement>) =>
+    Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
+
+  const strategyAssigneeIds = (strategy: Strategy) =>
+    Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
+      ? strategy.strategyAssignees.map((entry) => entry.assigneeId)
+      : strategy.assigneeId
+        ? [strategy.assigneeId]
+        : [];
+
+  const hasSameAssignees = (left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    const leftSorted = [...left].sort();
+    const rightSorted = [...right].sort();
+    return leftSorted.every((value, index) => value === rightSorted[index]);
+  };
 
   const renderAssigneeLabel = (strategy: Strategy) => {
-    if (strategy.assigneeEmail) return strategy.assigneeEmail;
+    const assigneeEmails =
+      Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
+        ? strategy.strategyAssignees.map((entry) => entry.assigneeEmail)
+        : strategy.assigneeEmail
+          ? [strategy.assigneeEmail]
+          : [];
+
+    if (assigneeEmails.length > 0) return assigneeEmails.join(', ');
     return 'Unassigned';
   };
 
@@ -184,7 +213,7 @@ export function StrategiesWorkspace({
           name: newName,
           description: newDescription,
           region: newRegion,
-          ...(newAssigneeId ? { assigneeId: newAssigneeId } : {}),
+          assigneeIds: newAssigneeIds,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -202,7 +231,7 @@ export function StrategiesWorkspace({
       setNewName('');
       setNewDescription('');
       setNewRegion('US');
-      setNewAssigneeId(viewer.id ?? '');
+      setNewAssigneeIds(viewer.id ? [viewer.id] : []);
       setIsAdding(false);
       toast.success('Strategy created');
     } catch (error) {
@@ -223,8 +252,8 @@ export function StrategiesWorkspace({
 
     try {
       const canAssign = Boolean(canAssignByStrategyId.get(id));
-      const currentAssigneeId = strategy?.assigneeId ?? '';
-      const assigneeChanged = editAssigneeId !== currentAssigneeId && editAssigneeId !== '';
+      const currentAssigneeIds = strategy ? strategyAssigneeIds(strategy) : [];
+      const assigneeChanged = !hasSameAssignees(editAssigneeIds, currentAssigneeIds);
 
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'PUT',
@@ -234,7 +263,7 @@ export function StrategiesWorkspace({
           name: editName,
           description: editDescription,
           region: editRegion,
-          ...(canAssign && assigneeChanged ? { assigneeId: editAssigneeId } : {}),
+          ...(canAssign && assigneeChanged ? { assigneeIds: editAssigneeIds } : {}),
         }),
       });
       const data = await response.json().catch(() => null);
@@ -311,7 +340,7 @@ export function StrategiesWorkspace({
     setEditName(strategy.name);
     setEditDescription(strategy.description ?? '');
     setEditRegion(strategy.region ?? 'US');
-    setEditAssigneeId(strategy.assigneeId ?? '');
+    setEditAssigneeIds(strategyAssigneeIds(strategy));
   };
 
   const cancelEdit = () => {
@@ -319,7 +348,7 @@ export function StrategiesWorkspace({
     setEditName('');
     setEditDescription('');
     setEditRegion('US');
-    setEditAssigneeId('');
+    setEditAssigneeIds([]);
   };
 
   const primaryActionClass =
@@ -411,20 +440,17 @@ export function StrategiesWorkspace({
                   </TableCell>
                   <TableCell className="border-r px-3 py-2 align-top">
                     <select
-                      value={newAssigneeId}
-                      onChange={(e) => setNewAssigneeId(e.target.value)}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      multiple
+                      value={newAssigneeIds}
+                      onChange={(e) => setNewAssigneeIds(parseSelectedAssigneeIds(e))}
+                      className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       disabled={assignees.length === 0}
                     >
-                      <option value="" disabled>
-                        {assignees.length === 0
-                          ? directoryConfigured
-                            ? 'Loading assignees...'
-                            : 'Directory unavailable'
-                          : directoryConfigured
-                            ? 'Select assignee'
-                            : 'Directory unavailable (limited list)'}
-                      </option>
+                      {assignees.length === 0 ? (
+                        <option value="" disabled>
+                          {directoryConfigured ? 'Loading assignees...' : 'Directory unavailable'}
+                        </option>
+                      ) : null}
                       {assignees.map((assignee) => (
                         <option key={assignee.id} value={assignee.id}>
                           {assignee.email}
@@ -563,20 +589,17 @@ export function StrategiesWorkspace({
                       >
                         {isEditing ? (
                           <select
-                            value={editAssigneeId}
-                            onChange={(e) => setEditAssigneeId(e.target.value)}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            multiple
+                            value={editAssigneeIds}
+                            onChange={(e) => setEditAssigneeIds(parseSelectedAssigneeIds(e))}
+                            className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             disabled={!canAssign || assignees.length === 0}
                           >
-                            <option value="" disabled>
-                              {assignees.length === 0
-                                ? directoryConfigured
-                                  ? 'Loading assignees...'
-                                  : 'Directory unavailable'
-                                : directoryConfigured
-                                  ? 'Select assignee'
-                                  : 'Directory unavailable (limited list)'}
-                            </option>
+                            {assignees.length === 0 ? (
+                              <option value="" disabled>
+                                {directoryConfigured ? 'Loading assignees...' : 'Directory unavailable'}
+                              </option>
+                            ) : null}
                             {assignees.map((assignee) => (
                               <option key={assignee.id} value={assignee.id}>
                                 {assignee.email}

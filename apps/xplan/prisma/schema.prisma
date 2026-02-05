@@ -26,6 +26,7 @@ model Strategy {
   products             Product[]
   businessParameters   BusinessParameter[]
   purchaseOrders       PurchaseOrder[]
+  strategyAssignees    StrategyAssignee[]
   salesWeeks           SalesWeek[]
   salesWeekFinancials  SalesWeekFinancials[]
   profitAndLossWeeks   ProfitAndLossWeek[]
@@ -36,6 +37,20 @@ model Strategy {
   @@index([status])
   @@index([createdById])
   @@index([createdByEmail])
+  @@index([assigneeId])
+  @@index([assigneeEmail])
+}
+
+model StrategyAssignee {
+  id            String   @id @default(cuid())
+  strategyId    String
+  assigneeId    String
+  assigneeEmail String
+  createdAt     DateTime @default(now())
+  strategy      Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, assigneeId])
+  @@index([strategyId])
   @@index([assigneeId])
   @@index([assigneeEmail])
 }
