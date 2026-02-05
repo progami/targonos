@@ -106,6 +106,11 @@ const baseAuthOptions: NextAuthConfig = {
       return token
     },
     async session({ session, token }) {
+      ;(session as any).authz = (token as any).authz
+      ;(session as any).roles = (token as any).roles
+      ;(session as any).globalRoles = (token as any).globalRoles
+      ;(session as any).authzVersion = (token as any).authzVersion
+
       // Always hydrate a stable user id (portal-issued) so API routes don't crash
       // when a Talos user record doesn't exist yet in the tenant schema.
       if (

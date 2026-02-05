@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
 
@@ -9,7 +8,7 @@ import { getAppIcon } from '@/components/app-icons'
 
 import styles from './portal.module.css'
 
-type PortalRoleMap = Record<string, { depts?: string[] }>
+type PortalRoleMap = Record<string, { role?: string; departments?: string[]; depts?: string[] }>
 
 const CATEGORY_ORDER = [
   'Ops',
@@ -23,7 +22,6 @@ const CATEGORY_ORDER = [
 
 const OTHER_CATEGORY = 'Other'
 
-const envAllowDevFlag = (process.env.NEXT_PUBLIC_ALLOW_DEV_APPS ?? process.env.ALLOW_DEV_APPS ?? '').trim().toLowerCase() === 'true'
 const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
 type PortalClientProps = {
@@ -31,15 +29,17 @@ type PortalClientProps = {
   apps: AppDef[]
   accessApps?: AppDef[]
   roles?: PortalRoleMap
+  isPlatformAdmin?: boolean
   accessError?: string
 }
 
-export default function PortalClient({ session, apps, accessApps, roles, accessError }: PortalClientProps) {
+export default function PortalClient({ session, apps, accessApps, roles, isPlatformAdmin, accessError }: PortalClientProps) {
   const roleMap = roles ?? {}
   const hasApps = apps.length > 0
-  const accessSummaryApps = (accessApps ?? apps).filter((app) => app.lifecycle !== 'dev' || Boolean(roleMap[app.id]))
+  const accessSummaryApps = (accessApps ?? apps).filter((app) => (
+    app.lifecycle !== 'dev' || Boolean(roleMap[app.id]) || Boolean(isPlatformAdmin)
+  ))
   const hasAccessSummaryApps = accessSummaryApps.length > 0
-  const [allowDevApps] = useState(envAllowDevFlag)
 
   const normalizeCategory = (value?: string | null) => {
     const trimmed = value?.trim()
@@ -47,7 +47,7 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
   }
 
   const appsByCategory = apps.reduce<Record<string, AppDef[]>>((acc, app) => {
-    const assigned = roleMap[app.id]?.depts
+    const assigned = roleMap[app.id]?.depts ?? roleMap[app.id]?.departments
     const primaryCategory = normalizeCategory(assigned?.[0] ?? (app as any).category)
     acc[primaryCategory] = acc[primaryCategory]
       ? [...acc[primaryCategory], app]
@@ -146,8 +146,9 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
                 <div className={styles.grid}>
 	                  {appsByCategory[category]?.map((app) => {
 	                    const isDevLifecycle = app.lifecycle === 'dev'
-	                    const isEntitled = Boolean(roleMap[app.id])
-	                    const isDisabled = !isEntitled || (isDevLifecycle && !allowDevApps)
+	                    const isPublicEntry = app.entryPolicy === 'public'
+	                    const isEntitled = isPublicEntry || Boolean(isPlatformAdmin) || Boolean(roleMap[app.id])
+	                    const isDisabled = !isEntitled
 	                    const cardClassName = isDisabled
 	                      ? `${styles.card} ${styles.cardDisabled}`
 	                      : styles.card
@@ -179,7 +180,7 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
                           </svg>
                         </div>
                         <div className={styles.badgesRow}>
-                          {!isEntitled && <span className={styles.lockBadge}>No Access</span>}
+                          {!isEntitled && !isPublicEntry && <span className={styles.lockBadge}>No Access</span>}
                           {isDevLifecycle && (
                             <span className={styles.lifecycleBadge} title="In Development">
                               DEV
