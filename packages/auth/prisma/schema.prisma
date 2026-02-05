@@ -8,6 +8,16 @@ datasource db {
   url      = env("PORTAL_DB_URL")
 }
 
+enum AppAccessRole {
+  viewer
+}
+
+enum AppAccessSource {
+  manual
+  group
+  bootstrap
+}
+
 model User {
   id            String      @id @default(uuid())
   email         String      @unique
@@ -62,8 +72,8 @@ model UserApp {
   assignedById String?
   assignedAt   DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  role         String    @default("viewer")
-  source       String    @default("manual")
+  role         AppAccessRole   @default(viewer)
+  source       AppAccessSource @default(manual)
   locked       Boolean   @default(false)
   departments  Json?
 
@@ -77,7 +87,7 @@ model UserApp {
 model GroupAppMapping {
   googleGroup String
   appId       String
-  role        String    @default("viewer")
+  role        AppAccessRole @default(viewer)
   departments Json?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
