@@ -7,8 +7,6 @@ import type { AppRole, AuthzAppGrant, PortalAuthz } from './index.js'
 
 type AppEntitlementMap = Record<string, AuthzAppGrant>
 
-const APP_ROLE_VALUES = new Set<AppRole>(['viewer', 'member', 'admin'])
-
 const DEFAULT_DEMO_USERNAME = 'demo-admin'
 const DEFAULT_DEMO_PASSWORD = 'demo-password'
 const DEMO_ADMIN_UUID = '00000000-0000-4000-a000-000000000001'
@@ -124,12 +122,12 @@ function parseEmailSet(raw: string | undefined) {
 
 function normalizeAppRole(value: unknown): AppRole {
   if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase() as AppRole
-    if (APP_ROLE_VALUES.has(normalized)) {
-      return normalized
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+      return 'viewer'
     }
   }
-  return 'member'
+  return 'viewer'
 }
 
 function normalizeDepartments(value: unknown): string[] {
@@ -161,14 +159,14 @@ function portalBootstrapAdminEmailSet() {
 
 function defaultPortalAdminApps() {
   return [
-    { slug: 'talos', name: 'Talos', departments: ['Ops'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'atlas', name: 'Atlas', departments: ['People Ops'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'website', name: 'Website', departments: [], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'kairos', name: 'Kairos', departments: ['Product'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'xplan', name: 'xplan', departments: ['Product'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'plutus', name: 'Plutus', departments: ['Finance'], role: 'admin' as const, source: 'bootstrap' as const },
-    { slug: 'argus', name: 'Argus', departments: ['Account / Listing'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'talos', name: 'Talos', departments: ['Ops'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'atlas', name: 'Atlas', departments: ['People Ops'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'website', name: 'Website', departments: [], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'kairos', name: 'Kairos', departments: ['Product'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'xplan', name: 'xplan', departments: ['Product'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'plutus', name: 'Plutus', departments: ['Finance'], role: 'viewer' as const, source: 'bootstrap' as const },
+    { slug: 'argus', name: 'Argus', departments: ['Account / Listing'], role: 'viewer' as const, source: 'bootstrap' as const },
   ]
 }
 
@@ -354,7 +352,7 @@ export async function provisionPortalUser(options: {
       await tx.userApp.upsert({
         where: { userId_appId: { userId, appId: appRecord.id } },
         update: {
-          role: app.role ?? 'member',
+          role: app.role ?? 'viewer',
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
@@ -362,7 +360,7 @@ export async function provisionPortalUser(options: {
         create: {
           userId,
           appId: appRecord.id,
-          role: app.role ?? 'member',
+          role: app.role ?? 'viewer',
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
@@ -567,12 +565,10 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
           continue
         }
 
-        const roleRank = { viewer: 1, member: 2, admin: 3 }
-        const highestRole = roleRank[mapping.role] > roleRank[existing.role] ? mapping.role : existing.role
         const deptSet = new Set<string>([...existing.departments, ...mapping.departments])
 
         desiredByApp.set(mapping.appId, {
-          role: highestRole,
+          role: 'viewer',
           departments: Array.from(deptSet),
         })
       }
@@ -755,14 +751,14 @@ function handleDevFallback(emailOrUsername: string, password: string): Authentic
 function buildDemoUser(): AuthenticatedUser {
   const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase()
   const entitlements: AppEntitlementMap = {
-    talos: { role: 'admin', departments: ['Ops'] },
-    atlas: { role: 'admin', departments: ['People Ops'] },
-    website: { role: 'admin', departments: [] },
-    kairos: { role: 'admin', departments: ['Product'] },
-    xplan: { role: 'admin', departments: ['Product'] },
-    hermes: { role: 'admin', departments: ['Account / Listing'] },
-    plutus: { role: 'admin', departments: ['Finance'] },
-    argus: { role: 'admin', departments: ['Account / Listing'] },
+    talos: { role: 'viewer', departments: ['Ops'] },
+    atlas: { role: 'viewer', departments: ['People Ops'] },
+    website: { role: 'viewer', departments: [] },
+    kairos: { role: 'viewer', departments: ['Product'] },
+    xplan: { role: 'viewer', departments: ['Product'] },
+    hermes: { role: 'viewer', departments: ['Account / Listing'] },
+    plutus: { role: 'viewer', departments: ['Finance'] },
+    argus: { role: 'viewer', departments: ['Account / Listing'] },
   }
 
   return {
