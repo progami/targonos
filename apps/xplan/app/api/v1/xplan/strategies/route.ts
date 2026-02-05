@@ -329,6 +329,8 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
       where: { id },
       select: {
         id: true,
+        name: true,
+        region: true,
         isDefault: true,
         createdById: true,
         createdByEmail: true,
@@ -357,6 +359,30 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
   if (!actorCanAccess) {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
+
+  const requestMeta = {
+    userAgent: request.headers.get('user-agent'),
+    xForwardedFor: request.headers.get('x-forwarded-for'),
+    cfConnectingIp: request.headers.get('cf-connecting-ip'),
+    cfRay: request.headers.get('cf-ray'),
+  };
+
+  console.log(
+    JSON.stringify({
+      event: 'xplan.strategy.delete',
+      actor,
+      strategy: {
+        id,
+        name: existing.name,
+        region: existing.region,
+        isDefault: existing.isDefault,
+        createdByEmail: existing.createdByEmail,
+        assigneeEmail: existing.assigneeEmail,
+      },
+      request: requestMeta,
+      at: new Date().toISOString(),
+    }),
+  );
 
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
   await prismaAny.$transaction(async (tx: any) => {
