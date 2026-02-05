@@ -7,7 +7,7 @@
   --text-secondary: rgba(248, 250, 252, 0.7);
   --accent: #00c2b9;
   --accent-strong: #00a39e;
-  --content-max: 1440px;
+  --content-max: 1180px;
   --content-padding: clamp(18px, 2.8vw, 32px);
   --header-padding-y: clamp(14px, 2.2vw, 22px);
   --card-min-height: 176px;
@@ -183,8 +183,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
   gap: 12px;
+  justify-content: start;
   position: relative;
   z-index: 1;
 }
@@ -218,6 +219,12 @@
 
 .cardDisabled .arrow {
   color: rgba(226, 232, 240, 0.32);
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .cardDisabled .description {
