@@ -204,14 +204,17 @@ export default function PortalClient({ session, apps, accessApps, roles, accessE
           </section>
 
           {hasAccessSummaryApps && (
-            <section aria-label="Current access summary" className={styles.rolesSection}>
-              <h2 className={styles.rolesHeading}>Access summary</h2>
+            <details className={styles.rolesSection}>
+              <summary className={styles.rolesSummary}>
+                <span className={styles.rolesSummaryTitle}>Access summary</span>
+                <span className={styles.rolesSummaryCount}>{accessSummaryApps.length}</span>
+              </summary>
               <ul className={styles.rolesList}>
                 {accessSummaryApps.map((app) => (
                   <li key={app.id}>{app.name}</li>
                 ))}
               </ul>
-            </section>
+            </details>
           )}
       </main>
     </div>
