@@ -66,6 +66,15 @@ export async function middleware(request: NextRequest) {
     : ''
   const basePath = normalizedBasePath.endsWith('/') ? normalizedBasePath.slice(0, -1) : normalizedBasePath
 
+  if (basePath) {
+    const doubleBasePrefix = `${basePath}${basePath}`
+    if (pathname === doubleBasePrefix || pathname.startsWith(`${doubleBasePrefix}/`)) {
+      const url = request.nextUrl.clone()
+      url.pathname = pathname.replace(doubleBasePrefix, basePath)
+      return NextResponse.redirect(url)
+    }
+  }
+
   const isUnderBasePath = !basePath || pathname === basePath || pathname.startsWith(`${basePath}/`)
   if (!isUnderBasePath && normalizedPath.startsWith('/amazon')) {
     const url = request.nextUrl.clone()
