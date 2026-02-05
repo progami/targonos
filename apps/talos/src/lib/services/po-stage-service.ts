@@ -456,6 +456,37 @@ async function requireDocuments(params: {
   }
 }
 
+async function requireLinePiDocuments(params: {
+  prisma: Prisma.TransactionClient
+  purchaseOrderId: string
+  activeLines: PurchaseOrderLine[]
+  issues: Record<string, string>
+}) {
+  const piNumbers: string[] = []
+  for (const line of params.activeLines) {
+    const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+    if (!piNumber) {
+      recordGateIssue(params.issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+      continue
+    }
+    piNumbers.push(piNumber)
+  }
+
+  const uniquePiNumbers = Array.from(new Set(piNumbers))
+  if (uniquePiNumbers.length === 0) return
+
+  const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
+  await requireDocuments({
+    prisma: params.prisma,
+    purchaseOrderId: params.purchaseOrderId,
+    stage: PurchaseOrderDocumentStage.ISSUED,
+    documentTypes: requiredDocTypes,
+    issues: params.issues,
+    issueKeyPrefix: 'documents.pi',
+    issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
+  })
+}
+
 function validateCommodityCodeFormat(params: { tenantCode: string; commodityCode: string }): boolean {
   const digits = params.commodityCode.replace(/[^0-9]/g, '')
   if (digits.length < 6) return false
@@ -614,29 +645,12 @@ async function validateTransitionGate(params: {
       supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
     }
 
-    const piNumbers: string[] = []
-    for (const line of activeLines) {
-      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
-      if (!piNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
-      } else {
-        piNumbers.push(piNumber)
-      }
-    }
-
-    const uniquePiNumbers = Array.from(new Set(piNumbers))
-    if (uniquePiNumbers.length > 0) {
-      const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
-      await requireDocuments({
-        prisma: params.prisma,
-        purchaseOrderId: params.order.id,
-        stage: PurchaseOrderDocumentStage.ISSUED,
-        documentTypes: requiredDocTypes,
-        issues,
-        issueKeyPrefix: 'documents.pi',
-        issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
-      })
-    }
+    await requireLinePiDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      activeLines,
+      issues,
+    })
 
     for (const line of activeLines) {
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
@@ -689,6 +703,13 @@ async function validateTransitionGate(params: {
   }
 
   if (params.targetStatus === PurchaseOrderStatus.OCEAN) {
+    await requireLinePiDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      activeLines,
+      issues,
+    })
+
     const allocationRows = Array.isArray(params.stageData.splitAllocations)
       ? params.stageData.splitAllocations
       : null
