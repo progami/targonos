@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
-import { isProtectedStrategyId } from '@/lib/protected-strategies';
 import { cn } from '@/lib/utils';
 import { formatDateDisplay } from '@/lib/utils/dates';
 import { Badge } from '@/components/ui/badge';
@@ -661,26 +660,13 @@ export function StrategiesWorkspace({
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
-                              {isProtectedStrategyId(strategy.id) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    toast.error('This strategy is protected and cannot be deleted.');
-                                  }}
-                                  className="rounded p-1.5 text-muted-foreground/50 transition hover:bg-muted"
-                                  title="Protected strategy cannot be deleted"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => requestDelete(strategy.id)}
-                                  className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => requestDelete(strategy.id)}
+                                className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </>
                           )}
                         </div>

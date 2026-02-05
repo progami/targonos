@@ -5,7 +5,8 @@ import { buildPortalUrl } from '@targon/auth';
 import { getPortalAuthPrisma } from '@targon/auth/server';
 import { Prisma } from '@targon/prisma-xplan';
 import prisma from '@/lib/prisma';
-import { DEMO_STRATEGY_ID } from '@/lib/protected-strategies';
+
+const DEMO_STRATEGY_ID = 'demo-strategy' as const;
 
 type StrategyActor = {
   id: string | null;

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
-import { isProtectedStrategyId } from '@/lib/protected-strategies';
 import {
   areStrategyAssignmentFieldsAvailable,
   buildStrategyAccessWhere,
@@ -361,10 +360,6 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
 
   if (existing.isDefault) {
     return NextResponse.json({ error: 'Default strategy cannot be deleted' }, { status: 400 });
-  }
-
-  if (isProtectedStrategyId(existing.id)) {
-    return NextResponse.json({ error: 'Protected strategy cannot be deleted' }, { status: 400 });
   }
 
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
