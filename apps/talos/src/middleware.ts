@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { applyDevAuthDefaults, decodePortalSession, getAppEntitlement, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
+import { applyDevAuthDefaults, getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+
 import { getBasePath, withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
@@ -9,52 +10,6 @@ applyDevAuthDefaults({
   // Align with portal default secret in local dev when ALLOW_DEV_AUTH_DEFAULTS=true.
   appId: 'targon',
 })
-
-// Session cache to avoid repeated JWT decoding on every request
-// Key: hash of session token, Value: { decoded payload, expiry timestamp }
-const SESSION_CACHE_TTL_MS = 60_000 // 1 minute cache
-const sessionCache = new Map<string, { payload: PortalJwtPayload | null; expiresAt: number }>()
-
-function getSessionCacheKey(cookieHeader: string | null): string {
-  if (!cookieHeader) return ''
-  // Extract session token value to use as cache key (first 64 chars for safety)
-  const sessionTokenMatch = cookieHeader.match(/(?:__Secure-)?(?:targon\.)?next-auth\.session-token=([^;]+)/)
-  return sessionTokenMatch?.[1]?.slice(0, 64) ?? ''
-}
-
-async function getCachedSession(
-  cookieHeader: string | null,
-  cookieNames: string[],
-  secret: string,
-  debug: boolean
-): Promise<PortalJwtPayload | null> {
-  const cacheKey = getSessionCacheKey(cookieHeader)
-  if (!cacheKey) {
-    return decodePortalSession({ cookieHeader, cookieNames, secret, debug })
-  }
-
-  const cached = sessionCache.get(cacheKey)
-  const now = Date.now()
-
-  if (cached && cached.expiresAt > now) {
-    return cached.payload
-  }
-
-  // Decode and cache
-  const decoded = await decodePortalSession({ cookieHeader, cookieNames, secret, debug })
-  sessionCache.set(cacheKey, { payload: decoded, expiresAt: now + SESSION_CACHE_TTL_MS })
-
-  // Prune old entries periodically (keep cache size bounded)
-  if (sessionCache.size > 1000) {
-    for (const [key, value] of sessionCache) {
-      if (value.expiresAt < now) {
-        sessionCache.delete(key)
-      }
-    }
-  }
-
-  return decoded
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -79,8 +34,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Public routes that don't require authentication
-  // Use exact matches or proper prefix matching to prevent auth bypass
   const publicRoutes = [
     '/',
     '/auth/login',
@@ -90,22 +43,15 @@ export async function middleware(request: NextRequest) {
     '/api/logs',
   ]
 
-  // Routes that should be prefix-matched
   const publicPrefixes = [
-    '/api/auth/', // NextAuth internal routes
-    '/api/tenant/', // Tenant selection routes
+    '/api/auth/',
+    '/api/tenant/',
   ]
 
-  // Check if the route is public using exact match
-  const isExactPublicRoute = publicRoutes.includes(normalizedPath)
+  const isPublicRoute =
+    publicRoutes.includes(normalizedPath) ||
+    publicPrefixes.some((prefix) => normalizedPath.startsWith(prefix))
 
-  // Check if the route matches a public prefix
-  const isPublicPrefix = publicPrefixes.some((prefix) => normalizedPath.startsWith(prefix))
-
-  // Combine both checks
-  const isPublicRoute = isExactPublicRoute || isPublicPrefix
-
-  // Skip auth check for public routes and static assets
   if (
     isPublicRoute ||
     normalizedPath.startsWith('/_next') ||
@@ -115,39 +61,36 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for session and app entitlement
-  const cookieNames = Array.from(
-    new Set([
-      ...getCandidateSessionCookieNames('targon'),
-      ...getCandidateSessionCookieNames('talos'),
-    ])
-  )
-	  const sharedSecret = process.env.PORTAL_AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
-	  if (!sharedSecret) {
-	    console.error('[talos middleware] Missing PORTAL_AUTH_SECRET/NEXTAUTH_SECRET')
-	    return normalizedPath.startsWith('/api/')
-	      ? NextResponse.json({ error: 'Authentication misconfigured' }, { status: 500 })
-	      : new NextResponse('Authentication misconfigured', { status: 500 })
-	  }
+  const cookieNames = Array.from(new Set([
+    ...getCandidateSessionCookieNames('targon'),
+    ...getCandidateSessionCookieNames('talos'),
+  ]))
 
-  const authDebugFlag =
-    typeof process.env.NEXTAUTH_DEBUG === 'string' &&
-    ['1', 'true', 'yes', 'on'].includes(process.env.NEXTAUTH_DEBUG.toLowerCase())
+  const decision = await requireAppEntry({
+    request,
+    appId: 'talos',
+    lifecycle: 'active',
+    entryPolicy: 'role_gated',
+    cookieNames,
+  })
 
-  const cookieHeader = request.headers.get('cookie')
-  const decoded = await getCachedSession(cookieHeader, cookieNames, sharedSecret, authDebugFlag)
+  if (!decision.allowed) {
+    console.info('[authz][talos] denied', {
+      path: normalizedPath,
+      status: decision.status,
+      reason: decision.reason,
+    })
 
-  const hasSession = !!decoded
-  const talosEntitlement = decoded ? getAppEntitlement(decoded.roles, 'talos') : undefined
-  const hasAccess = hasSession && !!talosEntitlement
-
-  if (!hasAccess) {
     if (normalizedPath.startsWith('/api/')) {
-      const errorMsg = hasSession ? 'No access to Talos' : 'Authentication required'
-      return NextResponse.json({ error: errorMsg }, { status: hasSession ? 403 : 401 })
+      const status = decision.status === 'unauthenticated' ? 401 : 403
+      const errorMsg = decision.status === 'unauthenticated'
+        ? 'Authentication required'
+        : 'No access to Talos'
+
+      return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
     }
 
-    if (hasSession && !talosEntitlement) {
+    if (decision.status === 'forbidden') {
       const url = request.nextUrl.clone()
       url.pathname = '/no-access'
       url.search = ''
@@ -167,11 +110,11 @@ export async function middleware(request: NextRequest) {
     const normalizedBasePath = rawBasePath && rawBasePath !== '/'
       ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
       : ''
-    const basePath = normalizedBasePath.endsWith('/')
+    const appBasePath = normalizedBasePath.endsWith('/')
       ? normalizedBasePath.slice(0, -1)
       : normalizedBasePath
-    const callbackPath = basePath && !pathname.startsWith(basePath)
-      ? `${basePath}${pathname}`
+    const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
+      ? `${appBasePath}${pathname}`
       : pathname
     const callbackUrl = `${forwardedProto}://${forwardedHost}${callbackPath}${request.nextUrl.search}`
 
@@ -180,12 +123,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirect)
   }
 
-  // Tenant handling for authenticated users
   const tenantCookie = request.cookies.get(TENANT_COOKIE_NAME)?.value
   const hasTenant = isValidTenantCode(tenantCookie)
 
-  // If no tenant selected and not on world map, redirect to world map
-  // Skip this for API routes - they should handle missing tenant themselves
   if (!hasTenant && !normalizedPath.startsWith('/api/')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
@@ -193,7 +133,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Inject tenant into headers for API routes
   const response = NextResponse.next()
   if (hasTenant) {
     response.headers.set('x-tenant', tenantCookie)

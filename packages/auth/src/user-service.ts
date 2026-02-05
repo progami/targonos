@@ -3,8 +3,11 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
 import { getPortalAuthPrisma } from './db.js'
+import type { AppRole, AuthzAppGrant, PortalAuthz } from './index.js'
 
-type AppEntitlementMap = Record<string, { departments: string[] }>
+type AppEntitlementMap = Record<string, AuthzAppGrant>
+
+const APP_ROLE_VALUES = new Set<AppRole>(['viewer', 'member', 'admin'])
 
 const DEFAULT_DEMO_USERNAME = 'demo-admin'
 const DEFAULT_DEMO_PASSWORD = 'demo-password'
@@ -15,12 +18,24 @@ const credentialsSchema = z.object({
   password: z.string().min(1),
 })
 
+const groupMembershipsSchema = z.record(z.string().email(), z.array(z.string().min(1))).transform((raw) => {
+  const normalized: Record<string, string[]> = {}
+  for (const [email, groups] of Object.entries(raw)) {
+    normalized[email.trim().toLowerCase()] = groups
+      .map((group) => group.trim())
+      .filter(Boolean)
+  }
+  return normalized
+})
+
 export type AuthenticatedUser = {
   id: string
   email: string
   username: string | null
   fullName: string | null
-  entitlements: Record<string, { departments: string[] }>
+  authzVersion: number
+  globalRoles: string[]
+  entitlements: AppEntitlementMap
 }
 
 const userSelect = {
@@ -30,8 +45,21 @@ const userSelect = {
   firstName: true,
   lastName: true,
   passwordHash: true,
+  authzVersion: true,
+  roles: {
+    select: {
+      role: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  },
   appAccess: {
     select: {
+      role: true,
+      source: true,
+      locked: true,
       departments: true,
       app: {
         select: {
@@ -49,13 +77,40 @@ type PortalUserRecord = {
   firstName: string | null
   lastName: string | null
   passwordHash: string
-  appAccess: Array<{ departments: unknown; app: { slug: string } }>
+  authzVersion: number
+  roles: Array<{ role: { name: string } }>
+  appAccess: Array<{
+    role: string
+    source: string
+    locked: boolean
+    departments: unknown
+    app: { slug: string }
+  }>
 }
 
 type ProvisionedAppAccess = {
   slug: string
   name: string
   departments: string[]
+  role?: AppRole
+  source?: 'manual' | 'group' | 'bootstrap'
+  locked?: boolean
+}
+
+export type ManualAppGrantInput = {
+  userId: string
+  appSlug: string
+  appName?: string
+  role: AppRole
+  departments?: string[]
+  locked?: boolean
+}
+
+export type GroupSyncResult = {
+  updatedUsers: number
+  upsertedGrants: number
+  deletedGrants: number
+  skippedLocked: number
 }
 
 function parseEmailSet(raw: string | undefined) {
@@ -67,6 +122,36 @@ function parseEmailSet(raw: string | undefined) {
   )
 }
 
+function normalizeAppRole(value: unknown): AppRole {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase() as AppRole
+    if (APP_ROLE_VALUES.has(normalized)) {
+      return normalized
+    }
+  }
+  return 'member'
+}
+
+function normalizeDepartments(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : []
+}
+
+function parseGroupMembershipsFromEnv(): Record<string, string[]> {
+  const raw = process.env.GOOGLE_GROUP_MEMBERSHIPS_JSON
+  if (!raw || raw.trim() === '') {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(raw)
+    return groupMembershipsSchema.parse(parsed)
+  } catch (error) {
+    throw new Error(`GOOGLE_GROUP_MEMBERSHIPS_JSON is invalid: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 const DEFAULT_PORTAL_BOOTSTRAP_ADMINS = new Set(['jarrar@targonglobal.com'])
 
 function portalBootstrapAdminEmailSet() {
@@ -76,13 +161,57 @@ function portalBootstrapAdminEmailSet() {
 
 function defaultPortalAdminApps() {
   return [
-    { slug: 'talos', name: 'Talos', departments: ['Ops'] },
-    { slug: 'atlas', name: 'Atlas', departments: ['People Ops'] },
-    { slug: 'website', name: 'Website', departments: [] },
-    { slug: 'kairos', name: 'Kairos', departments: ['Product'] },
-    { slug: 'xplan', name: 'xplan', departments: ['Product'] },
-    { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'] },
+    { slug: 'talos', name: 'Talos', departments: ['Ops'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'atlas', name: 'Atlas', departments: ['People Ops'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'website', name: 'Website', departments: [], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'kairos', name: 'Kairos', departments: ['Product'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'xplan', name: 'xplan', departments: ['Product'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'plutus', name: 'Plutus', departments: ['Finance'], role: 'admin' as const, source: 'bootstrap' as const },
+    { slug: 'argus', name: 'Argus', departments: ['Account / Listing'], role: 'admin' as const, source: 'bootstrap' as const },
   ]
+}
+
+async function ensurePlatformAdminRole(tx: any): Promise<string> {
+  const role = await tx.role.upsert({
+    where: { name: 'platform_admin' },
+    update: {},
+    create: {
+      name: 'platform_admin',
+      description: 'Global admin role for cross-app access management.',
+    },
+    select: { id: true },
+  })
+  return role.id
+}
+
+async function assignPlatformAdminRole(tx: any, userId: string): Promise<void> {
+  const roleId = await ensurePlatformAdminRole(tx)
+  await tx.userRole.upsert({
+    where: {
+      userId_roleId: {
+        userId,
+        roleId,
+      },
+    },
+    update: {},
+    create: {
+      userId,
+      roleId,
+    },
+  })
+}
+
+async function bumpAuthzVersion(tx: any, userId: string): Promise<void> {
+  await tx.user.update({
+    where: { id: userId },
+    data: {
+      authzVersion: {
+        increment: 1,
+      },
+    },
+    select: { id: true },
+  })
 }
 
 async function ensureBootstrapPortalAdminUser(normalizedEmail: string) {
@@ -136,10 +265,25 @@ async function ensureBootstrapPortalAdminUser(normalizedEmail: string) {
 
       await tx.userApp.upsert({
         where: { userId_appId: { userId, appId: appRecord.id } },
-        update: { departments: app.departments },
-        create: { userId, appId: appRecord.id, departments: app.departments },
+        update: {
+          role: app.role,
+          source: app.source,
+          locked: true,
+          departments: app.departments,
+        },
+        create: {
+          userId,
+          appId: appRecord.id,
+          role: app.role,
+          source: app.source,
+          locked: true,
+          departments: app.departments,
+        },
       })
     }
+
+    await assignPlatformAdminRole(tx, userId)
+    await bumpAuthzVersion(tx, userId)
   })
 }
 
@@ -209,10 +353,24 @@ export async function provisionPortalUser(options: {
 
       await tx.userApp.upsert({
         where: { userId_appId: { userId, appId: appRecord.id } },
-        update: { departments: app.departments },
-        create: { userId, appId: appRecord.id, departments: app.departments },
+        update: {
+          role: app.role ?? 'member',
+          source: app.source ?? 'manual',
+          locked: app.locked ?? false,
+          departments: app.departments,
+        },
+        create: {
+          userId,
+          appId: appRecord.id,
+          role: app.role ?? 'member',
+          source: app.source ?? 'manual',
+          locked: app.locked ?? false,
+          departments: app.departments,
+        },
       })
     }
+
+    await bumpAuthzVersion(tx, userId)
 
     const user = await tx.user.findUnique({
       where: { id: userId },
@@ -227,6 +385,320 @@ export async function provisionPortalUser(options: {
   })
 
   return mapPortalUser(provisioned)
+}
+
+export async function upsertManualUserAppGrant(input: ManualAppGrantInput): Promise<AuthenticatedUser> {
+  if (!process.env.PORTAL_DB_URL) {
+    throw new Error('PORTAL_DB_URL must be configured to update app grants.')
+  }
+
+  const prisma = getPortalAuthPrisma()
+  const user = await prisma.$transaction(async (tx) => {
+    const existingUser = await tx.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true },
+    })
+
+    if (!existingUser) {
+      throw new Error('PortalUserMissing')
+    }
+
+    const appRecord = await tx.app.upsert({
+      where: { slug: input.appSlug },
+      update: {
+        ...(input.appName ? { name: input.appName } : {}),
+      },
+      create: {
+        slug: input.appSlug,
+        name: input.appName ?? input.appSlug,
+        description: null,
+      },
+      select: { id: true },
+    })
+
+    await tx.userApp.upsert({
+      where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
+      update: {
+        role: input.role,
+        source: 'manual',
+        locked: input.locked ?? true,
+        departments: input.departments ?? [],
+      },
+      create: {
+        userId: input.userId,
+        appId: appRecord.id,
+        role: input.role,
+        source: 'manual',
+        locked: input.locked ?? true,
+        departments: input.departments ?? [],
+      },
+    })
+
+    await bumpAuthzVersion(tx, input.userId)
+
+    return tx.user.findUnique({
+      where: { id: input.userId },
+      select: userSelect,
+    }) as Promise<PortalUserRecord | null>
+  })
+
+  if (!user) {
+    throw new Error('PortalUserMissing')
+  }
+
+  return mapPortalUser(user)
+}
+
+export async function removeManualUserAppGrant(userId: string, appSlug: string): Promise<AuthenticatedUser> {
+  if (!process.env.PORTAL_DB_URL) {
+    throw new Error('PORTAL_DB_URL must be configured to update app grants.')
+  }
+
+  const prisma = getPortalAuthPrisma()
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const existingUser = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!existingUser) {
+      throw new Error('PortalUserMissing')
+    }
+
+    const appRecord = await tx.app.findUnique({
+      where: { slug: appSlug },
+      select: { id: true },
+    })
+
+    if (appRecord) {
+      await tx.userApp.deleteMany({
+        where: {
+          userId,
+          appId: appRecord.id,
+          source: 'manual',
+        },
+      })
+    }
+
+    await bumpAuthzVersion(tx, userId)
+
+    return tx.user.findUnique({
+      where: { id: userId },
+      select: userSelect,
+    }) as Promise<PortalUserRecord | null>
+  })
+
+  if (!updated) {
+    throw new Error('PortalUserMissing')
+  }
+
+  return mapPortalUser(updated)
+}
+
+export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
+  if (!process.env.PORTAL_DB_URL) {
+    return {
+      updatedUsers: 0,
+      upsertedGrants: 0,
+      deletedGrants: 0,
+      skippedLocked: 0,
+    }
+  }
+
+  const membershipsByEmail = parseGroupMembershipsFromEnv()
+  const prisma = getPortalAuthPrisma()
+
+  const [users, mappings] = await Promise.all([
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        email: true,
+      },
+    }),
+    prisma.groupAppMapping.findMany({
+      where: { isActive: true },
+      select: {
+        googleGroup: true,
+        role: true,
+        departments: true,
+        app: {
+          select: {
+            id: true,
+            slug: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  const mappingByGroup = new Map<string, Array<{ appId: string; role: AppRole; departments: string[] }>>()
+  for (const mapping of mappings) {
+    const key = mapping.googleGroup.trim()
+    const list = mappingByGroup.get(key) ?? []
+    list.push({
+      appId: mapping.app.id,
+      role: normalizeAppRole(mapping.role),
+      departments: normalizeDepartments(mapping.departments),
+    })
+    mappingByGroup.set(key, list)
+  }
+
+  let updatedUsers = 0
+  let upsertedGrants = 0
+  let deletedGrants = 0
+  let skippedLocked = 0
+
+  for (const user of users) {
+    const groupNames = membershipsByEmail[user.email.toLowerCase()] ?? []
+    const desiredByApp = new Map<string, { role: AppRole; departments: string[] }>()
+
+    for (const groupName of groupNames) {
+      const mappingsForGroup = mappingByGroup.get(groupName)
+      if (!mappingsForGroup) continue
+
+      for (const mapping of mappingsForGroup) {
+        const existing = desiredByApp.get(mapping.appId)
+        if (!existing) {
+          desiredByApp.set(mapping.appId, {
+            role: mapping.role,
+            departments: mapping.departments,
+          })
+          continue
+        }
+
+        const roleRank = { viewer: 1, member: 2, admin: 3 }
+        const highestRole = roleRank[mapping.role] > roleRank[existing.role] ? mapping.role : existing.role
+        const deptSet = new Set<string>([...existing.departments, ...mapping.departments])
+
+        desiredByApp.set(mapping.appId, {
+          role: highestRole,
+          departments: Array.from(deptSet),
+        })
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.userApp.findMany({
+        where: {
+          userId: user.id,
+        },
+        select: {
+          appId: true,
+          role: true,
+          source: true,
+          locked: true,
+          departments: true,
+        },
+      })
+
+      let changed = false
+      let localUpserts = 0
+      let localDeletes = 0
+      let localSkippedLocked = 0
+
+      const existingGroupMap = new Map(existing.filter((entry) => entry.source === 'group').map((entry) => [entry.appId, entry]))
+      const existingByAppMap = new Map(existing.map((entry) => [entry.appId, entry]))
+
+      for (const [appId, desired] of desiredByApp.entries()) {
+        const currentAny = existingByAppMap.get(appId)
+        if (currentAny?.source === 'manual') {
+          localSkippedLocked += 1
+          continue
+        }
+        if (currentAny?.locked && currentAny.source !== 'group') {
+          localSkippedLocked += 1
+          continue
+        }
+
+        const current = existingGroupMap.get(appId)
+        const currentRole = current ? normalizeAppRole(current.role) : null
+        const currentDepartments = current ? normalizeDepartments(current.departments) : []
+        const sameRole = currentRole === desired.role
+        const sameDepartments =
+          currentDepartments.length === desired.departments.length
+          && currentDepartments.every((dept, idx) => dept === desired.departments[idx])
+
+        if (sameRole && sameDepartments) {
+          continue
+        }
+
+        await tx.userApp.upsert({
+          where: {
+            userId_appId: {
+              userId: user.id,
+              appId,
+            },
+          },
+          update: {
+            role: desired.role,
+            departments: desired.departments,
+            source: 'group',
+            locked: false,
+          },
+          create: {
+            userId: user.id,
+            appId,
+            role: desired.role,
+            departments: desired.departments,
+            source: 'group',
+            locked: false,
+          },
+        })
+
+        changed = true
+        localUpserts += 1
+      }
+
+      for (const [appId, current] of existingGroupMap.entries()) {
+        if (desiredByApp.has(appId)) {
+          continue
+        }
+
+        if (current.locked) {
+          localSkippedLocked += 1
+          continue
+        }
+
+        await tx.userApp.delete({
+          where: {
+            userId_appId: {
+              userId: user.id,
+              appId,
+            },
+          },
+        })
+
+        changed = true
+        localDeletes += 1
+      }
+
+      if (changed) {
+        await bumpAuthzVersion(tx, user.id)
+      }
+
+      return {
+        changed,
+        localUpserts,
+        localDeletes,
+        localSkippedLocked,
+      }
+    })
+
+    if (result.changed) {
+      updatedUsers += 1
+    }
+    upsertedGrants += result.localUpserts
+    deletedGrants += result.localDeletes
+    skippedLocked += result.localSkippedLocked
+  }
+
+  return {
+    updatedUsers,
+    upsertedGrants,
+    deletedGrants,
+    skippedLocked,
+  }
 }
 
 export async function authenticateWithPortalDirectory(input: unknown): Promise<AuthenticatedUser | null> {
@@ -283,12 +755,14 @@ function handleDevFallback(emailOrUsername: string, password: string): Authentic
 function buildDemoUser(): AuthenticatedUser {
   const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase()
   const entitlements: AppEntitlementMap = {
-    talos: { departments: ['Ops'] },
-    atlas: { departments: ['People Ops'] },
-    website: { departments: [] },
-    kairos: { departments: ['Product'] },
-    'xplan': { departments: ['Product'] },
-    hermes: { departments: ['Account / Listing'] },
+    talos: { role: 'admin', departments: ['Ops'] },
+    atlas: { role: 'admin', departments: ['People Ops'] },
+    website: { role: 'admin', departments: [] },
+    kairos: { role: 'admin', departments: ['Product'] },
+    xplan: { role: 'admin', departments: ['Product'] },
+    hermes: { role: 'admin', departments: ['Account / Listing'] },
+    plutus: { role: 'admin', departments: ['Finance'] },
+    argus: { role: 'admin', departments: ['Account / Listing'] },
   }
 
   return {
@@ -296,11 +770,13 @@ function buildDemoUser(): AuthenticatedUser {
     email: process.env.DEMO_ADMIN_EMAIL || 'dev-admin@targonglobal.com',
     username: demoUsername,
     fullName: 'Development Admin',
+    authzVersion: 1,
+    globalRoles: ['platform_admin'],
     entitlements,
   }
 }
 
-export async function getUserEntitlements(userId: string) {
+export async function getUserEntitlements(userId: string): Promise<AppEntitlementMap> {
   if (!process.env.PORTAL_DB_URL) {
     return {}
   }
@@ -310,6 +786,7 @@ export async function getUserEntitlements(userId: string) {
   const assignments = await prisma.userApp.findMany({
     where: { userId },
     select: {
+      role: true,
       departments: true,
       app: {
         select: {
@@ -322,11 +799,92 @@ export async function getUserEntitlements(userId: string) {
   const entitlements: AppEntitlementMap = {}
   for (const assignment of assignments) {
     entitlements[assignment.app.slug] = {
-      departments: Array.isArray(assignment.departments) ? (assignment.departments as string[]) : [],
+      role: normalizeAppRole(assignment.role),
+      departments: normalizeDepartments(assignment.departments),
     }
   }
 
   return entitlements
+}
+
+export async function getUserGlobalRoles(userId: string): Promise<string[]> {
+  if (!process.env.PORTAL_DB_URL) {
+    return []
+  }
+
+  const prisma = getPortalAuthPrisma()
+  const userRoles = await prisma.userRole.findMany({
+    where: { userId },
+    select: {
+      role: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  })
+
+  return userRoles.map((entry) => entry.role.name)
+}
+
+export async function getUserAuthz(userId: string): Promise<PortalAuthz> {
+  if (!process.env.PORTAL_DB_URL) {
+    return {
+      version: 1,
+      globalRoles: ['platform_admin'],
+      apps: buildDemoUser().entitlements,
+    }
+  }
+
+  const prisma = getPortalAuthPrisma()
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      authzVersion: true,
+      appAccess: {
+        select: {
+          role: true,
+          departments: true,
+          app: {
+            select: {
+              slug: true,
+            },
+          },
+        },
+      },
+      roles: {
+        select: {
+          role: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!user) {
+    return {
+      version: 1,
+      globalRoles: [],
+      apps: {},
+    }
+  }
+
+  const apps: AppEntitlementMap = {}
+  for (const assignment of user.appAccess) {
+    apps[assignment.app.slug] = {
+      role: normalizeAppRole(assignment.role),
+      departments: normalizeDepartments(assignment.departments),
+    }
+  }
+
+  return {
+    version: user.authzVersion,
+    globalRoles: user.roles.map((entry) => entry.role.name),
+    apps,
+  }
 }
 
 export async function getUserByEmail(email: string): Promise<AuthenticatedUser | null> {
@@ -372,9 +930,8 @@ export async function getUserByEmail(email: string): Promise<AuthenticatedUser |
 function mapPortalUser(user: PortalUserRecord): AuthenticatedUser {
   const entitlements = user.appAccess.reduce<AppEntitlementMap>((acc, assignment) => {
     acc[assignment.app.slug] = {
-      departments: Array.isArray(assignment.departments)
-        ? (assignment.departments as string[])
-        : [],
+      role: normalizeAppRole(assignment.role),
+      departments: normalizeDepartments(assignment.departments),
     }
     return acc
   }, {} as AppEntitlementMap)
@@ -384,6 +941,8 @@ function mapPortalUser(user: PortalUserRecord): AuthenticatedUser {
     email: user.email,
     username: user.username,
     fullName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
+    authzVersion: user.authzVersion,
+    globalRoles: user.roles.map((entry) => entry.role.name),
     entitlements,
   }
 }

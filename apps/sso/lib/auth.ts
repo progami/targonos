@@ -1,8 +1,8 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
-import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
-import { getUserByEmail, getUserEntitlements, provisionPortalUser } from '@targon/auth/server'
+import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
+import { getUserAuthz, getUserByEmail, provisionPortalUser } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -153,7 +153,7 @@ const baseAuthOptions: NextAuthConfig = {
             firstName,
             lastName,
             apps: [
-              { slug: 'talos', name: 'Talos', departments: [] },
+              { slug: 'talos', name: 'Talos', role: 'member', departments: [] },
             ],
           })
         }
@@ -170,11 +170,19 @@ const baseAuthOptions: NextAuthConfig = {
     async jwt({ token, user }) {
       const portal = (user as any)?.portalUser
       if (portal) {
+        const authz: PortalAuthz = {
+          version: portal.authzVersion ?? 1,
+          globalRoles: portal.globalRoles ?? [],
+          apps: portal.entitlements ?? {},
+        }
         token.sub = portal.id
         token.email = portal.email
         token.name = portal.fullName || user?.name || portal.email
-        token.apps = Object.keys(portal.entitlements)
-        ;(token as any).roles = portal.entitlements
+        token.apps = Object.keys(authz.apps)
+        ;(token as any).authz = authz
+        ;(token as any).roles = authz.apps
+        ;(token as any).globalRoles = authz.globalRoles
+        ;(token as any).authzVersion = authz.version
         ;(token as any).entitlements_ver = Date.now()
         return token
       }
@@ -193,9 +201,12 @@ const baseAuthOptions: NextAuthConfig = {
       }
 
       try {
-        const entitlements = await getUserEntitlements(userId)
-        token.apps = Object.keys(entitlements)
-        ;(token as any).roles = entitlements
+        const authz = await getUserAuthz(userId)
+        token.apps = Object.keys(authz.apps)
+        ;(token as any).authz = authz
+        ;(token as any).roles = authz.apps
+        ;(token as any).globalRoles = authz.globalRoles
+        ;(token as any).authzVersion = authz.version
       } catch (error) {
         console.error('[auth] Failed to refresh entitlements', error)
       } finally {
@@ -210,7 +221,10 @@ const baseAuthOptions: NextAuthConfig = {
         session.user.name = (token.name as string | undefined) ?? session.user.name
         ;(session.user as any).apps = (token as any).apps as string[] | undefined
       }
+      ;(session as any).authz = (token as any).authz
       ;(session as any).roles = (token as any).roles
+      ;(session as any).globalRoles = (token as any).globalRoles
+      ;(session as any).authzVersion = (token as any).authzVersion
       ;(session as any).entitlements_ver = (token as any).entitlements_ver
       return session
     },
