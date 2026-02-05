@@ -863,6 +863,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     customsEntryNumber: '',
     customsClearedDate: '',
     receivedDate: '',
+    dutyAmount: '',
+    dutyCurrency: '',
     discrepancyNotes: '',
   })
   const [receivingInventory, setReceivingInventory] = useState(false)
@@ -1935,12 +1937,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (activeViewStage !== 'WAREHOUSE') return
 
     const wh = order.stageData.warehouse
+    const dutyAmount = wh?.dutyAmount
+    const normalizedDutyAmount = dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
+    const dutyCurrency = wh?.dutyCurrency
+    const normalizedDutyCurrency =
+      typeof dutyCurrency === 'string' && dutyCurrency.trim().length > 0 ? dutyCurrency : ''
+
     setReceiveFormData({
       warehouseCode: order.warehouseCode ?? '',
       receiveType: order.receiveType ?? '',
       customsEntryNumber: wh?.customsEntryNumber ?? '',
       customsClearedDate: formatDateOnly(wh?.customsClearedDate ?? null),
       receivedDate: formatDateOnly(wh?.receivedDate ?? null),
+      dutyAmount: normalizedDutyAmount,
+      dutyCurrency: normalizedDutyCurrency,
       discrepancyNotes: wh?.discrepancyNotes ?? '',
     })
   }, [activeViewStage, order])
@@ -2163,6 +2173,12 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          dutyAmount:
+            receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null,
+          dutyCurrency:
+            receiveFormData.dutyCurrency.trim().length > 0
+              ? receiveFormData.dutyCurrency.trim().toUpperCase()
+              : null,
           warehouseCode: receiveFormData.warehouseCode,
           receiveType: receiveFormData.receiveType,
           customsEntryNumber: receiveFormData.customsEntryNumber,

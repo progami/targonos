@@ -18,10 +18,13 @@ export function RealWeekIndicator({
   return (
     <span
       className={cn(
-        'inline-block w-2 h-2 rounded-full',
-        isIncompleteWeek ? 'bg-yellow-400' : 'bg-emerald-500',
-        className
+        'inline-block rounded-full',
+        isIncompleteWeek
+          ? 'w-2.5 h-2.5 bg-warning-400 ring-2 ring-warning-200 dark:ring-warning-700 animate-pulse'
+          : 'w-2 h-2 bg-success-500',
+        className,
       )}
+      title={isIncompleteWeek ? 'Current week (in progress)' : 'Actuals'}
     />
   );
 }
