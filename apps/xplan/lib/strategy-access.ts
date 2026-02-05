@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { Session } from 'next-auth';
-import { buildPortalUrl } from '@targon/auth';
+import { buildPortalUrl, getAppEntitlement } from '@targon/auth';
 import { getPortalAuthPrisma } from '@targon/auth/server';
 import { Prisma } from '@targon/prisma-xplan';
 import prisma from '@/lib/prisma';
@@ -73,10 +73,18 @@ export function getStrategyActor(session: Session | null): StrategyActor {
   const id = typeof user?.id === 'string' ? user.id : null;
   const email = typeof user?.email === 'string' ? user.email.trim().toLowerCase() : null;
 
+  const entitlement = getAppEntitlement((session as any)?.roles, 'xplan');
+  const departments = entitlement?.departments ?? entitlement?.depts;
+  const isRoleAdmin =
+    Array.isArray(departments) &&
+    departments
+      .map((dept) => String(dept).trim().toLowerCase())
+      .some((dept) => dept === 'admin' || dept === 'superadmin' || dept === 'super-admin');
+
   return {
     id,
     email,
-    isSuperAdmin: isXPlanSuperAdmin(email),
+    isSuperAdmin: isXPlanSuperAdmin(email) || isRoleAdmin,
   };
 }
 
