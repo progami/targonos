@@ -377,7 +377,7 @@ export function StrategiesWorkspace({
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
-        <div className="max-h-[440px] overflow-auto">
+        <div className="max-h-[min(440px,calc(100vh-320px))] overflow-auto">
           <Table className="table-fixed border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -547,7 +547,7 @@ export function StrategiesWorkspace({
                                   {strategy.name}
                                 </span>
                                 {isActive ? (
-                                  <Badge className="bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
+                                  <Badge className="ring-2 ring-cyan-300/40 dark:ring-[#00C2B9]/30 px-2.5 py-0.5 text-xs font-bold shadow-sm bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
                                     Active
                                   </Badge>
                                 ) : null}
@@ -656,20 +656,20 @@ export function StrategiesWorkspace({
                         </span>
                       </TableCell>
                     <TableCell className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1.5">
                         {isEditing ? (
                           <>
                               <button
                                 type="button"
                                 onClick={() => void handleUpdate(strategy.id)}
-                                className="rounded p-1.5 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-200 dark:hover:bg-emerald-900/20"
+                                className="rounded-md p-2 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-200 dark:hover:bg-emerald-900/20"
                               >
                                 <Check className="h-4 w-4" />
                               </button>
                               <button
                                 type="button"
                                 onClick={cancelEdit}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-muted"
+                                className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -679,14 +679,14 @@ export function StrategiesWorkspace({
                               <button
                                 type="button"
                                 onClick={() => startEdit(strategy)}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-muted"
+                                className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => requestDelete(strategy.id)}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                                className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>

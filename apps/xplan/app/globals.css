@@ -139,6 +139,15 @@ h4, .text-h4 {
 
 
 
+@layer components {
+  .grid-month-boundary { @apply border-t-2 border-t-slate-300 dark:border-t-slate-600; }
+  .grid-cell-negative { @apply text-danger-600 dark:text-danger-400; }
+  .grid-cell-negative-strong { @apply text-danger-600 dark:text-danger-400 font-semibold; }
+  .grid-cell-negative-bg { @apply bg-danger-50/80 dark:bg-danger-950/30; }
+  .grid-row-even { @apply bg-slate-50 dark:bg-slate-800/40; }
+  .grid-row-even-pinned { @apply bg-slate-100 dark:bg-slate-800/60; }
+}
+
 @layer base {
   * {
     @apply border-border;
