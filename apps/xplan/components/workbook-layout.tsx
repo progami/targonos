@@ -9,10 +9,12 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
+import { clsx } from 'clsx';
 import {
+  SHEET_TOOLBAR_BUTTON,
   SHEET_TOOLBAR_GROUP,
   SHEET_TOOLBAR_LABEL,
-  SHEET_TOOLBAR_SELECT,
+  SHEET_TOOLBAR_SEGMENTED,
 } from '@/components/sheet-toolbar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { TimeZoneClocks } from '@/components/timezone-clocks';
@@ -253,20 +255,29 @@ export function WorkbookLayout({
     return (
       <div className={SHEET_TOOLBAR_GROUP}>
         <span className={SHEET_TOOLBAR_LABEL}>Year</span>
-        <select
-          className={SHEET_TOOLBAR_SELECT}
-          value={String(resolvedYear)}
-          onChange={(event) => handleYearSelect(Number(event.target.value))}
-          disabled={isNavigationBusy}
-          aria-label="Select year"
-        >
-          {sortedYears.map((segment) => (
-            <option key={segment.year} value={segment.year}>
-              {segment.year}
-              {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
-            </option>
-          ))}
-        </select>
+        <div role="group" aria-label="Select year" className={SHEET_TOOLBAR_SEGMENTED}>
+          {sortedYears.map((segment) => {
+            const isActive = segment.year === resolvedYear;
+            return (
+              <button
+                key={segment.year}
+                type="button"
+                className={clsx(
+                  SHEET_TOOLBAR_BUTTON,
+                  isActive
+                    ? 'bg-cyan-600 text-white dark:bg-cyan-500'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
+                )}
+                onClick={() => handleYearSelect(segment.year)}
+                disabled={isNavigationBusy && isActive}
+                aria-pressed={isActive}
+              >
+                {segment.year}
+                {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }, [handleYearSelect, isNavigationBusy, isYearAwareSheet, resolvedYear, sortedYears]);
