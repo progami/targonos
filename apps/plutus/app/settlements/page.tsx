@@ -3,8 +3,8 @@
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -172,7 +172,6 @@ function SettlementsEmptyIcon() {
 
 export default function SettlementsPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
   const page = useSettlementsListStore((s) => s.page);
@@ -231,22 +230,7 @@ export default function SettlementsPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader
-          title="Settlements"
-          variant="accent"
-          actions={
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-              }}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-          }
-        />
+        <PageHeader title="Settlements" variant="accent" />
 
         {/* KPI Strip */}
         {!isLoading && data && (
@@ -354,8 +338,7 @@ export default function SettlementsPage() {
                       <TableHead className="font-semibold">Period</TableHead>
                       <TableHead className="font-semibold">Settlement Total</TableHead>
                       <TableHead className="font-semibold">LMB</TableHead>
-                      <TableHead className="font-semibold">Plutus</TableHead>
-                      <TableHead className="w-32 text-right"> </TableHead>
+                      <TableHead className="font-semibold text-right">Plutus</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -363,7 +346,7 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={6} className="py-4">
+                            <TableCell colSpan={5} className="py-4">
                               <Skeleton className="h-10 w-full" />
                             </TableCell>
                           </TableRow>
@@ -373,7 +356,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={5} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -381,7 +364,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && !error && settlements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6}>
+                        <TableCell colSpan={5}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
@@ -426,20 +409,20 @@ export default function SettlementsPage() {
                           <TableCell className="align-top">
                             <StatusPill status={s.lmbStatus} />
                           </TableCell>
-                          <TableCell className="align-top">
-                            <PlutusPill status={s.plutusStatus} />
-                          </TableCell>
                           <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
-                            <SplitButton
-                              onClick={() => router.push(`/settlements/${s.id}`)}
-                              dropdownItems={[
-                                { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
-                                { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
-                                { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
-                              ]}
-                            >
-                              Action
-                            </SplitButton>
+                            <div className="flex items-center justify-end gap-2">
+                              <PlutusPill status={s.plutusStatus} />
+                              <SplitButton
+                                onClick={() => router.push(`/settlements/${s.id}`)}
+                                dropdownItems={[
+                                  { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
+                                  { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
+                                  { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                                ]}
+                              >
+                                Action
+                              </SplitButton>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
