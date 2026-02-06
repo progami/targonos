@@ -468,8 +468,8 @@ const DOCUMENT_STAGE_META: Record<
   RFQ: { label: 'RFQ', icon: FileEdit },
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
-  OCEAN: { label: 'In Transit', icon: Ship },
-  WAREHOUSE: { label: 'At Warehouse', icon: Warehouse },
+  OCEAN: { label: 'Transit', icon: Ship },
+  WAREHOUSE: { label: 'Warehouse', icon: Warehouse },
   SHIPPED: { label: 'Shipped', icon: Package2 },
 }
 
@@ -503,8 +503,8 @@ const STAGES = [
   { value: 'RFQ', label: 'RFQ', icon: FileEdit, color: 'slate' },
   { value: 'ISSUED', label: 'Issued', icon: Send, color: 'emerald' },
   { value: 'MANUFACTURING', label: 'Manufacturing', icon: Factory, color: 'amber' },
-  { value: 'OCEAN', label: 'In Transit', icon: Ship, color: 'blue' },
-  { value: 'WAREHOUSE', label: 'At Warehouse', icon: Warehouse, color: 'purple' },
+  { value: 'OCEAN', label: 'Transit', icon: Ship, color: 'blue' },
+  { value: 'WAREHOUSE', label: 'Warehouse', icon: Warehouse, color: 'purple' },
 ] as const
 
 const INCOTERMS_OPTIONS = [
@@ -5705,7 +5705,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     ) : !order.warehouseCode || !order.warehouseName ? (
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                         <p className="text-sm text-muted-foreground">
-                          Supplier credits/debits are recorded after the PO is received at warehouse.
+                          Supplier credits/debits are recorded after the PO is received in Warehouse stage.
                         </p>
                       </div>
                     ) : (
@@ -6574,7 +6574,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )
                 })()}
 
-                {/* In Transit Section */}
+                {/* Transit Section */}
                 {(() => {
                   if (activeViewStage !== 'OCEAN') return null
                   const ocean = order.stageData.ocean
@@ -6586,7 +6586,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        In Transit
+                        Transit
                       </h4>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">

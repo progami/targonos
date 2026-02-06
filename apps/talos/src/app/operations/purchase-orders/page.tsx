@@ -64,14 +64,14 @@ const PIPELINE_STAGES: StatusConfig[] = [
   },
   {
     value: 'OCEAN',
-    label: 'In Transit',
-    description: 'Goods in transit from manufacturer',
+    label: 'Transit',
+    description: 'Goods moving from manufacturer',
     icon: Ship,
   },
   {
     value: 'WAREHOUSE',
-    label: 'At Warehouse',
-    description: 'Goods received at warehouse',
+    label: 'Warehouse',
+    description: 'Goods received in warehouse',
     icon: Warehouse,
   },
 ]
