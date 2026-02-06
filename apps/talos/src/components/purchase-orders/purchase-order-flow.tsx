@@ -931,6 +931,28 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [supplierAdjustmentOpen, setSupplierAdjustmentOpen] = useState(false)
   const [landedBreakdownOpen, setLandedBreakdownOpen] = useState(false)
 
+  // Manual warehouse cost state
+  const [manualWarehouseCosts, setManualWarehouseCosts] = useState<
+    Array<{
+      id: string
+      category: string
+      costName: string
+      amount: number
+      currency: string
+      createdByName: string
+      createdAt: string
+      notes: string | null
+    }>
+  >([])
+  const [manualWarehouseCostsLoading, setManualWarehouseCostsLoading] = useState(false)
+  const [warehouseCostEditing, setWarehouseCostEditing] = useState<'inbound' | 'storage' | null>(null)
+  const [warehouseCostSaving, setWarehouseCostSaving] = useState(false)
+  const [warehouseCostDraft, setWarehouseCostDraft] = useState({
+    costName: '',
+    amount: '',
+    notes: '',
+  })
+
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
   const [batchesBySkuId, setBatchesBySkuId] = useState<Record<string, BatchOption[]>>({})
@@ -1411,6 +1433,126 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     })
   }, [supplierAdjustment, supplierAdjustmentEditing])
 
+  const refreshManualWarehouseCosts = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
+    if (!order?.id) return
+    try {
+      setManualWarehouseCostsLoading(true)
+      const response = await fetch(`/api/purchase-orders/${order.id}/warehouse-costs`)
+      if (!response.ok) {
+        setManualWarehouseCosts([])
+        return
+      }
+      const json: unknown = await response.json().catch(() => null)
+      const data =
+        json && typeof json === 'object' && 'data' in json ? (json as { data: unknown }).data : null
+      if (!Array.isArray(data)) {
+        setManualWarehouseCosts([])
+        return
+      }
+      setManualWarehouseCosts(
+        data.map((entry: Record<string, unknown>) => ({
+          id: String(entry.id),
+          category: String(entry.category),
+          costName: String(entry.costName),
+          amount: Number(entry.amount),
+          currency: String(entry.currency),
+          createdByName: String(entry.createdByName),
+          createdAt: String(entry.createdAt),
+          notes: typeof entry.notes === 'string' ? entry.notes : null,
+        }))
+      )
+    } catch {
+      setManualWarehouseCosts([])
+    } finally {
+      setManualWarehouseCostsLoading(false)
+    }
+  }, [isCrossTenantReadOnly, order?.id])
+
+  useEffect(() => {
+    void refreshManualWarehouseCosts()
+  }, [refreshManualWarehouseCosts])
+
+  const saveWarehouseCost = useCallback(
+    async (category: 'Inbound' | 'Storage') => {
+      if (!order) return
+      if (warehouseCostSaving) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        return
+      }
+
+      const amount = Number(warehouseCostDraft.amount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error('Amount must be a positive number')
+        return
+      }
+      if (!warehouseCostDraft.costName.trim()) {
+        toast.error('Cost name is required')
+        return
+      }
+
+      try {
+        setWarehouseCostSaving(true)
+        const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/warehouse-costs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            costName: warehouseCostDraft.costName.trim(),
+            amount,
+            notes: warehouseCostDraft.notes.trim() ? warehouseCostDraft.notes.trim() : undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          toast.error(`Failed to save warehouse cost (HTTP ${response.status})`)
+          return
+        }
+
+        setWarehouseCostEditing(null)
+        setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+        void refreshManualWarehouseCosts()
+        toast.success(`${category} cost saved`)
+      } catch {
+        toast.error('Failed to save warehouse cost')
+      } finally {
+        setWarehouseCostSaving(false)
+      }
+    },
+    [
+      order,
+      refreshManualWarehouseCosts,
+      warehouseCostDraft.costName,
+      warehouseCostDraft.amount,
+      warehouseCostDraft.notes,
+      warehouseCostSaving,
+      isCrossTenantReadOnly,
+    ]
+  )
+
+  const deleteWarehouseCost = useCallback(
+    async (costId: string) => {
+      if (!order) return
+      if (isCrossTenantReadOnly) return
+      try {
+        const response = await fetchWithCSRF(
+          `/api/purchase-orders/${order.id}/warehouse-costs?costId=${encodeURIComponent(costId)}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          toast.error(`Failed to delete cost entry (HTTP ${response.status})`)
+          return
+        }
+        void refreshManualWarehouseCosts()
+        toast.success('Cost entry deleted')
+      } catch {
+        toast.error('Failed to delete cost entry')
+      }
+    },
+    [order, refreshManualWarehouseCosts, isCrossTenantReadOnly]
+  )
+
   const saveSupplierAdjustment = useCallback(async () => {
     if (!order) return
     if (supplierAdjustmentSaving) return
@@ -1471,6 +1613,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
   const storageCostRows = costLedgerSummary?.breakdown?.storage ?? []
   const storageSubtotal = costLedgerSummary?.totals?.storage ?? 0
+
+  const manualInboundCosts = manualWarehouseCosts.filter(c => c.category === 'Inbound')
+  const manualStorageCosts = manualWarehouseCosts.filter(c => c.category === 'Storage')
+  const manualInboundSubtotal = manualInboundCosts.reduce((sum, c) => sum + c.amount, 0)
+  const manualStorageSubtotal = manualStorageCosts.reduce((sum, c) => sum + c.amount, 0)
 
   const startEditFreightCost = useCallback(() => {
     setFreightCostDraft(forwardingSubtotal > 0 ? forwardingSubtotal.toFixed(2) : '')
@@ -2350,7 +2497,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     productSubtotal +
     forwardingSubtotal +
     inboundSubtotal +
+    manualInboundSubtotal +
     storageSubtotal +
+    manualStorageSubtotal +
     dutySubtotal +
     supplierAdjustmentSubtotal
   const isTerminalStatus = order
@@ -5601,8 +5750,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
                                   {costLedgerLoading
                                     ? 'Loading…'
-                                    : inboundSubtotal > 0
-                                      ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
+                                    : (inboundSubtotal + manualInboundSubtotal) > 0
+                                      ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         })}`
@@ -5610,61 +5759,210 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </p>
                               </div>
 
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => setInboundBreakdownOpen(prev => !prev)}
-                              >
-                                {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {warehouseCostEditing !== 'inbound' && !isCrossTenantReadOnly && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => {
+                                      setInboundBreakdownOpen(true)
+                                      setWarehouseCostEditing('inbound')
+                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                    }}
+                                    disabled={
+                                      warehouseCostSaving ||
+                                      !order.warehouseCode ||
+                                      !order.warehouseName
+                                    }
+                                  >
+                                    + Add Cost
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => setInboundBreakdownOpen(prev => !prev)}
+                                >
+                                  {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
+                                </Button>
+                              </div>
                             </div>
 
                             {inboundBreakdownOpen ? (
-                              costLedgerLoading ? (
+                              costLedgerLoading && manualWarehouseCostsLoading ? (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                                   <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
                                 </div>
-                              ) : inboundCostRows.length === 0 ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">
-                                    No inbound costs found for this receipt.
-                                  </p>
-                                </div>
                               ) : (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Cost
-                                        </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Total
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {inboundCostRows.map(row => (
-                                        <tr
-                                          key={row.costName}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                <div className="space-y-2">
+                                  {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && warehouseCostEditing !== 'inbound' ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                      <p className="text-sm text-muted-foreground">
+                                        No inbound costs found. Click &quot;+ Add Cost&quot; to record one.
+                                      </p>
+                                    </div>
+                                  ) : (inboundCostRows.length > 0 || manualInboundCosts.length > 0) ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                              Cost
+                                            </th>
+                                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                              Total
+                                            </th>
+                                            <th className="w-8" />
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {inboundCostRows.map(row => (
+                                            <tr
+                                              key={row.costName}
+                                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                            >
+                                              <td className="px-3 py-2 font-medium text-foreground">
+                                                {row.costName}
+                                              </td>
+                                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                                {tenantCurrency}{' '}
+                                                {row.totalCost.toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })}
+                                              </td>
+                                              <td />
+                                            </tr>
+                                          ))}
+                                          {manualInboundCosts.map(entry => (
+                                            <tr
+                                              key={entry.id}
+                                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                            >
+                                              <td className="px-3 py-2 font-medium text-foreground">
+                                                {entry.costName}
+                                                {entry.notes && (
+                                                  <span className="ml-2 text-xs text-muted-foreground">
+                                                    ({entry.notes})
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                                {entry.currency}{' '}
+                                                {entry.amount.toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })}
+                                              </td>
+                                              <td className="px-1 py-2">
+                                                {!isCrossTenantReadOnly && (
+                                                  <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => void deleteWarehouseCost(entry.id)}
+                                                  >
+                                                    <X className="h-3 w-3" />
+                                                  </Button>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : null}
+
+                                  {warehouseCostEditing === 'inbound' && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            Cost Name
+                                          </p>
+                                          <Input
+                                            value={warehouseCostDraft.costName}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                costName: e.target.value,
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                            placeholder="e.g. Unloading Fee"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            Amount ({tenantCurrency})
+                                          </p>
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.01"
+                                            value={warehouseCostDraft.amount}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                amount: e.target.value,
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                          Notes
+                                        </p>
+                                        <Input
+                                          value={warehouseCostDraft.notes}
+                                          onChange={e =>
+                                            setWarehouseCostDraft(prev => ({
+                                              ...prev,
+                                              notes: e.target.value,
+                                            }))
+                                          }
+                                          disabled={warehouseCostSaving}
+                                          placeholder="Optional notes"
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setWarehouseCostEditing(null)
+                                            setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                          }}
+                                          disabled={warehouseCostSaving}
                                         >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {row.costName}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {tenantCurrency}{' '}
-                                            {row.totalCost.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => void saveWarehouseCost('Inbound')}
+                                          disabled={
+                                            warehouseCostSaving ||
+                                            !warehouseCostDraft.costName.trim() ||
+                                            !warehouseCostDraft.amount.trim()
+                                          }
+                                          className="gap-2"
+                                        >
+                                          {warehouseCostSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             ) : null}
@@ -5679,8 +5977,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
                                   {costLedgerLoading
                                     ? 'Loading…'
-                                    : storageSubtotal > 0
-                                      ? `${tenantCurrency} ${storageSubtotal.toLocaleString(undefined, {
+                                    : (storageSubtotal + manualStorageSubtotal) > 0
+                                      ? `${tenantCurrency} ${(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         })}`
@@ -5688,59 +5986,210 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </p>
                               </div>
 
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => setStorageBreakdownOpen(prev => !prev)}
-                              >
-                                {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {warehouseCostEditing !== 'storage' && !isCrossTenantReadOnly && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => {
+                                      setStorageBreakdownOpen(true)
+                                      setWarehouseCostEditing('storage')
+                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                    }}
+                                    disabled={
+                                      warehouseCostSaving ||
+                                      !order.warehouseCode ||
+                                      !order.warehouseName
+                                    }
+                                  >
+                                    + Add Cost
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => setStorageBreakdownOpen(prev => !prev)}
+                                >
+                                  {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
+                                </Button>
+                              </div>
                             </div>
 
                             {storageBreakdownOpen ? (
-                              costLedgerLoading ? (
+                              costLedgerLoading && manualWarehouseCostsLoading ? (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                                   <p className="text-sm text-muted-foreground">Loading storage costs…</p>
                                 </div>
-                              ) : storageCostRows.length === 0 ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">No storage costs recorded.</p>
-                                </div>
                               ) : (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Cost
-                                        </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Total
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {storageCostRows.map(row => (
-                                        <tr
-                                          key={row.costName}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                <div className="space-y-2">
+                                  {storageCostRows.length === 0 && manualStorageCosts.length === 0 && warehouseCostEditing !== 'storage' ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                                      <p className="text-sm text-muted-foreground">
+                                        No storage costs recorded. Click &quot;+ Add Cost&quot; to record one.
+                                      </p>
+                                    </div>
+                                  ) : (storageCostRows.length > 0 || manualStorageCosts.length > 0) ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                              Cost
+                                            </th>
+                                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                              Total
+                                            </th>
+                                            <th className="w-8" />
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {storageCostRows.map(row => (
+                                            <tr
+                                              key={row.costName}
+                                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                            >
+                                              <td className="px-3 py-2 font-medium text-foreground">
+                                                {row.costName}
+                                              </td>
+                                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                                {tenantCurrency}{' '}
+                                                {row.totalCost.toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })}
+                                              </td>
+                                              <td />
+                                            </tr>
+                                          ))}
+                                          {manualStorageCosts.map(entry => (
+                                            <tr
+                                              key={entry.id}
+                                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                            >
+                                              <td className="px-3 py-2 font-medium text-foreground">
+                                                {entry.costName}
+                                                {entry.notes && (
+                                                  <span className="ml-2 text-xs text-muted-foreground">
+                                                    ({entry.notes})
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                                {entry.currency}{' '}
+                                                {entry.amount.toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })}
+                                              </td>
+                                              <td className="px-1 py-2">
+                                                {!isCrossTenantReadOnly && (
+                                                  <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => void deleteWarehouseCost(entry.id)}
+                                                  >
+                                                    <X className="h-3 w-3" />
+                                                  </Button>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : null}
+
+                                  {warehouseCostEditing === 'storage' && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            Cost Name
+                                          </p>
+                                          <Input
+                                            value={warehouseCostDraft.costName}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                costName: e.target.value,
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                            placeholder="e.g. Overtime Storage"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                            Amount ({tenantCurrency})
+                                          </p>
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.01"
+                                            value={warehouseCostDraft.amount}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                amount: e.target.value,
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                          Notes
+                                        </p>
+                                        <Input
+                                          value={warehouseCostDraft.notes}
+                                          onChange={e =>
+                                            setWarehouseCostDraft(prev => ({
+                                              ...prev,
+                                              notes: e.target.value,
+                                            }))
+                                          }
+                                          disabled={warehouseCostSaving}
+                                          placeholder="Optional notes"
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setWarehouseCostEditing(null)
+                                            setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                          }}
+                                          disabled={warehouseCostSaving}
                                         >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {row.costName}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {tenantCurrency}{' '}
-                                            {row.totalCost.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() => void saveWarehouseCost('Storage')}
+                                          disabled={
+                                            warehouseCostSaving ||
+                                            !warehouseCostDraft.costName.trim() ||
+                                            !warehouseCostDraft.amount.trim()
+                                          }
+                                          className="gap-2"
+                                        >
+                                          {warehouseCostSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             ) : null}
@@ -6002,24 +6451,24 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </td>
                               </tr>
                             )}
-                            {inboundSubtotal > 0 && (
+                            {(inboundSubtotal + manualInboundSubtotal) > 0 && (
                               <tr className="border-b border-slate-200 dark:border-slate-700">
                                 <td className="px-3 py-2 text-muted-foreground">Inbound</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-medium">
                                   {tenantCurrency}{' '}
-                                  {inboundSubtotal.toLocaleString(undefined, {
+                                  {(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
                                 </td>
                               </tr>
                             )}
-                            {storageSubtotal > 0 && (
+                            {(storageSubtotal + manualStorageSubtotal) > 0 && (
                               <tr className="border-b border-slate-200 dark:border-slate-700">
                                 <td className="px-3 py-2 text-muted-foreground">Storage</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-medium">
                                   {tenantCurrency}{' '}
-                                  {storageSubtotal.toLocaleString(undefined, {
+                                  {(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
