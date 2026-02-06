@@ -6170,207 +6170,187 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </div>
                         </div>
 
-	                {/* Supplier Credit/Debit Section */}
-	                {showWarehouseCostsStage && (
-	                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-	                    <div className="flex items-start justify-between gap-3">
-	                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-	                        Supplier Credit/Debit
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        {!supplierAdjustmentEditing && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSupplierAdjustmentOpen(true)
-                              setSupplierAdjustmentEditing(true)
-                            }}
-                            disabled={
-                              supplierAdjustmentLoading ||
-                              supplierAdjustmentSaving ||
-                              !order.warehouseCode ||
-                              !order.warehouseName
-                            }
-                          >
-                            {supplierAdjustment ? 'Edit' : 'Add'}
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
-                          disabled={supplierAdjustmentLoading}
-                        >
-                          {supplierAdjustmentOpen ? 'Hide' : 'Details'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                      {supplierAdjustmentLoading
-                        ? 'Loading…'
-                        : supplierAdjustment
-                          ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}`
-                          : '—'}
-                    </p>
-
-                    {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
-                      supplierAdjustmentLoading ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
-                      </div>
-                    ) : !order.warehouseCode || !order.warehouseName ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">
-                          Supplier credits/debits are recorded after the PO is received in Warehouse stage.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-4">
-                        {supplierAdjustment ? (
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Type
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.currency}{' '}
-                                {supplierAdjustment.amount.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Updated
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(supplierAdjustment.effectiveAt)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Updated By
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.createdByName}
-                              </p>
-                            </div>
-                            <div className="space-y-1 col-span-2 md:col-span-4">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Notes
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {supplierAdjustment.notes ? supplierAdjustment.notes : '—'}
-                              </p>
-                            </div>
+                    {/* Supplier Credit/Debit Section */}
+                    {showWarehouseCostsStage && (
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Supplier Credit/Debit
+                            </h4>
+                            <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                              {supplierAdjustmentLoading
+                                ? 'Loading…'
+                                : supplierAdjustment
+                                  ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}`
+                                  : '—'}
+                            </p>
                           </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No supplier adjustment recorded.</p>
-                        )}
-
-                        {supplierAdjustmentEditing && (
-                          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Kind
-                                </p>
-                                <select
-                                  value={supplierAdjustmentDraft.kind}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      kind: e.target.value as 'credit' | 'debit',
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                >
-                                  <option value="credit">Credit</option>
-                                  <option value="debit">Debit</option>
-                                </select>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Amount ({tenantCurrency})
-                                </p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.01"
-                                  value={supplierAdjustmentDraft.amount}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      amount: e.target.value,
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                />
-                              </div>
-                              <div className="space-y-1 col-span-2 md:col-span-4">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Notes
-                                </p>
-                                <Input
-                                  value={supplierAdjustmentDraft.notes}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      notes: e.target.value,
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                  placeholder="Optional notes"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-end gap-2 mt-4">
+                          <div className="flex items-center gap-1">
+                            {!supplierAdjustmentEditing && !isCrossTenantReadOnly && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setSupplierAdjustmentEditing(false)}
-                                disabled={supplierAdjustmentSaving}
+                                className="h-8 px-2 text-xs"
+                                onClick={() => {
+                                  setSupplierAdjustmentOpen(true)
+                                  setSupplierAdjustmentEditing(true)
+                                }}
+                                disabled={
+                                  supplierAdjustmentLoading ||
+                                  supplierAdjustmentSaving ||
+                                  !order.warehouseCode ||
+                                  !order.warehouseName
+                                }
                               >
-                                Cancel
+                                {supplierAdjustment ? 'Edit' : 'Add'}
                               </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => void saveSupplierAdjustment()}
-                                disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
-                                className="gap-2"
-                              >
-                                {supplierAdjustmentSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                                Save
-                              </Button>
-                            </div>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
+                              disabled={supplierAdjustmentLoading}
+                            >
+                              {supplierAdjustmentOpen ? 'Hide' : 'Details'}
+                            </Button>
                           </div>
-                        )}
+                        </div>
+
+                        {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
+                          supplierAdjustmentLoading ? (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                              <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                      Type
+                                    </th>
+                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
+                                      Amount
+                                    </th>
+                                    <th className="w-16" />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {supplierAdjustment && !supplierAdjustmentEditing && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">
+                                        {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
+                                        {supplierAdjustment.notes && (
+                                          <span className="ml-2 text-xs text-muted-foreground">
+                                            ({supplierAdjustment.notes})
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {supplierAdjustment.currency}{' '}
+                                        {supplierAdjustment.amount.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  {!supplierAdjustment && !supplierAdjustmentEditing && (
+                                    <tr>
+                                      <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
+                                        No supplier adjustment recorded.
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {supplierAdjustmentEditing && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={supplierAdjustmentDraft.kind}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({
+                                                ...prev,
+                                                kind: e.target.value as 'credit' | 'debit',
+                                              }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                          >
+                                            <option value="credit">Credit</option>
+                                            <option value="debit">Debit</option>
+                                          </select>
+                                          <Input
+                                            value={supplierAdjustmentDraft.notes}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({ ...prev, notes: e.target.value }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            placeholder="Notes"
+                                            className="h-8 text-sm"
+                                          />
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          value={supplierAdjustmentDraft.amount}
+                                          onChange={e =>
+                                            setSupplierAdjustmentDraft(prev => ({ ...prev, amount: e.target.value }))
+                                          }
+                                          disabled={supplierAdjustmentSaving}
+                                          placeholder="0.00"
+                                          className="h-8 text-sm text-right"
+                                        />
+                                      </td>
+                                      <td className="px-1 py-2">
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setSupplierAdjustmentEditing(false)}
+                                            disabled={supplierAdjustmentSaving}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                            onClick={() => void saveSupplierAdjustment()}
+                                            disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
+                                          >
+                                            {supplierAdjustmentSaving ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <Check className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        ) : null}
                       </div>
-                    )
-                    ) : null}
-                  </div>
-                )}
+                    )}
 
                 {showWarehouseCostsStage && (
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
