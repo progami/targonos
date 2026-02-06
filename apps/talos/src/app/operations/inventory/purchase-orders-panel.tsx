@@ -918,10 +918,10 @@ export function PurchaseOrdersPanel({
               Manufacturing
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.oceanCount}</span> In Transit
+              <span className="font-semibold text-foreground">{statusCounts.oceanCount}</span> Transit
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span> At Warehouse
+              <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span> Warehouse
             </span>
             <span>
               <span className="font-semibold text-foreground">{statusCounts.rejectedCount}</span> Rejected
