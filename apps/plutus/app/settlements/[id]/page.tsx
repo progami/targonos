@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { Timeline } from '@/components/ui/timeline';
+import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -217,7 +219,14 @@ function SignedAmount({
   currency: string;
 }) {
   const signed = postingType === 'Debit' ? amount : -amount;
-  return <span className="font-medium">{formatMoney(signed, currency)}</span>;
+  return (
+    <span className={cn(
+      'font-medium tabular-nums',
+      postingType === 'Credit' ? 'text-emerald-600 dark:text-emerald-400' : '',
+    )}>
+      {formatMoney(signed, currency)}
+    </span>
+  );
 }
 
 export default function SettlementDetailPage() {
@@ -412,7 +421,7 @@ export default function SettlementDetailPage() {
   }
 
   return (
-    <main className="flex-1">
+    <main className="flex-1 page-enter">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between gap-3">
           <BackButton />
@@ -536,71 +545,44 @@ export default function SettlementDetailPage() {
 
               <TabsContent value="history" className="p-4">
                 {settlement && (
-                  <div className="space-y-4">
+                  <div>
                     {!data?.processing && !data?.rollback && (
-                      <div className="text-sm text-slate-500 dark:text-slate-400">Plutus has not processed this settlement yet.</div>
-                    )}
-
-                    {data?.rollback && (
-                      <Card className="border-slate-200/70 dark:border-white/10">
-                        <CardContent className="p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-semibold text-slate-900 dark:text-white">Rolled back</div>
-                            <Badge variant="secondary">{new Date(data.rollback.rolledBackAt).toLocaleString('en-US')}</Badge>
-                          </div>
-                          <div className="text-sm text-slate-700 dark:text-slate-200">
-                            Invoice: <span className="font-mono">{data.rollback.invoiceId}</span>
-                          </div>
-                          <div className="text-sm text-slate-700 dark:text-slate-200">
-                            COGS JE ID: <span className="font-mono">{data.rollback.qboCogsJournalEntryId}</span>
-                          </div>
-                          <div className="text-sm text-slate-700 dark:text-slate-200">
-                            P&amp;L Reclass JE ID: <span className="font-mono">{data.rollback.qboPnlReclassJournalEntryId}</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {data?.processing && (
-                      <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Card className="border-slate-200/70 dark:border-white/10">
-                            <CardContent className="p-4">
-                              <div className="text-xs text-slate-500 dark:text-slate-400">Invoice</div>
-                              <div className="mt-1 font-mono text-sm text-slate-900 dark:text-white">{data.processing.invoiceId}</div>
-                              <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">Hash</div>
-                              <div className="mt-1 font-mono text-sm text-slate-900 dark:text-white">{data.processing.processingHash}</div>
-                            </CardContent>
-                          </Card>
-                          <Card className="border-slate-200/70 dark:border-white/10">
-                            <CardContent className="p-4">
-                              <div className="text-xs text-slate-500 dark:text-slate-400">Upload</div>
-                              <div className="mt-1 text-sm text-slate-900 dark:text-white">{data.processing.sourceFilename}</div>
-                              <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">Uploaded At</div>
-                              <div className="mt-1 text-sm text-slate-900 dark:text-white">
-                                {new Date(data.processing.uploadedAt).toLocaleString('en-US')}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-
-                        <Card className="border-slate-200/70 dark:border-white/10">
-                          <CardContent className="p-4 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm font-semibold text-slate-900 dark:text-white">Posted by Plutus</div>
-                              <Badge variant="success">
-                                {data.processing.orderSalesCount} sales • {data.processing.orderReturnsCount} returns
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-slate-700 dark:text-slate-200">
-                              COGS JE ID: <span className="font-mono">{data.processing.qboCogsJournalEntryId}</span>
-                            </div>
-                            <div className="text-sm text-slate-700 dark:text-slate-200">
-                              P&amp;L Reclass JE ID: <span className="font-mono">{data.processing.qboPnlReclassJournalEntryId}</span>
-                            </div>
-                          </CardContent>
-                        </Card>
+                      <div className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">
+                        Plutus has not processed this settlement yet.
                       </div>
+                    )}
+
+                    {(data?.processing || data?.rollback) && (
+                      <Timeline
+                        items={[
+                          ...(data?.rollback ? [{
+                            title: 'Rolled back' as const,
+                            variant: 'warning' as const,
+                            timestamp: new Date(data.rollback.rolledBackAt).toLocaleString('en-US'),
+                            description: (
+                              <div className="mt-1 space-y-1 text-xs">
+                                <div>Invoice: <span className="font-mono">{data.rollback.invoiceId}</span></div>
+                                <div>COGS JE: <span className="font-mono">{data.rollback.qboCogsJournalEntryId}</span></div>
+                                <div>P&amp;L Reclass JE: <span className="font-mono">{data.rollback.qboPnlReclassJournalEntryId}</span></div>
+                              </div>
+                            ),
+                          }] : []),
+                          ...(data?.processing ? [{
+                            title: `Processed — ${data.processing.orderSalesCount} sales, ${data.processing.orderReturnsCount} returns` as const,
+                            variant: 'success' as const,
+                            timestamp: new Date(data.processing.uploadedAt).toLocaleString('en-US'),
+                            description: (
+                              <div className="mt-1 space-y-1 text-xs">
+                                <div>Invoice: <span className="font-mono">{data.processing.invoiceId}</span></div>
+                                <div>Hash: <span className="font-mono">{data.processing.processingHash}</span></div>
+                                <div>Source: {data.processing.sourceFilename}</div>
+                                <div>COGS JE: <span className="font-mono">{data.processing.qboCogsJournalEntryId}</span></div>
+                                <div>P&amp;L Reclass JE: <span className="font-mono">{data.processing.qboPnlReclassJournalEntryId}</span></div>
+                              </div>
+                            ),
+                          }] : []),
+                        ]}
+                      />
                     )}
                   </div>
                 )}
@@ -669,12 +651,15 @@ export default function SettlementDetailPage() {
                           void handleAuditSelected(file);
                         }}
                       >
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col items-center gap-2 text-center">
+                          <svg className="h-8 w-8 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                          </svg>
                           <div className="text-sm font-medium text-slate-900 dark:text-white">
                             Drop the file here
                           </div>
                           <div className="text-sm text-slate-500 dark:text-slate-400">
-                            Or use “Choose file”. Once uploaded, Plutus will detect invoice groups and compute a preview.
+                            Or use &ldquo;Choose file&rdquo;. Once uploaded, Plutus will detect invoice groups and compute a preview.
                           </div>
                         </div>
                       </div>
