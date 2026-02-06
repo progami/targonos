@@ -172,6 +172,7 @@ function BellCurve({
 
   const xMedian = width / 2;
   const xValue = (value / 100) * width;
+  const yOnCurve = height - Math.exp(-((value / 100 - 0.5) ** 2) / (2 * 0.22 * 0.22)) * height * 0.85;
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[160px]">
@@ -189,6 +190,7 @@ function BellCurve({
         strokeWidth="2"
         strokeDasharray="3 6"
       />
+      <circle cx={xValue} cy={yOnCurve} r="4" className="fill-brand-teal-500 dark:fill-brand-teal-400" stroke="white" strokeWidth="2" />
     </svg>
   );
 }
@@ -356,7 +358,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <main className="flex-1">
+    <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader title="Industry Benchmarking" variant="accent" />
 
