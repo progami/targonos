@@ -18,8 +18,8 @@ const stages = [
   { key: 'draft', label: 'RFQ', filter: 'RFQ' },
   { key: 'issued', label: 'Issued', filter: 'ISSUED' },
   { key: 'manufacturing', label: 'Manufacturing', filter: 'MANUFACTURING' },
-  { key: 'inTransit', label: 'In Transit', filter: 'OCEAN' },
-  { key: 'atWarehouse', label: 'At Warehouse', filter: 'WAREHOUSE' },
+  { key: 'inTransit', label: 'Transit', filter: 'OCEAN' },
+  { key: 'atWarehouse', label: 'Warehouse', filter: 'WAREHOUSE' },
 ] as const
 
 export function OrderPipeline({ pipeline, pendingFulfillmentOrders }: OrderPipelineProps) {

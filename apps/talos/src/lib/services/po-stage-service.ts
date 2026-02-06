@@ -2884,7 +2884,7 @@ export async function receivePurchaseOrderInventory(params: {
   }
 
   if (order.status !== PurchaseOrderStatus.WAREHOUSE) {
-    throw new ConflictError('Inventory can only be received at the At Warehouse stage')
+    throw new ConflictError('Inventory can only be received at the Warehouse stage')
   }
 
   if (order.postedAt) {
