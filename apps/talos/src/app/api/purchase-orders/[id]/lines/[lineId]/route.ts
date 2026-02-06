@@ -6,6 +6,11 @@ import { hasPermission } from '@/lib/services/permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import {
+  buildLotReference,
+  normalizeSkuGroup,
+  resolveOrderReferenceSeed,
+} from '@/lib/services/supply-chain-reference-service'
 
 const UpdateLineSchema = z.object({
   skuCode: z.string().trim().min(1).optional(),
@@ -101,6 +106,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     id: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
+    lotRef: line.lotRef ?? null,
     batchLot: line.batchLot,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
@@ -369,6 +375,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         select: {
           id: true,
           skuCode: true,
+          skuGroup: true,
           description: true,
           isActive: true,
           cartonDimensionsCm: true,
@@ -415,7 +422,38 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         )
       }
 
+      const effectiveSkuGroup =
+        typeof order.skuGroup === 'string' && order.skuGroup.trim().length > 0
+          ? normalizeSkuGroup(order.skuGroup)
+          : typeof sku.skuGroup === 'string' && sku.skuGroup.trim().length > 0
+            ? normalizeSkuGroup(sku.skuGroup)
+            : null
+
+      if (!effectiveSkuGroup) {
+        return ApiResponses.badRequest(
+          `SKU group is required for SKU ${sku.skuCode}. Set it in Config → Products before updating this line.`
+        )
+      }
+
+      if (order.skuGroup !== effectiveSkuGroup) {
+        await prisma.purchaseOrder.update({
+          where: { id: order.id },
+          data: { skuGroup: effectiveSkuGroup },
+        })
+      }
+
+      const orderReferenceSeed = resolveOrderReferenceSeed({
+        orderNumber: order.orderNumber,
+        poNumber: order.poNumber,
+        skuGroup: effectiveSkuGroup,
+      })
+
       updateData.batchLot = existingBatch.batchCode
+      updateData.lotRef = buildLotReference(
+        orderReferenceSeed.sequence,
+        orderReferenceSeed.skuGroup,
+        sku.skuCode
+      )
       updateData.cartonDimensionsCm =
         existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null
       updateData.cartonSide1Cm = existingBatch.cartonSide1Cm ?? sku.cartonSide1Cm ?? null
@@ -453,6 +491,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription ?? null,
+    lotRef: line.lotRef ?? null,
     batchLot: line.batchLot ?? null,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
@@ -480,6 +519,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription ?? null,
+    lotRef: updated.lotRef ?? null,
     batchLot: updated.batchLot ?? null,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
@@ -529,6 +569,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     id: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription,
+    lotRef: updated.lotRef ?? null,
     batchLot: updated.batchLot,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
@@ -609,6 +650,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
       lineId: line.id,
       skuCode: line.skuCode,
       skuDescription: line.skuDescription ?? null,
+      lotRef: line.lotRef ?? null,
       batchLot: line.batchLot ?? null,
       cartonDimensionsCm: line.cartonDimensionsCm ?? null,
       cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),

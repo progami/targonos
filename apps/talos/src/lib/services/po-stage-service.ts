@@ -18,6 +18,16 @@ import { NotFoundError, ValidationError, ConflictError } from '@/lib/api'
 import { canApproveStageTransition, hasPermission, isSuperAdmin } from './permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
 import { toPublicOrderNumber } from './purchase-order-utils'
+import {
+  buildCommercialInvoiceReference,
+  buildLotReference,
+  buildPurchaseOrderReference,
+  getNextCommercialInvoiceSequence,
+  getNextPurchaseOrderSequence,
+  normalizeSkuGroup,
+  parseOrderReference,
+  resolveOrderReferenceSeed,
+} from './supply-chain-reference-service'
 import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
@@ -1148,40 +1158,13 @@ async function computeManufacturingCargoTotals(
 }
 
 /**
- * Generate the next order number in sequence (TG-<Country>-<number> format)
- * Used as RFQ number in RFQ and becomes PO number at ISSUED.
- *
- * Format: TG-US-2601, TG-US-2602, etc. for US tenant
- *         TG-UK-2601, TG-UK-2602, etc. for UK tenant
- *
- * Starting number: 2601
+ * Generate the next PO reference in sequence.
+ * Format: PO-<number>-<SKU_GROUP>
  */
-export async function generateOrderNumber(): Promise<string> {
+export async function generateOrderNumber(skuGroup: string): Promise<string> {
   const prisma = await getTenantPrisma()
-
-  const tenant = await getCurrentTenant()
-  const prefix = `TG-${tenant.code}-`
-  const startingNumber = 2601
-
-  const lastOrderRows = await prisma.$queryRaw<{ order_number: string | null }[]>`
-    SELECT order_number
-    FROM purchase_orders
-    WHERE order_number LIKE ${`${prefix}%`}
-    ORDER BY CAST(substring(order_number FROM '\\d+$') AS bigint) DESC
-    LIMIT 1
-  `
-
-  const lastOrderNumber = lastOrderRows.length > 0 ? lastOrderRows[0]?.order_number : null
-
-  let nextNumber = startingNumber
-  if (typeof lastOrderNumber === 'string') {
-    const match = lastOrderNumber.match(new RegExp(`^${prefix}(\\d+)$`))
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1
-    }
-  }
-
-  return `${prefix}${nextNumber}`
+  const nextSequence = await getNextPurchaseOrderSequence(prisma, skuGroup)
+  return buildPurchaseOrderReference(nextSequence, skuGroup)
 }
 
 export interface CreatePurchaseOrderLineInput {
@@ -1224,6 +1207,7 @@ export async function createPurchaseOrder(
     select: {
       id: true
       skuCode: true
+      skuGroup: true
       description: true
       cartonDimensionsCm: true
       cartonSide1Cm: true
@@ -1250,6 +1234,7 @@ export async function createPurchaseOrder(
   }>
 
   let skuRecordsForLines: LineSkuRecord[] = []
+  let orderSkuGroup: string | null = null
 
   const computeCartonsOrdered = (line: {
     skuCode: string
@@ -1345,6 +1330,7 @@ export async function createPurchaseOrder(
       select: {
         id: true,
         skuCode: true,
+        skuGroup: true,
         description: true,
         cartonDimensionsCm: true,
         cartonSide1Cm: true,
@@ -1362,6 +1348,26 @@ export async function createPurchaseOrder(
       }
     }
 
+    const skuGroups = new Set<string>()
+    for (const skuRecord of skus) {
+      if (typeof skuRecord.skuGroup !== 'string' || skuRecord.skuGroup.trim().length === 0) {
+        throw new ValidationError(
+          `SKU ${skuRecord.skuCode} is missing SKU group. Set SKU group in Config → Products before creating this PO.`
+        )
+      }
+      skuGroups.add(normalizeSkuGroup(skuRecord.skuGroup))
+    }
+
+    if (skuGroups.size !== 1) {
+      throw new ValidationError('All SKUs in a purchase order must share one SKU group')
+    }
+
+    const [resolvedSkuGroup] = Array.from(skuGroups)
+    if (!resolvedSkuGroup) {
+      throw new ValidationError('SKU group is required')
+    }
+    orderSkuGroup = resolvedSkuGroup
+
     input.lines = normalizedLines
     skuRecordsForLines = skus
   }
@@ -1369,8 +1375,16 @@ export async function createPurchaseOrder(
   const MAX_ORDER_NUMBER_ATTEMPTS = 5
   let order: PurchaseOrderWithLines | null = null
 
+  if (!orderSkuGroup) {
+    throw new ValidationError('SKU group is required')
+  }
+
   for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt += 1) {
-    const orderNumber = await generateOrderNumber()
+    const orderNumber = await generateOrderNumber(orderSkuGroup)
+    const generatedOrderReference = parseOrderReference(orderNumber)
+    if (!generatedOrderReference) {
+      throw new ValidationError('Unable to generate a valid PO reference')
+    }
 
 	    try {
 	      order = await prisma.$transaction(async tx => {
@@ -1453,11 +1467,12 @@ export async function createPurchaseOrder(
 	          }
 	        }
 
-	        return tx.purchaseOrder.create({
-	          data: {
-	            orderNumber,
-	            type: 'PURCHASE',
-	            status: PurchaseOrderStatus.RFQ,
+		        return tx.purchaseOrder.create({
+		          data: {
+		            orderNumber,
+                skuGroup: generatedOrderReference.skuGroup,
+		            type: 'PURCHASE',
+		            status: PurchaseOrderStatus.RFQ,
 	            counterpartyName: counterpartyNameCanonical,
 	            counterpartyAddress,
             expectedDate,
@@ -1472,8 +1487,8 @@ export async function createPurchaseOrder(
               input.lines && input.lines.length > 0
                 ? {
                     create: input.lines.map(line => ({
-                      ...(line.batchLot
-                        ? (() => {
+	                      ...(line.batchLot
+	                        ? (() => {
                             const skuRecord = skuByCode.get(line.skuCode.trim().toLowerCase())
                             const batchCode = line.batchLot.trim().toUpperCase()
                             const batchRecord = skuRecord
@@ -1514,8 +1529,13 @@ export async function createPurchaseOrder(
                                 ? new Prisma.Decimal(line.cartonWeightKg.toFixed(3))
                                 : null
 
-                            return {
-                              batchLot: batchRecord?.batchCode ?? batchCode,
+	                            return {
+                                lotRef: buildLotReference(
+                                  generatedOrderReference.sequence,
+                                  generatedOrderReference.skuGroup,
+                                  line.skuCode
+                                ),
+	                              batchLot: batchRecord?.batchCode ?? batchCode,
                               skuDescription:
                                 typeof line.skuDescription === 'string' && line.skuDescription.trim()
                                   ? line.skuDescription
@@ -1764,7 +1784,33 @@ export async function transitionPurchaseOrderStage(
   }
 
   if (targetStatus === PurchaseOrderStatus.ISSUED && !order.poNumber) {
-    updateData.poNumber = toPublicOrderNumber(order.orderNumber)
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: order.orderNumber,
+      poNumber: order.poNumber,
+      skuGroup: order.skuGroup,
+    })
+    updateData.poNumber = buildPurchaseOrderReference(
+      orderReferenceSeed.sequence,
+      orderReferenceSeed.skuGroup
+    )
+  }
+
+  const existingCommercialInvoiceNumber =
+    typeof order.commercialInvoiceNumber === 'string' ? order.commercialInvoiceNumber.trim() : ''
+  const shouldGenerateCommercialInvoiceNumber =
+    targetStatus === PurchaseOrderStatus.OCEAN && existingCommercialInvoiceNumber.length === 0
+
+  if (shouldGenerateCommercialInvoiceNumber) {
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: order.orderNumber,
+      poNumber: order.poNumber,
+      skuGroup: order.skuGroup,
+    })
+    const nextCiSequence = await getNextCommercialInvoiceSequence(prisma, orderReferenceSeed.skuGroup)
+    updateData.commercialInvoiceNumber = buildCommercialInvoiceReference(
+      nextCiSequence,
+      orderReferenceSeed.skuGroup
+    )
   }
 
   // Stage 2: Manufacturing fields
@@ -1817,7 +1863,10 @@ export async function transitionPurchaseOrderStage(
   if (filteredStageData.masterBillOfLading !== undefined) {
     updateData.masterBillOfLading = filteredStageData.masterBillOfLading
   }
-  if (filteredStageData.commercialInvoiceNumber !== undefined) {
+  if (
+    filteredStageData.commercialInvoiceNumber !== undefined &&
+    updateData.commercialInvoiceNumber === undefined
+  ) {
     updateData.commercialInvoiceNumber = filteredStageData.commercialInvoiceNumber
   }
   if (filteredStageData.packingListRef !== undefined) {
@@ -2195,17 +2244,33 @@ export async function transitionPurchaseOrderStage(
 
   const MAX_SPLIT_ORDER_ATTEMPTS = 5
   let createdRemainderOrderId: string | null = null
+  const orderReferenceSeed = dispatchSplitPlan
+    ? resolveOrderReferenceSeed({
+        orderNumber: order.orderNumber,
+        poNumber: order.poNumber,
+        skuGroup: order.skuGroup,
+      })
+    : null
 
   // Execute the transition + inventory impacts atomically.
   let updatedOrder: PurchaseOrder | null = null
 
   for (let attempt = 0; attempt < MAX_SPLIT_ORDER_ATTEMPTS; attempt += 1) {
     createdRemainderOrderId = null
-    const remainderOrderNumber = dispatchSplitPlan ? await generateOrderNumber() : null
+    const remainderOrderNumber =
+      dispatchSplitPlan && orderReferenceSeed
+        ? await generateOrderNumber(orderReferenceSeed.skuGroup)
+        : null
+    const remainderOrderReference =
+      typeof remainderOrderNumber === 'string' ? parseOrderReference(remainderOrderNumber) : null
 
     try {
       updatedOrder = await prisma.$transaction(async tx => {
         if (dispatchSplitPlan && remainderOrderNumber) {
+          if (!remainderOrderReference) {
+            throw new ValidationError('Unable to generate a valid split PO reference')
+          }
+
           for (const update of dispatchSplitPlan.shippingLineUpdates) {
             await tx.purchaseOrderLine.update({
               where: { id: update.lineId },
@@ -2216,6 +2281,7 @@ export async function transitionPurchaseOrderStage(
           const remainder = await tx.purchaseOrder.create({
             data: {
               orderNumber: remainderOrderNumber,
+              skuGroup: remainderOrderReference.skuGroup,
               poNumber: toPublicOrderNumber(remainderOrderNumber),
               splitGroupId: dispatchSplitPlan.groupId,
               splitParentId: order.id,
@@ -2261,6 +2327,11 @@ export async function transitionPurchaseOrderStage(
             await tx.purchaseOrderLine.createMany({
               data: dispatchSplitPlan.remainderLineSeeds.map(seed => ({
                 ...seed,
+                lotRef: buildLotReference(
+                  remainderOrderReference.sequence,
+                  remainderOrderReference.skuGroup,
+                  seed.skuCode
+                ),
                 purchaseOrderId: remainder.id,
               })),
             })
@@ -2884,7 +2955,7 @@ export async function receivePurchaseOrderInventory(params: {
   }
 
   if (order.status !== PurchaseOrderStatus.WAREHOUSE) {
-    throw new ConflictError('Inventory can only be received at the At Warehouse stage')
+    throw new ConflictError('Inventory can only be received at the Warehouse stage')
   }
 
   if (order.postedAt) {
@@ -3721,6 +3792,11 @@ export async function generatePurchaseOrderShippingMarks(params: {
       recordGateIssue(issues, `cargo.lines.${line.id}.material`, 'Material is required')
     }
 
+    const lotRef = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
+    if (!lotRef) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.lotRef`, 'Lot reference is required')
+    }
+
     const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
     if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
       recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight is required')
@@ -3784,7 +3860,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const grossWeightKg = Number(line.cartonWeightKg)
     const netWeightLabel = formatWeightDisplayFromKg(netWeightKg, unitSystem, 1)
     const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
-    const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
+    const shippingMark = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
 
     const perCarton: string[] = []
     for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
@@ -4046,6 +4122,7 @@ export function serializePurchaseOrder(
   return {
     id: order.id,
     orderNumber: toPublicOrderNumber(order.orderNumber),
+    skuGroup: order.skuGroup ?? null,
     poNumber: order.poNumber,
     splitGroupId: order.splitGroupId ?? null,
     splitParentId: order.splitParentId ?? null,
@@ -4104,6 +4181,7 @@ export function serializePurchaseOrder(
 	      id: line.id,
 	      skuCode: line.skuCode,
 	      skuDescription: line.skuDescription,
+	      lotRef: line.lotRef ?? null,
 	      batchLot: line.batchLot,
         piNumber: line.piNumber ?? null,
         commodityCode: line.commodityCode ?? null,

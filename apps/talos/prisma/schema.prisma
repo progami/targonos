@@ -63,6 +63,18 @@ model UserPermission {
   @@map("user_permissions")
 }
 
+model PoProductAssignment {
+  userEmail      String   @map("user_email")
+  skuCode        String   @map("sku_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+  createdByEmail String   @map("created_by_email")
+
+  @@id([userEmail, skuCode])
+  @@index([userEmail])
+  @@index([skuCode])
+  @@map("po_product_assignments")
+}
+
 model Warehouse {
   id                 String     @id @default(uuid())
   code               String     @unique
@@ -89,6 +101,7 @@ model Warehouse {
 model Sku {
   id                  String     @id @default(uuid())
   skuCode             String     @unique @map("sku_code")
+  skuGroup            String?    @map("sku_group")
   asin                String?
   category             String?    @map("category")
   subcategory          String?    @map("subcategory")
@@ -325,6 +338,7 @@ model InventoryTransaction {
 model PurchaseOrder {
   id               String              @id @default(uuid())
   orderNumber      String              @map("order_number")
+  skuGroup         String?             @map("sku_group")
   poNumber         String?             @unique @map("po_number") // Auto-generated PO-0001 format
   splitGroupId     String?             @map("split_group_id")
   splitParentId    String?             @map("split_parent_id")
@@ -656,6 +670,7 @@ model PurchaseOrderLine {
   purchaseOrder     PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   skuCode           String                  @map("sku_code")
   skuDescription    String?                 @map("sku_description")
+  lotRef            String?                 @map("lot_ref")
   batchLot          String?                 @map("batch_lot")
   piNumber          String?                 @map("pi_number")
   commodityCode     String?                 @map("commodity_code")

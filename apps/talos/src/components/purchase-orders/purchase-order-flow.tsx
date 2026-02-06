@@ -341,6 +341,9 @@ interface PurchaseOrderSummary {
   poNumber: string | null
   splitGroupId: string | null
   splitParentId: string | null
+  tenantCode?: TenantCode
+  matchedSkuCodes?: string[]
+  crossTenantReadOnly?: boolean
   type: 'PURCHASE' | 'ADJUSTMENT'
   status: POStageStatus
   isLegacy: boolean
@@ -443,6 +446,16 @@ type SupplierAdjustmentEntry = {
   notes: string | null
 }
 
+type CrossTenantPurchaseOrderPayload = PurchaseOrderSummary & {
+  tenantCode: TenantCode
+  matchedSkuCodes: string[]
+  crossTenantReadOnly: true
+  documents: PurchaseOrderDocumentSummary[]
+  forwardingCosts: PurchaseOrderForwardingCostSummary[]
+  costSummary: PurchaseOrderCostLedgerSummary
+  supplierAdjustment: SupplierAdjustmentEntry | null
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -468,8 +481,8 @@ const DOCUMENT_STAGE_META: Record<
   RFQ: { label: 'RFQ', icon: FileEdit },
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
-  OCEAN: { label: 'In Transit', icon: Ship },
-  WAREHOUSE: { label: 'At Warehouse', icon: Warehouse },
+  OCEAN: { label: 'Transit', icon: Ship },
+  WAREHOUSE: { label: 'Warehouse', icon: Warehouse },
   SHIPPED: { label: 'Shipped', icon: Package2 },
 }
 
@@ -503,8 +516,8 @@ const STAGES = [
   { value: 'RFQ', label: 'RFQ', icon: FileEdit, color: 'slate' },
   { value: 'ISSUED', label: 'Issued', icon: Send, color: 'emerald' },
   { value: 'MANUFACTURING', label: 'Manufacturing', icon: Factory, color: 'amber' },
-  { value: 'OCEAN', label: 'In Transit', icon: Ship, color: 'blue' },
-  { value: 'WAREHOUSE', label: 'At Warehouse', icon: Warehouse, color: 'purple' },
+  { value: 'OCEAN', label: 'Transit', icon: Ship, color: 'blue' },
+  { value: 'WAREHOUSE', label: 'Warehouse', icon: Warehouse, color: 'purple' },
 ] as const
 
 const INCOTERMS_OPTIONS = [
@@ -798,7 +811,13 @@ const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
 
 export type PurchaseOrderFlowMode = 'detail' | 'create'
 
-export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
+type PurchaseOrderFlowProps = {
+  mode: PurchaseOrderFlowMode
+  orderId?: string
+  tenantCode?: TenantCode
+}
+
+export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const router = useRouter()
   const { data: session, status } = useSession()
   const tenantRegion: TenantCode = session?.user?.region ?? 'US'
@@ -807,6 +826,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const weightUnit = getWeightUnitLabel(unitSystem)
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
+  const crossTenantCode = props.tenantCode
+  const isCrossTenantReadOnly = !isCreate && Boolean(crossTenantCode)
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
@@ -951,9 +972,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         : orderId
           ? `/operations/purchase-orders/${orderId}`
           : '/operations/purchase-orders'
+      const returnPathWithTenant =
+        !isCreate && crossTenantCode
+          ? `${returnPath}?tenant=${encodeURIComponent(crossTenantCode)}`
+          : returnPath
       redirectToPortal(
         '/login',
-        `${window.location.origin}${withBasePath(returnPath)}`
+        `${window.location.origin}${withBasePath(returnPathWithTenant)}`
       )
       return
     }
@@ -1035,12 +1060,27 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
       try {
         setLoading(true)
-        const response = await fetch(`/api/purchase-orders/${orderId}`)
+        const endpoint = isCrossTenantReadOnly && crossTenantCode
+          ? `/api/purchase-orders/manufacturing/${encodeURIComponent(crossTenantCode)}/${orderId}`
+          : `/api/purchase-orders/${orderId}`
+        const response = await fetch(endpoint)
         if (!response.ok) {
           throw new Error('Failed to load purchase order')
         }
         const data = await response.json()
-        setOrder(data)
+        if (isCrossTenantReadOnly && crossTenantCode) {
+          const crossPayload = data as CrossTenantPurchaseOrderPayload
+          setOrder(crossPayload)
+          setDocuments(Array.isArray(crossPayload.documents) ? crossPayload.documents : [])
+          setForwardingCosts(
+            Array.isArray(crossPayload.forwardingCosts) ? crossPayload.forwardingCosts : []
+          )
+          setCostLedgerSummary(crossPayload.costSummary ?? null)
+          setSupplierAdjustment(crossPayload.supplierAdjustment ?? null)
+          setAuditLogs([])
+        } else {
+          setOrder(data)
+        }
       } catch (_error) {
         toast.error('Failed to load purchase order')
         router.push('/operations/purchase-orders')
@@ -1056,7 +1096,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return
     }
     setLoading(false)
-  }, [isCreate, orderId, router, session, status])
+  }, [crossTenantCode, isCreate, isCrossTenantReadOnly, orderId, router, session, status])
 
   useEffect(() => {
     if (!order) return
@@ -1072,6 +1112,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   }, [order, orderInfoEditing])
 
   const refreshDocuments = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1091,13 +1132,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setDocumentsLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshDocuments()
   }, [refreshDocuments])
 
   const refreshAuditLogs = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1120,7 +1162,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setAuditLogsLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshAuditLogs()
@@ -1129,6 +1171,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const patchOrderLine = useCallback(
     async (lineId: string, data: Record<string, unknown>) => {
       if (!order) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        return
+      }
 
       try {
         const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
@@ -1159,7 +1205,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         toast.error('Failed to update line item')
       }
     },
-    [order, refreshAuditLogs]
+    [isCrossTenantReadOnly, order, refreshAuditLogs]
   )
 
   const maybePatchCartonDimensions = useCallback(
@@ -1205,6 +1251,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   )
 
   const refreshForwardingCosts = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1221,13 +1268,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } catch {
       setForwardingCosts([])
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshForwardingCosts()
   }, [refreshForwardingCosts])
 
   const refreshCostLedgerSummary = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1251,13 +1299,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setCostLedgerLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshCostLedgerSummary()
   }, [refreshCostLedgerSummary])
 
   const refreshSupplierAdjustment = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) {
       setSupplierAdjustment(null)
@@ -1340,7 +1389,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setSupplierAdjustmentLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshSupplierAdjustment()
@@ -1365,6 +1414,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const saveSupplierAdjustment = useCallback(async () => {
     if (!order) return
     if (supplierAdjustmentSaving) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     const amount = Number(supplierAdjustmentDraft.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1406,6 +1459,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     supplierAdjustmentDraft.kind,
     supplierAdjustmentDraft.notes,
     supplierAdjustmentSaving,
+    isCrossTenantReadOnly,
   ])
 
   const forwardingSubtotal = useMemo(
@@ -1431,6 +1485,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const saveFreightCost = useCallback(async () => {
     if (!order) return
     if (freightCostSaving) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     const raw = freightCostDraft.trim()
     if (!raw) {
@@ -1475,6 +1533,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     order,
     refreshCostLedgerSummary,
     refreshForwardingCosts,
+    isCrossTenantReadOnly,
   ])
 
   const handleDocumentUpload = useCallback(
@@ -1487,6 +1546,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       const input = event.target
       const file = input.files?.[0]
       if (!orderId || !file) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        input.value = ''
+        return
+      }
 
       const key = `${stage}::${documentType}`
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
@@ -1591,7 +1655,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         input.value = ''
       }
     },
-    [order?.id, refreshAuditLogs, refreshDocuments]
+    [isCrossTenantReadOnly, order?.id, refreshAuditLogs, refreshDocuments]
   )
 
   const ensureSkusLoaded = useCallback(async () => {
@@ -2072,6 +2136,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     // Show confirmation dialog for cancel
     if (targetStatus === 'CANCELLED') {
@@ -2100,6 +2168,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const executeTransition = async (targetStatus: POStageStatus): Promise<boolean> => {
     if (!order || transitioning) return false
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return false
+    }
 
     try {
       setTransitioning(true)
@@ -2158,6 +2230,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const handleReceiveInventory = async () => {
     if (!order) return
     if (receivingInventory) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       setReceivingInventory(true)
@@ -2281,7 +2357,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
   const isReceived = Boolean(order?.postedAt)
-  const isReadOnly = isTerminalStatus || isReceived
+  const isReadOnly = isCrossTenantReadOnly || isTerminalStatus || isReceived
   const canEdit = isCreate ? true : !isReadOnly && order?.status === 'RFQ'
   const canEditDispatchAllocation =
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
@@ -2359,6 +2435,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       setOrderInfoSaving(true)
@@ -2501,6 +2581,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
@@ -2595,6 +2679,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     setAddLineSubmitting(true)
     try {
@@ -2638,6 +2726,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleDownloadPdf = async () => {
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('PDF generation is not available in cross-region read-only mode')
+      return
+    }
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/pdf`))
       if (!response.ok) {
@@ -2669,6 +2761,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleDownloadShippingMarks = async () => {
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('Shipping marks generation is not available in cross-region read-only mode')
+      return
+    }
 
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`))
@@ -2759,6 +2855,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       />
 	      <PageContent>
 	        <div className="flex flex-col gap-6">
+            {isCrossTenantReadOnly && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Cross-region manufacturing view ({crossTenantCode}) is read-only.
+              </div>
+            )}
 	          {/* Stage Progress Bar */}
 	          {(isCreate ||
 	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
@@ -5705,7 +5806,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                     ) : !order.warehouseCode || !order.warehouseName ? (
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                         <p className="text-sm text-muted-foreground">
-                          Supplier credits/debits are recorded after the PO is received at warehouse.
+                          Supplier credits/debits are recorded after the PO is received in Warehouse stage.
                         </p>
                       </div>
                     ) : (
@@ -6574,7 +6675,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )
                 })()}
 
-                {/* In Transit Section */}
+                {/* Transit Section */}
                 {(() => {
                   if (activeViewStage !== 'OCEAN') return null
                   const ocean = order.stageData.ocean
@@ -6586,7 +6687,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        In Transit
+                        Transit
                       </h4>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">

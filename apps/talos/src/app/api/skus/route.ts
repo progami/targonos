@@ -47,6 +47,20 @@ const skuSchemaBase = z.object({
     .min(1)
     .max(50)
     .transform(val => sanitizeForDisplay(val)),
+  skuGroup: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .nullable()
+    .transform(val => {
+      if (val === undefined) return undefined
+      if (val === null) return null
+      const sanitized = sanitizeForDisplay(val)
+      if (!sanitized) return null
+      const normalized = sanitized.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      return normalized.length > 0 ? normalized : null
+    }),
   asin: z
     .string()
     .trim()
@@ -423,6 +437,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     const created = await tx.sku.create({
       data: {
         skuCode: validatedData.skuCode,
+        skuGroup: validatedData.skuGroup ?? null,
         asin: validatedData.asin ?? null,
         category: validatedData.category ?? null,
         subcategory: validatedData.subcategory ?? null,
