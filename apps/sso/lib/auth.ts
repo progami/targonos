@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
-import { getOrCreatePortalUserByEmail, getUserAuthz } from '@targon/auth/server'
+import { getOrCreatePortalUserByEmail, getUserAuthz, getUserByEmail } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -81,6 +81,9 @@ if (normalizedBaseUrl) {
 const resolvedCookieDomain = resolveCookieDomain(process.env.COOKIE_DOMAIN, process.env.NEXTAUTH_URL)
 process.env.COOKIE_DOMAIN = resolvedCookieDomain
 
+const portalHostname = new URL(process.env.NEXTAUTH_URL).hostname.trim().toLowerCase()
+const AUTO_PROVISION_PORTAL_USERS = !portalHostname.startsWith('dev-os.')
+
 const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET
 if (sharedSecret) {
   process.env.NEXTAUTH_SECRET = sharedSecret
@@ -139,13 +142,16 @@ const baseAuthOptions: NextAuthConfig = {
         const lastName = typeof (profile as any)?.family_name === 'string'
           ? (profile as any).family_name
           : null
-        const portalUser = await getOrCreatePortalUserByEmail({
-          email,
-          firstName,
-          lastName,
-        })
+        const portalUser = AUTO_PROVISION_PORTAL_USERS
+          ? await getOrCreatePortalUserByEmail({
+              email,
+              firstName,
+              lastName,
+            })
+          : await getUserByEmail(email)
         if (!portalUser) {
-          console.warn(`[auth] Blocked Google login for ${email} (unable to load portal user)`)
+          const reason = AUTO_PROVISION_PORTAL_USERS ? 'unable to provision portal user' : 'no portal user record'
+          console.warn(`[auth] Blocked Google login for ${email} (${reason})`)
           return false
         }
 
