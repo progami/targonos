@@ -45,4 +45,9 @@ export declare function getUserEntitlements(userId: string): Promise<AppEntitlem
 export declare function getUserGlobalRoles(userId: string): Promise<string[]>;
 export declare function getUserAuthz(userId: string): Promise<PortalAuthz>;
 export declare function getUserByEmail(email: string): Promise<AuthenticatedUser | null>;
+export declare function getOrCreatePortalUserByEmail(options: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+}): Promise<AuthenticatedUser | null>;
 export {};

@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
-import { getUserAuthz, getUserByEmail } from '@targon/auth/server'
+import { getOrCreatePortalUserByEmail, getUserAuthz } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -19,6 +19,13 @@ if (!process.env.COOKIE_DOMAIN) {
 applyDevAuthDefaults({
   appId: 'targon',
 })
+
+const ORG_EMAIL_DOMAIN = 'targonglobal.com'
+
+function isOrgEmail(email: string): boolean {
+  const normalized = email.trim().toLowerCase()
+  return normalized.endsWith(`@${ORG_EMAIL_DOMAIN}`)
+}
 
 function sanitizeBaseUrl(raw?: string | null): string | undefined {
   if (!raw) return undefined
@@ -121,9 +128,24 @@ const baseAuthOptions: NextAuthConfig = {
           return false
         }
 
-        const portalUser = await getUserByEmail(email)
+        if (!isOrgEmail(email)) {
+          console.warn(`[auth] Blocked Google login for ${email} (outside org domain)`)
+          return false
+        }
+
+        const firstName = typeof (profile as any)?.given_name === 'string'
+          ? (profile as any).given_name
+          : null
+        const lastName = typeof (profile as any)?.family_name === 'string'
+          ? (profile as any).family_name
+          : null
+        const portalUser = await getOrCreatePortalUserByEmail({
+          email,
+          firstName,
+          lastName,
+        })
         if (!portalUser) {
-          console.warn(`[auth] Blocked Google login for ${email} (no active portal user)`)
+          console.warn(`[auth] Blocked Google login for ${email} (unable to load portal user)`)
           return false
         }
 
