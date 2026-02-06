@@ -114,7 +114,7 @@ export type GroupSyncResult = {
 function normalizeAppRole(value: unknown): AppRole {
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase()
-    if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+    if (normalized === 'viewer') {
       return 'viewer'
     }
   }
@@ -125,6 +125,23 @@ function normalizeDepartments(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => String(item).trim()).filter(Boolean)
     : []
+}
+
+function normalizeOptionalName(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null) {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return trimmed
 }
 
 function parseGroupMembershipsFromEnv(): Record<string, string[]> {
@@ -773,6 +790,70 @@ export async function getUserByEmail(email: string): Promise<AuthenticatedUser |
   }) as PortalUserRecord | null
 
   if (!user) return null
+  return mapPortalUser(user)
+}
+
+export async function getOrCreatePortalUserByEmail(options: {
+  email: string
+  firstName?: string | null
+  lastName?: string | null
+}): Promise<AuthenticatedUser | null> {
+  const normalizedEmail = options.email.trim().toLowerCase()
+  if (!normalizedEmail) return null
+
+  if (!process.env.PORTAL_DB_URL) {
+    const demoUser = buildDemoUser()
+    if (demoUser.email.toLowerCase() === normalizedEmail) {
+      return demoUser
+    }
+    return null
+  }
+
+  const firstName = normalizeOptionalName(options.firstName)
+  const lastName = normalizeOptionalName(options.lastName)
+  const prisma = getPortalAuthPrisma()
+
+  const user = await prisma.$transaction(async (tx) => {
+    const existingUser = await tx.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    })
+
+    if (existingUser) {
+      await tx.user.update({
+        where: { id: existingUser.id },
+        data: {
+          isActive: true,
+          ...(firstName !== undefined ? { firstName } : {}),
+          ...(lastName !== undefined ? { lastName } : {}),
+        },
+        select: { id: true },
+      })
+    } else {
+      await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          username: null,
+          passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+          firstName: firstName ?? null,
+          lastName: lastName ?? null,
+          isActive: true,
+          isDemo: false,
+        },
+        select: { id: true },
+      })
+    }
+
+    return tx.user.findUnique({
+      where: { email: normalizedEmail },
+      select: userSelect,
+    }) as Promise<PortalUserRecord | null>
+  })
+
+  if (!user) {
+    return null
+  }
+
   return mapPortalUser(user)
 }
 

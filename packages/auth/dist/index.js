@@ -464,7 +464,7 @@ function normalizeStringArray(value) {
 function normalizeAppRole(value) {
     if (typeof value === 'string') {
         const normalized = value.trim().toLowerCase();
-        if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+        if (normalized === 'viewer') {
             return 'viewer';
         }
     }

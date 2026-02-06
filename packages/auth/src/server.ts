@@ -4,6 +4,7 @@ export {
   getUserAuthz,
   getUserEntitlements,
   getUserByEmail,
+  getOrCreatePortalUserByEmail,
   getUserGlobalRoles,
   provisionPortalUser,
   removeManualUserAppGrant,
