@@ -111,15 +111,6 @@ export type GroupSyncResult = {
   skippedLocked: number
 }
 
-function parseEmailSet(raw: string | undefined) {
-  return new Set(
-    (raw ?? '')
-      .split(/[,\s]+/)
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean),
-  )
-}
-
 function normalizeAppRole(value: unknown): AppRole {
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase()
@@ -150,56 +141,6 @@ function parseGroupMembershipsFromEnv(): Record<string, string[]> {
   }
 }
 
-const DEFAULT_PORTAL_BOOTSTRAP_ADMINS = new Set(['jarrar@targonglobal.com'])
-
-function portalBootstrapAdminEmailSet() {
-  const configured = parseEmailSet(process.env.PORTAL_BOOTSTRAP_ADMIN_EMAILS)
-  return new Set([...DEFAULT_PORTAL_BOOTSTRAP_ADMINS, ...configured])
-}
-
-function defaultPortalAdminApps() {
-  return [
-    { slug: 'talos', name: 'Talos', departments: ['Ops'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'atlas', name: 'Atlas', departments: ['People Ops'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'website', name: 'Website', departments: [], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'kairos', name: 'Kairos', departments: ['Product'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'xplan', name: 'xplan', departments: ['Product'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'plutus', name: 'Plutus', departments: ['Finance'], role: 'viewer' as const, source: 'bootstrap' as const },
-    { slug: 'argus', name: 'Argus', departments: ['Account / Listing'], role: 'viewer' as const, source: 'bootstrap' as const },
-  ]
-}
-
-async function ensurePlatformAdminRole(tx: any): Promise<string> {
-  const role = await tx.role.upsert({
-    where: { name: 'platform_admin' },
-    update: {},
-    create: {
-      name: 'platform_admin',
-      description: 'Global admin role for cross-app access management.',
-    },
-    select: { id: true },
-  })
-  return role.id
-}
-
-async function assignPlatformAdminRole(tx: any, userId: string): Promise<void> {
-  const roleId = await ensurePlatformAdminRole(tx)
-  await tx.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId,
-        roleId,
-      },
-    },
-    update: {},
-    create: {
-      userId,
-      roleId,
-    },
-  })
-}
-
 async function bumpAuthzVersion(tx: any, userId: string): Promise<void> {
   await tx.user.update({
     where: { id: userId },
@@ -209,79 +150,6 @@ async function bumpAuthzVersion(tx: any, userId: string): Promise<void> {
       },
     },
     select: { id: true },
-  })
-}
-
-async function ensureBootstrapPortalAdminUser(normalizedEmail: string) {
-  const prisma = getPortalAuthPrisma()
-
-  await prisma.$transaction(async (tx) => {
-    const usernameBase = (normalizedEmail.split('@')[0] || 'admin')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'admin'
-
-    const existingUser = await tx.user.findUnique({
-      where: { email: normalizedEmail },
-      select: { id: true, username: true },
-    })
-
-    const userId = existingUser
-      ? (
-          await tx.user.update({
-            where: { email: normalizedEmail },
-            data: {
-              isActive: true,
-              username: existingUser.username ?? usernameBase,
-            },
-            select: { id: true },
-          })
-        ).id
-      : (
-          await tx.user.create({
-            data: {
-              email: normalizedEmail,
-              username: usernameBase,
-              passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
-              firstName: null,
-              lastName: null,
-              isActive: true,
-              isDemo: false,
-            },
-            select: { id: true },
-          })
-        ).id
-
-    for (const app of defaultPortalAdminApps()) {
-      const appRecord = await tx.app.upsert({
-        where: { slug: app.slug },
-        update: {},
-        create: { slug: app.slug, name: app.name, description: null },
-        select: { id: true },
-      })
-
-      await tx.userApp.upsert({
-        where: { userId_appId: { userId, appId: appRecord.id } },
-        update: {
-          role: app.role,
-          source: app.source,
-          locked: true,
-          departments: app.departments,
-        },
-        create: {
-          userId,
-          appId: appRecord.id,
-          role: app.role,
-          source: app.source,
-          locked: true,
-          departments: app.departments,
-        },
-      })
-    }
-
-    await assignPlatformAdminRole(tx, userId)
-    await bumpAuthzVersion(tx, userId)
   })
 }
 
@@ -896,28 +764,13 @@ export async function getUserByEmail(email: string): Promise<AuthenticatedUser |
   }
 
   const prisma = getPortalAuthPrisma()
-
-  const fetchUser = async () =>
-    prisma.user.findFirst({
-      where: {
-        email: normalizedEmail,
-        isActive: true,
-      },
-      select: userSelect,
-    }) as Promise<PortalUserRecord | null>
-
-  let user = await fetchUser()
-
-  if (portalBootstrapAdminEmailSet().has(normalizedEmail)) {
-    const requiredSlugs = defaultPortalAdminApps().map((app) => app.slug)
-    const currentSlugs = user ? new Set(user.appAccess.map((entry) => entry.app.slug)) : new Set<string>()
-    const hasAllAppAccess = user ? requiredSlugs.every((slug) => currentSlugs.has(slug)) : false
-
-    if (!user || !hasAllAppAccess) {
-      await ensureBootstrapPortalAdminUser(normalizedEmail)
-      user = await fetchUser()
-    }
-  }
+  const user = await prisma.user.findFirst({
+    where: {
+      email: normalizedEmail,
+      isActive: true,
+    },
+    select: userSelect,
+  }) as PortalUserRecord | null
 
   if (!user) return null
   return mapPortalUser(user)
