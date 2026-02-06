@@ -16,10 +16,10 @@ const ENTITY_ORDER_BY: Record<ErdV9Entity, string> = {
   warehouse: '"code"',
   lot: '"po_id", "sku_id"',
   purchase_order: '"created_at" DESC',
-  po_ci: '"po_id", "ci_id"',
+  po_ci: '"po_id", "sku_id", "ci_id"',
   commercial_invoice: '"ci_ref"',
   ci_allocation: '"po_id", "sku_id"',
-  goods_receipt: '"received_date" DESC',
+  grn: '"received_date" DESC',
   grn_line_item: '"grn_id", "line_id"',
   discrepancy: '"logged_at" DESC',
 }
