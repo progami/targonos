@@ -171,6 +171,7 @@ interface SkuBatchRow {
 interface SkuRow {
   id: string
   skuCode: string
+  skuGroup?: string | null
   description: string
   isActive: boolean
   asin: string | null
@@ -219,6 +220,7 @@ interface SupplierOption {
 
 interface SkuFormState {
   skuCode: string
+  skuGroup: string
   description: string
   isActive: boolean
   asin: string
@@ -335,6 +337,7 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
   const itemSide3Input = formatLengthInput(parseFiniteNumber(side3))
   return {
     skuCode: sku?.skuCode ?? '',
+    skuGroup: sku?.skuGroup ?? '',
     description: sku?.description ?? '',
     isActive: sku ? sku.isActive : true,
     asin: sku?.asin ?? '',
@@ -791,11 +794,17 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
     }
 
     const skuCode = formState.skuCode.trim()
+    const skuGroup = formState.skuGroup.trim().toUpperCase()
     const description = formState.description.trim()
     const asinValue = formState.asin.trim() ? formState.asin.trim() : null
 
     if (!skuCode) {
       toast.error('SKU code is required')
+      return
+    }
+
+    if (!skuGroup) {
+      toast.error('SKU group is required')
       return
     }
 
@@ -969,6 +978,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 
       const payload: Record<string, unknown> = {
         skuCode,
+        skuGroup,
         asin: asinValue,
         description,
         isActive: formState.isActive,
@@ -1243,6 +1253,19 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     onChange={event =>
                       setFormState(prev => ({ ...prev, skuCode: event.target.value }))
                     }
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="skuGroup">SKU Group</Label>
+                  <Input
+                    id="skuGroup"
+                    value={formState.skuGroup}
+                    onChange={event =>
+                      setFormState(prev => ({ ...prev, skuGroup: event.target.value.toUpperCase() }))
+                    }
+                    placeholder="e.g. PDS"
                     required
                   />
                 </div>

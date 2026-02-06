@@ -100,6 +100,8 @@ export interface PurchaseOrderSummary {
   id: string
   orderNumber: string
   poNumber: string | null
+  tenantCode?: string | null
+  matchedSkuCodes?: string[]
   type: PurchaseOrderTypeOption
   status: PurchaseOrderStatusOption
   counterpartyName: string | null
@@ -257,7 +259,11 @@ export function PurchaseOrdersPanel({
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/purchase-orders')
+      const endpoint =
+        statusFilter === 'MANUFACTURING'
+          ? '/api/purchase-orders/manufacturing'
+          : '/api/purchase-orders'
+      const response = await fetch(endpoint)
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         toast.error(payload?.error ?? 'Failed to load purchase orders')
@@ -272,7 +278,7 @@ export function PurchaseOrdersPanel({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [statusFilter])
 
   useEffect(() => {
     fetchOrders()
@@ -428,7 +434,11 @@ export function PurchaseOrdersPanel({
       tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
       render: order => (
         <Link
-          href={`/operations/purchase-orders/${order.id}`}
+          href={
+            order.tenantCode
+              ? `/operations/purchase-orders/${order.id}?tenant=${encodeURIComponent(order.tenantCode)}`
+              : `/operations/purchase-orders/${order.id}`
+          }
           className="block max-w-full truncate text-primary hover:underline"
           prefetch={false}
         >
@@ -610,6 +620,18 @@ export function PurchaseOrdersPanel({
       }
       case 'MANUFACTURING': {
         cols.push(
+          {
+            key: 'tenant',
+            header: buildColumnHeader('Region'),
+            fit: true,
+            thClassName: 'w-[84px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap',
+            render: order => (
+              <Badge variant="outline" className="text-[11px] font-semibold">
+                {formatTextOrDash(order.tenantCode)}
+              </Badge>
+            ),
+          },
 	          {
 	            key: 'pi-number',
 	            header: buildColumnHeader('PI #'),

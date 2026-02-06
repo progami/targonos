@@ -5,6 +5,11 @@ import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
+import {
+  buildLotReference,
+  normalizeSkuGroup,
+  resolveOrderReferenceSeed,
+} from '@/lib/services/supply-chain-reference-service'
 
 const CreateLineSchema = z.object({
   skuCode: z.string().trim().min(1),
@@ -89,6 +94,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
       id: line.id,
       skuCode: line.skuCode,
       skuDescription: line.skuDescription,
+      lotRef: line.lotRef ?? null,
       batchLot: line.batchLot,
       piNumber: line.piNumber ?? null,
       commodityCode: line.commodityCode ?? null,
@@ -135,7 +141,13 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      orderNumber: true,
+      poNumber: true,
+      skuGroup: true,
+    },
   })
 
   if (!order) {
@@ -166,6 +178,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     select: {
       id: true,
       skuCode: true,
+      skuGroup: true,
       description: true,
       isActive: true,
       packSize: true,
@@ -257,12 +270,40 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       ? Number(Math.abs(result.data.totalCost).toFixed(2))
       : null
 
+  const effectiveSkuGroup =
+    typeof order.skuGroup === 'string' && order.skuGroup.trim().length > 0
+      ? normalizeSkuGroup(order.skuGroup)
+      : typeof sku.skuGroup === 'string' && sku.skuGroup.trim().length > 0
+        ? normalizeSkuGroup(sku.skuGroup)
+        : null
+
+  if (!effectiveSkuGroup) {
+    return ApiResponses.badRequest(
+      `SKU group is required for SKU ${sku.skuCode}. Set it in Config → Products before adding this line.`
+    )
+  }
+
+  if (order.skuGroup !== effectiveSkuGroup) {
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: { skuGroup: effectiveSkuGroup },
+    })
+  }
+
+  const orderReferenceSeed = resolveOrderReferenceSeed({
+    orderNumber: order.orderNumber,
+    poNumber: order.poNumber,
+    skuGroup: effectiveSkuGroup,
+  })
+  const lotRef = buildLotReference(orderReferenceSeed.sequence, orderReferenceSeed.skuGroup, sku.skuCode)
+
   try {
     line = await prisma.purchaseOrderLine.create({
       data: {
         purchaseOrder: { connect: { id: order.id } },
         skuCode: sku.skuCode,
         skuDescription: result.data.skuDescription ?? sku.description ?? '',
+        lotRef,
         batchLot: existingBatch.batchCode,
         piNumber,
         netWeightKg,
@@ -307,6 +348,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       lineId: line.id,
       skuCode: line.skuCode,
       skuDescription: line.skuDescription ?? null,
+      lotRef: line.lotRef ?? null,
       batchLot: line.batchLot ?? null,
       piNumber: line.piNumber ?? null,
       commodityCode: line.commodityCode ?? null,
@@ -335,6 +377,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     id: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
+    lotRef: line.lotRef ?? null,
     batchLot: line.batchLot,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
