@@ -41,13 +41,7 @@ Dev
   - test account must be a verified `@targonglobal.com` user.
   - `NEXTAUTH_SECRET` (and optionally `NEXTAUTH_URL=http://localhost:3000`) so the NextAuth session behavior matches production.
 - Auth bootstrap now fails immediately when required env vars are missing. Ensure `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` are defined before running dev servers. For ad-hoc local runs you can export `ALLOW_DEV_AUTH_DEFAULTS=true` to re-enable localhost fallbacks.
-- The portal now connects to the shared `auth_dev` schema on the `targon-prod` RDS instance. Before launching the dev server, open a tunnel to the bastion:
-  ```bash
-  ssh -f -N \
-    -L 6543:targon-prod.cyx0i8s6srto.us-east-1.rds.amazonaws.com:5432 \
-    -i ~/.ssh/talos-deploy-key.pem ec2-user@100.77.97.60
-  ```
-  With the tunnel running, set `PORTAL_DB_URL=postgresql://portal_auth:portal_auth_password_2024@localhost:6543/portal_db?schema=auth_dev` in `.env.local`. No local Postgres install is required—the tunnel proxies every request to the shared dev database.
+- Set `PORTAL_DB_URL` to the shared auth schema in `.env.local`, e.g. `postgresql://portal_auth:***@localhost:5432/portal_db?schema=auth`.
 
 Extending claims
 ----------------
