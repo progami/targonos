@@ -3,8 +3,8 @@
 import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -172,7 +172,6 @@ function SettlementsEmptyIcon() {
 
 export default function SettlementsPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
   const page = useSettlementsListStore((s) => s.page);
@@ -231,22 +230,7 @@ export default function SettlementsPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader
-          title="Settlements"
-          variant="accent"
-          actions={
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-              }}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-          }
-        />
+        <PageHeader title="Settlements" variant="accent" />
 
         {/* KPI Strip */}
         {!isLoading && data && (

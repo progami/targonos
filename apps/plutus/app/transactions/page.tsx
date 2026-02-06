@@ -1,8 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -117,7 +117,6 @@ async function fetchTransactions(input: {
 }
 
 export default function TransactionsPage() {
-  const queryClient = useQueryClient();
   const tab = useTransactionsStore((s) => s.tab);
   const searchInput = useTransactionsStore((s) => s.searchInput);
   const search = useTransactionsStore((s) => s.search);
@@ -180,20 +179,7 @@ export default function TransactionsPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader
-          title="Transactions"
-          variant="accent"
-          actions={
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] })}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </Button>
-          }
-        />
+        <PageHeader title="Transactions" variant="accent" />
 
         <div className="mt-6 grid gap-4">
           {/* Tabs above filter */}
@@ -412,13 +398,13 @@ export default function TransactionsPage() {
                                 {row.entityName.trim() === '' ? '—' : row.entityName}
                               </TableCell>
                               <TableCell
-                                className="align-top text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                className="align-top text-xs text-slate-700 dark:text-slate-200 max-w-[200px] truncate"
                                 title={memo === '—' ? undefined : memo}
                               >
                                 {memo}
                               </TableCell>
                               <TableCell
-                                className="align-top text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                className="align-top text-xs text-slate-700 dark:text-slate-200 max-w-[200px] truncate"
                                 title={accountLabel === '—' ? undefined : accountLabel}
                               >
                                 {accountLabel}
