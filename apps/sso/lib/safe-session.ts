@@ -4,10 +4,13 @@ import type { Session } from 'next-auth'
 function isDecryptError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const message = error.message ?? ''
+  const name = error.name ?? ''
   return (
-    error.name === 'JWEDecryptionFailed' ||
+    name === 'JWEDecryptionFailed' ||
+    name === 'JWTSessionError' ||
     message.includes('JWEDecryptionFailed') ||
-    message.includes('decryption operation failed')
+    message.includes('decryption operation failed') ||
+    message.includes('no matching decryption secret')
   )
 }
 
