@@ -139,5 +139,6 @@ export function buildYearSegments(calendar: WeekCalendar): YearSegment[] {
       startWeekNumber: min,
       endWeekNumber: max,
       weekCount: max >= min ? max - min + 1 : 0,
-    }));
+    }))
+    .filter((segment) => segment.weekCount >= 4);
 }
