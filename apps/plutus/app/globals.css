@@ -8,33 +8,33 @@
 
 /* Custom scrollbar - refined with brand colors */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(203, 213, 225, 0.2);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 194, 185, 0.35);
-  border-radius: 0.5rem;
+  background: rgba(0, 194, 185, 0.25);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 194, 185, 0.55);
+  background: rgba(0, 194, 185, 0.45);
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(0, 194, 185, 0.25);
+  background: rgba(0, 194, 185, 0.2);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 194, 185, 0.45);
+  background: rgba(0, 194, 185, 0.4);
 }
 
 /* Selection */
@@ -124,6 +124,74 @@ h4,
   box-shadow: 0 8px 32px rgba(0, 194, 185, 0.08);
 }
 
+/* Table row hover with left accent */
+.table-row-hover {
+  @apply relative transition-colors duration-150;
+}
+
+.table-row-hover:hover {
+  @apply bg-slate-50/80 dark:bg-white/[0.03];
+}
+
+.table-row-hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  border-radius: 0 4px 4px 0;
+  transition: background-color 0.15s ease;
+}
+
+.table-row-hover:hover::before {
+  background: rgb(69, 179, 212);
+}
+
+.dark .table-row-hover:hover::before {
+  background: rgb(0, 194, 185);
+}
+
+/* Clickable row cursor */
+.cursor-row {
+  cursor: pointer;
+}
+
+/* Alternating table rows */
+.table-striped > tbody > tr:nth-child(even) {
+  @apply bg-slate-50/40 dark:bg-white/[0.02];
+}
+
+/* Smooth expand/collapse */
+.expand-content {
+  animation: expandIn 0.2s ease-out;
+  overflow: hidden;
+}
+
+@keyframes expandIn {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
+/* Code block styling */
+.code-block {
+  @apply rounded-xl border border-slate-800 bg-slate-950 text-slate-50 p-4 text-sm overflow-x-auto font-mono;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark .code-block {
+  @apply border-white/10 bg-black/60;
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -205,5 +273,35 @@ h4,
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Page entrance animation */
+  .page-enter {
+    animation: pageEnter 0.25s ease-out;
+  }
+
+  @keyframes pageEnter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Monospace numbers for financial data */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Money positive/negative colors */
+  .money-positive {
+    @apply text-emerald-600 dark:text-emerald-400;
+  }
+
+  .money-negative {
+    @apply text-red-600 dark:text-red-400;
   }
 }

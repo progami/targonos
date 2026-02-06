@@ -49,11 +49,11 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="flex-1">
+    <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader title="Settings" variant="accent" />
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="mt-6 grid gap-6">
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-6">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
