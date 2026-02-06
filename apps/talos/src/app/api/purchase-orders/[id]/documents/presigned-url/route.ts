@@ -6,6 +6,7 @@ import { getS3Service } from '@/services/s3.service'
 import { validateFile } from '@/lib/security/file-upload'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
+import { withBasePath } from '@/lib/utils/base-path'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,15 +154,21 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     )
 
     // Browsers cannot PUT directly to our S3 bucket (CORS). Return a same-origin upload URL that
-    // proxies the PUT through our API so older clients keep working.
+    // proxies the PUT through our API so older clients keep working. This must include the base
+    // path when Talos is hosted under one (e.g. /talos).
     const origin = request.nextUrl.origin
-    const uploadUrl = `${origin}/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
-      s3Key
-    )}&stage=${encodeURIComponent(stage)}&documentType=${encodeURIComponent(
-      documentType
-    )}&fileName=${encodeURIComponent(fileName)}&fileType=${encodeURIComponent(
-      fileType
-    )}&fileSize=${encodeURIComponent(String(fileSize))}`
+    const uploadUrl = new URL(
+      withBasePath(
+        `/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
+          s3Key
+        )}&stage=${encodeURIComponent(stage)}&documentType=${encodeURIComponent(
+          documentType
+        )}&fileName=${encodeURIComponent(fileName)}&fileType=${encodeURIComponent(
+          fileType
+        )}&fileSize=${encodeURIComponent(String(fileSize))}`
+      ),
+      origin
+    ).toString()
 
     return NextResponse.json({ uploadUrl, s3Key, expiresIn: 300 })
   } catch (_error) {
