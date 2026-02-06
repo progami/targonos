@@ -655,7 +655,7 @@ function normalizeStringArray(value: unknown): string[] {
 function normalizeAppRole(value: unknown): AppRole {
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'viewer' || normalized === 'member' || normalized === 'admin') {
+    if (normalized === 'viewer') {
       return 'viewer';
     }
   }
