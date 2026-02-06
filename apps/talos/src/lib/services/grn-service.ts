@@ -17,6 +17,11 @@ import {
   SYSTEM_FALLBACK_NAME,
   toPublicOrderNumber,
 } from '@/lib/services/purchase-order-utils'
+import {
+  buildGoodsReceiptReference,
+  getNextGoodsReceiptSequence,
+  resolveOrderReferenceSeed,
+} from '@/lib/services/supply-chain-reference-service'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
@@ -128,12 +133,22 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
     }
 
     const receivedAt = input.receivedAt ?? new Date()
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: purchaseOrder.orderNumber,
+      poNumber: purchaseOrder.poNumber,
+      skuGroup: purchaseOrder.skuGroup,
+    })
+    const nextGrnSequence = await getNextGoodsReceiptSequence(tx, orderReferenceSeed.skuGroup)
+    const generatedGrnReference = buildGoodsReceiptReference(
+      nextGrnSequence,
+      orderReferenceSeed.skuGroup
+    )
 
     const note = await tx.grn.create({
       data: {
         purchaseOrderId: input.purchaseOrderId,
         status: GrnStatus.DRAFT,
-        referenceNumber: input.referenceNumber ?? null,
+        referenceNumber: generatedGrnReference,
         receivedAt,
         receivedById: user.id ?? null,
         receivedByName: user.name ?? null,
