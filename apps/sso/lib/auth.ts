@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
-import { getUserAuthz, getUserByEmail, provisionPortalUser } from '@targon/auth/server'
+import { getUserAuthz, getUserByEmail } from '@targon/auth/server'
 
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
@@ -82,15 +82,9 @@ if (sharedSecret) {
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const hasGoogleOAuth = Boolean(googleClientId && googleClientSecret)
-const isProd = process.env.NODE_ENV === 'production'
 
 if (!hasGoogleOAuth) {
   throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured for Targon auth.')
-}
-
-const allowedEmails = parseAllowedEmails(process.env.GOOGLE_ALLOWED_EMAILS || process.env.ALLOWED_GOOGLE_EMAILS)
-if (isProd && allowedEmails.addresses.size === 0 && allowedEmails.domains.size === 0) {
-  throw new Error('GOOGLE_ALLOWED_EMAILS must include at least one permitted account in production.')
 }
 
 const providers: NextAuthConfig['providers'] = [
@@ -117,14 +111,6 @@ const baseAuthOptions: NextAuthConfig = {
     async signIn({ user, account, profile }) {
       if (account?.provider === 'google') {
         const email = (profile?.email || user?.email || '').toLowerCase()
-        const rawFirstName = (profile as any)?.given_name
-        const rawLastName = (profile as any)?.family_name
-        const firstName = typeof rawFirstName === 'string' && rawFirstName.trim()
-          ? rawFirstName.trim()
-          : undefined
-        const lastName = typeof rawLastName === 'string' && rawLastName.trim()
-          ? rawLastName.trim()
-          : undefined
         const emailVerified = typeof (profile as any)?.email_verified === 'boolean'
           ? Boolean((profile as any)?.email_verified)
           : typeof (profile as any)?.verified_email === 'boolean'
@@ -135,27 +121,10 @@ const baseAuthOptions: NextAuthConfig = {
           return false
         }
 
-        if (!isEmailAllowed(email, allowedEmails)) {
-          if (!isProd) {
-            console.warn(`[auth] Blocked Google login for ${email} (not in GOOGLE_ALLOWED_EMAILS)`)
-          }
+        const portalUser = await getUserByEmail(email)
+        if (!portalUser) {
+          console.warn(`[auth] Blocked Google login for ${email} (no active portal user)`)
           return false
-        }
-
-        let portalUser = await getUserByEmail(email)
-        const hasTalosEntitlement = portalUser
-          ? Object.prototype.hasOwnProperty.call(portalUser.entitlements, 'talos')
-          : false
-
-        if (!portalUser || !hasTalosEntitlement) {
-          portalUser = await provisionPortalUser({
-            email,
-            firstName,
-            lastName,
-            apps: [
-              { slug: 'talos', name: 'Talos', role: 'viewer', departments: [] },
-            ],
-          })
         }
 
         ;(user as any).portalUser = portalUser
@@ -280,51 +249,3 @@ export const authOptions: NextAuthConfig = withSharedAuth(baseAuthOptions, {
 
 // Initialize NextAuth with config and export handlers + auth function
 export const { handlers, auth, signIn, signOut } = NextAuth(authOptions)
-
-type AllowedEmailConfig = {
-  addresses: Set<string>
-  domains: Set<string>
-}
-
-function parseAllowedEmails(raw: string | undefined): AllowedEmailConfig {
-  const config: AllowedEmailConfig = {
-    addresses: new Set(),
-    domains: new Set(),
-  }
-  if (!raw) return config
-  const candidates = raw
-    .split(/[,\s]+/)
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-
-  for (const candidate of candidates) {
-    if (candidate === '*') {
-      config.domains.add('*')
-      continue
-    }
-    if (candidate.startsWith('@')) {
-      const domain = candidate.slice(1)
-      if (domain) config.domains.add(domain)
-      continue
-    }
-    if (!candidate.includes('@')) {
-      config.domains.add(candidate)
-      continue
-    }
-    config.addresses.add(candidate)
-  }
-  return config
-}
-
-function isEmailAllowed(email: string, config: AllowedEmailConfig): boolean {
-  if (config.addresses.size === 0 && config.domains.size === 0) {
-    return true
-  }
-  const normalized = email.trim().toLowerCase()
-  if (config.addresses.has(normalized)) {
-    return true
-  }
-  const [, domain = ''] = normalized.split('@')
-  if (!domain) return false
-  return config.domains.has('*') || config.domains.has(domain)
-}
