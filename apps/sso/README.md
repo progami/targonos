@@ -17,7 +17,7 @@ How it works
 - NextAuth (JWT sessions) runs only in this app.
 - Session cookie name: `__Secure-next-auth.session-token` (prod) scoped to domain `.targonglobal.com`.
 - Other apps verify the cookie with `next-auth/jwt` in their middleware and do not render their own login.
-- Google OAuth handles primary authentication; only allow-listed company accounts can complete sign-in.
+- Google OAuth handles primary authentication; only active users from the portal auth DB can complete sign-in.
 - On missing/invalid session, apps redirect to `PORTAL_AUTH_URL + /login?callbackUrl=<originalUrl>`.
 
 Environment
@@ -28,17 +28,15 @@ Environment
 - NEXTAUTH_URL: `https://os.targonglobal.com`
 - PORTAL_DB_URL: `postgresql://portal_auth:***@localhost:5432/portal_db?schema=auth`
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET: OAuth credentials from the Google Cloud console
-- GOOGLE_ALLOWED_EMAILS: comma or whitespace separated list of permitted Google accounts (e.g. `jarrar@targonglobal.com, mehdi@targonglobal.com`)
 
 Dev
 ---
 
 - In dev, cookie name becomes `targon.next-auth.session-token` to avoid collisions.
 - Apps attempt `next-auth.session-token`, `targon.next-auth.session-token`, and their legacy cookie name.
-- When `GOOGLE_ALLOWED_EMAILS` is omitted locally, any Google account may sign in (handy for smoke tests).
 - To test Google SSO locally, create `apps/sso/.env.local` (gitignored) with:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` copied from the Google Cloud project (`targon-sso`).
-  - `GOOGLE_ALLOWED_EMAILS` set to the Workspace accounts you want exercising the flow.
+  - ensure test accounts exist and are active in `auth."User"` on the portal DB.
   - `NEXTAUTH_SECRET` (and optionally `NEXTAUTH_URL=http://localhost:3000`) so the NextAuth session behavior matches production.
 - Auth bootstrap now fails immediately when required env vars are missing. Ensure `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` are defined before running dev servers. For ad-hoc local runs you can export `ALLOW_DEV_AUTH_DEFAULTS=true` to re-enable localhost fallbacks.
 - The portal now connects to the shared `auth_dev` schema on the `targon-prod` RDS instance. Before launching the dev server, open a tunnel to the bastion:
