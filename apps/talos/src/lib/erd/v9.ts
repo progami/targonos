@@ -2,6 +2,7 @@ export const ERD_V9_ENTITY_COLUMNS = {
   sku: [
     'sku_id',
     'sku_code',
+    'sku_group',
     'asin',
     'description',
     'is_active',
@@ -57,6 +58,7 @@ export const ERD_V9_ENTITY_COLUMNS = {
   purchase_order: [
     'po_id',
     'po_ref',
+    'sku_group',
     'supplier_id',
     'destination',
     'issue_date',
@@ -89,7 +91,7 @@ export const ERD_V9_ENTITY_COLUMNS = {
     'box_artwork_url',
     'mfg_shipping_marks_url',
   ],
-  po_ci: ['po_id', 'ci_id', 'qty_on_shipment'],
+  po_ci: ['po_id', 'sku_id', 'ci_id', 'qty_on_shipment'],
   commercial_invoice: [
     'ci_id',
     'ci_ref',
@@ -118,7 +120,7 @@ export const ERD_V9_ENTITY_COLUMNS = {
     'allocated_by',
     'allocated_at',
   ],
-  goods_receipt: [
+  grn: [
     'grn_id',
     'grn_ref',
     'ci_id',
