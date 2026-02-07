@@ -28,6 +28,13 @@ export const runtime = "nodejs";
  * - mark sent + append audit attempts
  */
 async function handlePost(req: Request) {
+  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+    return NextResponse.json(
+      { ok: false, error: "Hermes is in dry-run mode. Dispatch queueing is disabled." },
+      { status: 403 }
+    );
+  }
+
   await maybeAutoMigrate();
 
   const schema = z.object({

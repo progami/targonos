@@ -130,6 +130,13 @@ async function loadDispatchById(id: string) {
  * - optional immediate send runs through the same claim+attempt recording as the worker
  */
 async function handlePost(req: Request) {
+  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+    return NextResponse.json(
+      { ok: false, error: "Hermes is in dry-run mode. Messaging is disabled." },
+      { status: 403 }
+    );
+  }
+
   await maybeAutoMigrate();
 
   const schema = z.object({

@@ -9,7 +9,7 @@ import {
   type CreditCardBrand,
   type PasswordDepartment,
 } from '@/lib/api-client'
-import { LockClosedIcon, PlusIcon, ExternalLinkIcon, TrashIcon, PencilIcon, ClipboardIcon, EyeIcon, EyeSlashIcon } from '@/components/ui/Icons'
+import { LockClosedIcon, PlusIcon, TrashIcon, PencilIcon, ClipboardIcon, EyeIcon, EyeSlashIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -141,6 +141,35 @@ function CvcCell({ cvv }: { cvv?: string | null }) {
         onClick={handleCopy}
         className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         title={copied ? 'Copied!' : 'Copy CVC'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
+function ExpiryCell({ expMonth, expYear }: { expMonth: number; expYear: number }) {
+  const [copied, setCopied] = useState(false)
+  const display = `${String(expMonth).padStart(2, '0')}/${expYear}`
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(display)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <span className="text-sm text-muted-foreground">{display}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy expiry'}
       >
         <ClipboardIcon className={cn(
           "h-3.5 w-3.5 transition-colors",
@@ -323,12 +352,17 @@ export default function CreditCardsPage() {
         accessorKey: 'title',
         header: 'Card',
         cell: ({ row }) => (
-          <div>
-            <p className="font-semibold text-foreground">{row.original.title}</p>
-            {row.original.cardholderName ? (
-              <p className="text-xs text-muted-foreground mt-0.5">{row.original.cardholderName}</p>
-            ) : null}
-          </div>
+          <p className="font-semibold text-foreground">{row.original.title}</p>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'cardholderName',
+        header: 'Cardholder',
+        cell: ({ row }) => row.original.cardholderName ? (
+          <span className="text-sm text-foreground">{row.original.cardholderName}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
         ),
         enableSorting: true,
       },
@@ -359,11 +393,7 @@ export default function CreditCardsPage() {
       {
         id: 'expiry',
         header: 'Expiry',
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {String(row.original.expMonth).padStart(2, '0')}/{row.original.expYear}
-          </span>
-        ),
+        cell: ({ row }) => <ExpiryCell expMonth={row.original.expMonth} expYear={row.original.expYear} />,
         enableSorting: false,
       },
       {
@@ -378,25 +408,6 @@ export default function CreditCardsPage() {
           )
         },
         enableSorting: true,
-      },
-      {
-        accessorKey: 'url',
-        header: 'Link',
-        cell: ({ row }) => row.original.url ? (
-          <a
-            href={row.original.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <span className="truncate max-w-[150px]">{new URL(row.original.url).hostname}</span>
-            <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
-          </a>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-        enableSorting: false,
       },
       {
         id: 'actions',

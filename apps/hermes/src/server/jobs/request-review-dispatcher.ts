@@ -358,6 +358,14 @@ async function processDispatch(row: DispatchRow, opts: {
 
 async function main() {
   loadHermesEnv();
+
+  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+    console.log(`[${nowIso()}] HERMES_DRY_RUN is enabled — request-review dispatcher will not process dispatches.`);
+    // Keep the process alive so monitoring sees it as running, but do nothing.
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);
