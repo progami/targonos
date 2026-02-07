@@ -9,7 +9,7 @@ import {
   type CreditCardBrand,
   type PasswordDepartment,
 } from '@/lib/api-client'
-import { LockClosedIcon, PlusIcon, ExternalLinkIcon, TrashIcon, PencilIcon } from '@/components/ui/Icons'
+import { LockClosedIcon, PlusIcon, ExternalLinkIcon, TrashIcon, PencilIcon, ClipboardIcon, EyeIcon, EyeSlashIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -51,6 +51,104 @@ const BRAND_OPTIONS: { value: CreditCardBrand; label: string }[] = [
 
 function getBrandLabel(brand: CreditCardBrand) {
   return BRAND_OPTIONS.find((b) => b.value === brand)?.label ?? brand
+}
+
+function CardNumberCell({ cardNumber, last4 }: { cardNumber?: string | null; last4: string }) {
+  const [visible, setVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const raw = cardNumber?.replace(/\s+/g, '')
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(raw ?? last4)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const display = raw
+    ? (visible ? raw : '•'.repeat(raw.length - 4) + raw.slice(-4))
+    : `•••• ${last4}`
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <code className={cn(
+        "px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs",
+        !visible && "tracking-wider"
+      )}>
+        {display}
+      </code>
+      {raw ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
+          className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={visible ? 'Hide number' : 'Show number'}
+        >
+          {visible ? (
+            <EyeSlashIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <EyeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy number'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
+function CvcCell({ cvv }: { cvv?: string | null }) {
+  const [visible, setVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  if (!cvv) return <span className="text-muted-foreground">—</span>
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(cvv)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
+        {visible ? cvv : '•••'}
+      </code>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={visible ? 'Hide CVC' : 'Show CVC'}
+      >
+        {visible ? (
+          <EyeSlashIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <EyeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy CVC'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
 }
 
 type CreditCardFormData = {
@@ -247,23 +345,15 @@ export default function CreditCardsPage() {
       {
         accessorKey: 'last4',
         header: 'Number',
-        cell: ({ row }) => {
-          const card = row.original
-          if (card.cardNumber) {
-            const digits = card.cardNumber.replace(/\s+/g, '')
-            const masked = '•'.repeat(digits.length - 4) + digits.slice(-4)
-            return (
-              <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
-                {masked}
-              </code>
-            )
-          }
-          return (
-            <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
-              •••• {card.last4}
-            </code>
-          )
-        },
+        cell: ({ row }) => (
+          <CardNumberCell cardNumber={row.original.cardNumber} last4={row.original.last4} />
+        ),
+        enableSorting: false,
+      },
+      {
+        id: 'cvc',
+        header: 'CVC',
+        cell: ({ row }) => <CvcCell cvv={row.original.cvv} />,
         enableSorting: false,
       },
       {
