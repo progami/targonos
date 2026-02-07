@@ -118,35 +118,160 @@ Portal app-link configuration:
 
 - `PORTAL_APPS_CONFIG` points at a JSON file (example: `dev.local.apps.json`) that tells the portal where each child app lives in dev.
 
-## Local development
+## Local development (new developer setup)
+
+This section covers how to set up the repo on your own machine for local development, connecting to the shared dev database.
 
 ### Prerequisites
 
-- Node.js `>= 20` (repo uses Node 20 in CI)
-- pnpm via Corepack (`corepack enable`)
-- PostgreSQL + Redis (only needed for flows that hit them)
+- **Node.js >= 20** (repo uses Node 20 in CI)
+- **pnpm** via Corepack:
+  ```bash
+  corepack enable
+  corepack prepare pnpm@latest --activate
+  ```
+- **Redis** (required by Talos for CSRF + rate limiting):
+  ```bash
+  brew install redis
+  brew services start redis
+  ```
+- **Cloudflare Tunnel client** (for shared dev database access):
+  ```bash
+  brew install cloudflared
+  ```
 
-### Install
+You do **not** need PostgreSQL installed locally — you'll connect to the shared dev database via tunnel.
+
+### 1. Clone and install
 
 ```bash
+git clone <repo-url> targonos-dev
+cd targonos-dev
+git checkout dev
 pnpm install
 ```
 
-### Run (dev mode)
+### 2. Start the database tunnel
+
+The shared dev database is exposed via a Cloudflare TCP tunnel. Run this in a **separate terminal** and keep it running:
 
 ```bash
-# All apps (parallel)
-pnpm dev
-
-# Single app
-pnpm --filter @targon/sso dev
-pnpm --filter @targon/talos dev
-pnpm --filter @targon/xplan dev
-pnpm --filter @targon/atlas dev
-pnpm --filter @targon/website dev
+cloudflared access tcp --hostname db.targonglobal.com --url localhost:6432
 ```
 
-For local-only URL wiring, set `PORTAL_APPS_CONFIG=dev.local.apps.json` so the portal can link to other apps running on localhost.
+This proxies the shared PostgreSQL instance to your `localhost:6432`. All `DATABASE_URL` values in your `.env.local` files should use port `6432`.
+
+### 3. Create `.env.local` files
+
+Each app needs its own `.env.local` file (gitignored). Ask a team member for the required secrets — specifically:
+
+- `NEXTAUTH_SECRET` / `PORTAL_AUTH_SECRET` — shared auth secret (must match across SSO and all apps)
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth credentials for SSO
+- Database credentials — username and password for the shared dev DB user
+
+#### `apps/sso/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3000
+HOST=0.0.0.0
+AUTH_TRUST_HOST=true
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+PORTAL_APPS_CONFIG=dev.local.apps.json
+PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=auth_dev
+GOOGLE_CLIENT_ID=<ask team for Google OAuth client ID>
+GOOGLE_CLIENT_SECRET=<ask team for Google OAuth client secret>
+GOOGLE_ALLOWED_EMAILS=@targonglobal.com
+ALLOW_CALLBACK_REDIRECT=true
+```
+
+#### `apps/talos/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3001
+HOST=0.0.0.0
+NEXTAUTH_URL=http://localhost:3001
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+NEXT_PUBLIC_APP_URL=http://localhost:3001
+CSRF_ALLOWED_ORIGINS=http://localhost:3001
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db
+REDIS_URL=redis://localhost:6379
+S3_BUCKET_NAME=ci-talos-bucket
+S3_BUCKET_REGION=us-east-1
+DATABASE_URL_US=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=dev_talos_us
+DATABASE_URL_UK=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=dev_talos_uk
+```
+
+> **Do NOT set `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH`, or `PRISMA_SCHEMA`** in local dev.
+> `BASE_PATH` causes double-path issues with `next dev`. `PRISMA_SCHEMA` overrides all tenant schemas globally and breaks multi-tenant routing.
+
+#### Other apps
+
+Use the same pattern — point `DATABASE_URL` to `localhost:6432` with the appropriate schema:
+
+| App | Workspace | Port | DB Schema |
+|-----|-----------|------|-----------|
+| SSO (Portal) | `@targon/sso` | 3000 | `auth_dev` |
+| Talos | `@targon/talos` | 3001 | `dev_talos_us` / `dev_talos_uk` |
+| Website | `@targon/website` | 3005 | — |
+| Atlas | `@targon/atlas` | 3006 | `dev_atlas` |
+| X-Plan | `@targon/xplan` | 3008 | `dev_xplan` |
+| Kairos | `@targon/kairos` | 3010 | `kairos` |
+| Plutus | `@targon/plutus` | 3012 | — (uses QuickBooks API) |
+| Hermes | `@targon/hermes` | 3014 | `dev_hermes` |
+| Argus | `@targon/argus` | 3016 | `dev_argus` |
+
+### 4. Generate Prisma clients
+
+Before running any app, generate its Prisma client:
+
+```bash
+# Generate for specific apps
+pnpm --filter @targon/sso exec prisma generate
+pnpm --filter @targon/talos exec prisma generate
+pnpm --filter @targon/atlas exec prisma generate
+pnpm --filter @targon/xplan exec prisma generate
+```
+
+### 5. Run the apps
+
+SSO must be running for authentication to work. Start it first, then any app you're working on:
+
+```bash
+# Terminal 1 — SSO (must start first)
+pnpm --filter @targon/sso dev
+
+# Terminal 2 — whichever app you're working on
+pnpm --filter @targon/talos dev
+pnpm --filter @targon/atlas dev
+pnpm --filter @targon/xplan dev
+```
+
+### 6. Access
+
+1. Open `http://localhost:3000` — SSO login page
+2. Sign in with your `@targonglobal.com` Google account
+3. Navigate to the app you're working on (e.g., `http://localhost:3001` for Talos)
+
+### Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `cloudflared` connection drops | Tunnel host machine may be offline | Confirm with team that the host is running, then restart `cloudflared access tcp ...` |
+| `/talos/talos` double path | `BASE_PATH` is set in `.env.local` | Remove `BASE_PATH` and `NEXT_PUBLIC_BASE_PATH` from your Talos `.env.local` |
+| "no matching decryption secret" | Auth secret mismatch between SSO and app | Ensure `NEXTAUTH_SECRET` and `PORTAL_AUTH_SECRET` are identical across all `.env.local` files |
+| "User region US does not match tenant UK" | `PRISMA_SCHEMA` is set | Remove `PRISMA_SCHEMA` from your Talos `.env.local` — it overrides all tenant schemas |
+| "Your account is not allowed to sign in" | DB connection limit hit or missing permissions | Ask team to check `portal_dev_external` connection limit and `auth_dev` schema grants |
+| Redis connection error | Redis not running | `brew services start redis` |
+| Prisma errors on startup | Prisma client not generated | Run `pnpm --filter <workspace> exec prisma generate` |
 
 ## CI/CD (GitHub Actions)
 
