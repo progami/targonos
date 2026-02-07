@@ -126,7 +126,7 @@ export const GET = withAuth(async (request, session) => {
 
  // Detailed transactions sheet
  const detailHeaders = [
- 'Date', 'Transaction ID', 'Type', 'Warehouse', 'SKU', 'Batch', 
+ 'Date', 'Transaction ID', 'Type', 'Warehouse', 'SKU', 'Lot Ref', 
   'Category', 'Quantity', 'Rate', 'Cost'
  ]
  const detailData: (string | number | null)[][] = [detailHeaders]
@@ -139,7 +139,7 @@ export const GET = withAuth(async (request, session) => {
  detail.transactionType,
  detail.warehouse,
  detail.sku,
- detail.batchLot,
+ detail.lotRef,
    detail.costCategory,
    detail.quantity,
  detail.unitRate,

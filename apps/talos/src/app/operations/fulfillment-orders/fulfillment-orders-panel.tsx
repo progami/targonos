@@ -5,13 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
+import { withBasePath } from '@/lib/utils/base-path'
 
 export type FulfillmentOrderStatusOption = 'DRAFT' | 'SHIPPED' | 'CANCELLED'
 
 export interface FulfillmentOrderLineSummary {
   id: string
   skuCode: string
-  batchLot: string
+  lotRef: string
   quantity: number
 }
 
@@ -65,7 +66,7 @@ export function FulfillmentOrdersPanel({
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/fulfillment-orders')
+      const response = await fetch(withBasePath('/api/fulfillment-orders'), { credentials: 'include' })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         toast.error(payload?.error ?? 'Failed to load fulfillment orders')

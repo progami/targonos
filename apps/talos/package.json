@@ -48,6 +48,7 @@
     "db:migrate:purchase-order-pi-documents-to-issued": "tsx scripts/migrations/move-pi-documents-to-issued.ts",
     "db:migrate:fulfillment-orders-foundation": "tsx scripts/migrations/add-fulfillment-orders-foundation.ts",
     "db:migrate:fulfillment-orders-amazon-fields": "tsx scripts/migrations/add-fulfillment-orders-amazon-fields.ts",
+    "db:migrate:replace-batch-with-lot-ref": "tsx scripts/migrations/replace-batch-with-lot-ref.ts",
     "db:migrate:po-product-assignments": "tsx scripts/migrations/add-po-product-assignments.ts",
     "db:migrate:supply-chain-reference-convention": "tsx scripts/migrations/supply-chain-reference-convention.ts",
     "db:migrate:erd-v9-views": "tsx scripts/migrations/ensure-erd-v9-views.ts",

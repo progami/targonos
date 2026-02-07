@@ -26,6 +26,7 @@ import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
 } from '@/lib/constants/status-mappings'
+import { withBasePath } from '@/lib/utils/base-path'
 
 export type PurchaseOrderTypeOption = 'PURCHASE' | 'ADJUSTMENT' | 'FULFILLMENT'
 export type PurchaseOrderStatusOption =
@@ -43,7 +44,7 @@ export interface PurchaseOrderLineSummary {
   id: string
   skuCode: string
   skuDescription: string | null
-  batchLot: string | null
+  lotRef: string | null
   unitsOrdered: number
   unitsPerCarton: number
   quantity: number
@@ -259,11 +260,12 @@ export function PurchaseOrdersPanel({
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true)
-      const endpoint =
+      const endpoint = withBasePath(
         statusFilter === 'MANUFACTURING'
           ? '/api/purchase-orders/manufacturing'
           : '/api/purchase-orders'
-      const response = await fetch(endpoint)
+      )
+      const response = await fetch(endpoint, { credentials: 'include' })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         toast.error(payload?.error ?? 'Failed to load purchase orders')

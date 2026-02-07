@@ -11,6 +11,7 @@ import { redirectToPortal } from '@/lib/portal'
 import { Button } from '@/components/ui/button'
 import { ImportButton } from '@/components/ui/import-button'
 import SuppliersPanel from './suppliers-panel'
+import { withBasePath } from '@/lib/utils/base-path'
 
 const ALLOWED_ROLES = ['admin', 'staff']
 
@@ -27,8 +28,7 @@ function SuppliersPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-      redirectToPortal('/login', `${window.location.origin}${basePath}/config/suppliers`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/suppliers')}`)
       return
     }
 

@@ -132,7 +132,7 @@ export const GET = withAuth(async (req, session) => {
         description: balance.skuDescription,
         unitsPerCarton: balance.unitsPerCarton
       },
-      batchLot: balance.batchLot,
+      lotRef: balance.lotRef,
       currentCartons: balance.currentCartons,
       currentPallets: balance.currentPallets,
       currentUnits: balance.currentUnits,

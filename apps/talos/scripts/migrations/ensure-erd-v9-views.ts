@@ -301,14 +301,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       pol."quantity" AS "cartons",
       pol."unit_cost",
       pol."pi_number" AS "pi_ref",
-      sb."production_date"::date AS "production_date",
+      pol."production_date"::date AS "production_date",
       pol."status"::text AS "status"
     FROM "purchase_order_lines" pol
     LEFT JOIN "skus" s
-      ON s."sku_code" = pol."sku_code"
-    LEFT JOIN "sku_batches" sb
-      ON sb."sku_id" = s."id"
-     AND sb."batch_code" = pol."batch_lot"`,
+      ON s."sku_code" = pol."sku_code"`,
     `CREATE OR REPLACE VIEW "commercial_invoice" AS
     WITH line_totals AS (
       SELECT
@@ -538,4 +535,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

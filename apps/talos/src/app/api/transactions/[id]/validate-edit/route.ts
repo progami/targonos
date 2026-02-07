@@ -36,7 +36,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  details: {
  currentInventory?: {
  skuCode: string;
- batchLot: string;
+ lotRef: string;
  quantity: number;
  allocated: number;
  available: number;
@@ -59,7 +59,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const allTransactionsForInventory = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode
  },
  orderBy: {
@@ -78,7 +78,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
 
  result.details.currentInventory = {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot || '',
+ lotRef: transaction.lotRef,
  quantity: currentQuantity,
  allocated: 0, // We don't track allocations in this simple system
  available: currentQuantity
@@ -90,7 +90,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const outgoingTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode,
  transactionType: { in: ['SHIP', 'ADJUST_OUT'] },
  transactionDate: {
@@ -106,7 +106,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const totalOut = outgoingTransactions.reduce((sum, t) => sum + t.cartonsOut, 0)
  result.canDelete = false // Never allow delete if goods have moved
  result.canEdit = true // Allow editing non-quantity fields (will be enforced in edit endpoint)
- result.reason = `Cannot delete: ${totalOut} cartons from this batch have been shipped/adjusted. You must delete the ${outgoingTransactions.length} dependent transaction(s) first.`
+ result.reason = `Cannot delete: ${totalOut} cartons from this lot have been shipped/adjusted. You must delete the ${outgoingTransactions.length} dependent transaction(s) first.`
  
  result.details.dependentTransactions = outgoingTransactions.map(t => ({
  id: t.id,
@@ -123,7 +123,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const allTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode
  },
  orderBy: [
