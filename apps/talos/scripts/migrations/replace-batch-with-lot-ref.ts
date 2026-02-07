@@ -176,6 +176,87 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     // ERD v9 lot PK = (po_id, sku_id) so enforce one SKU per PO line.
     `ALTER TABLE "purchase_order_lines" DROP CONSTRAINT IF EXISTS "purchase_order_lines_purchase_order_id_sku_code_batch_lot_key"`,
     `DROP INDEX IF EXISTS "purchase_order_lines_purchase_order_id_sku_code_batch_lot_key"`,
+    `
+      WITH dups AS (
+        SELECT
+          "purchase_order_id",
+          "sku_code",
+          MIN("id") AS keep_id,
+          ARRAY_AGG("id") AS ids,
+          SUM("units_ordered") AS sum_units_ordered,
+          SUM("quantity") AS sum_quantity,
+          SUM("posted_quantity") AS sum_posted_quantity,
+          SUM(COALESCE("quantity_received", 0)) AS sum_quantity_received,
+          SUM(COALESCE("total_cost", 0)) AS sum_total_cost
+        FROM "purchase_order_lines"
+        GROUP BY "purchase_order_id", "sku_code"
+        HAVING COUNT(*) > 1
+      ),
+      id_map AS (
+        SELECT keep_id, UNNEST(ids) AS old_id
+        FROM dups
+      ),
+      update_keep AS (
+        UPDATE "purchase_order_lines" pol
+        SET
+          "units_ordered" = d.sum_units_ordered,
+          "quantity" = d.sum_quantity,
+          "posted_quantity" = d.sum_posted_quantity,
+          "quantity_received" = CASE
+            WHEN d.sum_quantity_received = 0 THEN NULL
+            ELSE d.sum_quantity_received
+          END,
+          "total_cost" = CASE
+            WHEN d.sum_total_cost = 0 THEN NULL
+            ELSE d.sum_total_cost
+          END
+        FROM dups d
+        WHERE pol."id" = d.keep_id
+        RETURNING pol."id"
+      ),
+      update_inventory_transactions AS (
+        UPDATE "inventory_transactions" it
+        SET "purchase_order_line_id" = m.keep_id
+        FROM id_map m
+        WHERE it."purchase_order_line_id" = m.old_id
+          AND m.old_id <> m.keep_id
+        RETURNING it."id"
+      ),
+      update_financial_ledger AS (
+        UPDATE "financial_ledger" fl
+        SET "purchase_order_line_id" = m.keep_id
+        FROM id_map m
+        WHERE fl."purchase_order_line_id" = m.old_id
+          AND m.old_id <> m.keep_id
+        RETURNING fl."id"
+      ),
+      update_goods_receipt_lines AS (
+        UPDATE "goods_receipt_lines" grl
+        SET "purchase_order_line_id" = m.keep_id
+        FROM id_map m
+        WHERE grl."purchase_order_line_id" = m.old_id
+          AND m.old_id <> m.keep_id
+        RETURNING grl."id"
+      ),
+      update_warehouse_invoice_lines AS (
+        UPDATE "warehouse_invoice_lines" wil
+        SET "purchase_order_line_id" = m.keep_id
+        FROM id_map m
+        WHERE wil."purchase_order_line_id" = m.old_id
+          AND m.old_id <> m.keep_id
+        RETURNING wil."id"
+      ),
+      delete_dups AS (
+        DELETE FROM "purchase_order_lines" pol
+        USING id_map m
+        WHERE pol."id" = m.old_id
+          AND m.old_id <> m.keep_id
+        RETURNING pol."id"
+      )
+      SELECT
+        (SELECT COUNT(*) FROM dups) AS duplicate_groups,
+        (SELECT COUNT(*) FROM delete_dups) AS deleted_lines
+    `,
     `CREATE UNIQUE INDEX IF NOT EXISTS "purchase_order_lines_purchase_order_id_sku_code_key"
       ON "purchase_order_lines"("purchase_order_id", "sku_code")`,
 
