@@ -117,7 +117,7 @@ function QueueChart({ series }: { series: Overview["queue"]["series"] }) {
   const data = series.map((d) => ({ day: d.day, queued: d.queued }));
 
   return (
-    <div className="h-[240px] w-full">
+    <div className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -170,7 +170,7 @@ function MultiQueueChart(params: {
   bars: Array<{ key: string; label: string; color: string }>;
 }) {
   return (
-    <div className="h-[240px] w-full">
+    <div className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
