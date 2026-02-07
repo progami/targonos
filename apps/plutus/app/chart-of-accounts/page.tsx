@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useChartOfAccountsStore } from '@/lib/store/chart-of-accounts';
 import { cn } from '@/lib/utils';
@@ -310,19 +311,22 @@ export default function ChartOfAccountsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background page-enter">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <BackButton />
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Chart of Accounts</h1>
-          </div>
-          <Button onClick={handleRefresh} variant="outline" size="sm">
-            <RefreshIcon className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
-            Refresh
-          </Button>
-        </header>
+        <div className="flex items-center gap-4 mb-2">
+          <BackButton />
+        </div>
+        <PageHeader
+          title="Chart of Accounts"
+          variant="accent"
+          actions={
+            <Button onClick={handleRefresh} variant="outline" size="sm">
+              <RefreshIcon className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
+              Refresh
+            </Button>
+          }
+        />
 
         {/* Source Tabs */}
         <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-white/5 rounded-lg w-fit">
@@ -478,7 +482,7 @@ export default function ChartOfAccountsPage() {
                 {filteredAccounts.map((account) => (
                   <div
                     key={account.id}
-                    className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                    className="grid grid-cols-12 gap-4 px-4 py-3 table-row-hover"
                   >
                     {/* Code */}
                     <div className="col-span-1 flex items-center text-slate-600 dark:text-slate-400 text-sm font-mono">
@@ -487,22 +491,18 @@ export default function ChartOfAccountsPage() {
 
                     {/* Name */}
                     <div
-                      className="col-span-3 flex items-center gap-2 min-w-0"
-                      style={{ paddingLeft: `${account.depth * 16}px` }}
+                      className="col-span-3 flex items-center min-w-0"
+                      style={{ paddingLeft: `${account.depth * 20}px` }}
                       title={account.fullyQualifiedName ? account.fullyQualifiedName : account.name}
                     >
-                      {account.isSubAccount && (
-                        <span className="text-slate-400 dark:text-slate-500 text-xs flex-shrink-0">
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </span>
+                      {account.depth > 0 && (
+                        <span className="mr-1.5 text-slate-300 dark:text-slate-600 flex-shrink-0 select-none font-mono text-xs">└</span>
                       )}
                       <span className="font-medium text-slate-900 dark:text-white truncate">
                         {account.name}
                       </span>
                       {account.source === 'lmb' && (
-                        <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 rounded">
+                        <span className="ml-2 flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 rounded">
                           LMB
                         </span>
                       )}
@@ -526,10 +526,12 @@ export default function ChartOfAccountsPage() {
                     {/* Balance */}
                     <div className="col-span-2 flex items-center justify-end">
                       <span className={cn(
-                        'font-mono text-sm',
+                        'font-mono text-sm tabular-nums',
                         account.balance < 0
                           ? 'text-red-600 dark:text-red-400'
-                          : 'text-slate-700 dark:text-slate-300'
+                          : account.balance > 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-400 dark:text-slate-500'
                       )}>
                         {formatCurrency(account.balance, account.currency)}
                       </span>
@@ -542,7 +544,8 @@ export default function ChartOfAccountsPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500" />
           Synced from QuickBooks Online
         </div>
       </div>
