@@ -208,6 +208,7 @@ const nextConfig = {
   experimental: {
     // optimizeCss: true, // Disabled to avoid critters dependency issue
     optimizePackageImports: ['lucide-react', 'date-fns', 'recharts', '@radix-ui/react-icons', '@radix-ui/react-dialog', '@radix-ui/react-select'],
+    proxyClientMaxBodySize: '1gb',
   },
   
   // Server external packages (moved from experimental in Next.js 15)
