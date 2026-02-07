@@ -91,13 +91,7 @@ function normalizeTransactionLine(input: unknown): MutableTransactionLine {
     return {}
   }
 
-  const lotRef = (() => {
-    const normalized = asString(input.lotRef)
-    if (normalized) return normalized
-    // Legacy payload key
-    const legacy = asString(input.batchLot)
-    return legacy
-  })()
+  const lotRef = asString(input.lotRef)
 
   return {
     skuCode: asString(input.skuCode),
@@ -268,7 +262,6 @@ export const POST = withAuth(async (request, session) => {
 	      warehouseId: bodyWarehouseId,
 	      skuId,
 	      lotRef,
-	      batchLot: legacyBatchLot,
 	      cartonsIn,
 	      cartonsOut,
 	      storagePalletsIn,
@@ -288,11 +281,8 @@ export const POST = withAuth(async (request, session) => {
 	    const sanitizedTrackingNumber = trackingNumber ? sanitizeForDisplay(trackingNumber) : null
 	    const sanitizedNotes = notes ? sanitizeForDisplay(notes) : null
 	    const sanitizedSupplier = supplier ? sanitizeForDisplay(supplier) : null
-	    const resolvedLotRefInput = (() => {
-	      if (typeof lotRef === 'string' && lotRef.trim().length > 0) return lotRef
-	      if (typeof legacyBatchLot === 'string' && legacyBatchLot.trim().length > 0) return legacyBatchLot
-	      return null
-	    })()
+	    const resolvedLotRefInput =
+	      typeof lotRef === 'string' && lotRef.trim().length > 0 ? lotRef : null
 	    const sanitizedLotRef = resolvedLotRefInput ? sanitizeForDisplay(resolvedLotRefInput) : null
 
     // Handle both 'type' and 'transactionType' fields for backward compatibility

@@ -84,10 +84,10 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  available: currentQuantity
  }
 
- // For RECEIVE transactions, check if any items have been shipped
- if (transaction.transactionType === 'RECEIVE') {
- // Find any SHIP or ADJUST_OUT transactions for this SKU/batch/warehouse combo
- const outgoingTransactions = await prisma.inventoryTransaction.findMany({
+	 // For RECEIVE transactions, check if any items have been shipped
+	 if (transaction.transactionType === 'RECEIVE') {
+	 // Find any SHIP or ADJUST_OUT transactions for this SKU/lot/warehouse combo
+	 const outgoingTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
  lotRef: transaction.lotRef,
@@ -117,10 +117,10 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  }
  }
 
- // For SHIP or ADJUST_OUT transactions, check if deletion would create negative inventory
- if (transaction.transactionType === 'SHIP' || transaction.transactionType === 'ADJUST_OUT') {
- // Get all transactions for this SKU/batch/warehouse in chronological order
- const allTransactions = await prisma.inventoryTransaction.findMany({
+	 // For SHIP or ADJUST_OUT transactions, check if deletion would create negative inventory
+	 if (transaction.transactionType === 'SHIP' || transaction.transactionType === 'ADJUST_OUT') {
+	 // Get all transactions for this SKU/lot/warehouse in chronological order
+	 const allTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
  lotRef: transaction.lotRef,

@@ -404,7 +404,7 @@ export const importConfigs: Record<string, ImportEntityConfig> = {
       },
       {
         dbField: 'lotRef',
-        excelColumns: ['Lot', 'lot_ref', 'Lot Ref', 'Batch', 'batch_lot', 'Shipment', 'Batch/Lot'], // Matches export name first
+        excelColumns: ['Lot', 'lot_ref', 'Lot Ref'], // Matches export name first
         type: 'string',
         required: true,
       },

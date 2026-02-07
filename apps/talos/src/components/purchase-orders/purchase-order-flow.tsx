@@ -633,12 +633,7 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_ADD': {
       if (!newValue) return []
       const skuCode = newValue.skuCode
-      const lotRef =
-        typeof newValue.lotRef === 'string'
-          ? newValue.lotRef
-          : typeof newValue.batchLot === 'string'
-            ? newValue.batchLot
-            : null
+      const lotRef = typeof newValue.lotRef === 'string' ? newValue.lotRef : null
       const quantity = newValue.quantity
       const currency = newValue.currency
       const unitCost = newValue.unitCost
@@ -657,12 +652,7 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_DELETE': {
       if (!oldValue) return []
       const skuCode = oldValue.skuCode
-      const lotRef =
-        typeof oldValue.lotRef === 'string'
-          ? oldValue.lotRef
-          : typeof oldValue.batchLot === 'string'
-            ? oldValue.batchLot
-            : null
+      const lotRef = typeof oldValue.lotRef === 'string' ? oldValue.lotRef : null
       const quantity = oldValue.quantity
       const detail = [
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,

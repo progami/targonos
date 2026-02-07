@@ -252,7 +252,7 @@ export function optimizeShipmentQuantity(
 }
 
 /**
- * Batch optimization for multiple SKUs shipping together
+ * Bulk optimization for multiple SKUs shipping together
  */
 export interface BatchOptimizationInput {
  skuCode: string
