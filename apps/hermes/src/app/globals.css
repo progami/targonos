@@ -85,3 +85,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Semantic status badge colors */
+@layer components {
+  .badge-success {
+    @apply border-emerald-500/30 bg-emerald-500/10 text-emerald-600;
+  }
+  .dark .badge-success {
+    @apply border-emerald-400/30 bg-emerald-400/10 text-emerald-400;
+  }
+  .badge-warning {
+    @apply border-amber-500/30 bg-amber-500/10 text-amber-600;
+  }
+  .dark .badge-warning {
+    @apply border-amber-400/30 bg-amber-400/10 text-amber-400;
+  }
+}
