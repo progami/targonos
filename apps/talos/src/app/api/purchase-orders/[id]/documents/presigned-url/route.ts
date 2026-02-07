@@ -9,7 +9,7 @@ import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_DOCUMENT_SIZE_MB = 50
+const MAX_DOCUMENT_SIZE_MB = 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'RFQ',
