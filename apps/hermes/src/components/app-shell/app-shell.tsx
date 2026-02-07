@@ -3,9 +3,16 @@ import * as React from "react";
 import { AppHeader } from "@/components/app-shell/app-header";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 
+const isDryRun = process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
+      {isDryRun && (
+        <div className="bg-amber-500 px-4 py-1.5 text-center text-sm font-medium text-black">
+          DRY-RUN MODE — No messages will be sent to customers
+        </div>
+      )}
       <div className="flex">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
