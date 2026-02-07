@@ -83,7 +83,7 @@ function MarketplaceSelector() {
 
   return (
     <Select value={marketplace} onValueChange={(v) => setMarketplace(v as Marketplace)}>
-      <SelectTrigger className="h-8 w-[180px] gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
+      <SelectTrigger className="h-8 w-[155px] gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
         <SelectValue>
           {current?.flag ? `${current.flag} ${current.label}` : current?.label}
         </SelectValue>
@@ -142,9 +142,9 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md dark:bg-slate-950/90">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-8">
-          <Link href="/" className="flex items-center gap-2.5">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-6">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-teal-500 to-brand-teal-600 text-white shadow-sm shadow-brand-teal-500/25 dark:from-brand-cyan dark:to-brand-teal-400 dark:text-slate-900 dark:shadow-brand-cyan/20">
               <LogoIcon className="h-5 w-5" />
             </div>
@@ -154,40 +154,29 @@ export function AppHeader() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden items-center gap-0.5 md:flex">
+          <nav className="hidden items-center gap-0.5 lg:flex">
             {NAV_ITEMS.map((item) => {
               if ('href' in item) {
-                const Icon = item.icon;
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                      'group relative whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150',
                       isActive
                         ? 'text-brand-teal-700 dark:text-brand-cyan'
                         : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
                     )}
                   >
-                    <Icon
-                      className={cn(
-                        'h-4 w-4 transition-colors duration-150',
-                        isActive
-                          ? 'text-brand-teal-600 dark:text-brand-cyan'
-                          : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
-                      )}
-                    />
-                    <span>{item.label}</span>
-                    {/* Active bottom indicator */}
+                    {item.label}
                     {isActive && (
-                      <span className="absolute -bottom-[13px] left-3 right-3 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
+                      <span className="absolute -bottom-[13px] left-2.5 right-2.5 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
                     )}
                   </Link>
                 );
               }
 
-              const Icon = item.icon;
               const anyActive = item.items.some(
                 (submenu) => pathname === submenu.href || pathname.startsWith(`${submenu.href}/`),
               );
@@ -198,24 +187,16 @@ export function AppHeader() {
                     <button
                       type="button"
                       className={cn(
-                        'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                        'group relative flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150',
                         anyActive
                           ? 'text-brand-teal-700 dark:text-brand-cyan'
                           : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
                       )}
                     >
-                      <Icon
-                        className={cn(
-                          'h-4 w-4 transition-colors duration-150',
-                          anyActive
-                            ? 'text-brand-teal-600 dark:text-brand-cyan'
-                            : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
-                        )}
-                      />
                       <span>{item.label}</span>
-                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                      <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                       {anyActive && (
-                        <span className="absolute -bottom-[13px] left-3 right-3 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
+                        <span className="absolute -bottom-[13px] left-2.5 right-2.5 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
                       )}
                     </button>
                   </DropdownMenuTrigger>
@@ -232,8 +213,8 @@ export function AppHeader() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden md:block">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="hidden lg:block">
             <MarketplaceSelector />
           </div>
 
@@ -264,7 +245,7 @@ export function AppHeader() {
           {/* Mobile menu toggle */}
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5 md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5 lg:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
@@ -278,7 +259,7 @@ export function AppHeader() {
 
       {/* Mobile nav overlay */}
       {mobileOpen && (
-        <nav className="border-t border-slate-200/50 bg-white/98 backdrop-blur-md dark:border-white/5 dark:bg-slate-950/98 md:hidden">
+        <nav className="border-t border-slate-200/50 bg-white/98 backdrop-blur-md dark:border-white/5 dark:bg-slate-950/98 lg:hidden">
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-3 sm:px-6">
             <div className="mb-2 px-3 md:hidden">
               <MarketplaceSelector />
