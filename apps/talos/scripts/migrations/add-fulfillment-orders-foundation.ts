@@ -265,9 +265,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           ALTER TABLE "fulfillment_order_lines" RENAME COLUMN "batch_lot" TO "lot_ref";
         END IF;
       END $$;
-
+    `,
+    `
       DROP INDEX IF EXISTS "fulfillment_order_lines_fulfillment_order_id_sku_code_batch_lot_key";
-
+    `,
+    `
       CREATE UNIQUE INDEX IF NOT EXISTS "fulfillment_order_lines_fulfillment_order_id_sku_code_lot_ref_key"
         ON "fulfillment_order_lines" ("fulfillment_order_id", "sku_code", "lot_ref");
     `,
