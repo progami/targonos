@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERD v10.1 — Supply Chain Data Model</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f4f5f7;--surface:#ffffff;--border-light:#e5e7eb;--text:#1a1f2e;--text-dim:#6b7280;--text-muted:#9ca3af;--line:#94a3b8;
+    --blue:#2563eb;--blue-light:#eff6ff;--blue-border:#bfdbfe;
+    --orange:#ea580c;--orange-light:#fff7ed;--orange-border:#fed7aa;
+    --green:#16a34a;--green-light:#f0fdf4;--green-border:#bbf7d0;
+    --purple:#7c3aed;--purple-light:#f5f3ff;--purple-border:#ddd6fe;
+    --cyan:#0891b2;--cyan-light:#ecfeff;--cyan-border:#a5f3fc;
+    --yellow:#ca8a04;--yellow-light:#fefce8;--yellow-border:#fde68a;
+    --red:#dc2626;--red-light:#fef2f2;--red-border:#fecaca;
+    --amber:#b45309;--amber-light:#fffbeb;--amber-border:#fde68a;
+    --slate:#475569;--slate-light:#f8fafc;--slate-border:#cbd5e1;
+    --indigo:#4f46e5;--indigo-light:#eef2ff;--indigo-border:#c7d2fe;
+    --pink:#db2777;--pink-light:#fdf2f8;--pink-border:#fbcfe8;
+    --teal:#0d9488;--teal-light:#f0fdfa;--teal-border:#99f6e4;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif}
+  .page{max-width:1900px;margin:0 auto;padding:28px 24px 60px}
+  header h1{font-size:1.45rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:3px}
+  header p{font-size:0.84rem;color:var(--text-dim);margin-bottom:18px}
+  .legend{display:flex;gap:18px;padding:9px 14px;background:var(--surface);border:1px solid var(--border-light);border-radius:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+  .legend-title{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:.73rem;color:var(--text-dim)}
+  .legend-item svg{flex-shrink:0}
+  .kb{font-size:.52rem;font-weight:700;padding:1px 5px;border-radius:3px}
+  .kb-pk{background:var(--yellow-light);color:var(--yellow);border:1px solid var(--yellow-border)}
+  .kb-fk{background:var(--purple-light);color:var(--purple);border:1px solid var(--purple-border)}
+  .erd-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:12px;overflow:auto}
+  .erd{position:relative;width:1700px;height:1920px}
+  svg.lines{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+  .e{position:absolute;background:var(--surface);border:2px solid;border-radius:7px;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .15s}
+  .e:hover{box-shadow:0 4px 14px rgba(0,0,0,.09)}
+  .e-h{padding:6px 11px;border-bottom:2px solid;display:flex;align-items:center;justify-content:space-between;border-radius:5px 5px 0 0}
+  .e-n{font-family:'IBM Plex Mono',monospace;font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+  .e-t{font-size:.52rem;font-weight:600;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.05em}
+  .e-b{padding:4px 0}
+  .f{padding:2px 11px;font-size:.7rem;display:flex;align-items:center;gap:4px}
+  .fn{font-family:'IBM Plex Mono',monospace;font-size:.67rem;color:var(--text)}
+  .ft{font-family:'IBM Plex Mono',monospace;font-size:.57rem;color:var(--text-muted);margin-left:auto}
+  .fk{font-size:.48rem;font-weight:700;padding:1px 3px;border-radius:2px;flex-shrink:0}
+  .sep{height:1px;background:var(--border-light);margin:3px 11px}
+  .sec{padding:1px 11px;font-size:.52rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+  .e.c-pink{border-color:var(--pink)}.e.c-pink .e-h{background:var(--pink-light);border-color:var(--pink)}.e.c-pink .e-n{color:var(--pink)}.e.c-pink .e-t{background:var(--pink-light);color:var(--pink);border:1px solid var(--pink-border)}
+  .e.c-cyan{border-color:var(--cyan)}.e.c-cyan .e-h{background:var(--cyan-light);border-color:var(--cyan)}.e.c-cyan .e-n{color:var(--cyan)}.e.c-cyan .e-t{background:var(--cyan-light);color:var(--cyan);border:1px solid var(--cyan-border)}
+  .e.c-blue{border-color:var(--blue)}.e.c-blue .e-h{background:var(--blue-light);border-color:var(--blue)}.e.c-blue .e-n{color:var(--blue)}.e.c-blue .e-t{background:var(--blue-light);color:var(--blue);border:1px solid var(--blue-border)}
+  .e.c-purple{border-color:var(--purple);border-style:dashed}.e.c-purple .e-h{background:var(--purple-light);border-color:var(--purple);border-bottom-style:dashed}.e.c-purple .e-n{color:var(--purple)}.e.c-purple .e-t{background:var(--purple-light);color:var(--purple);border:1px solid var(--purple-border)}
+  .e.c-orange{border-color:var(--orange)}.e.c-orange .e-h{background:var(--orange-light);border-color:var(--orange)}.e.c-orange .e-n{color:var(--orange)}.e.c-orange .e-t{background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border)}
+  .e.c-amber{border-color:var(--amber);border-style:dashed}.e.c-amber .e-h{background:var(--amber-light);border-color:var(--amber);border-bottom-style:dashed}.e.c-amber .e-n{color:var(--amber)}.e.c-amber .e-t{background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-border)}
+  .e.c-green{border-color:var(--green)}.e.c-green .e-h{background:var(--green-light);border-color:var(--green)}.e.c-green .e-n{color:var(--green)}.e.c-green .e-t{background:var(--green-light);color:var(--green);border:1px solid var(--green-border)}
+  .e.c-red{border-color:var(--red)}.e.c-red .e-h{background:var(--red-light);border-color:var(--red)}.e.c-red .e-n{color:var(--red)}.e.c-red .e-t{background:var(--red-light);color:var(--red);border:1px solid var(--red-border)}
+  .e.c-slate{border-color:var(--slate)}.e.c-slate .e-h{background:var(--slate-light);border-color:var(--slate)}.e.c-slate .e-n{color:var(--slate)}.e.c-slate .e-t{background:var(--slate-light);color:var(--slate);border:1px solid var(--slate-border)}
+  .e.c-indigo{border-color:var(--indigo)}.e.c-indigo .e-h{background:var(--indigo-light);border-color:var(--indigo)}.e.c-indigo .e-n{color:var(--indigo)}.e.c-indigo .e-t{background:var(--indigo-light);color:var(--indigo);border:1px solid var(--indigo-border)}
+  .e.c-teal{border-color:var(--teal)}.e.c-teal .e-h{background:var(--teal-light);border-color:var(--teal)}.e.c-teal .e-n{color:var(--teal)}.e.c-teal .e-t{background:var(--teal-light);color:var(--teal);border:1px solid var(--teal-border)}
+  .stg{position:absolute;z-index:3;font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:3px 7px;border-radius:4px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Entity Relationship Diagram — v10.1</h1>
+    <p>Crow's Feet — 12 entities. Lot is independent (lot_id PK), consumed by RFQ &amp; PO. RFQ is supplier-agnostic; supplier_id required on PO (Issued+). Document URLs embedded per stage entity. Lot carries nullable carton dimension overrides (SKU values are defaults).</p>
+  </header>
+  <div class="legend">
+    <span class="legend-title">Crow's Feet</span>
+    <div class="legend-item"><svg width="44" height="16" viewBox="0 0 44 16"><line x1="2" y1="8" x2="30" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="2" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="14" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="8" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/></svg>Many</div>
+    <div class="legend-item"><svg width="44" height="16" viewBox="0 0 44 16"><line x1="2" y1="8" x2="38" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="38" y1="1" x2="38" y2="15" stroke="var(--line)" stroke-width="2.5"/></svg>One</div>
+    <div class="legend-item"><svg width="44" height="16" viewBox="0 0 44 16"><line x1="2" y1="8" x2="38" y2="8" stroke="var(--line)" stroke-width="1.5"/><circle cx="34" cy="8" r="4" fill="none" stroke="var(--line)" stroke-width="1.5"/></svg>Zero/One</div>
+    <div class="legend-item"><span class="kb kb-pk">PK</span> Primary Key</div>
+    <div class="legend-item"><span class="kb kb-fk">FK</span> Foreign Key</div>
+    <div class="legend-item"><span style="border:1.5px dashed var(--purple);padding:1px 5px;border-radius:3px;font-size:.6rem;color:var(--purple)">┅</span> Junction</div>
+  </div>
+  <div class="erd-wrap">
+    <div class="erd" id="erd">
+      <!-- Stage labels -->
+      <div class="stg" style="top:10px;left:380px;background:var(--teal-light);color:var(--teal);border:1px solid var(--teal-border)">⓪ Lot Pool</div>
+      <div class="stg" style="top:465px;left:380px;background:var(--cyan-light);color:var(--cyan);border:1px solid var(--cyan-border)">① RFQ</div>
+      <div class="stg" style="top:10px;left:780px;background:var(--blue-light);color:var(--blue);border:1px solid var(--blue-border)">② Issued</div>
+      <div class="stg" style="top:10px;left:1180px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-border)">③ Manufacturing</div>
+      <div class="stg" style="top:820px;left:500px;background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-border)">④ Transit</div>
+      <div class="stg" style="top:1060px;left:1150px;background:var(--green-light);color:var(--green);border:1px solid var(--green-border)">⑤ Warehouse</div>
+
+      <!-- ═══════════ SKU ═══════════ -->
+      <div class="e c-pink" id="sku" style="top:35px;left:25px;width:275px">
+        <div class="e-h"><span class="e-n">sku</span><span class="e-t">Product</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">sku_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">sku_code</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">sku_group</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">asin</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">description</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">is_active</span><span class="ft">bool</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">default_supplier_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">secondary_supplier_id</span><span class="ft">int?</span></div>
+          <div class="sep"></div><div class="sec">Reference Dims</div>
+          <div class="f"><span class="fn">ref_pkg_length_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_pkg_width_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_pkg_height_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_pkg_weight_lb</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_item_length_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_item_width_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_item_height_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">ref_item_weight_lb</span><span class="ft">decimal</span></div>
+          <div class="sep"></div><div class="sec">Amazon Dims</div>
+          <div class="f"><span class="fn">amz_pkg_length_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_pkg_width_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_pkg_height_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_pkg_weight_lb</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_item_length_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_item_width_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_item_height_in</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">amz_item_weight_lb</span><span class="ft">decimal</span></div>
+          <div class="sep"></div><div class="sec">Amazon Fees</div>
+          <div class="f"><span class="fn">category</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">subcategory</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">size_tier</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">referral_fee_pct</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">fba_fulfillment_fee</span><span class="ft">decimal</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ SUPPLIER ═══════════ -->
+      <div class="e c-slate" id="supplier" style="top:900px;left:25px;width:275px">
+        <div class="e-h"><span class="e-n">supplier</span><span class="e-t">Reference</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">supplier_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">name</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">contact_name</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">email</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">phone</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">address</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">banking_info</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">notes</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">default_payment_terms</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">default_incoterms</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ WAREHOUSE ═══════════ -->
+      <div class="e c-indigo" id="warehouse" style="top:1200px;left:25px;width:275px">
+        <div class="e-h"><span class="e-n">warehouse</span><span class="e-t">Reference</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">warehouse_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">code</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">name</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">type</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">address</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">phone</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ LOT (now independent) ═══════════ -->
+      <div class="e c-teal" id="lot" style="top:35px;left:380px;width:260px">
+        <div class="e-h"><span class="e-n">lot</span><span class="e-t">Production</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">lot_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">sku_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">rfq_id</span><span class="ft">int?</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">po_id</span><span class="ft">int?</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">lot_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">qty_units</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">units_per_carton</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">cartons</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">unit_cost</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">pi_ref</span><span class="ft">varchar?</span></div>
+          <div class="sep"></div><div class="sec">Carton Overrides</div>
+          <div class="f"><span class="fn">carton_side1_cm</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">carton_side2_cm</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">carton_side3_cm</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">carton_weight_kg</span><span class="ft">decimal?</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">production_date</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">created_at</span><span class="ft">datetime</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ RFQ (new entity) ═══════════ -->
+      <div class="e c-cyan" id="rfq" style="top:490px;left:380px;width:260px">
+        <div class="e-h"><span class="e-n">rfq</span><span class="e-t">Sourcing</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">rfq_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">rfq_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">sku_group</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">destination</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">cargo_ready_date</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">incoterms</span><span class="ft">varchar?</span></div>
+          <div class="f"><span class="fn">payment_terms</span><span class="ft">text?</span></div>
+          <div class="f"><span class="fn">notes</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">created_at</span><span class="ft">datetime</span></div>
+          <div class="f"><span class="fn">created_by</span><span class="ft">varchar</span></div>
+          <div class="sep"></div><div class="sec">Documents</div>
+          <div class="f"><span class="fn">rfq_pdf_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">inventory_summary_url</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ PURCHASE ORDER ═══════════ -->
+      <div class="e c-blue" id="po" style="top:35px;left:780px;width:290px">
+        <div class="e-h"><span class="e-n">purchase_order</span><span class="e-t">Commercial</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">po_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">po_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">sku_group</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">rfq_id</span><span class="ft">int?</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">supplier_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">destination</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">issue_date</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="sep"></div><div class="sec">Order Details</div>
+          <div class="f"><span class="fn">cargo_ready_date</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">incoterms</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">payment_terms</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">ship_to_address</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">created_at</span><span class="ft">datetime</span></div>
+          <div class="f"><span class="fn">created_by</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">notes</span><span class="ft">text</span></div>
+          <div class="sep"></div><div class="sec">Cargo Totals</div>
+          <div class="f"><span class="fn">total_units</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">total_cartons</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">total_pallets</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">total_weight_lb</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">total_volume_cbm</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">product_subtotal</span><span class="ft">decimal</span></div>
+          <div class="sep"></div><div class="sec">Manufacturing</div>
+          <div class="f"><span class="fn">mfg_start_date</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">mfg_expected_completion</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">packaging_notes</span><span class="ft">text</span></div>
+          <div class="sep"></div><div class="sec">Warehouse Costs</div>
+          <div class="f"><span class="fn">inbound_cost</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">storage_cost</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">supplier_credit_debit</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">landed_total</span><span class="ft">decimal</span></div>
+          <div class="sep"></div><div class="sec">Documents</div>
+          <div class="f"><span class="fn">po_pdf_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">shipping_marks_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">signed_pi_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">box_artwork_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">mfg_shipping_marks_url</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ PO_CI Junction ═══════════ -->
+      <div class="e c-purple" id="po_ci" style="top:55px;left:1180px;width:210px">
+        <div class="e-h"><span class="e-n">po_ci</span><span class="e-t">Junction</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fk kb-fk" style="margin-left:1px">FK</span><span class="fn">lot_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fk kb-fk" style="margin-left:1px">FK</span><span class="fn">ci_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">qty_on_shipment</span><span class="ft">int</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ COMMERCIAL INVOICE ═══════════ -->
+      <div class="e c-orange" id="ci" style="top:250px;left:1180px;width:270px">
+        <div class="e-h"><span class="e-n">commercial_invoice</span><span class="e-t">Logistics</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">ci_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">ci_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">house_bl</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">master_bl</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">vessel</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">voyage</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">port_of_loading</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">port_of_discharge</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">etd</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">eta</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">total_qty</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">packing_list_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">freight_cost_usd</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="sep"></div><div class="sec">Documents</div>
+          <div class="f"><span class="fn">ci_doc_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">bl_doc_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">packing_list_doc_url</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ CI_ALLOCATION ═══════════ -->
+      <div class="e c-amber" id="ci_alloc" style="top:850px;left:500px;width:250px">
+        <div class="e-h"><span class="e-n">ci_allocation</span><span class="e-t">Distribution</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fk kb-fk" style="margin-left:1px">FK</span><span class="fn">ci_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fk kb-fk" style="margin-left:1px">FK</span><span class="fn">lot_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fk kb-fk" style="margin-left:1px">FK</span><span class="fn">warehouse_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">qty_allocated</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">allocated_by</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">allocated_at</span><span class="ft">datetime</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ GOODS RECEIPT ═══════════ -->
+      <div class="e c-green" id="grn" style="top:1090px;left:1150px;width:270px">
+        <div class="e-h"><span class="e-n">grn</span><span class="e-t">Warehouse</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">grn_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">grn_ref</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">ci_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">lot_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">warehouse_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">receive_type</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">import_entry_number</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">customs_cleared_date</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">received_date</span><span class="ft">date</span></div>
+          <div class="f"><span class="fn">discrepancy_notes</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">total_received</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="sep"></div><div class="sec">Documents</div>
+          <div class="f"><span class="fn">grn_doc_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">customs_clearance_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">cube_master_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">freight_receipt_url</span><span class="ft">varchar</span></div>
+          <div class="f"><span class="fn">transaction_cert_url</span><span class="ft">varchar</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ GRN LINE ITEM ═══════════ -->
+      <div class="e c-green" id="grn_line" style="top:1220px;left:500px;width:245px">
+        <div class="e-h"><span class="e-n">grn_line_item</span><span class="e-t">Detail</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">line_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">grn_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">lot_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">expected_qty</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">received_qty</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">damaged_qty</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">delta</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+        </div>
+      </div>
+
+      <!-- ═══════════ DISCREPANCY ═══════════ -->
+      <div class="e c-red" id="disc" style="top:1520px;left:530px;width:225px">
+        <div class="e-h"><span class="e-n">discrepancy</span><span class="e-t">Exception</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">disc_id</span><span class="ft">int</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">line_id</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">type</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">qty</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">notes</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">logged_at</span><span class="ft">datetime</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const erd = document.getElementById('erd');
+  const ns = 'http://www.w3.org/2000/svg';
+  const C = '#94a3b8';
+
+  const svg = document.createElementNS(ns, 'svg');
+  svg.classList.add('lines');
+  svg.setAttribute('viewBox', `0 0 ${erd.scrollWidth} ${erd.scrollHeight}`);
+  erd.insertBefore(svg, erd.firstChild);
+
+  function g(id) {
+    const e = document.getElementById(id);
+    return { l: e.offsetLeft, t: e.offsetTop, r: e.offsetLeft + e.offsetWidth, b: e.offsetTop + e.offsetHeight, cx: e.offsetLeft + e.offsetWidth/2, cy: e.offsetTop + e.offsetHeight/2, w: e.offsetWidth, h: e.offsetHeight };
+  }
+
+  function mkLine(x1,y1,x2,y2,w=1.5) {
+    const l = document.createElementNS(ns,'line');
+    l.setAttribute('x1',x1); l.setAttribute('y1',y1); l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+    l.setAttribute('stroke',C); l.setAttribute('stroke-width',w);
+    svg.appendChild(l);
+  }
+
+  function mkPoly(pts) {
+    const p = document.createElementNS(ns,'polyline');
+    p.setAttribute('points', pts.map(p=>p.join(',')).join(' '));
+    p.setAttribute('stroke',C); p.setAttribute('stroke-width','1.5'); p.setAttribute('fill','none');
+    svg.appendChild(p);
+  }
+
+  function mkText(x,y,txt,angle) {
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-family','IBM Plex Mono,monospace'); t.setAttribute('font-size','9.5');
+    t.setAttribute('fill','#b0b8c4'); t.setAttribute('font-weight','500');
+    if(angle) t.setAttribute('transform',`rotate(${angle},${x},${y})`);
+    t.textContent = txt; svg.appendChild(t);
+  }
+
+  function crow(x,y,dir) {
+    const s=9;
+    const d = {r:[1,0],l:[-1,0],d:[0,1],u:[0,-1]}[dir];
+    const p = [-d[1],d[0]];
+    mkLine(x, y, x+d[0]*s+p[0]*s, y+d[1]*s+p[1]*s);
+    mkLine(x, y, x+d[0]*s-p[0]*s, y+d[1]*s-p[1]*s);
+    mkLine(x, y, x+d[0]*s, y+d[1]*s);
+  }
+
+  function bar(x,y,dir) {
+    const s=7;
+    if(dir==='r'||dir==='l') { mkLine(x,y-s,x,y+s,2.5); }
+    else { mkLine(x-s,y,x+s,y,2.5); }
+  }
+
+  function zeroCirc(x,y) {
+    const c = document.createElementNS(ns,'circle');
+    c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r','5');
+    c.setAttribute('fill','white'); c.setAttribute('stroke',C); c.setAttribute('stroke-width','1.5');
+    svg.appendChild(c);
+  }
+
+  const SKU=g('sku'), LOT=g('lot'), RFQ=g('rfq'), PO=g('po'), POCI=g('po_ci'), CI=g('ci');
+  const SUPP=g('supplier'), WH=g('warehouse'), ALLOC=g('ci_alloc');
+  const GRN=g('grn'), LINE=g('grn_line'), DISC=g('disc');
+
+  // ─── 1. SKU → LOT (1:N) horizontal ───
+  let y = SKU.t + 60;
+  mkLine(SKU.r, y, LOT.l, y);
+  bar(SKU.r+3, y, 'r'); crow(LOT.l-3, y, 'r');
+  mkText((SKU.r+LOT.l)/2, y-11, '1 : N');
+
+  // ─── 2. LOT → RFQ (N:0..1) vertical ───
+  let x = LOT.cx - 30;
+  mkLine(x, LOT.b, x, RFQ.t);
+  crow(x, LOT.b+3, 'u');
+  zeroCirc(x, RFQ.t-14); bar(x, RFQ.t-3, 'd');
+  mkText(x+35, (LOT.b+RFQ.t)/2, 'N : 0..1');
+
+  // ─── 3. LOT → PO (N:0..1) horizontal ───
+  y = LOT.t + 80;
+  mkLine(LOT.r, y, PO.l, y);
+  crow(LOT.r+3, y, 'l');
+  zeroCirc(PO.l-14, y); bar(PO.l-3, y, 'l');
+  mkText((LOT.r+PO.l)/2, y-11, 'N : 0..1');
+
+  // ─── 4. RFQ → PO (1:N) L-route ───
+  let sx=RFQ.r, sy=RFQ.t+30, mx=RFQ.r+50, ey=PO.b-30;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[PO.l,ey]]);
+  bar(sx+3, sy, 'r'); crow(PO.l-3, ey, 'r');
+  mkText(mx+20, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 5. SUPPLIER → SKU (1:N) vertical ───
+  x = SKU.l + 55;
+  mkLine(x, SKU.b, x, SUPP.t);
+  crow(x, SKU.b+3, 'd'); bar(x, SUPP.t-3, 'd');
+  mkText(x+22, (SKU.b+SUPP.t)/2, '1 : N');
+
+  // ─── 6. SUPPLIER → PO (1:N) L-route ───
+  sx=SUPP.r; sy=SUPP.t+25; mx=410; ey=PO.b-10;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[PO.l,ey]]);
+  bar(sx+3, sy, 'r'); crow(PO.l-3, ey, 'r');
+  mkText(mx+18, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 7. LOT → PO_CI (1:N) L-route via top ───
+  sx=LOT.r; sy=LOT.t+40;
+  mkPoly([[sx,sy],[sx+60,sy],[sx+60,POCI.t+25],[POCI.l,POCI.t+25]]);
+  bar(sx+3, sy, 'r'); crow(POCI.l-3, POCI.t+25, 'r');
+  mkText((sx+60+POCI.l)/2, POCI.t+14, '1 : N');
+
+  // ─── 8. PO_CI → CI (N:1) vertical ───
+  x = POCI.cx;
+  mkLine(x, POCI.b, x, CI.t);
+  crow(x, POCI.b+3, 'd'); bar(x, CI.t-3, 'd');
+  mkText(x+22, (POCI.b+CI.t)/2, 'N : 1');
+
+  // ─── 9. CI → CI_ALLOC (1:N) L-route ───
+  sx=CI.l; sy=CI.b-30; mx=CI.l-40; ey=ALLOC.t+25;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[ALLOC.r,ey]]);
+  bar(sx-3, sy, 'l'); crow(ALLOC.r+3, ey, 'l');
+  mkText(mx-18, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 10. LOT → CI_ALLOC (1:N) vertical route ───
+  x = LOT.l + 45; let xb = ALLOC.l + 45;
+  mkPoly([[x,LOT.b],[x,ALLOC.t-25],[xb,ALLOC.t-25],[xb,ALLOC.t]]);
+  bar(x, LOT.b+3, 'd'); crow(xb, ALLOC.t-3, 'd');
+  mkText(x-20, (LOT.b+ALLOC.t)/2, '1 : N', -90);
+
+  // ─── 11. WAREHOUSE → CI_ALLOC (1:N) L-route ───
+  sx=WH.r; sy=WH.t+30; mx=WH.r+55; ey=ALLOC.b-20;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[ALLOC.l,ey]]);
+  bar(sx+3, sy, 'r'); crow(ALLOC.l-3, ey, 'r');
+  mkText(mx-18, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 12. WAREHOUSE → GRN (1:N) L-route ───
+  sx=WH.r; sy=WH.cy+10; mx=WH.r+30;
+  mkPoly([[sx,sy],[mx,sy],[mx,GRN.cy+20],[GRN.l,GRN.cy+20]]);
+  bar(sx+3, sy, 'r'); crow(GRN.l-3, GRN.cy+20, 'r');
+  mkText((mx+GRN.l)/2, GRN.cy+10, '1 : N');
+
+  // ─── 13. CI_ALLOC → GRN (1:N) L-route ───
+  sx=ALLOC.r; sy=ALLOC.b-40; mx=ALLOC.r+50; ey=GRN.t+35;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[GRN.l,ey]]);
+  bar(sx+3, sy, 'r'); crow(GRN.l-3, ey, 'r');
+  mkText(mx+18, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 14. GRN → GRN_LINE (1:N) L-route ───
+  sx=GRN.l; sy=GRN.cy+40; mx=GRN.l-40; ey=LINE.cy;
+  mkPoly([[sx,sy],[mx,sy],[mx,ey],[LINE.r,ey]]);
+  bar(sx-3, sy, 'l'); crow(LINE.r+3, ey, 'l');
+  mkText(mx-18, (sy+ey)/2, '1 : N', -90);
+
+  // ─── 15. LOT → GRN_LINE (1:N) vertical route ───
+  x=LINE.l+90; xb=LOT.cx+20;
+  mkPoly([[x,LINE.t],[x,LINE.t-40],[xb,LINE.t-40],[xb,LOT.b]]);
+  crow(x, LINE.t-3, 'u'); bar(xb, LOT.b+3, 'd');
+  mkText((x+xb)/2, LINE.t-52, 'N : 1');
+
+  // ─── 16. GRN_LINE → DISCREPANCY (1:0..1) vertical ───
+  x=LINE.cx+20;
+  mkLine(x, LINE.b, x, DISC.t);
+  bar(x, LINE.b+3, 'd');
+  zeroCirc(x, DISC.t-14);
+  bar(x, DISC.t-3, 'd');
+  mkText(x+30, (LINE.b+DISC.t)/2, '1 : 0..1');
+});
+</script>
+</body>
+</html>

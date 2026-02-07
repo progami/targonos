@@ -412,7 +412,7 @@ const STAGE_DOCUMENTS: Record<
 > = {
   RFQ: [],
   ISSUED: [],
-  MANUFACTURING: [{ id: 'box_artwork', label: 'Box Artwork' }],
+  MANUFACTURING: [{ id: 'inspection_report', label: 'Inspection Report' }],
   OCEAN: [
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
     { id: 'bill_of_lading', label: 'Bill of Lading' },
@@ -422,6 +422,21 @@ const STAGE_DOCUMENTS: Record<
     { id: 'grn', label: 'GRN' },
     { id: 'custom_declaration', label: 'Customs & Border Patrol Clearance Proof' },
   ],
+}
+
+function getStageDocuments(
+  stage: Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
+  lines: PurchaseOrderLineSummary[]
+): Array<{ id: string; label: string }> {
+  if (stage === 'MANUFACTURING') {
+    const activeLines = lines.filter(line => line.status !== 'CANCELLED')
+    const artworkDocs = activeLines.map(line => ({
+      id: `box_artwork_${line.skuCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      label: `Box Artwork — ${line.skuCode}`,
+    }))
+    return [...artworkDocs, { id: 'inspection_report', label: 'Inspection Report' }]
+  }
+  return STAGE_DOCUMENTS[stage]
 }
 
 const DOCUMENT_STAGE_META: Record<
@@ -451,9 +466,9 @@ function buildPiDocumentType(piNumber: string): string {
   return `pi_${sanitized.toLowerCase()}`
 }
 
-function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: string) {
+function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: string, lines?: PurchaseOrderLineSummary[]) {
   if (stage !== 'SHIPPED') {
-    const required = STAGE_DOCUMENTS[stage] ?? []
+    const required = lines ? getStageDocuments(stage, lines) : (STAGE_DOCUMENTS[stage] ?? [])
     const match = required.find(candidate => candidate.id === documentType)
     if (match) return match.label
   }
@@ -4829,7 +4844,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       ]
                     }
 
-                    const requiredDocs = stage === 'SHIPPED' ? [] : (STAGE_DOCUMENTS[stageKey] ?? [])
+                    const requiredDocs = stage === 'SHIPPED' ? [] : getStageDocuments(stageKey, order.lines)
                     const requiredIds = new Set(requiredDocs.map(doc => doc.id))
                     const otherDocs = stageDocs.filter(doc => !requiredIds.has(doc.documentType))
 
@@ -5086,7 +5101,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       documentStages.forEach(stage => {
                         const stageDocs = documents.filter(doc => doc.stage === stage)
                         const requiredDocs =
-                          stage === 'SHIPPED' ? [] : (STAGE_DOCUMENTS[stage] ?? [])
+                          stage === 'SHIPPED' ? [] : getStageDocuments(stage, order?.lines ?? [])
                         const requiredIds = new Set(requiredDocs.map(doc => doc.id))
                         const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
                         const otherDocs = stageDocs.filter(

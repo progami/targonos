@@ -9,9 +9,9 @@ import { PurchaseOrderDocumentStage, Prisma, PurchaseOrderStatus } from '@targon
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60 // 60 seconds for file uploads
+export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
 
-const MAX_DOCUMENT_SIZE_MB = 50
+const MAX_DOCUMENT_SIZE_MB = 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'RFQ',
