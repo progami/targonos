@@ -22,6 +22,7 @@ on:
           - atlas
           - plutus
           - hermes
+          - argus
       environment:
         description: 'Environment to deploy to'
         required: true
@@ -49,6 +50,7 @@ jobs:
       atlas: ${{ steps.changes.outputs.atlas }}
       plutus: ${{ steps.changes.outputs.plutus }}
       hermes: ${{ steps.changes.outputs.hermes }}
+      argus: ${{ steps.changes.outputs.argus }}
       packages: ${{ steps.changes.outputs.packages }}
       any_app: ${{ steps.changes.outputs.any_app }}
     steps:
@@ -309,6 +311,7 @@ jobs:
           [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
           [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
           [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
+          [[ "${{ needs.detect-changes.outputs.argus }}" == "true" ]] && apps+=(argus)
 
           if [[ ${#apps[@]} -eq 0 ]]; then
             echo "No deployable apps detected; exiting."
@@ -351,6 +354,9 @@ jobs:
             unsafe_parallel="true"
           fi
           if grep -qx 'apps/atlas/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-atlas/generated/' <<< "$CHANGED_FILES"; then
+            unsafe_parallel="true"
+          fi
+          if grep -qx 'apps/argus/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-argus/generated/' <<< "$CHANGED_FILES"; then
             unsafe_parallel="true"
           fi
 

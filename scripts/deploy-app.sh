@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus" >&2
+  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -189,6 +189,14 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/hermes"
     pm2_name="${PM2_PREFIX}-hermes"
     prisma_cmd=""
+    build_cmd="pnpm --filter $workspace build"
+    ;;
+  argus)
+    workspace="@targon/argus"
+    app_dir="$REPO_DIR/apps/argus"
+    pm2_name="${PM2_PREFIX}-argus"
+    prisma_cmd="pnpm --filter $workspace prisma:generate"
+    migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)
