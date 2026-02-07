@@ -255,8 +255,6 @@ export async function syncSellerboardActualSales(options: {
     if (!weekDate) continue;
 
     for (const product of products) {
-      const shouldClearFinalSales = entry.weekNumber < currentWeekNumber;
-
       upserts.push(
         prisma.salesWeek.upsert({
           where: {
@@ -270,7 +268,6 @@ export async function syncSellerboardActualSales(options: {
             weekDate,
             actualSales: entry.units,
             hasActualData: true,
-            ...(shouldClearFinalSales ? { finalSales: null } : {}),
           },
           create: {
             strategyId: product.strategyId,
@@ -279,7 +276,6 @@ export async function syncSellerboardActualSales(options: {
             weekDate,
             actualSales: entry.units,
             hasActualData: true,
-            ...(shouldClearFinalSales ? { finalSales: null } : {}),
           },
         })
       );

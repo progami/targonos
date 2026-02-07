@@ -55,4 +55,35 @@ describe('sellerboard orders parsing', () => {
       { productCode: 'SKU-1', weekNumber: expectedWeek, units: 3 },
     ]);
   });
+
+  it('skips non-positive unit rows instead of writing zero sales', async () => {
+    const planning = await loadPlanningCalendar(1);
+    const csv = [
+      '"AmazonOrderId","PurchaseDate(UTC)","OrderStatus","NumberOfItems","Products"',
+      '"111","1/1/2026 11:36:55 PM","Shipped","0.00","SKU-1"',
+      '"222","1/2/2026 11:36:55 PM","Shipped","-2.00","SKU-1"',
+      '"333","1/3/2026 11:36:55 PM","Shipped","2.00","SKU-1"',
+      '',
+    ].join('\n');
+
+    const expectedWeek = weekNumberForDate(
+      new Date(Date.UTC(2026, 0, 3, 23, 36, 55)),
+      planning.calendar,
+    );
+    if (expectedWeek == null) {
+      throw new Error('Expected planning week number');
+    }
+
+    const result = parseSellerboardOrdersWeeklyUnits(csv, planning, {
+      weekStartsOn: 1,
+      reportTimeZone: 'UTC',
+      excludeStatuses: ['Cancelled'],
+    });
+
+    expect(result.weeklyUnits).toEqual([
+      { productCode: 'SKU-1', weekNumber: expectedWeek, units: 2 },
+    ]);
+    expect(result.rowsParsed).toBe(1);
+    expect(result.rowsSkipped).toBe(2);
+  });
 });

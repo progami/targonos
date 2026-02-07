@@ -622,18 +622,6 @@ export function PurchaseOrdersPanel({
       }
       case 'MANUFACTURING': {
         cols.push(
-          {
-            key: 'tenant',
-            header: buildColumnHeader('Region'),
-            fit: true,
-            thClassName: 'w-[84px]',
-            tdClassName: 'px-3 py-2 whitespace-nowrap',
-            render: order => (
-              <Badge variant="outline" className="text-[11px] font-semibold">
-                {formatTextOrDash(order.tenantCode)}
-              </Badge>
-            ),
-          },
 	          {
 	            key: 'pi-number',
 	            header: buildColumnHeader('PI #'),

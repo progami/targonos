@@ -16,6 +16,13 @@ export const runtime = "nodejs";
  * - Expired dispatches cannot be requeued (worker will ignore them).
  */
 async function handlePost(req: Request) {
+  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+    return NextResponse.json(
+      { ok: false, error: "Hermes is in dry-run mode. Requeue is disabled." },
+      { status: 403 }
+    );
+  }
+
   await maybeAutoMigrate();
 
   const schema = z.object({
