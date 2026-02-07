@@ -1,19 +1,16 @@
 import { withAuth, withRole, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma, type Sku, type SkuBatch } from '@targon/prisma-talos'
+import { Prisma, type Sku } from '@targon/prisma-talos'
 import {
   sanitizeForDisplay,
   sanitizeSearchQuery,
   escapeRegex,
 } from '@/lib/security/input-sanitization'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
-import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 export const dynamic = 'force-dynamic'
 
-type SkuWithCounts = Sku & { batches: SkuBatch[]; _count: { inventoryTransactions: number } }
-
-const DEFAULT_CARTONS_PER_PALLET = SHIPMENT_PLANNING_CONFIG.DEFAULT_CARTONS_PER_PALLET
+type SkuWithCounts = Sku & { _count: { inventoryTransactions: number } }
 
 // Validation schemas with sanitization
 const supplierIdSchema = z.preprocess(value => {
@@ -260,38 +257,6 @@ const refineDimensions = <T extends z.ZodRawShape & DimensionRefineShape>(schema
 const createSkuSchema = refineDimensions(
   skuSchemaBase.extend({
     unitWeightKg: z.number().positive(),
-    initialBatch: z.object({
-      batchCode: z.string().trim().min(1).max(64),
-      description: z
-        .string()
-        .trim()
-        .max(200)
-        .optional()
-        .nullable()
-        .transform(val => {
-          if (val === undefined) return undefined
-          if (val === null) return null
-          const sanitized = sanitizeForDisplay(val)
-          return sanitized ? sanitized : null
-        }),
-      packSize: z.number().int().positive().default(1),
-      unitsPerCarton: z.number().int().positive().default(1),
-      material: z
-        .string()
-        .trim()
-        .max(120)
-        .optional()
-        .nullable()
-        .transform(val => {
-          if (val === undefined) return undefined
-          if (val === null) return null
-          const sanitized = sanitizeForDisplay(val)
-          return sanitized ? sanitized : null
-        }),
-      packagingType: packagingTypeSchema,
-      storageCartonsPerPallet: z.number().int().positive().default(DEFAULT_CARTONS_PER_PALLET),
-      shippingCartonsPerPallet: z.number().int().positive().default(DEFAULT_CARTONS_PER_PALLET),
-    }),
   })
 )
 
@@ -321,12 +286,6 @@ export const GET = withAuth(async (request, _session) => {
   const skus = await prisma.sku.findMany({
     where,
     orderBy: { skuCode: 'asc' },
-    include: {
-      batches: {
-        orderBy: [{ createdAt: 'desc' }],
-        take: 1,
-      },
-    },
   })
 
   // Get transaction counts for all SKUs in a single query
@@ -347,7 +306,10 @@ export const GET = withAuth(async (request, _session) => {
   const skusWithCounts: SkuWithCounts[] = skus.map(sku => ({
     ...sku,
     _count: {
-      inventoryTransactions: countMap.get(sku.skuCode) || 0,
+      inventoryTransactions: (() => {
+        const count = countMap.get(sku.skuCode)
+        return typeof count === 'number' ? count : 0
+      })(),
     },
   }))
 
@@ -395,14 +357,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     return ApiResponses.badRequest('SKU code already exists')
   }
 
-  const initialBatchCode = sanitizeForDisplay(validatedData.initialBatch.batchCode.toUpperCase())
-  if (!initialBatchCode) {
-    return ApiResponses.badRequest('Invalid batch code')
-  }
-  if (initialBatchCode === 'DEFAULT') {
-    return ApiResponses.badRequest('Batch code DEFAULT is not allowed')
-  }
-
   const itemTriplet = resolveDimensionTripletCm({
     side1Cm: validatedData.itemSide1Cm,
     side2Cm: validatedData.itemSide2Cm,
@@ -448,12 +402,12 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         amazonSizeTier: validatedData.amazonSizeTier ?? null,
         amazonReferralFeePercent: validatedData.amazonReferralFeePercent ?? null,
         amazonFbaFulfillmentFee: validatedData.amazonFbaFulfillmentFee ?? null,
-        amazonReferenceWeightKg: null,
+        amazonReferenceWeightKg: validatedData.amazonReferenceWeightKg ?? null,
         description: validatedData.description,
-        packSize: validatedData.initialBatch.packSize,
+        packSize: validatedData.packSize ?? null,
         defaultSupplierId: validatedData.defaultSupplierId ?? null,
         secondarySupplierId: validatedData.secondarySupplierId ?? null,
-        material: validatedData.initialBatch.material ?? null,
+        material: validatedData.material ?? null,
         unitDimensionsCm: unitTriplet ? formatDimensionTripletCm(unitTriplet) : null,
         unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
         unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
@@ -464,37 +418,14 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         itemSide2Cm: itemTriplet ? itemTriplet.side2Cm : null,
         itemSide3Cm: itemTriplet ? itemTriplet.side3Cm : null,
         itemWeightKg: validatedData.itemWeightKg ?? null,
-        unitsPerCarton: validatedData.initialBatch.unitsPerCarton,
-        cartonDimensionsCm: null,
-        cartonSide1Cm: null,
-        cartonSide2Cm: null,
-        cartonSide3Cm: null,
-        cartonWeightKg: null,
-        packagingType: validatedData.initialBatch.packagingType ?? null,
+        unitsPerCarton: validatedData.unitsPerCarton,
+        cartonDimensionsCm: validatedData.cartonDimensionsCm ?? null,
+        cartonSide1Cm: validatedData.cartonSide1Cm ?? null,
+        cartonSide2Cm: validatedData.cartonSide2Cm ?? null,
+        cartonSide3Cm: validatedData.cartonSide3Cm ?? null,
+        cartonWeightKg: validatedData.cartonWeightKg ?? null,
+        packagingType: validatedData.packagingType ?? null,
         isActive: validatedData.isActive !== undefined ? validatedData.isActive : true,
-      },
-    })
-
-    await tx.skuBatch.create({
-      data: {
-        sku: { connect: { id: created.id } },
-        batchCode: initialBatchCode,
-        description: validatedData.initialBatch.description ?? null,
-        packSize: validatedData.initialBatch.packSize,
-        unitsPerCarton: validatedData.initialBatch.unitsPerCarton,
-        material: validatedData.initialBatch.material ?? null,
-        cartonDimensionsCm: null,
-        cartonSide1Cm: null,
-        cartonSide2Cm: null,
-        cartonSide3Cm: null,
-        cartonWeightKg: null,
-        packagingType: validatedData.initialBatch.packagingType ?? null,
-        amazonSizeTier: null,
-        amazonFbaFulfillmentFee: null,
-        amazonReferenceWeightKg: null,
-        storageCartonsPerPallet: validatedData.initialBatch.storageCartonsPerPallet,
-        shippingCartonsPerPallet: validatedData.initialBatch.shippingCartonsPerPallet,
-        isActive: true,
       },
     })
 

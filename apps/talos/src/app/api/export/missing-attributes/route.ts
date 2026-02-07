@@ -86,7 +86,7 @@ export const GET = withAuth(async (_request, session) => {
  warehouse: transaction.warehouseName,
  sku: transaction.skuCode,
  skuDescription: transaction.skuDescription,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  referenceId: transaction.referenceId || '',
  
  // Quantities
@@ -158,7 +158,7 @@ export const GET = withAuth(async (_request, session) => {
  'Warehouse',
  'SKU Code',
  'SKU Description',
- 'Batch',
+ 'Lot Ref',
  'Reference ID',
  
  // Quantities
@@ -208,7 +208,7 @@ export const GET = withAuth(async (_request, session) => {
  row.warehouse,
  row.sku,
  row.skuDescription,
- row.batchLot,
+ row.lotRef,
  row.referenceId,
  
  // Quantities

@@ -11,6 +11,7 @@ import type { TenantCode } from '@/lib/tenant/constants'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem, LB_PER_KG } from '@/lib/measurements'
 import { usePageState } from '@/lib/store/page-state'
+import { withBasePath } from '@/lib/utils/base-path'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,7 +64,6 @@ type ApiSkuRow = {
   itemSide2Cm: number | string | null
   itemSide3Cm: number | string | null
   itemWeightKg: number | string | null
-  latestBatchCode?: string | null
 }
 
 const ALLOWED_ROLES = ['admin', 'staff'] as const
@@ -354,8 +354,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     if (status === 'loading') return
 
     if (!session) {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-      redirectToPortal('/login', `${window.location.origin}${basePath}/amazon/fba-fee-discrepancies`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/amazon/fba-fee-discrepancies')}`)
       return
     }
 
@@ -371,7 +370,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       const params = new URLSearchParams()
       if (search.trim()) params.set('search', search.trim())
 
-      const response = await fetch(`/api/amazon/fba-fee-discrepancies?${params.toString()}`, {
+      const response = await fetch(withBasePath(`/api/amazon/fba-fee-discrepancies?${params.toString()}`), {
         credentials: 'include',
       })
       if (!response.ok) {

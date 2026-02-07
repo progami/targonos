@@ -4,7 +4,7 @@ import { createGrn, listGrns, type CreateGrnInput } from '@/lib/services/grn-ser
 const lineSchema = z.object({
  purchaseOrderLineId: z.string().min(1, 'Purchase order line is required'),
  quantity: z.number().int('Quantity must be an integer').positive('Quantity must be greater than zero'),
- batchLot: z.string().trim().min(1, 'Batch cannot be empty').optional().nullable(),
+ lotRef: z.string().trim().min(1, 'Lot ref cannot be empty').optional().nullable(),
  storageCartonsPerPallet: z.number().int().positive().optional().nullable(),
  shippingCartonsPerPallet: z.number().int().positive().optional().nullable(),
  attachments: z.record(z.string(), z.any()).optional().nullable(),
@@ -54,7 +54,7 @@ export const POST = withAuth(async (request, session) => {
  lines: parsed.data.lines.map(line => ({
  purchaseOrderLineId: line.purchaseOrderLineId,
  quantity: line.quantity,
- batchLot: line.batchLot ?? null,
+ lotRef: line.lotRef ?? null,
  storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
  shippingCartonsPerPallet: line.shippingCartonsPerPallet ?? null,
  attachments: line.attachments ?? null,

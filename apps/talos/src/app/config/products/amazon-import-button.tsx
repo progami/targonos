@@ -5,6 +5,8 @@ import { toast } from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { PortalModal } from '@/components/ui/portal-modal'
 import { Input } from '@/components/ui/input'
+import { withBasePath } from '@/lib/utils/base-path'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
   AlertCircle,
   Check,
@@ -43,8 +45,6 @@ type ImportPreview = {
   }
   policy: {
     updatesExistingSkus: boolean
-    createsBatch: boolean
-    defaultBatchCode: string
   }
   items: Array<{
     sellerSku: string
@@ -135,9 +135,10 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
     setValidatedKey(null)
 
     try {
-      const response = await fetch('/api/amazon/import-skus?limit=250', {
+      const response = await fetch(withBasePath('/api/amazon/import-skus?limit=250'), {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
       })
 
       const payload = await response.json().catch(() => null)
@@ -207,9 +208,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
     setValidatedKey(null)
 
     try {
-      const response = await fetch('/api/amazon/import-skus', {
+      const response = await fetchWithCSRF('/api/amazon/import-skus', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skuCodes: Array.from(selectedSkuCodes), mode: 'validate' }),
       })
 
@@ -265,9 +265,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
     setResult(null)
 
     try {
-      const response = await fetch('/api/amazon/import-skus', {
+      const response = await fetchWithCSRF('/api/amazon/import-skus', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skuCodes: Array.from(selectedSkuCodes), mode: 'import' }),
       })
 

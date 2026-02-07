@@ -71,7 +71,7 @@ interface ShipmentEmailData {
  items: Array<{
  skuCode: string;
  description: string;
- batchLot: string;
+ lotRef: string;
  cartons: number;
  pallets: number;
  }>;
@@ -97,7 +97,7 @@ function generateEmailBody(data: ShipmentEmailData): string {
 
  const itemsTable = items.map((item) => 
  `${item.skuCode} - ${item.description}
-Batch: ${item.batchLot} | Qty: ${item.cartons} cartons (${item.pallets} pallets)`
+Lot Ref: ${item.lotRef} | Qty: ${item.cartons} cartons (${item.pallets} pallets)`
  ).join('\n')
 
  return `SHIPMENT #${orderNumber}

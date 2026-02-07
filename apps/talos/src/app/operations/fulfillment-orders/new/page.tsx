@@ -29,8 +29,9 @@ import {
   type AmazonFreightState,
   type LineItem,
   type WarehouseOption,
-  type SkuOption,
-  type SkuBatchOption,
+  type SkuMasterOption,
+  type SkuInventoryOption,
+  type SkuLotOption,
 } from './components'
 
 type DestinationType = 'AMAZON_FBA' | 'CUSTOMER' | 'TRANSFER'
@@ -44,8 +45,8 @@ export default function NewFulfillmentOrderPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
-  const [skus, setSkus] = useState<SkuOption[]>([])
-  const [inventorySkus, setInventorySkus] = useState<SkuOption[]>([])
+  const [skus, setSkus] = useState<SkuMasterOption[]>([])
+  const [inventorySkus, setInventorySkus] = useState<SkuInventoryOption[]>([])
   const [inventoryOptionsLoading, setInventoryOptionsLoading] = useState(false)
 
   // Source type selection (replaces destination type in Order Details tab)
@@ -112,7 +113,7 @@ export default function NewFulfillmentOrderPage() {
       id: crypto.randomUUID(),
       skuCode: '',
       skuDescription: '',
-      batchLot: '',
+      lotRef: '',
       quantity: 1,
       notes: '',
     },
@@ -126,21 +127,19 @@ export default function NewFulfillmentOrderPage() {
   }, [sourceType])
 
   // Calculate total units for display
-  const totalUnits = useMemo(() => {
-    return lineItems.reduce((sum, item) => {
-      if (!item.skuCode || !item.batchLot) return sum
+	  const totalUnits = useMemo(() => {
+	    return lineItems.reduce((sum, item) => {
+	      if (!item.skuCode || !item.lotRef) return sum
 
-      let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
-      if (!sku) {
-        sku = skus.find(s => s.skuCode === item.skuCode)
-      }
+	      const inventorySku = inventorySkus.find(s => s.skuCode === item.skuCode)
+	      const sku = inventorySku ?? skus.find(s => s.skuCode === item.skuCode)
 
-      const batch = sku?.batches?.find(b => b.batchCode === item.batchLot)
+	      const lot = inventorySku?.lots.find(l => l.lotRef === item.lotRef)
 
-      let unitsPerCarton = 1
-      if (batch && typeof batch.unitsPerCarton === 'number' && batch.unitsPerCarton > 0) {
-        unitsPerCarton = batch.unitsPerCarton
-      } else if (sku && typeof sku.unitsPerCarton === 'number' && sku.unitsPerCarton > 0) {
+	      let unitsPerCarton = 1
+	      if (lot && typeof lot.unitsPerCarton === 'number' && lot.unitsPerCarton > 0) {
+	        unitsPerCarton = lot.unitsPerCarton
+	      } else if (sku && typeof sku.unitsPerCarton === 'number' && sku.unitsPerCarton > 0) {
         unitsPerCarton = sku.unitsPerCarton
       }
 
@@ -173,11 +172,11 @@ export default function NewFulfillmentOrderPage() {
       issues.amazon += 1
     }
 
-    const invalidLines = lineItems.filter(item => {
-      if (!item.skuCode.trim()) return true
-      if (!item.batchLot.trim()) return true
-      return !Number.isFinite(item.quantity) || item.quantity <= 0
-    }).length
+	    const invalidLines = lineItems.filter(item => {
+	      if (!item.skuCode.trim()) return true
+	      if (!item.lotRef.trim()) return true
+	      return !Number.isFinite(item.quantity) || item.quantity <= 0
+	    }).length
 
     if (invalidLines > 0) {
       issues.lines = invalidLines
@@ -199,11 +198,11 @@ export default function NewFulfillmentOrderPage() {
 
     const load = async () => {
       try {
-        setLoading(true)
-        const [warehousesRes, skusRes] = await Promise.all([
-          fetch('/api/warehouses?includeAmazon=true'),
-          fetch('/api/skus'),
-        ])
+	        setLoading(true)
+	        const [warehousesRes, skusRes] = await Promise.all([
+	          fetch(withBasePath('/api/warehouses?includeAmazon=true'), { credentials: 'include' }),
+	          fetch(withBasePath('/api/skus'), { credentials: 'include' }),
+	        ])
 
         if (!warehousesRes.ok) {
           const payload = await warehousesRes.json().catch(() => null)
@@ -223,9 +222,9 @@ export default function NewFulfillmentOrderPage() {
             ? (warehousesPayload as WarehouseOption[])
             : []
         const skusData = Array.isArray(skusPayload?.data)
-          ? (skusPayload.data as SkuOption[])
+          ? (skusPayload.data as SkuMasterOption[])
           : Array.isArray(skusPayload)
-            ? (skusPayload as SkuOption[])
+            ? (skusPayload as SkuMasterOption[])
             : []
 
         setWarehouses(warehousesData)
@@ -262,8 +261,10 @@ export default function NewFulfillmentOrderPage() {
         setInventoryOptionsLoading(true)
 
         const response = await fetch(
-          `/api/fulfillment-orders/inventory-options?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`,
-          { signal: controller.signal }
+          withBasePath(
+            `/api/fulfillment-orders/inventory-options?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`
+          ),
+          { signal: controller.signal, credentials: 'include' }
         )
         const payload = await response.json().catch(() => null)
 
@@ -273,7 +274,7 @@ export default function NewFulfillmentOrderPage() {
           return
         }
 
-        const options = Array.isArray(payload?.skus) ? (payload.skus as SkuOption[]) : []
+        const options = Array.isArray(payload?.skus) ? (payload.skus as SkuInventoryOption[]) : []
         setInventorySkus(options)
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
@@ -292,9 +293,9 @@ export default function NewFulfillmentOrderPage() {
   }, [formData.warehouseCode, status, warehouses])
 
   // Line item helpers
-  const getBatchOptions = (skuCode: string): SkuBatchOption[] => {
+  const getLotOptions = (skuCode: string): SkuLotOption[] => {
     const sku = inventorySkus.find(s => s.skuCode === skuCode)
-    return sku?.batches ?? []
+    return sku?.lots ?? []
   }
 
   const addLineItem = () => {
@@ -304,7 +305,7 @@ export default function NewFulfillmentOrderPage() {
         id: crypto.randomUUID(),
         skuCode: '',
         skuDescription: '',
-        batchLot: '',
+        lotRef: '',
         quantity: 1,
         notes: '',
       },
@@ -322,15 +323,15 @@ export default function NewFulfillmentOrderPage() {
 
         if (field === 'skuCode') {
           const nextSkuCode = String(value)
-          let sku = inventorySkus.find(s => s.skuCode === nextSkuCode)
-          if (!sku) {
-            sku = skus.find(s => s.skuCode === nextSkuCode)
-          }
+          const inventorySku = inventorySkus.find(s => s.skuCode === nextSkuCode)
+          const masterSku = skus.find(s => s.skuCode === nextSkuCode)
+          const skuDescription =
+            inventorySku?.description ?? masterSku?.description ?? item.skuDescription
           return {
             ...item,
             skuCode: nextSkuCode,
-            skuDescription: sku?.description ?? item.skuDescription,
-            batchLot: '',
+            skuDescription,
+            lotRef: '',
           }
         }
 
@@ -362,14 +363,14 @@ export default function NewFulfillmentOrderPage() {
         return
       }
 
-      const invalidLine = lineItems.find(
-        item => !item.skuCode || !item.batchLot || item.quantity <= 0
-      )
-      if (invalidLine) {
-        setActiveTab('lines')
-        toast.error('Each line requires SKU, batch, and quantity')
-        return
-      }
+	      const invalidLine = lineItems.find(
+	        item => !item.skuCode || !item.lotRef || item.quantity <= 0
+	      )
+	      if (invalidLine) {
+	        setActiveTab('lines')
+	        toast.error('Each line requires SKU, lot, and quantity')
+	        return
+	      }
 
       if (inventoryOptionsLoading) {
         setActiveTab('lines')
@@ -385,26 +386,26 @@ export default function NewFulfillmentOrderPage() {
 
       for (const item of lineItems) {
         const sku = inventorySkus.find(s => s.skuCode === item.skuCode)
-        if (!sku) {
-          toast.error(`SKU ${item.skuCode} has no on-hand inventory in this warehouse`)
-          return
-        }
+	        if (!sku) {
+	          toast.error(`SKU ${item.skuCode} has no on-hand inventory in this warehouse`)
+	          return
+	        }
 
-        const batch = sku.batches.find(b => b.batchCode === item.batchLot)
-        if (!batch) {
-          toast.error(
-            `Batch ${item.batchLot} for SKU ${item.skuCode} has no on-hand inventory in this warehouse`
-          )
-          return
-        }
+	        const lot = sku.lots.find(l => l.lotRef === item.lotRef)
+	        if (!lot) {
+	          toast.error(
+	            `Lot ${item.lotRef} for SKU ${item.skuCode} has no on-hand inventory in this warehouse`
+	          )
+	          return
+	        }
 
-        if (typeof batch.availableCartons === 'number' && batch.availableCartons < item.quantity) {
-          toast.error(
-            `Insufficient inventory for SKU ${item.skuCode} batch ${item.batchLot}. Available: ${batch.availableCartons}, Requested: ${item.quantity}`
-          )
-          return
-        }
-      }
+	        if (typeof lot.availableCartons === 'number' && lot.availableCartons < item.quantity) {
+	          toast.error(
+	            `Insufficient inventory for SKU ${item.skuCode} lot ${item.lotRef}. Available: ${lot.availableCartons}, Requested: ${item.quantity}`
+	          )
+	          return
+	        }
+	      }
 
       setSubmitting(true)
 
@@ -450,15 +451,15 @@ export default function NewFulfillmentOrderPage() {
         amazonFuelSurcharge: amazonFreight.fuelSurcharge,
         amazonTotalPrice: amazonFreight.totalPrice,
         amazonCurrency: amazonFreight.currency,
-        notes: formData.notes,
-        lines: lineItems.map(item => ({
-          skuCode: item.skuCode,
-          skuDescription: item.skuDescription,
-          batchLot: item.batchLot,
-          quantity: item.quantity,
-          notes: item.notes,
-        })),
-      }
+	        notes: formData.notes,
+	        lines: lineItems.map(item => ({
+	          skuCode: item.skuCode,
+	          skuDescription: item.skuDescription,
+	          lotRef: item.lotRef,
+	          quantity: item.quantity,
+	          notes: item.notes,
+	        })),
+	      }
 
       const response = await fetchWithCSRF('/api/fulfillment-orders', {
         method: 'POST',
@@ -734,27 +735,29 @@ export default function NewFulfillmentOrderPage() {
                     </Button>
                   </div>
 
-                  <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
-                    <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
-                      <div className="col-span-3">SKU</div>
-                      <div className="col-span-3">Batch</div>
-                      <div className="col-span-3">Description</div>
-                      <div className="col-span-1">Qty</div>
-                      <div className="col-span-1">Units</div>
-                      <div className="col-span-2">Notes</div>
+	                  <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
+	                    <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
+	                      <div className="col-span-3">SKU</div>
+	                      <div className="col-span-3">Lot</div>
+	                      <div className="col-span-3">Description</div>
+	                      <div className="col-span-1">Qty</div>
+	                      <div className="col-span-1">Units</div>
+	                      <div className="col-span-2">Notes</div>
                       <div className="col-span-1"></div>
                     </div>
 
-                    <div className="divide-y divide-border">
-                      {lineItems.map(item => {
-                        const batches = getBatchOptions(item.skuCode)
-                        let sku = inventorySkus.find(s => s.skuCode === item.skuCode)
-                        if (!sku) {
-                          sku = skus.find(s => s.skuCode === item.skuCode)
-                        }
-                        const batch = batches.find(b => b.batchCode === item.batchLot)
-                        const unitsPerCarton = batch?.unitsPerCarton ?? sku?.unitsPerCarton ?? 1
-                        const totalItemUnits = item.quantity * unitsPerCarton
+	                    <div className="divide-y divide-border">
+		                      {lineItems.map(item => {
+		                        const lots = getLotOptions(item.skuCode)
+		                        const inventorySku = inventorySkus.find(s => s.skuCode === item.skuCode)
+		                        const masterSku = skus.find(s => s.skuCode === item.skuCode)
+		                        const lot = lots.find(l => l.lotRef === item.lotRef)
+		                        const unitsPerCarton =
+		                          lot?.unitsPerCarton ??
+		                          inventorySku?.unitsPerCarton ??
+		                          masterSku?.unitsPerCarton ??
+		                          1
+		                        const totalItemUnits = item.quantity * unitsPerCarton
 
                         return (
                           <div key={item.id} className="grid grid-cols-14 gap-2 items-center p-3">
@@ -775,22 +778,22 @@ export default function NewFulfillmentOrderPage() {
                               </select>
                             </div>
 
-                            <div className="col-span-3">
-                              <select
-                                value={item.batchLot}
-                                onChange={e => updateLineItem(item.id, 'batchLot', e.target.value)}
-                                className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                required
-                                disabled={!item.skuCode}
-                              >
-                                <option value="">Select batch</option>
-                                {batches.map(b => (
-                                  <option key={b.id} value={b.batchCode}>
-                                    {b.batchCode}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+	                            <div className="col-span-3">
+	                              <select
+	                                value={item.lotRef}
+	                                onChange={e => updateLineItem(item.id, 'lotRef', e.target.value)}
+	                                className="w-full px-2 py-1.5 border rounded-md bg-white dark:bg-slate-800 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+	                                required
+	                                disabled={!item.skuCode}
+	                              >
+	                                <option value="">Select lot</option>
+	                                {lots.map(l => (
+	                                  <option key={l.lotRef} value={l.lotRef}>
+	                                    {l.lotRef}
+	                                  </option>
+	                                ))}
+	                              </select>
+	                            </div>
 
                             <div className="col-span-3">
                               <Input
@@ -815,11 +818,11 @@ export default function NewFulfillmentOrderPage() {
                               />
                             </div>
 
-                            <div className="col-span-1">
-                              <span className="text-sm text-muted-foreground">
-                                {item.skuCode && item.batchLot ? totalItemUnits.toLocaleString() : '—'}
-                              </span>
-                            </div>
+	                            <div className="col-span-1">
+	                              <span className="text-sm text-muted-foreground">
+	                                {item.skuCode && item.lotRef ? totalItemUnits.toLocaleString() : '—'}
+	                              </span>
+	                            </div>
 
                             <div className="col-span-2">
                               <Input

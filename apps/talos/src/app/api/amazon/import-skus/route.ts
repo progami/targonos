@@ -9,7 +9,6 @@ import {
   testCompareApis,
   type AmazonCatalogListingType,
 } from '@/lib/amazon/client'
-import { SHIPMENT_PLANNING_CONFIG } from '@/lib/config/shipment-planning'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import {
   parseAmazonProductFees,
@@ -35,10 +34,8 @@ const requestSchema = z.object({
   mode: z.enum(['import', 'validate']).default('import'),
 })
 
-const DEFAULT_BATCH_CODE = 'BATCH 01'
 const DEFAULT_PACK_SIZE = 1
 const DEFAULT_UNITS_PER_CARTON = 1
-const DEFAULT_CARTONS_PER_PALLET = SHIPMENT_PLANNING_CONFIG.DEFAULT_CARTONS_PER_PALLET
 const DEFAULT_FEE_ESTIMATE_PRICE = 10
 
 function normalizeSkuCode(value: string): string | null {
@@ -431,15 +428,13 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
       limit: previewLimit,
       totalListings: listings.length,
       hasMore: listingResponse.hasMore,
-      summary,
-      policy: {
-        updatesExistingSkus: false,
-        createsBatch: true,
-        defaultBatchCode: DEFAULT_BATCH_CODE,
-      },
-      items,
-    },
-  })
+	      summary,
+	      policy: {
+	        updatesExistingSkus: false,
+	      },
+	      items,
+	    },
+	  })
 })
 
 export const POST = withRole(['admin', 'staff'], async (request, _session) => {
@@ -781,39 +776,13 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           data: skuUpdateData,
         })
 
-        if (!existingSku) {
-          throw new Error(`SKU not found during import: ${skuCode}`)
-        }
+	        if (!existingSku) {
+	          throw new Error(`SKU not found during import: ${skuCode}`)
+	        }
 
-        // Update batch with Amazon fee data
-        const batchUpdateData: Prisma.SkuBatchUpdateInput = {}
-        if (unitWeightKg !== null) {
-          batchUpdateData.amazonReferenceWeightKg = unitWeightKg
-        }
-        if (amazonSizeTier !== null) {
-          batchUpdateData.amazonSizeTier = amazonSizeTier
-        }
-        if (amazonFbaFulfillmentFee !== null) {
-          batchUpdateData.amazonFbaFulfillmentFee = amazonFbaFulfillmentFee
-        }
-
-        if (Object.keys(batchUpdateData).length > 0) {
-          const latestBatch = await prisma.skuBatch.findFirst({
-            where: { skuId: existingSku.id, isActive: true },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true },
-          })
-          if (latestBatch) {
-            await prisma.skuBatch.update({
-              where: { id: latestBatch.id },
-              data: batchUpdateData,
-            })
-          }
-        }
-
-        imported += 1
-        details.push({
-          skuCode,
+	        imported += 1
+	        details.push({
+	          skuCode,
           status: 'imported',
           message: 'Refreshed Amazon data',
           unitWeightKg,
@@ -826,10 +795,10 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         })
       } else {
         // Create new SKU
-        await prisma.$transaction(async tx => {
-          const createdSku = await tx.sku.create({
-            data: {
-              skuCode,
+	        await prisma.$transaction(async tx => {
+	          await tx.sku.create({
+	            data: {
+	              skuCode,
               asin,
               description,
               amazonCategory,
@@ -864,36 +833,11 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               cartonSide2Cm: null,
               cartonSide3Cm: null,
               cartonWeightKg: null,
-              packagingType: null,
-              isActive: true,
-            },
-          })
-
-          await tx.skuBatch.create({
-            data: {
-              skuId: createdSku.id,
-              batchCode: DEFAULT_BATCH_CODE,
-              description: null,
-              productionDate: null,
-              expiryDate: null,
-              packSize: DEFAULT_PACK_SIZE,
-              unitsPerCarton: DEFAULT_UNITS_PER_CARTON,
-              material: null,
-              cartonDimensionsCm: null,
-              cartonSide1Cm: null,
-              cartonSide2Cm: null,
-              cartonSide3Cm: null,
-              cartonWeightKg: null,
-              packagingType: null,
-              amazonSizeTier,
-              amazonFbaFulfillmentFee,
-              amazonReferenceWeightKg: unitWeightKg,
-              storageCartonsPerPallet: DEFAULT_CARTONS_PER_PALLET,
-              shippingCartonsPerPallet: DEFAULT_CARTONS_PER_PALLET,
-              isActive: true,
-            },
-          })
-        })
+	              packagingType: null,
+	              isActive: true,
+	            },
+	          })
+	        })
 
         imported += 1
         existingSet.add(skuCode.toUpperCase())

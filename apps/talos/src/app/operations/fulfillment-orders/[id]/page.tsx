@@ -38,7 +38,7 @@ type FulfillmentOrderLine = {
   id: string
   skuCode: string
   skuDescription: string | null
-  batchLot: string
+  lotRef: string
   quantity: number
   status: string
 }
@@ -284,7 +284,9 @@ export default function FulfillmentOrderDetailPage() {
   const fetchOrder = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/fulfillment-orders/${params.id}`)
+      const response = await fetch(withBasePath(`/api/fulfillment-orders/${params.id}`), {
+        credentials: 'include',
+      })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         toast.error(payload?.error ?? 'Failed to load fulfillment order')
@@ -362,7 +364,9 @@ export default function FulfillmentOrderDetailPage() {
     const loadDocuments = async () => {
       try {
         setDocumentsLoading(true)
-        const response = await fetch(`/api/fulfillment-orders/${order.id}/documents`)
+        const response = await fetch(withBasePath(`/api/fulfillment-orders/${order.id}/documents`), {
+          credentials: 'include',
+        })
         if (!response.ok) {
           setDocuments([])
           return
@@ -709,7 +713,9 @@ export default function FulfillmentOrderDetailPage() {
 
   const refreshDocuments = async () => {
     if (!order) return
-    const response = await fetch(`/api/fulfillment-orders/${order.id}/documents`)
+    const response = await fetch(withBasePath(`/api/fulfillment-orders/${order.id}/documents`), {
+      credentials: 'include',
+    })
     if (!response.ok) {
       setDocuments([])
       return
@@ -1285,7 +1291,7 @@ export default function FulfillmentOrderDetailPage() {
               <div className="rounded-lg border bg-white dark:bg-slate-800 overflow-hidden">
                 <div className="grid grid-cols-14 gap-2 text-xs font-medium text-muted-foreground p-3 border-b bg-slate-50/50 dark:bg-slate-900/50">
                   <div className="col-span-3">SKU</div>
-                  <div className="col-span-3">Batch</div>
+                  <div className="col-span-3">Lot</div>
                   <div className="col-span-4">Description</div>
                   <div className="col-span-2 text-right">Qty</div>
                   <div className="col-span-2">Status</div>
@@ -1298,7 +1304,7 @@ export default function FulfillmentOrderDetailPage() {
                         <span className="text-sm font-semibold text-foreground">{line.skuCode}</span>
                       </div>
                       <div className="col-span-3">
-                        <span className="text-sm text-muted-foreground uppercase">{line.batchLot}</span>
+                        <span className="text-sm text-muted-foreground uppercase">{line.lotRef}</span>
                       </div>
                       <div className="col-span-4">
                         <span

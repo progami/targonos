@@ -25,11 +25,6 @@ export const GET = withAuth(async (request: NextRequest, _session) => {
 const LineItemSchema = z.object({
   skuCode: z.string().trim().min(1, 'SKU is required'),
   skuDescription: z.string().optional(),
-  batchLot: z
-    .string()
-    .trim()
-    .min(1)
-    .refine(value => value.trim().toUpperCase() !== 'DEFAULT', 'Batch is required'),
   piNumber: z.string().trim().optional(),
   commodityCode: z.string().trim().optional(),
   countryOfOrigin: z.string().trim().optional(),
@@ -97,7 +92,6 @@ export const POST = withAuth(async (request: NextRequest, session) => {
         lines: result.data.lines.map(line => ({
           skuCode: line.skuCode,
           skuDescription: line.skuDescription,
-          batchLot: line.batchLot,
           piNumber: line.piNumber,
           commodityCode: line.commodityCode,
           countryOfOrigin: line.countryOfOrigin,
