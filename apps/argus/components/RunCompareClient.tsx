@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { stableStringify } from '@/lib/capture/stable-json';
+import { Label } from '@/components/ui/label';
 
 type RunOption = {
   id: string;
@@ -18,41 +19,48 @@ export function RunCompareClient(props: { runs: RunOption[] }) {
   const right = useMemo(() => runs.find((r) => r.id === rightId) ?? null, [runs, rightId]);
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="space-y-1">
-          <div className="text-sm font-medium">Left run</div>
-          <select className="rounded border border-slate-300 px-3 py-2 text-sm" value={leftId} onChange={(e) => setLeftId(e.target.value)}>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Left run</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            value={leftId}
+            onChange={(e) => setLeftId(e.target.value)}
+          >
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 {new Date(r.startedAtIso).toLocaleString()}
               </option>
             ))}
           </select>
-        </label>
-
-        <label className="space-y-1">
-          <div className="text-sm font-medium">Right run</div>
-          <select className="rounded border border-slate-300 px-3 py-2 text-sm" value={rightId} onChange={(e) => setRightId(e.target.value)}>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Right run</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            value={rightId}
+            onChange={(e) => setRightId(e.target.value)}
+          >
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 {new Date(r.startedAtIso).toLocaleString()}
               </option>
             ))}
           </select>
-        </label>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
-          <div className="text-sm font-medium text-slate-700">Left normalized</div>
-          <pre className="mt-2 max-h-80 overflow-auto rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Left normalized</p>
+          <pre className="max-h-80 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs">
             {left ? stableStringify(left.normalizedExtracted) : ''}
           </pre>
         </div>
         <div>
-          <div className="text-sm font-medium text-slate-700">Right normalized</div>
-          <pre className="mt-2 max-h-80 overflow-auto rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Right normalized</p>
+          <pre className="max-h-80 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs">
             {right ? stableStringify(right.normalizedExtracted) : ''}
           </pre>
         </div>

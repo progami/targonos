@@ -5,26 +5,28 @@ export type WarehouseOption = {
   kind?: string
 }
 
-export type SkuBatchOption = {
-  id: string
-  batchCode: string
+export type SkuLotOption = {
+  lotRef: string
   unitsPerCarton?: number | null
   availableCartons?: number
 }
 
-export type SkuOption = {
+export type SkuMasterOption = {
   id: string
   skuCode: string
   description: string
   unitsPerCarton?: number | null
-  batches: SkuBatchOption[]
+}
+
+export type SkuInventoryOption = SkuMasterOption & {
+  lots: SkuLotOption[]
 }
 
 export type LineItem = {
   id: string
   skuCode: string
   skuDescription: string
-  batchLot: string
+  lotRef: string
   quantity: number
   notes: string
 }

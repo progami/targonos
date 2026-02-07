@@ -267,7 +267,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
 
   const batchRows = purchaseOrder.lines.map((line) => ({
     skuCode: line.skuCode.trim(),
-    batchCode: line.batchLot?.trim() ? line.batchLot.trim() : null,
+    batchCode: line.lotRef?.trim() ? line.lotRef.trim() : null,
     quantity: line.unitsOrdered,
   }));
 

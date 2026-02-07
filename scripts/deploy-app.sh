@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus" >&2
+  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -135,7 +135,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/talos"
     pm2_name="${PM2_PREFIX}-talos"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:sku-batch-amazon-item-package-dimensions && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v9-views"
+    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views"
     build_cmd="pnpm --filter $workspace build"
     ;;
   sso|targon|targonos)
@@ -189,6 +189,14 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/hermes"
     pm2_name="${PM2_PREFIX}-hermes"
     prisma_cmd=""
+    build_cmd="pnpm --filter $workspace build"
+    ;;
+  argus)
+    workspace="@targon/argus"
+    app_dir="$REPO_DIR/apps/argus"
+    pm2_name="${PM2_PREFIX}-argus"
+    prisma_cmd="pnpm --filter $workspace prisma:generate"
+    migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)

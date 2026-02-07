@@ -1340,7 +1340,9 @@ model CreditCard {
   title          String
   cardholderName String?
   brand          CreditCardBrand
+  cardNumber     String?
   last4          String
+  cvv            String?
   expMonth       Int
   expYear        Int
   department     PasswordDepartment @default(FINANCE)

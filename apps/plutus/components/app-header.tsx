@@ -86,7 +86,11 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Inventory',
     icon: Boxes,
-    items: [{ href: '/bills', label: 'Bills' }],
+    items: [
+      { href: '/audit-data', label: 'Audit Data' },
+      { href: '/settlement-processing', label: 'Settlement Processing' },
+      { href: '/bills', label: 'Bills' },
+    ],
   },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];

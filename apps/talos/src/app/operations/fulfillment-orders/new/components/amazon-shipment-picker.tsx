@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Check, Download, Loader2, Search } from '@/lib/lucide-icons'
+import { withBasePath } from '@/lib/utils/base-path'
 import type {
   AmazonInboundShipment,
   AmazonInboundDetails,
@@ -13,7 +14,7 @@ import type {
   AmazonFreightState,
   FormData,
   LineItem,
-  SkuOption,
+  SkuMasterOption,
   WarehouseOption,
 } from './types'
 import {
@@ -30,7 +31,7 @@ interface AmazonShipmentPickerProps {
   formData: FormData
   setFormData: React.Dispatch<React.SetStateAction<FormData>>
   setLineItems: React.Dispatch<React.SetStateAction<LineItem[]>>
-  skus: SkuOption[]
+  skus: SkuMasterOption[]
   warehouses: WarehouseOption[]
 }
 
@@ -56,7 +57,7 @@ export function AmazonShipmentPicker({
     setShipmentsLoading(true)
     setShipmentsError(null)
     try {
-      const response = await fetch('/api/amazon/inbound-shipments', { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/amazon/inbound-shipments'), { credentials: 'include' })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(payload?.error ?? 'Failed to fetch Amazon shipments')
@@ -110,11 +111,6 @@ export function AmazonShipmentPicker({
     [warehouses]
   )
 
-  const getPreferredBatch = (sku?: SkuOption | null) => {
-    if (!sku?.batches?.length) return null
-    return sku.batches[0]
-  }
-
   const handleImport = async (shipmentId: string) => {
     if (!shipmentId.trim()) {
       toast.error('Amazon shipment ID is required')
@@ -124,7 +120,7 @@ export function AmazonShipmentPicker({
     setImportLoading(true)
     try {
       const response = await fetch(
-        `/api/amazon/inbound-shipments/${encodeURIComponent(shipmentId)}`,
+        withBasePath(`/api/amazon/inbound-shipments/${encodeURIComponent(shipmentId)}`),
         { credentials: 'include' }
       )
       const payload = await response.json().catch(() => null)
@@ -205,7 +201,6 @@ export function AmazonShipmentPicker({
 
       const skuMap = new Map(skus.map(sku => [sku.skuCode.toLowerCase(), sku]))
       const missingSkus = new Set<string>()
-      const missingBatches = new Set<string>()
       const lineMap = new Map<string, LineItem>()
       let totalUnitsImported = 0
 
@@ -218,18 +213,13 @@ export function AmazonShipmentPicker({
           missingSkus.add(rawSku)
           continue
         }
-
-        const preferredBatch = getPreferredBatch(sku)
-        const batchLot = preferredBatch?.batchCode ?? ''
-        if (!batchLot) {
-          missingBatches.add(sku.skuCode)
-        }
+        const lotRef = ''
 
         const quantityUnits = item.quantityExpected ?? 0
         if (!Number.isFinite(quantityUnits) || quantityUnits <= 0) continue
 
         const fallbackUnitsPerCarton =
-          preferredBatch?.unitsPerCarton ?? sku.unitsPerCarton ?? null
+          sku.unitsPerCarton ?? null
         const unitsPerCarton =
           item.quantityInCase && item.quantityInCase > 0
             ? item.quantityInCase
@@ -242,7 +232,7 @@ export function AmazonShipmentPicker({
 
         totalUnitsImported += quantityUnits
 
-        const key = `${sku.skuCode}::${batchLot}`
+        const key = sku.skuCode
         const existing = lineMap.get(key)
         if (existing) {
           existing.quantity += cartons
@@ -253,7 +243,7 @@ export function AmazonShipmentPicker({
           id: crypto.randomUUID(),
           skuCode: sku.skuCode,
           skuDescription: sku.description,
-          batchLot,
+          lotRef,
           quantity: cartons,
           notes: '',
         })
@@ -270,12 +260,6 @@ export function AmazonShipmentPicker({
         const list = Array.from(missingSkus)
         const preview = list.slice(0, 3).join(', ')
         toast.error(`Missing SKUs in Talos: ${preview}${list.length > 3 ? '...' : ''}`)
-      }
-
-      if (missingBatches.size > 0) {
-        const list = Array.from(missingBatches)
-        const preview = list.slice(0, 3).join(', ')
-        toast.error(`Missing batches for SKUs: ${preview}${list.length > 3 ? '...' : ''}`)
       }
 
       toast.success('Amazon shipment imported')

@@ -1,22 +1,24 @@
 import Link from 'next/link';
 import { TargetFormClient } from '@/components/TargetFormClient';
+import { PageHeader } from '@/components/layout/page-header';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
 export default function NewTargetPage() {
   return (
-    <main className="p-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">New target</h1>
-        <Link href="/targets" className="text-sm text-slate-600 hover:underline">
-          Back
-        </Link>
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/products">
+            <ArrowLeft className="mr-1 h-3.5 w-3.5" />
+            Back
+          </Link>
+        </Button>
       </div>
-
-      <div className="mt-4">
-        <TargetFormClient mode="create" />
-      </div>
-    </main>
+      <PageHeader title="New Target" subtitle="Create a new monitoring target." />
+      <TargetFormClient mode="create" />
+    </div>
   );
 }
-

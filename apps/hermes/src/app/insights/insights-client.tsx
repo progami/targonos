@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { CalendarClock, Clock, Loader2, PackageSearch, Send } from "lucide-react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -14,6 +16,7 @@ import {
 } from "recharts";
 
 import { hermesApiUrl } from "@/lib/base-path";
+import { KpiCard } from "@/components/hermes/kpi-card";
 import { PageHeader } from "@/components/hermes/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,14 +89,36 @@ function connectionShortLabel(c: { marketplaceIds: string[]; accountName: string
   return c.accountName;
 }
 
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <div className="mb-1 font-medium">{String(label)}</div>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+          <span className="text-muted-foreground">{p.name}</span>
+          <span className="ml-auto tabular-nums font-medium">{fmtInt(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SentChart({ series }: { series: Overview["series"] }) {
   const data = series.map((d) => ({ day: d.day, sent: d.sent }));
 
   return (
-    <div className="h-[280px] w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <AreaChart data={data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
+          <defs>
+            <linearGradient id="grad-sent" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.5} />
           <XAxis
             dataKey="day"
             tickFormatter={fmtDayShort}
@@ -101,13 +126,17 @@ function SentChart({ series }: { series: Overview["series"] }) {
             interval="preserveStartEnd"
             minTickGap={18}
           />
-          <YAxis className="text-[11px]" width={36} />
-          <Tooltip
-            formatter={(value) => [fmtInt(Number(value ?? 0)), "Sent"]}
-            labelFormatter={(label) => String(label)}
+          <YAxis className="text-[11px]" width={40} tickFormatter={(v) => fmtInt(v)} />
+          <Tooltip content={<ChartTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="sent"
+            name="Sent"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
+            fill="url(#grad-sent)"
           />
-          <Bar dataKey="sent" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-        </BarChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
@@ -117,17 +146,14 @@ function QueueChart({ series }: { series: Overview["queue"]["series"] }) {
   const data = series.map((d) => ({ day: d.day, queued: d.queued }));
 
   return (
-    <div className="h-[240px] w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <BarChart data={data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }} barCategoryGap="20%">
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.5} />
           <XAxis dataKey="day" tickFormatter={fmtDayShort} className="text-[11px]" />
-          <YAxis className="text-[11px]" width={36} />
-          <Tooltip
-            formatter={(value) => [fmtInt(Number(value ?? 0)), "Queued"]}
-            labelFormatter={(label) => String(label)}
-          />
-          <Bar dataKey="queued" fill="hsl(var(--muted-foreground))" radius={[3, 3, 0, 0]} />
+          <YAxis className="text-[11px]" width={40} tickFormatter={(v) => fmtInt(v)} />
+          <Tooltip content={<ChartTooltip />} />
+          <Bar dataKey="queued" name="Queued" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -139,10 +165,18 @@ function MultiSentChart(params: {
   bars: Array<{ key: string; label: string; color: string }>;
 }) {
   return (
-    <div className="h-[280px] w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <AreaChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
+          <defs>
+            {params.bars.map((b) => (
+              <linearGradient key={`grad-${b.key}`} id={`grad-${b.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={b.color} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={b.color} stopOpacity={0.02} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.5} />
           <XAxis
             dataKey="day"
             tickFormatter={fmtDayShort}
@@ -150,16 +184,22 @@ function MultiSentChart(params: {
             interval="preserveStartEnd"
             minTickGap={18}
           />
-          <YAxis className="text-[11px]" width={36} />
-          <Tooltip
-            formatter={(value, name) => [fmtInt(Number(value ?? 0)), String(name)]}
-            labelFormatter={(label) => String(label)}
-          />
+          <YAxis className="text-[11px]" width={40} tickFormatter={(v) => fmtInt(v)} />
+          <Tooltip content={<ChartTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {params.bars.map((b) => (
-            <Bar key={b.key} dataKey={b.key} name={b.label} fill={b.color} radius={[3, 3, 0, 0]} />
+            <Area
+              key={b.key}
+              type="monotone"
+              dataKey={b.key}
+              name={b.label}
+              stroke={b.color}
+              strokeWidth={2}
+              fill={`url(#grad-${b.key})`}
+              stackId="sent"
+            />
           ))}
-        </BarChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
@@ -170,19 +210,16 @@ function MultiQueueChart(params: {
   bars: Array<{ key: string; label: string; color: string }>;
 }) {
   return (
-    <div className="h-[240px] w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <BarChart data={params.data} margin={{ left: 6, right: 10, top: 12, bottom: 6 }} barCategoryGap="20%">
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.5} />
           <XAxis dataKey="day" tickFormatter={fmtDayShort} className="text-[11px]" />
-          <YAxis className="text-[11px]" width={36} />
-          <Tooltip
-            formatter={(value, name) => [fmtInt(Number(value ?? 0)), String(name)]}
-            labelFormatter={(label) => String(label)}
-          />
+          <YAxis className="text-[11px]" width={40} tickFormatter={(v) => fmtInt(v)} />
+          <Tooltip content={<ChartTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {params.bars.map((b) => (
-            <Bar key={b.key} dataKey={b.key} name={b.label} fill={b.color} radius={[3, 3, 0, 0]} />
+            <Bar key={b.key} dataKey={b.key} name={b.label} fill={b.color} stackId="queued" radius={[4, 4, 0, 0]} />
           ))}
         </BarChart>
       </ResponsiveContainer>
@@ -352,6 +389,15 @@ export function InsightsClient() {
     return sum;
   }, [scopedOverviews]);
 
+  const totalOrders = React.useMemo(() => {
+    let sum = 0;
+    for (const { overview } of scopedOverviews) {
+      if (!overview) continue;
+      sum += overview.summary.orders.shipped + overview.summary.orders.pending + overview.summary.orders.canceled;
+    }
+    return sum;
+  }, [scopedOverviews]);
+
   const hasAnyOverview = React.useMemo(() => scopedOverviews.some((x) => x.overview), [scopedOverviews]);
 
   const overviewOrderRange = React.useMemo(() => {
@@ -497,12 +543,13 @@ export function InsightsClient() {
           <div className="flex items-center gap-2">
             <Tabs
               value={String(rangeDays)}
-              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 })}
+              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 | 365 })}
             >
               <TabsList>
                 <TabsTrigger value="7">7d</TabsTrigger>
                 <TabsTrigger value="30">30d</TabsTrigger>
                 <TabsTrigger value="90">90d</TabsTrigger>
+                <TabsTrigger value="365">All</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -525,6 +572,29 @@ export function InsightsClient() {
         }
       />
 
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <KpiCard
+          label={`Sent (${rangeDays === 365 ? "all" : `${rangeDays}d`})`}
+          value={hasAnyOverview ? fmtInt(sentInRange) : "—"}
+          icon={Send}
+        />
+        <KpiCard
+          label="Queued today"
+          value={hasAnyOverview ? fmtInt(queuedToday) : "—"}
+          icon={Clock}
+        />
+        <KpiCard
+          label="Queued tomorrow"
+          value={hasAnyOverview ? fmtInt(queuedTomorrow) : "—"}
+          icon={CalendarClock}
+        />
+        <KpiCard
+          label="Total orders"
+          value={hasAnyOverview ? fmtInt(totalOrders) : "—"}
+          icon={PackageSearch}
+        />
+      </div>
+
       {connections.length > 1 ? (
         <Card>
           <CardHeader className="py-3">
@@ -537,7 +607,7 @@ export function InsightsClient() {
                   <TableRow>
                     <TableHead>Account</TableHead>
                     <TableHead className="text-right">Sent / shipped</TableHead>
-                    <TableHead className="text-right">Sent ({rangeDays}d)</TableHead>
+                    <TableHead className="text-right">Sent ({rangeDays === 365 ? "all" : `${rangeDays}d`})</TableHead>
                     <TableHead className="text-right">Queued</TableHead>
                     <TableHead className="text-right">Pending</TableHead>
                     <TableHead className="text-right">Canceled</TableHead>
@@ -601,18 +671,15 @@ export function InsightsClient() {
         </Card>
       ) : null}
 
-      <Tabs defaultValue="table">
+      <Tabs defaultValue="chart">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="table">Table</TabsTrigger>
             <TabsTrigger value="chart">Chart</TabsTrigger>
+            <TabsTrigger value="table">Table</TabsTrigger>
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-1.5">
             {overviewOrderRange ? <Badge variant="outline">Orders {overviewOrderRange}</Badge> : null}
-            <Badge variant="secondary">Sent ({rangeDays}d) {hasAnyOverview ? fmtInt(sentInRange) : "—"}</Badge>
-            <Badge variant="outline">Queued today {hasAnyOverview ? fmtInt(queuedToday) : "—"}</Badge>
-            <Badge variant="outline">Queued tomorrow {hasAnyOverview ? fmtInt(queuedTomorrow) : "—"}</Badge>
             {allLoading ? (
               <Badge variant="outline" className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

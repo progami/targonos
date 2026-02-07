@@ -18,7 +18,7 @@ export interface FulfillmentUserContext {
 export type CreateFulfillmentOrderLineInput = {
   skuCode: string
   skuDescription?: string
-  batchLot: string
+  lotRef: string
   quantity: number
   notes?: string
 }
@@ -95,10 +95,10 @@ function normalizeSkuCode(value: string) {
   return sanitizeForDisplay(value.trim())
 }
 
-function normalizeBatchLot(value: string) {
+function normalizeLotRef(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return ''
-  return sanitizeForDisplay(trimmed.toUpperCase())
+  return sanitizeForDisplay(trimmed)
 }
 
 export async function listFulfillmentOrders() {
@@ -140,7 +140,7 @@ export async function createFulfillmentOrder(
     skuDescription: line.skuDescription?.trim()
       ? sanitizeForDisplay(line.skuDescription.trim())
       : undefined,
-    batchLot: normalizeBatchLot(line.batchLot),
+    lotRef: normalizeLotRef(line.lotRef),
     quantity: line.quantity,
     notes: line.notes?.trim() ? sanitizeForDisplay(line.notes.trim()) : undefined,
   }))
@@ -150,16 +150,16 @@ export async function createFulfillmentOrder(
     if (!line.skuCode) {
       throw new ValidationError('SKU code is required for all line items')
     }
-    if (!line.batchLot) {
-      throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
+    if (!line.lotRef) {
+      throw new ValidationError(`Lot ref is required for SKU ${line.skuCode}`)
     }
     if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
       throw new ValidationError(`Quantity must be a positive integer for SKU ${line.skuCode}`)
     }
-    const key = `${line.skuCode.toLowerCase()}::${line.batchLot.toLowerCase()}`
+    const key = `${line.skuCode.toLowerCase()}::${line.lotRef.toLowerCase()}`
     if (keySet.has(key)) {
       throw new ValidationError(
-        `Duplicate line detected for SKU ${line.skuCode} batch ${line.batchLot}. Combine quantities into a single line.`
+        `Duplicate line detected for SKU ${line.skuCode} lot ${line.lotRef}. Combine quantities into a single line.`
       )
     }
     keySet.add(key)
@@ -193,33 +193,14 @@ export async function createFulfillmentOrder(
     }
   }
 
-  const batchCodes = Array.from(new Set(normalizedLines.map(line => line.batchLot)))
-  const batchRecords = await prisma.skuBatch.findMany({
-    where: {
-      skuId: { in: skus.map(sku => sku.id) },
-      batchCode: { in: batchCodes },
-    },
-    select: { skuId: true, batchCode: true },
-  })
-  const batchKeySet = new Set(batchRecords.map(batch => `${batch.skuId}::${batch.batchCode}`))
-
-  for (const line of normalizedLines) {
-    const sku = skuByCode.get(line.skuCode)
-    if (!sku) continue
-    const key = `${sku.id}::${line.batchLot}`
-    if (!batchKeySet.has(key)) {
-      throw new ValidationError(
-        `Batch ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
-      )
-    }
-  }
+  const lotRefs = Array.from(new Set(normalizedLines.map(line => line.lotRef)))
 
   const inventoryGrouped = await prisma.inventoryTransaction.groupBy({
-    by: ['skuCode', 'batchLot'],
+    by: ['skuCode', 'lotRef'],
     where: {
       warehouseCode: warehouse.code,
       skuCode: { in: skuCodes },
-      batchLot: { in: batchCodes },
+      lotRef: { in: lotRefs },
     },
     _sum: { cartonsIn: true, cartonsOut: true },
   })
@@ -230,17 +211,17 @@ export async function createFulfillmentOrder(
     const cartonsOut = row._sum.cartonsOut
     const totalIn = typeof cartonsIn === 'number' ? cartonsIn : 0
     const totalOut = typeof cartonsOut === 'number' ? cartonsOut : 0
-    availableCartonsByKey.set(`${row.skuCode}::${row.batchLot}`, totalIn - totalOut)
+    availableCartonsByKey.set(`${row.skuCode}::${row.lotRef}`, totalIn - totalOut)
   }
 
   const inventoryIssues: string[] = []
   for (const line of normalizedLines) {
-    const available = availableCartonsByKey.get(`${line.skuCode}::${line.batchLot}`)
+    const available = availableCartonsByKey.get(`${line.skuCode}::${line.lotRef}`)
     const availableCartons = typeof available === 'number' ? available : 0
 
     if (availableCartons < line.quantity) {
       inventoryIssues.push(
-        `${line.skuCode} batch ${line.batchLot} (available ${availableCartons}, requested ${line.quantity})`
+        `${line.skuCode} lot ${line.lotRef} (available ${availableCartons}, requested ${line.quantity})`
       )
     }
   }
@@ -363,7 +344,7 @@ export async function createFulfillmentOrder(
               skuCode: line.skuCode,
               skuDescription:
                 line.skuDescription ?? skuByCode.get(line.skuCode)?.description ?? null,
-              batchLot: line.batchLot,
+              lotRef: line.lotRef,
               quantity: line.quantity,
               status: FulfillmentOrderLineStatus.PENDING,
               shippedQuantity: 0,
@@ -515,23 +496,17 @@ export async function transitionFulfillmentOrderStage(
   })
   const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
 
-  const batchCodes = Array.from(new Set(order.lines.map(line => line.batchLot)))
-  const batchRecords = await prisma.skuBatch.findMany({
+  const configs = await prisma.warehouseSkuStorageConfig.findMany({
     where: {
+      warehouseId: warehouse.id,
       skuId: { in: skus.map(sku => sku.id) },
-      batchCode: { in: batchCodes },
     },
     select: {
       skuId: true,
-      batchCode: true,
-      unitsPerCarton: true,
-      cartonDimensionsCm: true,
-      cartonWeightKg: true,
-      packagingType: true,
       shippingCartonsPerPallet: true,
     },
   })
-  const batchMap = new Map(batchRecords.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch]))
+  const configBySkuId = new Map(configs.map(config => [config.skuId, config]))
 
   const referenceId = stageData.trackingNumber?.trim()
     ? sanitizeForDisplay(stageData.trackingNumber.trim())
@@ -548,24 +523,19 @@ export async function transitionFulfillmentOrderStage(
         throw new ValidationError(`SKU not found: ${line.skuCode}`)
       }
 
-      const batch = batchMap.get(`${sku.id}::${line.batchLot}`)
-      if (!batch) {
-        throw new ValidationError(
-          `Batch ${line.batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
-        )
-      }
+      const config = configBySkuId.get(sku.id) ?? null
 
       const cartons = line.quantity
       if (!Number.isInteger(cartons) || cartons <= 0) {
         throw new ValidationError(`Invalid cartons quantity for SKU ${line.skuCode}`)
       }
 
-      const unitsPerCarton = batch.unitsPerCarton ?? sku.unitsPerCarton ?? 1
-      const shippingCartonsPerPallet = batch.shippingCartonsPerPallet ?? null
+      const unitsPerCarton = sku.unitsPerCarton
+      const shippingCartonsPerPallet = config?.shippingCartonsPerPallet ?? null
 
       if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${line.skuCode} batch ${line.batchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Shipping cartons per pallet is required for SKU ${line.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
@@ -573,7 +543,7 @@ export async function transitionFulfillmentOrderStage(
         where: {
           warehouseCode: warehouse.code,
           skuCode: sku.skuCode,
-          batchLot: line.batchLot,
+          lotRef: line.lotRef,
           transactionDate: { lte: shippedAt },
         },
         select: { cartonsIn: true, cartonsOut: true },
@@ -586,7 +556,7 @@ export async function transitionFulfillmentOrderStage(
 
       if (currentCartons < cartons) {
         throw new ValidationError(
-          `Insufficient inventory for SKU ${sku.skuCode} batch ${line.batchLot}. Available: ${currentCartons}, Requested: ${cartons}`
+          `Insufficient inventory for SKU ${sku.skuCode} lot ${line.lotRef}. Available: ${currentCartons}, Requested: ${cartons}`
         )
       }
 
@@ -609,11 +579,11 @@ export async function transitionFulfillmentOrderStage(
           skuDescription: line.skuDescription ?? sku.description,
           unitDimensionsCm: sku.unitDimensionsCm,
           unitWeightKg: sku.unitWeightKg,
-          cartonDimensionsCm: batch.cartonDimensionsCm ?? sku.cartonDimensionsCm,
-          cartonWeightKg: batch.cartonWeightKg ?? sku.cartonWeightKg,
-          packagingType: batch.packagingType ?? sku.packagingType,
+          cartonDimensionsCm: sku.cartonDimensionsCm,
+          cartonWeightKg: sku.cartonWeightKg,
+          packagingType: sku.packagingType,
           unitsPerCarton,
-          batchLot: line.batchLot,
+          lotRef: line.lotRef,
           transactionType: TransactionType.SHIP,
           referenceId,
           cartonsIn: 0,

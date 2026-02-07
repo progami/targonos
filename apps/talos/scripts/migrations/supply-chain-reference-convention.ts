@@ -69,6 +69,7 @@ Ensures schema + backfills for:
 - skus.sku_group
 - purchase_orders.sku_group
 - purchase_order_lines.lot_ref
+- purchase_order_lines.production_date
 
 Usage:
   pnpm --filter @targon/talos tsx scripts/migrations/supply-chain-reference-convention.ts [options]
@@ -87,6 +88,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
     `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "lot_ref" TEXT`,
+    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "production_date" date`,
     `WITH sku_reference_groups AS (
       SELECT
         pol."sku_code",
@@ -165,31 +167,13 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       (seed."sequence_text")::integer,
       seed."sku_group",
       upper(regexp_replace(pol."sku_code", '[^A-Za-z0-9]', '', 'g'))
-    )
-    FROM order_seed seed
-    WHERE pol."purchase_order_id" = seed."purchase_order_id"
-      AND seed."sku_group" IS NOT NULL
-      AND seed."sequence_text" IS NOT NULL
-      AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,
-    `CREATE OR REPLACE VIEW "lot" AS
-    SELECT
-      pol."purchase_order_id" AS "po_id",
-      s."id" AS "sku_id",
-      pol."lot_ref" AS "lot_ref",
-      pol."units_ordered" AS "qty_units",
-      pol."units_per_carton",
-      pol."quantity" AS "cartons",
-      pol."unit_cost",
-      pol."pi_number" AS "pi_ref",
-      sb."production_date"::date AS "production_date",
-      pol."status"::text AS "status"
-    FROM "purchase_order_lines" pol
-    LEFT JOIN "skus" s
-      ON s."sku_code" = pol."sku_code"
-    LEFT JOIN "sku_batches" sb
-      ON sb."sku_id" = s."id"
-     AND sb."batch_code" = pol."batch_lot"`,
-  ]
+	    )
+	    FROM order_seed seed
+	    WHERE pol."purchase_order_id" = seed."purchase_order_id"
+	      AND seed."sku_group" IS NOT NULL
+	      AND seed."sequence_text" IS NOT NULL
+	      AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,
+	  ]
 
   console.log(`\n[${tenant}] Applying supply chain naming convention schema/backfill`)
   for (const statement of statements) {
@@ -220,4 +204,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

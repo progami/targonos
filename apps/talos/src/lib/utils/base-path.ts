@@ -23,6 +23,16 @@ function normalizeBasePath(rawBasePath: string): string {
  return collapsedSlashes
 }
 
+function inferBasePathFromPathname(pathname: string): string {
+ const trimmed = pathname.trim()
+ if (!trimmed.startsWith('/')) return ''
+
+ const [firstSegment] = trimmed.split('/').filter(Boolean)
+ if (firstSegment === 'talos') return '/talos'
+
+ return ''
+}
+
 /**
  * Get the base path from environment or default to empty string
  */
@@ -31,7 +41,18 @@ export function getBasePath(): string {
   typeof window === 'undefined'
    ? (process.env.BASE_PATH ?? process.env.NEXT_PUBLIC_BASE_PATH ?? '')
    : (process.env.NEXT_PUBLIC_BASE_PATH ?? '')
- return normalizeBasePath(rawBasePath)
+
+ const normalized = normalizeBasePath(rawBasePath)
+ if (normalized) return normalized
+
+ // If Talos is accessed via `/talos/*` but BASE_PATH is not set (rewrite mode),
+ // infer it so client-side fetches hit the same origin path.
+ if (typeof window !== 'undefined') {
+  const inferred = inferBasePathFromPathname(window.location.pathname ?? '')
+  return normalizeBasePath(inferred)
+ }
+
+ return ''
 }
 
 /**

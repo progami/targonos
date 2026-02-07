@@ -12,6 +12,7 @@ import { PortalModal } from '@/components/ui/portal-modal'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import {
   calculateFbaFeeForTenant,
@@ -25,8 +26,7 @@ import { convertLengthToCm, convertWeightToKg, formatLengthFromCm, formatWeightF
 import type { TenantCode } from '@/lib/tenant/constants'
 import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
-import { ChevronDown, ChevronRight, ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
-import { SkuBatchesPanel } from './sku-batches-modal'
+import { ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 
 const PAGE_KEY = '/config/products'
 
@@ -144,30 +144,6 @@ const AMAZON_SIZE_TIER_OPTIONS = [
 
 const UK_SIZE_TIER_OPTIONS = UK_SIZE_TIER_DEFINITIONS_2026.map(entry => entry.tier)
 
-interface SkuBatchRow {
-  id: string
-  batchCode: string
-  description: string | null
-  productionDate: string | null
-  expiryDate: string | null
-  packSize: number | null
-  unitsPerCarton: number | null
-  material: string | null
-  amazonSizeTier: string | null
-  amazonFbaFulfillmentFee: number | string | null
-  amazonReferenceWeightKg: number | string | null
-  cartonDimensionsCm: string | null
-  cartonSide1Cm: number | string | null
-  cartonSide2Cm: number | string | null
-  cartonSide3Cm: number | string | null
-  cartonWeightKg: number | string | null
-  packagingType: string | null
-  storageCartonsPerPallet: number | null
-  shippingCartonsPerPallet: number | null
-  createdAt: string
-  updatedAt: string
-}
-
 interface SkuRow {
   id: string
   skuCode: string
@@ -206,11 +182,18 @@ interface SkuRow {
   itemSide2Cm?: number | string | null
   itemSide3Cm?: number | string | null
   itemWeightKg?: number | string | null
+  material?: string | null
   packSize: number | null
+  unitsPerCarton?: number | null
+  cartonDimensionsCm?: string | null
+  cartonSide1Cm?: number | string | null
+  cartonSide2Cm?: number | string | null
+  cartonSide3Cm?: number | string | null
+  cartonWeightKg?: number | string | null
+  packagingType?: string | null
   defaultSupplierId?: string | null
   secondarySupplierId?: string | null
   _count?: { inventoryTransactions: number }
-  batches?: SkuBatchRow[]
 }
 
 interface SupplierOption {
@@ -224,6 +207,14 @@ interface SkuFormState {
   description: string
   isActive: boolean
   asin: string
+  packSize: string
+  unitsPerCarton: string
+  material: string
+  packagingType: string
+  cartonSide1Cm: string
+  cartonSide2Cm: string
+  cartonSide3Cm: string
+  cartonWeightKg: string
   category: string
   subcategory: string
   sizeTier: string
@@ -252,22 +243,20 @@ interface SkuFormState {
   amazonItemWeightKg: string
   defaultSupplierId: string
   secondarySupplierId: string
-  initialBatch: {
-    batchCode: string
-    packSize: string
-    unitsPerCarton: string
-    packagingType: string
-  }
 }
 
 function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem): SkuFormState {
-  const latestBatch = sku?.batches && sku.batches.length > 0 ? sku.batches[0] : null
-
   const unitTriplet = resolveDimensionTripletCm({
     side1Cm: sku?.unitSide1Cm,
     side2Cm: sku?.unitSide2Cm,
     side3Cm: sku?.unitSide3Cm,
     legacy: sku?.unitDimensionsCm,
+  })
+  const cartonTriplet = resolveDimensionTripletCm({
+    side1Cm: sku?.cartonSide1Cm,
+    side2Cm: sku?.cartonSide2Cm,
+    side3Cm: sku?.cartonSide3Cm,
+    legacy: sku?.cartonDimensionsCm,
   })
   const amazonItemPackageTriplet = resolveDimensionTripletCm({
     side1Cm: sku?.amazonItemPackageSide1Cm,
@@ -328,6 +317,7 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
   }
 
   const unitWeightInput = formatWeightInput(parseFiniteNumber(sku?.unitWeightKg))
+  const cartonWeightInput = formatWeightInput(parseFiniteNumber(sku?.cartonWeightKg))
   const amazonItemPackageWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonReferenceWeightKg))
   const itemWeightInput = formatWeightInput(parseFiniteNumber(sku?.itemWeightKg))
   const amazonItemWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonItemWeightKg))
@@ -341,6 +331,14 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     description: sku?.description ?? '',
     isActive: sku ? sku.isActive : true,
     asin: sku?.asin ?? '',
+    packSize: sku ? (sku.packSize != null ? String(sku.packSize) : '') : '1',
+    unitsPerCarton: sku ? (sku.unitsPerCarton != null ? String(sku.unitsPerCarton) : '1') : '1',
+    material: sku?.material ?? '',
+    packagingType: sku?.packagingType ?? '',
+    cartonSide1Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side1Cm) : '',
+    cartonSide2Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side2Cm) : '',
+    cartonSide3Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side3Cm) : '',
+    cartonWeightKg: cartonWeightInput,
     category,
     subcategory: sku?.subcategory ?? '',
     sizeTier: sku?.sizeTier ?? '',
@@ -348,9 +346,9 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     fbaFulfillmentFee: sku?.fbaFulfillmentFee?.toString?.() ?? '',
     amazonCategory: sku?.amazonCategory ?? '',
     amazonSubcategory: sku?.amazonSubcategory ?? '',
-    amazonSizeTier: latestBatch?.amazonSizeTier ?? '',
+    amazonSizeTier: sku?.amazonSizeTier ?? '',
     amazonReferralFeePercent: sku?.amazonReferralFeePercent?.toString?.() ?? '',
-    amazonFbaFulfillmentFee: latestBatch?.amazonFbaFulfillmentFee?.toString?.() ?? '',
+    amazonFbaFulfillmentFee: sku?.amazonFbaFulfillmentFee?.toString?.() ?? '',
     unitSide1Cm: unitTriplet ? formatLengthInput(unitTriplet.side1Cm) : '',
     unitSide2Cm: unitTriplet ? formatLengthInput(unitTriplet.side2Cm) : '',
     unitSide3Cm: unitTriplet ? formatLengthInput(unitTriplet.side3Cm) : '',
@@ -369,12 +367,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     amazonItemWeightKg: amazonItemWeightInput,
     defaultSupplierId: sku?.defaultSupplierId ?? '',
     secondarySupplierId: sku?.secondarySupplierId ?? '',
-    initialBatch: {
-      batchCode: '',
-      packSize: '1',
-      unitsPerCarton: '1',
-      packagingType: '',
-    },
   }
 }
 
@@ -525,7 +517,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const [formState, setFormState] = useState<SkuFormState>(() => buildFormState(null, unitSystem))
 
   const [confirmDelete, setConfirmDelete] = useState<SkuRow | null>(null)
-  const [expandedSkuIds, setExpandedSkuIds] = useState<Set<string>>(new Set())
   const [modalTab, setModalTab] = useState<SkuModalTab>('reference')
   const [externalEditOpened, setExternalEditOpened] = useState(false)
 
@@ -661,7 +652,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const fetchSkus = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/skus?${buildQuery()}`, { credentials: 'include' })
+      const response = await fetch(withBasePath(`/api/skus?${buildQuery()}`), { credentials: 'include' })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         throw new Error(payload?.error ?? 'Failed to load SKUs')
@@ -684,7 +675,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
   const fetchSuppliers = useCallback(async () => {
     try {
       setSuppliersLoading(true)
-      const response = await fetch('/api/suppliers', { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include' })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         throw new Error(payload?.error ?? 'Failed to load suppliers')
@@ -934,59 +925,106 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
       }
     }
 
-    if (formState.fbaFulfillmentFee.trim()) {
-      fbaFulfillmentFee = Number.parseFloat(formState.fbaFulfillmentFee)
-      if (!Number.isFinite(fbaFulfillmentFee) || fbaFulfillmentFee < 0) {
-        toast.error('FBA fulfillment fee must be a non-negative number')
-        return
-      }
-    }
+	    if (formState.fbaFulfillmentFee.trim()) {
+	      fbaFulfillmentFee = Number.parseFloat(formState.fbaFulfillmentFee)
+	      if (!Number.isFinite(fbaFulfillmentFee) || fbaFulfillmentFee < 0) {
+	        toast.error('FBA fulfillment fee must be a non-negative number')
+	        return
+	      }
+	    }
 
-    let initialBatchPayload: Record<string, unknown> | null = null
+	    // Parse packaging fields (SKU-level)
+	    const packSizeRaw = formState.packSize.trim()
+	    const packSize = packSizeRaw ? Number.parseInt(packSizeRaw, 10) : null
+	    if (packSize === null || !Number.isFinite(packSize) || packSize <= 0) {
+	      toast.error('Pack size must be a positive number')
+	      return
+	    }
 
-    if (isCreating) {
-      const batchCode = formState.initialBatch.batchCode.trim()
-      if (!batchCode) {
-        toast.error('Batch code is required')
-        return
-      }
+	    const unitsPerCartonRaw = formState.unitsPerCarton.trim()
+	    const unitsPerCarton = unitsPerCartonRaw ? Number.parseInt(unitsPerCartonRaw, 10) : null
+	    if (unitsPerCarton === null || !Number.isFinite(unitsPerCarton) || unitsPerCarton <= 0) {
+	      toast.error('Units per carton must be a positive number')
+	      return
+	    }
 
-      const packSize = Number.parseInt(formState.initialBatch.packSize, 10)
-      if (!Number.isFinite(packSize) || packSize <= 0) {
-        toast.error('Pack size must be a positive number')
-        return
-      }
+	    const materialRaw = formState.material.trim()
+	    const material = materialRaw ? materialRaw : null
+	    const packagingTypeRaw = formState.packagingType.trim()
+	    const packagingType = packagingTypeRaw ? packagingTypeRaw : null
 
-      const unitsPerCarton = Number.parseInt(formState.initialBatch.unitsPerCarton, 10)
-      if (!Number.isFinite(unitsPerCarton) || unitsPerCarton <= 0) {
-        toast.error('Units per carton must be a positive number')
-        return
-      }
+	    const cartonSide1Raw = formState.cartonSide1Cm.trim()
+	    const cartonSide2Raw = formState.cartonSide2Cm.trim()
+	    const cartonSide3Raw = formState.cartonSide3Cm.trim()
+	    const cartonWeightRaw = formState.cartonWeightKg.trim()
 
-      initialBatchPayload = {
-        batchCode,
-        packSize,
-        unitsPerCarton,
-        packagingType: formState.initialBatch.packagingType ? formState.initialBatch.packagingType : null,
-      }
-    }
+	    let cartonSide1Cm: number | null = null
+	    let cartonSide2Cm: number | null = null
+	    let cartonSide3Cm: number | null = null
 
-    setIsSubmitting(true)
-    try {
-      const subcategoryTrimmed = formState.subcategory.trim()
-      const subcategoryValue = subcategoryTrimmed ? subcategoryTrimmed : null
+	    const hasAnyCartonDimension = cartonSide1Raw || cartonSide2Raw || cartonSide3Raw
+	    if (hasAnyCartonDimension) {
+	      if (!cartonSide1Raw || !cartonSide2Raw || !cartonSide3Raw) {
+	        toast.error('Carton dimensions require length, width, and height')
+	        return
+	      }
 
-      const payload: Record<string, unknown> = {
-        skuCode,
-        skuGroup,
-        asin: asinValue,
-        description,
-        isActive: formState.isActive,
-        defaultSupplierId: formState.defaultSupplierId ? formState.defaultSupplierId : null,
-        secondarySupplierId: formState.secondarySupplierId ? formState.secondarySupplierId : null,
-        category: categoryValue,
-        subcategory: subcategoryValue,
-        sizeTier: sizeTierValue,
+	      const cartonSide1Input = Number.parseFloat(cartonSide1Raw)
+	      const cartonSide2Input = Number.parseFloat(cartonSide2Raw)
+	      const cartonSide3Input = Number.parseFloat(cartonSide3Raw)
+
+	      if (!Number.isFinite(cartonSide1Input) || cartonSide1Input <= 0) {
+	        toast.error('Carton length must be a positive number')
+	        return
+	      }
+	      if (!Number.isFinite(cartonSide2Input) || cartonSide2Input <= 0) {
+	        toast.error('Carton width must be a positive number')
+	        return
+	      }
+	      if (!Number.isFinite(cartonSide3Input) || cartonSide3Input <= 0) {
+	        toast.error('Carton height must be a positive number')
+	        return
+	      }
+
+	      cartonSide1Cm = convertLengthToCm(cartonSide1Input, unitSystem)
+	      cartonSide2Cm = convertLengthToCm(cartonSide2Input, unitSystem)
+	      cartonSide3Cm = convertLengthToCm(cartonSide3Input, unitSystem)
+	    }
+
+	    let cartonWeightKg: number | null = null
+	    if (cartonWeightRaw) {
+	      const cartonWeightInput = Number.parseFloat(cartonWeightRaw)
+	      if (!Number.isFinite(cartonWeightInput) || cartonWeightInput <= 0) {
+	        toast.error(`Carton weight (${weightUnit}) must be a positive number`)
+	        return
+	      }
+	      cartonWeightKg = convertWeightToKg(cartonWeightInput, unitSystem)
+	    }
+	
+	    setIsSubmitting(true)
+	    try {
+	      const subcategoryTrimmed = formState.subcategory.trim()
+	      const subcategoryValue = subcategoryTrimmed ? subcategoryTrimmed : null
+
+	      const payload: Record<string, unknown> = {
+	        skuCode,
+	        skuGroup,
+	        asin: asinValue,
+	        description,
+	        isActive: formState.isActive,
+	        packSize,
+	        unitsPerCarton,
+	        material,
+	        packagingType,
+	        cartonSide1Cm,
+	        cartonSide2Cm,
+	        cartonSide3Cm,
+	        cartonWeightKg,
+	        defaultSupplierId: formState.defaultSupplierId ? formState.defaultSupplierId : null,
+	        secondarySupplierId: formState.secondarySupplierId ? formState.secondarySupplierId : null,
+	        category: categoryValue,
+	        subcategory: subcategoryValue,
+	        sizeTier: sizeTierValue,
         referralFeePercent,
         fbaFulfillmentFee,
         unitSide1Cm,
@@ -995,13 +1033,9 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
         unitWeightKg,
         itemSide1Cm,
         itemSide2Cm,
-        itemSide3Cm,
-        itemWeightKg,
-      }
-
-      if (initialBatchPayload) {
-        payload.initialBatch = initialBatchPayload
-      }
+	        itemSide3Cm,
+	        itemWeightKg,
+	      }
 
       let endpoint = '/api/skus'
       let method: 'POST' | 'PATCH' = 'POST'
@@ -1118,118 +1152,65 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto text-sm">
-              <thead>
-                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-8"></th>
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">SKU</th>
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Description</th>
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">ASIN</th>
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Txns</th>
-                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSkus.map(sku => {
-                  const isExpanded = expandedSkuIds.has(sku.id)
-
-                  const toggleExpand = () => {
-                    setExpandedSkuIds(prev => {
-                      const next = new Set(prev)
-                      if (next.has(sku.id)) {
-                        next.delete(sku.id)
-                      } else {
-                        next.add(sku.id)
-                      }
-                      return next
-                    })
-                  }
-
-                  return (
-                    <React.Fragment key={sku.id}>
-                      <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                        <td className="px-2 py-3">
-                          <button
-                            type="button"
-                            onClick={toggleExpand}
-                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                            aria-label={isExpanded ? 'Collapse batches' : 'Expand batches'}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(sku)}
-                              className="text-cyan-700 dark:text-cyan-400 hover:underline"
-                            >
-                              {sku.skuCode}
-                            </button>
-                            {!sku.isActive && (
-                              <Badge variant="neutral" className="uppercase tracking-wide text-[10px]">
-                                Inactive
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {sku.description}
-                        </td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {sku.asin ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {sku._count?.inventoryTransactions ?? 0}
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setConfirmDelete(sku)}
-                            className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={6} className="p-0 bg-slate-50/80 dark:bg-slate-900/50">
-                            <div className="p-4">
-                              <SkuBatchesPanel
-                                sku={{
-                                  id: sku.id,
-                                  skuCode: sku.skuCode,
-                                  description: sku.description,
-                                  unitDimensionsCm: sku.unitDimensionsCm,
-                                  amazonReferenceWeightKg: sku.amazonReferenceWeightKg,
-                                  itemDimensionsCm: sku.itemDimensionsCm ?? null,
-                                  itemSide1Cm: sku.itemSide1Cm ?? null,
-                                  itemSide2Cm: sku.itemSide2Cm ?? null,
-                                  itemSide3Cm: sku.itemSide3Cm ?? null,
-                                  itemWeightKg: sku.itemWeightKg ?? null,
-                                }}
-                                onBatchesUpdated={fetchSkus}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+	          <div className="overflow-x-auto">
+	            <table className="min-w-full table-auto text-sm">
+	              <thead>
+	                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+	                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">SKU</th>
+	                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Description</th>
+	                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">ASIN</th>
+	                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Txns</th>
+	                  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
+	                </tr>
+	              </thead>
+	              <tbody>
+	                {filteredSkus.map(sku => (
+	                  <tr
+	                    key={sku.id}
+	                    className="hover:bg-slate-50/50 dark:hover:bg-slate-700/50 transition-colors"
+	                  >
+	                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+	                      <div className="flex items-center gap-2">
+	                        <button
+	                          type="button"
+	                          onClick={() => openEdit(sku)}
+	                          className="text-cyan-700 dark:text-cyan-400 hover:underline"
+	                        >
+	                          {sku.skuCode}
+	                        </button>
+	                        {!sku.isActive && (
+	                          <Badge variant="neutral" className="uppercase tracking-wide text-[10px]">
+	                            Inactive
+	                          </Badge>
+	                        )}
+	                      </div>
+	                    </td>
+	                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+	                      {sku.description}
+	                    </td>
+	                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+	                      {sku.asin ?? '—'}
+	                    </td>
+	                    <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+	                      {sku._count?.inventoryTransactions ?? 0}
+	                    </td>
+	                    <td className="px-4 py-3 text-right whitespace-nowrap">
+	                      <Button
+	                        variant="outline"
+	                        size="sm"
+	                        onClick={() => setConfirmDelete(sku)}
+	                        className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
+	                      >
+	                        <Trash2 className="h-4 w-4" />
+	                      </Button>
+	                    </td>
+	                  </tr>
+	                ))}
+	              </tbody>
+	            </table>
+	          </div>
+	        )}
+	      </div>
 
       <PortalModal open={isModalOpen} className="items-center" onClose={closeModal}>
         <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-800 shadow-xl">
@@ -1737,95 +1718,140 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                         </div>
                       )}
                     </div>
-                  </Tabs>
-                </div>
+	                  </Tabs>
+	                </div>
 
-                {!editingSku ? (
-                  <>
-                    <div className="md:col-span-2 pt-2">
-                      <h3 className="text-sm font-semibold text-slate-900">Initial Batch</h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Required. Defines pack size and units/carton.
-                      </p>
-                    </div>
+	                <div className="md:col-span-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+	                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+	                    Packaging
+	                  </h3>
+	                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+	                    Carton specs and packing defaults used for inventory, shipping, and costing.
+	                  </p>
+	                </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="initialBatchCode">Batch Code</Label>
-                      <Input
-                        id="initialBatchCode"
-                        value={formState.initialBatch.batchCode}
-                        onChange={event =>
-                          setFormState(prev => ({
-                            ...prev,
-                            initialBatch: { ...prev.initialBatch, batchCode: event.target.value },
-                          }))
-                        }
-                        required
-                      />
-                    </div>
+	                <div className="space-y-1">
+	                  <Label htmlFor="packSize">Pack Size</Label>
+	                  <Input
+	                    id="packSize"
+	                    type="number"
+	                    min={1}
+	                    value={formState.packSize}
+	                    onChange={event => setFormState(prev => ({ ...prev, packSize: event.target.value }))}
+	                    required
+	                  />
+	                </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="initialPackagingType">Packaging Type</Label>
-                      <select
-                        id="initialPackagingType"
-                        value={formState.initialBatch.packagingType}
-                        onChange={event =>
-                          setFormState(prev => ({
-                            ...prev,
-                            initialBatch: {
-                              ...prev.initialBatch,
-                              packagingType: event.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      >
-                        <option value="">Optional</option>
-                        <option value="BOX">Box</option>
-                        <option value="POLYBAG">Polybag</option>
-                      </select>
-                    </div>
+	                <div className="space-y-1">
+	                  <Label htmlFor="unitsPerCarton">Units per Carton</Label>
+	                  <Input
+	                    id="unitsPerCarton"
+	                    type="number"
+	                    min={1}
+	                    value={formState.unitsPerCarton}
+	                    onChange={event =>
+	                      setFormState(prev => ({ ...prev, unitsPerCarton: event.target.value }))
+	                    }
+	                    required
+	                  />
+	                </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="initialPackSize">Pack Size</Label>
-                      <Input
-                        id="initialPackSize"
-                        type="number"
-                        min={1}
-                        value={formState.initialBatch.packSize}
-                        onChange={event =>
-                          setFormState(prev => ({
-                            ...prev,
-                            initialBatch: { ...prev.initialBatch, packSize: event.target.value },
-                          }))
-                        }
-                        required
-                      />
-                    </div>
+	                <div className="space-y-1">
+	                  <Label htmlFor="packagingType">Packaging Type</Label>
+	                  <select
+	                    id="packagingType"
+	                    value={formState.packagingType}
+	                    onChange={event =>
+	                      setFormState(prev => ({ ...prev, packagingType: event.target.value }))
+	                    }
+	                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+	                  >
+	                    <option value="">Optional</option>
+	                    <option value="BOX">Box</option>
+	                    <option value="POLYBAG">Polybag</option>
+	                  </select>
+	                </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="initialUnitsPerCarton">Units per Carton</Label>
-                      <Input
-                        id="initialUnitsPerCarton"
-                        type="number"
-                        min={1}
-                        value={formState.initialBatch.unitsPerCarton}
-                        onChange={event =>
-                          setFormState(prev => ({
-                            ...prev,
-                            initialBatch: {
-                              ...prev.initialBatch,
-                              unitsPerCarton: event.target.value,
-                            },
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
+	                <div className="space-y-1">
+	                  <Label htmlFor="material">Material</Label>
+	                  <Input
+	                    id="material"
+	                    value={formState.material}
+	                    onChange={event => setFormState(prev => ({ ...prev, material: event.target.value }))}
+	                    placeholder="Optional"
+	                  />
+	                </div>
+
+	                <div className="md:col-span-2 pt-2">
+	                  <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+	                    Carton
+	                  </h5>
+	                </div>
+
+	                <div className="space-y-1 md:col-span-2">
+	                  <Label>Carton dimensions ({lengthUnit})</Label>
+	                  <div className="grid grid-cols-3 gap-2">
+	                    <Input
+	                      id="cartonSide1Cm"
+	                      type="number"
+	                      step="0.01"
+	                      min={0.01}
+	                      value={formState.cartonSide1Cm}
+	                      onChange={event =>
+	                        setFormState(prev => ({ ...prev, cartonSide1Cm: event.target.value }))
+	                      }
+	                      placeholder="L"
+	                      inputMode="decimal"
+	                    />
+	                    <Input
+	                      id="cartonSide2Cm"
+	                      type="number"
+	                      step="0.01"
+	                      min={0.01}
+	                      value={formState.cartonSide2Cm}
+	                      onChange={event =>
+	                        setFormState(prev => ({ ...prev, cartonSide2Cm: event.target.value }))
+	                      }
+	                      placeholder="W"
+	                      inputMode="decimal"
+	                    />
+	                    <Input
+	                      id="cartonSide3Cm"
+	                      type="number"
+	                      step="0.01"
+	                      min={0.01}
+	                      value={formState.cartonSide3Cm}
+	                      onChange={event =>
+	                        setFormState(prev => ({ ...prev, cartonSide3Cm: event.target.value }))
+	                      }
+	                      placeholder="H"
+	                      inputMode="decimal"
+	                    />
+	                  </div>
+	                </div>
+
+	                <div className="space-y-1">
+	                  <Label htmlFor="cartonWeightKg">Carton weight ({weightUnit})</Label>
+	                  <Input
+	                    id="cartonWeightKg"
+	                    type="number"
+	                    step="0.001"
+	                    min={0.001}
+	                    value={formState.cartonWeightKg}
+	                    onChange={event =>
+	                      setFormState(prev => ({ ...prev, cartonWeightKg: event.target.value }))
+	                    }
+	                    placeholder="Optional"
+	                  />
+	                </div>
+
+	                <div className="md:col-span-2">
+	                  <p className="text-xs text-slate-500 dark:text-slate-400">
+	                    Pallet configuration (cartons per pallet) is set per warehouse in Configuration → Warehouses.
+	                  </p>
+	                </div>
+		              </div>
+		            </div>
 
             <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
               <div />

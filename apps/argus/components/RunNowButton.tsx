@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
+import { Button } from '@/components/ui/button';
+import { Play, Loader2 } from 'lucide-react';
 
 export function RunNowButton(props: { targetId: string }) {
   const router = useRouter();
@@ -23,14 +25,12 @@ export function RunNowButton(props: { targetId: string }) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={running}
-      className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-    >
-      {running ? 'Queued…' : 'Run now'}
-    </button>
+    <Button onClick={onClick} disabled={running} size="sm">
+      {running ? (
+        <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Queued</>
+      ) : (
+        <><Play className="mr-1.5 h-3.5 w-3.5" />Capture Now</>
+      )}
+    </Button>
   );
 }
-
