@@ -403,7 +403,7 @@ export const INVENTORY_BALANCE_COLUMNS: ColumnDefinition[] = [
  showInUI: true,
  showInExport: true
  },
- // Configuration (batch-specific, less prominent)
+ // Configuration (less prominent)
  {
  fieldName: 'storageCartonsPerPallet',
  displayName: 'Storage Config',

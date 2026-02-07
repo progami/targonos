@@ -99,9 +99,9 @@ export function RestockAlertCard({
  type="checkbox"
  checked={isSelected}
  onChange={(e) => onSelect(e.target.checked)}
- aria-label={`Select ${skuCode} for batch operation`}
- className="rounded border-slate-300 text-primary focus:ring-primary"
- />
+	 aria-label={`Select ${skuCode} for bulk operation`}
+	 className="rounded border-slate-300 text-primary focus:ring-primary"
+	 />
  )}
  </div>
 
