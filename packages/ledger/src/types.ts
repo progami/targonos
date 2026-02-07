@@ -9,7 +9,7 @@ export interface InventoryTransactionRecord {
   warehouseName: string
   skuCode: string
   skuDescription: string
-  batchLot: string
+  lotRef: string
   cartonsIn: number
   cartonsOut: number
   unitsPerCarton?: number | null
@@ -36,7 +36,7 @@ export interface InventoryBalanceSnapshot {
   warehouseName: string
   skuCode: string
   skuDescription: string
-  batchLot: string
+  lotRef: string
   currentCartons: number
   currentUnits: number
   currentPallets: number
@@ -56,9 +56,9 @@ export interface InventoryBalanceSnapshot {
 
 export interface InventoryAggregationSummary {
   totalSkuCount: number
-  totalBatchCount: number
-  batchesWithInventory: number
-  batchesOutOfStock: number
+  totalLotCount: number
+  lotsWithInventory: number
+  lotsOutOfStock: number
 }
 
 export interface InventoryAggregationResult {
@@ -72,7 +72,7 @@ export interface CostLedgerTransactionContext {
   warehouseName?: string | null
   skuCode?: string | null
   skuDescription?: string | null
-  batchLot?: string | null
+  lotRef?: string | null
 }
 
 export interface CostLedgerEntryRecord {
@@ -93,7 +93,7 @@ export interface CostLedgerDetail {
   transactionType: string
   warehouse: string
   sku: string
-  batchLot: string
+  lotRef: string
   costCategory: string
   quantity: number
   unitRate: number

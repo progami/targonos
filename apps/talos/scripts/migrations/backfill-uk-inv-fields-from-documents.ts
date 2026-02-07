@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url'
 import { parse as parseCsv } from 'csv-parse/sync'
 import * as XLSX from 'xlsx'
 import { InboundReceiveType, Prisma, PurchaseOrderDocumentStage } from '@targon/prisma-talos'
+import { buildLotReference, resolveOrderReferenceSeed } from '../../src/lib/services/supply-chain-reference-service'
 import { getTenantPrismaClient, disconnectAllTenants } from '../../src/lib/tenant/prisma-factory'
 import type { TenantCode } from '../../src/lib/tenant/constants'
 
@@ -3787,13 +3788,21 @@ async function main() {
 
         const piCost = piCostByUnitsOrdered.get(unitsOrdered)
 
-        const createdData: Prisma.PurchaseOrderLineCreateInput = {
-          purchaseOrder: { connect: { id: order.id } },
-          skuCode,
-          unitsOrdered,
-          unitsPerCarton: unitsPerCartonValue,
-          quantity: cartonsValue,
-        }
+	        const createdData: Prisma.PurchaseOrderLineCreateInput = {
+	          purchaseOrder: { connect: { id: order.id } },
+	          skuCode,
+	          lotRef: (() => {
+	            const seed = resolveOrderReferenceSeed({
+	              orderNumber: order.orderNumber,
+	              poNumber: null,
+	              skuGroup: null,
+	            })
+	            return buildLotReference(seed.sequence, seed.skuGroup, skuCode)
+	          })(),
+	          unitsOrdered,
+	          unitsPerCarton: unitsPerCartonValue,
+	          quantity: cartonsValue,
+	        }
 
         if (dims.length === 1) createdData.cartonDimensionsCm = dims[0] as string
         if (commodity.length === 1) createdData.commodityCode = commodity[0] as string

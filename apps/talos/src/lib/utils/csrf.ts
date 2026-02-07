@@ -2,6 +2,8 @@
  * CSRF Token Management Utilities
  */
 
+import { withBasePath } from '@/lib/utils/base-path'
+
 const CSRF_COOKIE_NAME = 'csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 
@@ -56,7 +58,7 @@ export async function refreshCSRFToken(): Promise<void> {
  try {
  // Make a GET request to any API endpoint to get a fresh CSRF token
  // The server will set the token cookie in the response
- await fetch('/api/csrf', {
+ await fetch(withBasePath('/api/csrf'), {
  method: 'GET',
  credentials: 'include'
  })

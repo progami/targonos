@@ -6,7 +6,7 @@ export interface ColumnFiltersState {
   warehouse: string[]
   sku: string[]
   skuDescription: string
-  batch: string[]
+  lot: string[]
   lastTransaction: string
   movement: MovementType[]
   cartonsMin: string
@@ -18,7 +18,7 @@ export interface ColumnFiltersState {
 }
 
 export type ColumnFilterKey = keyof ColumnFiltersState
-export type SortKey = 'warehouse' | 'sku' | 'batch' | 'cartons' | 'pallets' | 'units' | 'lastTransaction'
+export type SortKey = 'warehouse' | 'sku' | 'lot' | 'cartons' | 'pallets' | 'units' | 'lastTransaction'
 
 export interface SortConfig {
   key: SortKey
@@ -29,7 +29,7 @@ const createColumnFilterDefaults = (): ColumnFiltersState => ({
   warehouse: [],
   sku: [],
   skuDescription: '',
-  batch: [],
+  lot: [],
   lastTransaction: '',
   movement: [],
   cartonsMin: '',
@@ -60,7 +60,7 @@ export interface InventoryBalance {
     description: string
     unitsPerCarton: number
   }
-  batchLot: string
+  lotRef: string
   currentCartons: number
   currentPallets: number
   currentUnits: number
@@ -146,7 +146,7 @@ export function useInventoryFilters({
   }, [])
 
   const toggleMultiValueFilter = useCallback(
-    (key: 'warehouse' | 'sku' | 'batch', value: string) => {
+    (key: 'warehouse' | 'sku' | 'lot', value: string) => {
       setColumnFilters(prev => {
         const current = prev[key] as string[]
         const nextValues = current.includes(value)
@@ -176,8 +176,8 @@ export function useInventoryFilters({
           case 'skuDescription':
             next.skuDescription = defaults.skuDescription
             break
-          case 'batch':
-            next.batch = defaults.batch
+          case 'lot':
+            next.lot = defaults.lot
             break
           case 'lastTransaction':
             next.lastTransaction = defaults.lastTransaction
@@ -249,12 +249,12 @@ export function useInventoryFilters({
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [balances])
 
-  const uniqueBatchOptions = useMemo(() => {
+  const uniqueLotOptions = useMemo(() => {
     const set = new Set<string>()
     balances.forEach(balance => {
-      const batch = balance.batchLot?.trim()
-      if (batch) {
-        set.add(batch)
+      const lotRef = balance.lotRef?.trim()
+      if (lotRef) {
+        set.add(lotRef)
       }
     })
     return Array.from(set.values()).sort((a, b) => a.localeCompare(b)).map(value => ({
@@ -296,9 +296,9 @@ export function useInventoryFilters({
         }
       }
 
-      if (columnFilters.batch.length > 0) {
-        const batchLot = balance.batchLot?.trim()
-        if (!batchLot || !columnFilters.batch.includes(batchLot)) {
+      if (columnFilters.lot.length > 0) {
+        const lotRef = balance.lotRef?.trim()
+        if (!lotRef || !columnFilters.lot.includes(lotRef)) {
           return false
         }
       }
@@ -373,8 +373,8 @@ export function useInventoryFilters({
             { sensitivity: 'base' }
           )
           break
-        case 'batch':
-          comparison = a.batchLot.localeCompare(b.batchLot, undefined, { sensitivity: 'base' })
+        case 'lot':
+          comparison = a.lotRef.localeCompare(b.lotRef, undefined, { sensitivity: 'base' })
           break
         case 'cartons':
           comparison = a.currentCartons - b.currentCartons
@@ -411,7 +411,7 @@ export function useInventoryFilters({
     isFilterActive,
     uniqueWarehouseOptions,
     uniqueSkuOptions,
-    uniqueBatchOptions,
+    uniqueLotOptions,
     processedBalances,
   }
 }

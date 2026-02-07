@@ -42,24 +42,38 @@ Goal: **brand-level P&L** where everything adds up to the total, with **inventor
    - Costing method: **moving average** (v1)
    - Late freight/duty uses “apply to remaining on-hand only” behavior (v1)
 
+## Ongoing: Audit Data (bulk upload)
+
+LMB exports Audit Data as a single CSV covering a date range (e.g. `audit-data-Targon US-2025-10-2026-02.csv`). One file contains **all settlements** in that range — rows are grouped by the `Invoice` column, where each unique Invoice ID maps to one LMB settlement.
+
+1. In LMB:
+   - Download the **Audit Data CSV** for the desired date range.
+2. In Plutus → **Inventory → Audit Data**:
+   - Upload the CSV (or ZIP containing a CSV).
+   - Plutus parses the file and splits rows by `Invoice`.
+   - Matches each Invoice to a known LMB settlement (via QBO journal entry lookup).
+   - Shows upload summary: how many settlements matched, how many rows, any unmatched invoices.
+   - Stores the parsed data — settlements can now be processed from the Settlements page.
+
+Re-uploading a file with overlapping Invoices is safe (idempotent via processing hash).
+
 ## Ongoing: Settlements (the main workflow)
 
-This is the “posting unit”: **one LMB `Invoice` group** from Audit Data.
+This is the "posting unit": **one LMB `Invoice` group** from Audit Data.
 
 1. In Plutus (LMB-like UX):
    - Open the Settlements list.
    - Plutus polls **QBO** to find LMB-posted settlements (LMB has no API).
    - Each row shows:
      - **LMB Posted** (inferred from QBO)
+     - **Audit Data**: whether audit data has been uploaded for this settlement
      - **Plutus Processed / Pending / Blocked**
-2. In LMB:
-   - Download the **Audit Data CSV** for that settlement (often delivered as a ZIP containing a single CSV).
-3. In Plutus:
-   - Upload the Audit Data file for the selected settlement.
-   - Plutus groups rows by **Invoice** and uses the settlement as:
+2. To process a settlement, audit data must already be uploaded (via Inventory → Audit Data).
+3. Plutus uses the stored audit data for the settlement's Invoice:
      - **Processed** (already posted by Plutus)
-     - **Pending** (ready to post)
+     - **Pending** (ready to post — audit data available)
      - **Blocked** (missing cost basis, negative inventory risk, missing SKU mapping, etc.)
+     - **No Audit Data** (audit data not yet uploaded for this Invoice)
 4. Plutus validation (hard blocks in v1):
    - Missing SKU → block (must exist + be mapped to a Brand)
    - Missing cost basis for SKU as-of sale date (from Bills) → **block**
