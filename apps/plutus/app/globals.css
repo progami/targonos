@@ -126,14 +126,18 @@ h4,
 
 /* Table row hover with left accent */
 .table-row-hover {
-  @apply relative transition-colors duration-150;
+  @apply transition-colors duration-150;
 }
 
 .table-row-hover:hover {
   @apply bg-slate-50/80 dark:bg-white/[0.03];
 }
 
-.table-row-hover::before {
+.table-row-hover > td:first-child {
+  @apply relative;
+}
+
+.table-row-hover > td:first-child::before {
   content: '';
   position: absolute;
   left: 0;
@@ -145,11 +149,11 @@ h4,
   transition: background-color 0.15s ease;
 }
 
-.table-row-hover:hover::before {
+.table-row-hover:hover > td:first-child::before {
   background: rgb(69, 179, 212);
 }
 
-.dark .table-row-hover:hover::before {
+.dark .table-row-hover:hover > td:first-child::before {
   background: rgb(0, 194, 185);
 }
 
