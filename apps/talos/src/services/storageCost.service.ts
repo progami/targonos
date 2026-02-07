@@ -51,7 +51,7 @@ const asIsoDateString = (value: unknown): string | null => {
 }
 
 /**
- * Record a storage cost entry for a specific batch in a given week
+ * Record a storage cost entry for a specific lot in a given week
  * This function is called on every inventory transaction to ensure
  * storage costs are captured when inventory first appears in a week
  */
@@ -485,14 +485,14 @@ async function upsertFinancialLedgerEntryForStorage(
 }
 
 /**
- * Ensure all batches with positive inventory have storage ledger entries for a given week
- * This is run as a weekly batch process to catch any missed entries
+ * Ensure all lots with positive inventory have storage ledger entries for a given week
+ * This is run as a weekly scheduled process to catch any missed entries
  */
 export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
  const prisma = await getTenantPrisma()
  const weekEndingDate = endOfWeek(date, { weekStartsOn: 1 })
 
- // Get all batches with positive inventory balances
+ // Get all lots with positive inventory balances
  const aggregates = await prisma.inventoryTransaction.groupBy({
   by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
   _sum: { cartonsIn: true, cartonsOut: true },
@@ -508,10 +508,10 @@ export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
 
  for (const agg of aggregates) {
  try {
- const netCartons = Number(agg._sum.cartonsIn || 0) - Number(agg._sum.cartonsOut || 0)
+ const netCartons = Number(agg._sum.cartonsIn ?? 0) - Number(agg._sum.cartonsOut ?? 0)
  if (netCartons <= 0) {
- skipped++
- continue
+  skipped++
+  continue
  }
 
  // Check if entry already exists

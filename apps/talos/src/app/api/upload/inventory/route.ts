@@ -59,7 +59,7 @@ export const POST = withAuth(async (request, _session) => {
  const values = lines[i].split(',');
  const row: Record<string, string> = {};
  headers.forEach((header, index) => {
- row[header] = sanitizeForExcel(values[index]?.trim() || '');
+ row[header] = sanitizeForExcel(values[index]?.trim() ?? '');
  });
  data.push(row);
  }
@@ -87,7 +87,7 @@ export const POST = withAuth(async (request, _session) => {
  Name: z.string().min(1),
  Quantity: z.coerce.number().positive().int(),
  Warehouse: z.string().min(1),
- BatchNumber: z.string().optional()
+ LotRef: z.string().optional()
  });
 
  const validationErrors: unknown[] = [];
@@ -113,20 +113,20 @@ export const POST = withAuth(async (request, _session) => {
  }, { status: 400 });
  }
 
- // Process valid rows in batches to avoid memory issues
- const BATCH_SIZE = 100;
+ // Process valid rows in chunks to avoid memory issues
+ const CHUNK_SIZE = 100;
  const results = [];
  
- for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
- const batch = validRows.slice(i, i + BATCH_SIZE);
- // Process batch...
- results.push({ batch: i / BATCH_SIZE + 1, processed: batch.length });
+ for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+ const chunk = validRows.slice(i, i + CHUNK_SIZE);
+ // Process chunk...
+ results.push({ chunk: i / CHUNK_SIZE + 1, processed: chunk.length });
  }
 
  return NextResponse.json({
  success: true,
  totalRows: validRows.length,
- batches: results
+ chunks: results
  });
 
  } catch (_error: unknown) {
