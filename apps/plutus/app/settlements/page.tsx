@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight, Play, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -140,11 +141,13 @@ async function fetchSettlements({
   search,
   startDate,
   endDate,
+  marketplace,
 }: {
   page: number;
   search: string;
   startDate: string | null;
   endDate: string | null;
+  marketplace: Marketplace;
 }): Promise<SettlementsResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -152,6 +155,7 @@ async function fetchSettlements({
   if (search.trim() !== '') params.set('search', search.trim());
   if (startDate !== null && startDate.trim() !== '') params.set('startDate', startDate.trim());
   if (endDate !== null && endDate.trim() !== '') params.set('endDate', endDate.trim());
+  if (marketplace !== 'all') params.set('marketplace', marketplace);
 
   const res = await fetch(`${basePath}/api/plutus/settlements?${params.toString()}`);
   if (!res.ok) {
@@ -170,8 +174,25 @@ function SettlementsEmptyIcon() {
   );
 }
 
+type AutopostCheckResult = {
+  processed: Array<{ settlementId: string; docNumber: string; invoiceId: string }>;
+  skipped: Array<{ settlementId: string; docNumber: string; reason: string }>;
+  errors: Array<{ settlementId: string; docNumber: string; error: string }>;
+};
+
+async function runAutopostCheck(): Promise<AutopostCheckResult> {
+  const res = await fetch(`${basePath}/api/plutus/autopost/check`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
+
 export default function SettlementsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
   const page = useSettlementsListStore((s) => s.page);
@@ -202,10 +223,10 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate],
-    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate }),
+    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace],
+    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace }),
     enabled: connection !== undefined && connection.connected === true,
-    staleTime: 15 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const settlements = useMemo(() => {
@@ -218,10 +239,32 @@ export default function SettlementsPage() {
     const total = data?.pagination.totalCount ?? 0;
     const processed = settlements.filter((s) => s.plutusStatus === 'Processed').length;
     const pending = settlements.filter((s) => s.plutusStatus === 'Pending').length;
+    const hasAnyTotal = settlements.some((s) => s.settlementTotal !== null);
     const totalAmount = settlements.reduce((sum, s) => sum + (s.settlementTotal ?? 0), 0);
     const primaryCurrency = settlements[0]?.marketplace.currency ?? 'USD';
-    return { total, processed, pending, totalAmount, primaryCurrency };
+    return { total, processed, pending, hasAnyTotal, totalAmount, primaryCurrency };
   }, [data, settlements]);
+
+  const autoprocessMutation = useMutation({
+    mutationFn: runAutopostCheck,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+      const processedCount = result.processed.length;
+      const skippedCount = result.skipped.length;
+      const errorCount = result.errors.length;
+
+      if (processedCount > 0) {
+        toast.success(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`);
+      } else if (errorCount > 0) {
+        toast.error(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`);
+      } else {
+        toast.info(`No settlements to auto-process (${skippedCount} skipped)`);
+      }
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Auto-process failed');
+    },
+  });
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlements" />;
@@ -230,7 +273,17 @@ export default function SettlementsPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Settlements" variant="accent" />
+        <div className="flex items-center justify-between">
+          <PageHeader title="Settlements" variant="accent" />
+          <Button
+            variant="outline"
+            onClick={() => autoprocessMutation.mutate()}
+            disabled={autoprocessMutation.isPending}
+          >
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+            {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
+          </Button>
+        </div>
 
         {/* KPI Strip */}
         {!isLoading && data && (
@@ -247,7 +300,7 @@ export default function SettlementsPage() {
             />
             <StatCard
               label="Settlement Value"
-              value={formatMoney(stats.totalAmount, stats.primaryCurrency)}
+              value={stats.hasAnyTotal ? formatMoney(stats.totalAmount, stats.primaryCurrency) : 'No data'}
             />
             <StatCard
               label="Processed"

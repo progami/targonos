@@ -1,47 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { fetchBillById, updateBillLineAccounts, QboAuthError, type QboConnection } from '@/lib/qbo/api';
+import { fetchBillById, updateBillLineAccounts, QboAuthError } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-bill-detail' });
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function shouldUseSecureCookies(req: NextRequest): boolean {
-  let isHttps = req.nextUrl.protocol === 'https:';
-  if (!isHttps) {
-    const forwardedProto = req.headers.get('x-forwarded-proto');
-    if (forwardedProto === 'https') {
-      isHttps = true;
-    }
-  }
-  return isHttps;
-}
-
-export async function GET(req: NextRequest, context: RouteContext) {
+export async function GET(_req: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const { bill, updatedConnection } = await fetchBillById(connection, id);
 
     if (updatedConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
-        httpOnly: true,
-        secure: shouldUseSecureCookies(req),
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(updatedConnection);
     }
 
@@ -82,15 +59,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const body = await req.json();
     const lineUpdates = body.lines;
@@ -105,7 +78,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
       }
     }
 
-    // Fetch current bill to get syncToken
     const { bill: currentBill, updatedConnection: fetchConn } = await fetchBillById(connection, id);
     const activeConnection = fetchConn ?? connection;
 
@@ -116,15 +88,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       lineUpdates,
     );
 
-    const finalConnection = updatedConnection ?? (fetchConn ? activeConnection : undefined);
+    const finalConnection = updatedConnection ?? fetchConn;
     if (finalConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(finalConnection), {
-        httpOnly: true,
-        secure: shouldUseSecureCookies(req),
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(finalConnection);
     }
 
