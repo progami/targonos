@@ -135,6 +135,19 @@ function dropPurchaseOrderLineBatchLot(): string {
           AND table_name = 'purchase_order_lines'
           AND column_name = 'batch_lot'
       ) THEN
+        -- Older environments may have an ERD-aligned view named "lot" that still references batch_lot.
+        -- Drop it before dropping the column to avoid dependency errors.
+        IF EXISTS (
+          SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'v'
+            AND c.relname = 'lot'
+            AND n.nspname = current_schema()
+        ) THEN
+          EXECUTE 'DROP VIEW IF EXISTS "lot"';
+        END IF;
+
         -- Backfill lot_ref if any rows still relied on batch_lot.
         UPDATE "purchase_order_lines"
         SET "lot_ref" = "batch_lot"
