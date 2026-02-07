@@ -70,12 +70,14 @@ function formatPeriod(start: string | null, end: string | null): string {
   const sameMonth = sameYear && startMonth === endMonth;
 
   const startText = startDate.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
     year: sameYear ? undefined : 'numeric',
   });
 
   const endText = endDate.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
     month: sameMonth ? undefined : 'short',
     day: 'numeric',
     year: 'numeric',
@@ -453,7 +455,7 @@ export default function SettlementsPage() {
                               {formatPeriod(s.periodStart, s.periodEnd)}
                             </div>
                             <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US')}
+                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC' })}
                             </div>
                           </TableCell>
                           <TableCell className="align-top text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
