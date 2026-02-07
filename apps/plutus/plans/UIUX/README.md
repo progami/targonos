@@ -123,6 +123,49 @@ className="border-slate-200 dark:border-slate-700"
 className="hover:bg-slate-50 dark:hover:bg-slate-700"
 ```
 
+## Navigation Structure
+
+```
+Settlements          (top-level link)
+Transactions         (top-level link)
+Analytics            (top-level link)
+Accounts & Taxes ▾   (dropdown)
+  ├── Setup Wizard
+  └── Chart of Accounts
+Inventory ▾          (dropdown)
+  ├── Audit Data      ← NEW: bulk audit data upload
+  └── Bills
+Settings             (top-level link)
+```
+
+## Audit Data Page (`/audit-data`)
+
+**Purpose:** Single place to upload LMB Audit Data CSVs. One CSV covers multiple settlements — Plutus splits by Invoice and matches to known settlements automatically.
+
+**Location in nav:** Inventory → Audit Data
+
+### Upload Flow
+1. User drags/clicks to upload a CSV (or ZIP containing a CSV)
+2. Plutus parses and shows a summary table:
+   - Invoice ID, matched settlement doc number, date range, row count, status
+   - Statuses: "Matched" (linked to a known settlement), "Unmatched" (no QBO settlement found)
+3. User confirms → audit data is stored and linked to settlements
+4. Re-uploading overlapping data is safe (idempotent)
+
+### Page Layout
+- **Header:** "Audit Data" (accent variant)
+- **Upload zone:** Drag-and-drop area with file picker fallback
+- **Upload history table:**
+  - Columns: Filename, Uploaded, Settlements, Rows, Status
+  - Expandable rows showing per-Invoice breakdown
+- **Empty state:** Instructions pointing user to download audit data from LMB
+
+### Design Notes
+- Upload zone: dashed border, teal accent on hover/drag, file icon
+- Success state: green checkmark with matched settlement count
+- Warning state: amber for unmatched invoices (settlement not yet posted by LMB)
+- The Settlements page should show an "Audit Data" indicator column so the user knows which settlements have data ready for processing
+
 ## LMB Patterns Reference
 
 ### Settlements List
@@ -130,6 +173,7 @@ className="hover:bg-slate-50 dark:hover:bg-slate-700"
 - Split action button per row
 - Status badges ("Posted" in teal pill)
 - Country flags next to marketplace
+- Audit data availability indicator per row
 
 ### Account Taxes
 - Tree table with expand/collapse
