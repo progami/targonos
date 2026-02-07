@@ -69,7 +69,7 @@ interface PurchaseOrderLineSummary {
   id: string
   skuCode: string
   skuDescription: string | null
-  batchLot: string | null
+  lotRef: string | null
   piNumber: string | null
   commodityCode: string | null
   countryOfOrigin: string | null
@@ -102,6 +102,27 @@ interface SkuSummary {
   id: string
   skuCode: string
   description: string
+  unitsPerCarton: number
+  material: string | null
+  cartonDimensionsCm: string | null
+  cartonSide1Cm: number | string | null
+  cartonSide2Cm: number | string | null
+  cartonSide3Cm: number | string | null
+  cartonWeightKg: number | string | null
+  packagingType: string | null
+}
+
+function toNullableNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 interface SupplierOption {
@@ -111,76 +132,6 @@ interface SupplierOption {
   address: string | null
   defaultIncoterms: string | null
   defaultPaymentTerms: string | null
-}
-
-interface BatchOption {
-  batchCode: string
-  unitsPerCarton: number | null
-  cartonDimensionsCm: string | null
-  cartonSide1Cm: number | null
-  cartonSide2Cm: number | null
-  cartonSide3Cm: number | null
-  cartonWeightKg: number | null
-  packagingType: string | null
-}
-
-function _buildBatchPackagingMeta(options: {
-  batch: BatchOption
-  unitsOrdered: number
-  unitsPerCarton: number | null
-}): { text: string; tone: 'muted' | 'warning' } | null {
-  const unitsOrdered = Number(options.unitsOrdered)
-  const unitsPerCarton =
-    options.unitsPerCarton && options.unitsPerCarton > 0 ? options.unitsPerCarton : null
-  const cartons =
-    unitsPerCarton && unitsOrdered > 0 ? Math.ceil(unitsOrdered / unitsPerCarton) : null
-
-  const cartonTriplet = resolveDimensionTripletCm({
-    side1Cm: options.batch.cartonSide1Cm,
-    side2Cm: options.batch.cartonSide2Cm,
-    side3Cm: options.batch.cartonSide3Cm,
-    legacy: options.batch.cartonDimensionsCm,
-  })
-
-  const parts: string[] = []
-
-  if (!cartonTriplet) {
-    parts.push('Carton dims not set')
-
-    if (options.batch.cartonWeightKg) {
-      parts.push(`KG/ctn: ${options.batch.cartonWeightKg.toFixed(2)}`)
-      if (cartons) {
-        parts.push(`KG: ${(options.batch.cartonWeightKg * cartons).toFixed(2)}`)
-      }
-    }
-
-    if (options.batch.packagingType) {
-      parts.push(`Pkg: ${options.batch.packagingType}`)
-    }
-
-    return { tone: 'warning', text: parts.join(' • ') }
-  }
-
-  parts.push(`Carton: ${formatDimensionTripletCm(cartonTriplet)} cm`)
-  const cbmPerCarton =
-    (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
-  parts.push(`CBM/ctn: ${cbmPerCarton.toFixed(3)}`)
-  if (cartons) {
-    parts.push(`CBM: ${(cbmPerCarton * cartons).toFixed(3)}`)
-  }
-
-  if (options.batch.cartonWeightKg) {
-    parts.push(`KG/ctn: ${options.batch.cartonWeightKg.toFixed(2)}`)
-    if (cartons) {
-      parts.push(`KG: ${(options.batch.cartonWeightKg * cartons).toFixed(2)}`)
-    }
-  }
-
-  if (options.batch.packagingType) {
-    parts.push(`Pkg: ${options.batch.packagingType}`)
-  }
-
-  return { tone: 'muted', text: parts.join(' • ') }
 }
 
 type LinePackagingDetails = {
@@ -194,7 +145,6 @@ type LinePackagingDetails = {
 }
 
 function _buildLinePackagingDetails(line: PurchaseOrderLineSummary): LinePackagingDetails | null {
-  if (!line.batchLot?.trim()) return null
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) return null
 
   const cartonTriplet = resolveDimensionTripletCm({
@@ -683,13 +633,18 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_ADD': {
       if (!newValue) return []
       const skuCode = newValue.skuCode
-      const batchLot = newValue.batchLot
+      const lotRef =
+        typeof newValue.lotRef === 'string'
+          ? newValue.lotRef
+          : typeof newValue.batchLot === 'string'
+            ? newValue.batchLot
+            : null
       const quantity = newValue.quantity
       const currency = newValue.currency
       const unitCost = newValue.unitCost
       const detail = [
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof batchLot === 'string' ? `Batch ${batchLot}` : null,
+        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
         typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
         typeof unitCost === 'number' && Number.isFinite(unitCost) && typeof currency === 'string'
           ? `Unit ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
@@ -702,11 +657,16 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_DELETE': {
       if (!oldValue) return []
       const skuCode = oldValue.skuCode
-      const batchLot = oldValue.batchLot
+      const lotRef =
+        typeof oldValue.lotRef === 'string'
+          ? oldValue.lotRef
+          : typeof oldValue.batchLot === 'string'
+            ? oldValue.batchLot
+            : null
       const quantity = oldValue.quantity
       const detail = [
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof batchLot === 'string' ? `Batch ${batchLot}` : null,
+        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
         typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
       ]
         .filter((part): part is string => Boolean(part))
@@ -955,8 +915,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
-  const [batchesBySkuId, setBatchesBySkuId] = useState<Record<string, BatchOption[]>>({})
-  const [batchesLoadingBySkuId, setBatchesLoadingBySkuId] = useState<Record<string, boolean>>({})
   const [addLineOpen, setAddLineOpen] = useState(false)
   const [addLineSubmitting, setAddLineSubmitting] = useState(false)
   const [activeBottomTab, setActiveBottomTab] = useState<
@@ -966,7 +924,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
-    batchLot: '',
     unitsOrdered: 1,
     unitsPerCarton: null as number | null,
     notes: '',
@@ -1012,7 +969,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const loadWarehouses = async () => {
       try {
         setWarehousesLoading(true)
-        const response = await fetch('/api/warehouses')
+        const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
         if (!response.ok) return
         const payload: unknown = await response.json().catch(() => null)
 
@@ -1050,7 +1007,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     const loadTenant = async () => {
       try {
-        const response = await fetch('/api/tenant/current')
+        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
         if (!response.ok) return
         const payload = await response.json().catch(() => null)
         const currency = payload?.current?.currency
@@ -1085,7 +1042,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         const endpoint = isCrossTenantReadOnly && crossTenantCode
           ? `/api/purchase-orders/manufacturing/${encodeURIComponent(crossTenantCode)}/${orderId}`
           : `/api/purchase-orders/${orderId}`
-        const response = await fetch(endpoint)
+        const response = await fetch(withBasePath(endpoint), { credentials: 'include' })
         if (!response.ok) {
           throw new Error('Failed to load purchase order')
         }
@@ -1140,7 +1097,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setDocumentsLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/documents`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/documents`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setDocuments([])
         return
@@ -1168,7 +1127,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     try {
       setAuditLogsLoading(true)
       const response = await fetch(
-        `/api/audit-logs?entityType=PurchaseOrder&entityId=${encodeURIComponent(orderId)}&limit=200`
+        withBasePath(
+          `/api/audit-logs?entityType=PurchaseOrder&entityId=${encodeURIComponent(orderId)}&limit=200`
+        ),
+        { credentials: 'include' }
       )
 
       if (!response.ok) {
@@ -1278,7 +1240,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!orderId) return
 
     try {
-      const response = await fetch(`/api/purchase-orders/${orderId}/forwarding-costs`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/forwarding-costs`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setForwardingCosts([])
         return
@@ -1303,7 +1267,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setCostLedgerLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/costs`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/costs`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setCostLedgerSummary(null)
         return
@@ -1337,7 +1303,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSupplierAdjustmentLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/supplier-adjustments`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/supplier-adjustments`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setSupplierAdjustment(null)
         return
@@ -1438,7 +1406,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!order?.id) return
     try {
       setManualWarehouseCostsLoading(true)
-      const response = await fetch(`/api/purchase-orders/${order.id}/warehouse-costs`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/warehouse-costs`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setManualWarehouseCosts([])
         return
@@ -1810,13 +1780,73 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSkusLoading(true)
-      const response = await fetch('/api/skus')
+      const response = await fetch(withBasePath('/api/skus'), { credentials: 'include' })
       if (!response.ok) {
         setSkus([])
         return
       }
       const payload = await response.json().catch(() => null)
-      setSkus(Array.isArray(payload) ? (payload as SkuSummary[]) : [])
+      if (!Array.isArray(payload)) {
+        setSkus([])
+        return
+      }
+
+      const coerceString = (value: unknown): string | null => {
+        if (typeof value !== 'string') return null
+        const trimmed = value.trim()
+        return trimmed ? trimmed : null
+      }
+
+      const coercePositiveInt = (value: unknown): number | null => {
+        if (typeof value === 'number') {
+          return Number.isInteger(value) && value > 0 ? value : null
+        }
+        if (typeof value === 'string' && value.trim()) {
+          const parsed = Number(value.trim())
+          return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+        }
+        return null
+      }
+
+      const coercePositiveNumber = (value: unknown): number | null => {
+        if (typeof value === 'number') {
+          return Number.isFinite(value) && value > 0 ? value : null
+        }
+        if (typeof value === 'string' && value.trim()) {
+          const parsed = Number(value.trim())
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+        }
+        return null
+      }
+
+      const parsed = payload
+        .map((item): SkuSummary | null => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+          const record = item as Record<string, unknown>
+          const id = coerceString(record.id)
+          const skuCode = coerceString(record.skuCode)
+          const description = coerceString(record.description)
+          const unitsPerCarton = coercePositiveInt(record.unitsPerCarton)
+
+          if (!id || !skuCode || !description || !unitsPerCarton) return null
+
+          return {
+            id,
+            skuCode,
+            description,
+            unitsPerCarton,
+            material: coerceString(record.material),
+            cartonDimensionsCm: coerceString(record.cartonDimensionsCm),
+            cartonSide1Cm: coercePositiveNumber(record.cartonSide1Cm),
+            cartonSide2Cm: coercePositiveNumber(record.cartonSide2Cm),
+            cartonSide3Cm: coercePositiveNumber(record.cartonSide3Cm),
+            cartonWeightKg: coercePositiveNumber(record.cartonWeightKg),
+            packagingType: coerceString(record.packagingType),
+          }
+        })
+        .filter((value): value is SkuSummary => value !== null)
+
+      setSkus(parsed)
     } catch {
       setSkus([])
     } finally {
@@ -1837,7 +1867,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSuppliersLoading(true)
-      const response = await fetch('/api/suppliers', { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include' })
       if (!response.ok) {
         setSuppliers([])
         return
@@ -1914,109 +1944,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     [suppliers]
   )
 
-  const ensureSkuBatchesLoaded = useCallback(
-    async (skuId: string) => {
-      if (!skuId) return
-      if (batchesBySkuId[skuId]) return
-      if (batchesLoadingBySkuId[skuId]) return
-
-      setBatchesLoadingBySkuId(prev => ({ ...prev, [skuId]: true }))
-      try {
-        const response = await fetch(`/api/skus/${encodeURIComponent(skuId)}/batches`, {
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          setBatchesBySkuId(prev => ({ ...prev, [skuId]: [] }))
-          return
-        }
-
-        const payload = await response.json().catch(() => null)
-        const batches = Array.isArray(payload?.batches) ? payload.batches : []
-        const coercePositiveInt = (value: unknown): number | null => {
-          if (typeof value === 'number') {
-            return Number.isInteger(value) && value > 0 ? value : null
-          }
-          if (typeof value === 'string' && value.trim()) {
-            const parsed = Number(value.trim())
-            return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-          }
-          return null
-        }
-        const coercePositiveNumber = (value: unknown): number | null => {
-          if (typeof value === 'number') {
-            return Number.isFinite(value) && value > 0 ? value : null
-          }
-          if (typeof value === 'string' && value.trim()) {
-            const parsed = Number(value.trim())
-            return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-          }
-          return null
-        }
-        const coerceString = (value: unknown): string | null => {
-          if (typeof value !== 'string') return null
-          const trimmed = value.trim()
-          return trimmed ? trimmed : null
-        }
-
-        const parsedBatches: BatchOption[] = batches
-          .map((batch: Record<string, unknown>): BatchOption | null => {
-            const batchCode = String(batch?.batchCode ?? '')
-              .trim()
-              .toUpperCase()
-            if (!batchCode || batchCode === 'DEFAULT') return null
-
-            return {
-              batchCode,
-              unitsPerCarton: coercePositiveInt(batch?.unitsPerCarton),
-              cartonDimensionsCm: coerceString(batch?.cartonDimensionsCm),
-              cartonSide1Cm: coercePositiveNumber(batch?.cartonSide1Cm),
-              cartonSide2Cm: coercePositiveNumber(batch?.cartonSide2Cm),
-              cartonSide3Cm: coercePositiveNumber(batch?.cartonSide3Cm),
-              cartonWeightKg: coercePositiveNumber(batch?.cartonWeightKg),
-              packagingType: (() => {
-                const raw = coerceString(batch?.packagingType)
-                return raw ? raw.toUpperCase() : null
-              })(),
-            }
-          })
-          .filter((batch): batch is BatchOption => Boolean(batch))
-
-        const unique = Array.from(
-          new Map(parsedBatches.map(batch => [batch.batchCode, batch])).values()
-        )
-
-        setBatchesBySkuId(prev => ({ ...prev, [skuId]: unique }))
-      } catch {
-        setBatchesBySkuId(prev => ({ ...prev, [skuId]: [] }))
-      } finally {
-        setBatchesLoadingBySkuId(prev => ({ ...prev, [skuId]: false }))
-      }
-    },
-    [batchesBySkuId, batchesLoadingBySkuId]
-  )
-
   useEffect(() => {
     if (!newLineDraft.skuId) return
-    const options = batchesBySkuId[newLineDraft.skuId]
-    if (!options || options.length === 0) return
-    if (
-      newLineDraft.batchLot &&
-      options.some(option => option.batchCode === newLineDraft.batchLot)
-    ) {
-      return
-    }
+    const sku = skus.find(candidate => candidate.id === newLineDraft.skuId)
+    if (!sku) return
 
     setNewLineDraft(prev => {
-      if (prev.skuId !== newLineDraft.skuId) return prev
-      const selected = options[0]
-      return {
-        ...prev,
-        batchLot: selected.batchCode,
-        unitsPerCarton: selected.unitsPerCarton ?? null,
-      }
+      if (prev.skuId !== sku.id) return prev
+      if (prev.unitsPerCarton && prev.unitsPerCarton > 0) return prev
+      return { ...prev, unitsPerCarton: sku.unitsPerCarton }
     })
-  }, [batchesBySkuId, newLineDraft.batchLot, newLineDraft.skuId])
+  }, [newLineDraft.skuId, skus])
 
   useEffect(() => {
     if (!addLineOpen) return
@@ -2079,7 +2017,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const loadSplitGroup = async () => {
       try {
         setSplitGroupLoading(true)
-        const response = await fetch(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`)
+        const response = await fetch(
+          withBasePath(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`),
+          { credentials: 'include' }
+        )
         if (!response.ok) {
           setSplitGroupOrders([])
           return
@@ -2673,7 +2614,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	          lines: draftLines.map(line => ({
 	            skuCode: line.skuCode,
 	            skuDescription: line.skuDescription ? line.skuDescription : undefined,
-	            batchLot: line.batchLot!,
 	            piNumber: line.piNumber ? line.piNumber : undefined,
 	            commodityCode: line.commodityCode ? line.commodityCode : undefined,
 	            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
@@ -2761,12 +2701,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       return
     }
 
-    const batchLot = newLineDraft.batchLot.trim().toUpperCase()
-    if (!batchLot) {
-      toast.error('Please select a batch')
-      return
-    }
-
     const unitsOrdered = Number(newLineDraft.unitsOrdered)
     if (!Number.isInteger(unitsOrdered) || unitsOrdered <= 0) {
       toast.error('Please enter a valid units ordered value')
@@ -2782,24 +2716,22 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (isCreate) {
       const now = new Date().toISOString()
       const quantity = Math.ceil(unitsOrdered / unitsPerCarton)
-      const batchOptions = batchesBySkuId[newLineDraft.skuId] ?? []
-      const selectedBatch = batchOptions.find(option => option.batchCode === batchLot) ?? null
       const createdLine: PurchaseOrderLineSummary = {
         id: `draft-${now}-${Math.random().toString(36).slice(2, 9)}`,
         skuCode: selectedSku.skuCode,
         skuDescription: selectedSku.description,
-        batchLot,
+        lotRef: null,
         piNumber: null,
         commodityCode: null,
         countryOfOrigin: null,
         netWeightKg: null,
-        material: null,
-        cartonDimensionsCm: selectedBatch?.cartonDimensionsCm ?? null,
-        cartonSide1Cm: selectedBatch?.cartonSide1Cm ?? null,
-        cartonSide2Cm: selectedBatch?.cartonSide2Cm ?? null,
-        cartonSide3Cm: selectedBatch?.cartonSide3Cm ?? null,
-        cartonWeightKg: selectedBatch?.cartonWeightKg ?? null,
-        packagingType: selectedBatch?.packagingType ?? null,
+        material: selectedSku.material,
+        cartonDimensionsCm: selectedSku.cartonDimensionsCm,
+        cartonSide1Cm: toNullableNumber(selectedSku.cartonSide1Cm),
+        cartonSide2Cm: toNullableNumber(selectedSku.cartonSide2Cm),
+        cartonSide3Cm: toNullableNumber(selectedSku.cartonSide3Cm),
+        cartonWeightKg: toNullableNumber(selectedSku.cartonWeightKg),
+        packagingType: selectedSku.packagingType,
         unitsOrdered,
         unitsPerCarton,
         quantity,
@@ -2819,7 +2751,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setAddLineOpen(false)
       setNewLineDraft({
         skuId: '',
-        batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
         notes: '',
@@ -2841,7 +2772,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         body: JSON.stringify({
           skuCode: selectedSku.skuCode,
           skuDescription: selectedSku.description,
-          batchLot,
           unitsOrdered,
           unitsPerCarton,
           currency: tenantCurrency,
@@ -2860,7 +2790,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setAddLineOpen(false)
       setNewLineDraft({
         skuId: '',
-        batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
         notes: '',
@@ -3407,7 +3336,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             SKU
                           </th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                            Batch
+                            Lot Ref
                           </th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
                             Units
@@ -3474,8 +3403,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
-                                  {line.batchLot ? line.batchLot : '—'}
+                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
@@ -3694,7 +3623,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           open: true,
                                           type: 'delete-line',
                                           title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
+                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this RFQ?`,
                                           lineId: line.id,
                                         })
                                       }
@@ -3719,12 +3648,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   setNewLineDraft(prev => ({
                                     ...prev,
                                     skuId,
-                                    batchLot: '',
                                     unitsOrdered: 1,
                                     unitsPerCarton: null,
                                     notes: '',
                                   }))
-                                  void ensureSkuBatchesLoaded(skuId)
                                 }}
                                 disabled={skusLoading || addLineSubmitting}
                                 className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
@@ -3737,41 +3664,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 ))}
                               </select>
                             </td>
-                            <td className="px-3 py-2 min-w-0">
-                              <select
-                                value={newLineDraft.batchLot}
-                                onChange={e => {
-                                  const batchLot = e.target.value
-                                  setNewLineDraft(prev => {
-                                    const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
-                                    const selected = batches.find(batch => batch.batchCode === batchLot)
-                                    return {
-                                      ...prev,
-                                      batchLot,
-                                      unitsPerCarton: selected?.unitsPerCarton ?? null,
-                                    }
-                                  })
-                                }}
-                                disabled={!newLineDraft.skuId || addLineSubmitting}
-                                className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
-                              >
-                                {!newLineDraft.skuId ? (
-                                  <option value="">—</option>
-                                ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
-                                  <option value="">Loading…</option>
-                                ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
-                                  <>
-                                    <option value="">Select</option>
-                                    {batchesBySkuId[newLineDraft.skuId].map(batch => (
-                                      <option key={batch.batchCode} value={batch.batchCode}>
-                                        {batch.batchCode}
-                                      </option>
-                                    ))}
-                                  </>
-                                ) : (
-                                  <option value="">No batches</option>
-                                )}
-                              </select>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              Auto
                             </td>
                             <td className="px-3 py-2">
                               <Input
@@ -3807,7 +3701,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     })(),
                                   }))
                                 }
-                                disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                                disabled={!newLineDraft.skuId || addLineSubmitting}
                                 placeholder="—"
                                 className="h-7 w-20 px-2 py-0 text-xs text-right"
                               />
@@ -3829,7 +3723,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 onClick={() => void handleAddLineItem()}
                                 disabled={
                                   !newLineDraft.skuId ||
-                                  !newLineDraft.batchLot ||
                                   !newLineDraft.unitsPerCarton ||
                                   newLineDraft.unitsOrdered <= 0 ||
                                   addLineSubmitting
@@ -3893,7 +3786,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   {line.skuCode}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
-                                  {line.batchLot ? line.batchLot : '—'}
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </p>
                               </div>
                             </div>
@@ -4276,7 +4169,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             SKU
                           </th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                            Batch
+                            Lot Ref
                           </th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
                             Units
@@ -4331,8 +4224,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
-                                  {line.batchLot ? line.batchLot : '—'}
+                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </span>
                               </td>
                               <td className="px-3 py-2">
@@ -4440,7 +4333,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           open: true,
                                           type: 'delete-line',
                                           title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this draft RFQ?`,
                                           lineId: line.id,
                                         })
                                       }
@@ -4464,12 +4357,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 setNewLineDraft(prev => ({
                                   ...prev,
                                   skuId,
-                                  batchLot: '',
                                   unitsOrdered: 1,
                                   unitsPerCarton: null,
                                   notes: '',
                                 }))
-                                void ensureSkuBatchesLoaded(skuId)
                               }}
                               disabled={skusLoading || addLineSubmitting}
                               className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
@@ -4482,42 +4373,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 min-w-0">
-                            <select
-                              value={newLineDraft.batchLot}
-                              onChange={e => {
-                                const batchLot = e.target.value
-                                setNewLineDraft(prev => {
-                                  const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
-                                  const selected = batches.find(batch => batch.batchCode === batchLot)
-                                  return {
-                                    ...prev,
-                                    batchLot,
-                                    unitsPerCarton: selected?.unitsPerCarton ?? null,
-                                  }
-                                })
-                              }}
-                              disabled={!newLineDraft.skuId || addLineSubmitting}
-                              className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
-                            >
-                              {!newLineDraft.skuId ? (
-                                <option value="">—</option>
-                              ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
-                                <option value="">Loading…</option>
-                              ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
-                                <>
-                                  <option value="">Select</option>
-                                  {batchesBySkuId[newLineDraft.skuId].map(batch => (
-                                    <option key={batch.batchCode} value={batch.batchCode}>
-                                      {batch.batchCode}
-                                    </option>
-                                  ))}
-                                </>
-                              ) : (
-                                <option value="">No batches</option>
-                              )}
-                            </select>
-                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">Auto</td>
                           <td className="px-3 py-2">
                             <Input
                               type="number"
@@ -4552,7 +4408,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   })(),
                                 }))
                               }
-                              disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                              disabled={!newLineDraft.skuId || addLineSubmitting}
                               placeholder="—"
                               className="h-7 w-20 px-2 py-0 text-xs text-right"
                             />
@@ -4572,7 +4428,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               onClick={() => void handleAddLineItem()}
                               disabled={
                                 !newLineDraft.skuId ||
-                                !newLineDraft.batchLot ||
                                 !newLineDraft.unitsPerCarton ||
                                 newLineDraft.unitsOrdered <= 0 ||
                                 addLineSubmitting
@@ -4623,7 +4478,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   {line.skuCode}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
-                                  {line.batchLot ? line.batchLot : '—'}
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </p>
                               </div>
                             </div>
@@ -5393,7 +5248,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                          <thead>
 	                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
 	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Cost</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Target Total</th>
@@ -5416,9 +5271,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
 	                                    <span
 	                                      className="block truncate"
-	                                      title={line.batchLot ? line.batchLot : undefined}
+	                                      title={line.lotRef ? line.lotRef : undefined}
 	                                    >
-	                                      {line.batchLot ? line.batchLot : '—'}
+	                                      {line.lotRef ? line.lotRef : '—'}
 	                                    </span>
 	                                  </td>
 	                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
@@ -5528,7 +5383,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           <thead>
                             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                               <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Unit Cost</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
@@ -5563,9 +5418,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   <td className="px-3 py-2 text-muted-foreground min-w-0">
                                     <span
                                       className="block truncate"
-                                      title={line.batchLot ? line.batchLot : undefined}
+                                      title={line.lotRef ? line.lotRef : undefined}
                                     >
-                                      {line.batchLot ? line.batchLot : '—'}
+                                      {line.lotRef ? line.lotRef : '—'}
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">

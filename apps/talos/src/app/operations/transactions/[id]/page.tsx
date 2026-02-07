@@ -15,6 +15,7 @@ import {
 } from '@/lib/lucide-icons'
 import { TabbedContainer, TabPanel } from '@/components/ui/tabbed-container'
 import { type ApiAttachment } from '@/components/operations/edit-attachments-tab'
+import { withBasePath } from '@/lib/utils/base-path'
 
 const INVENTORY_LEDGER_PATH = '/operations/inventory'
 
@@ -71,7 +72,7 @@ interface TransactionData {
       description: string
       unitsPerCarton: number
     }
-    batchLot: string
+    lotRef: string
     cartonsIn: number
     cartonsOut: number
     storagePalletsIn: number
@@ -97,7 +98,7 @@ export default function TransactionDetailPage() {
 
   const loadTransaction = async () => {
     try {
-      const response = await fetch(`/api/transactions/${params.id}`, {
+      const response = await fetch(withBasePath(`/api/transactions/${params.id}`), {
         credentials: 'include',
       })
 
@@ -141,11 +142,11 @@ export default function TransactionDetailPage() {
     }
   }
 
-  const loadSkus = async () => {
-    try {
-      const response = await fetch('/api/skus', {
-        credentials: 'include',
-      })
+	  const loadSkus = async () => {
+	    try {
+	      const response = await fetch(withBasePath('/api/skus'), {
+	        credentials: 'include',
+	      })
       if (response.ok) {
         const data = await response.json()
         setSkus(data.skus || [])
@@ -197,18 +198,18 @@ export default function TransactionDetailPage() {
   // Convert line items to the format expected by cargo tabs
   const cargoItems = transaction.lineItems.map(item => ({
     id: item.id,
-    skuCode: item.sku?.skuCode || '',
+    skuCode: item.sku?.skuCode ?? '',
     skuId: item.skuId,
-    batchLot: item.batchLot,
+    lotRef: item.lotRef,
     cartons: isReceive ? item.cartonsIn : item.cartonsOut,
-    units: (isReceive ? item.cartonsIn : item.cartonsOut) * (item.unitsPerCarton || 0),
-    unitsPerCarton: item.unitsPerCarton || item.sku?.unitsPerCarton || 0,
-    storagePalletsIn: item.storagePalletsIn || 0,
-    shippingPalletsOut: item.shippingPalletsOut || 0,
-    storageCartonsPerPallet: item.storageCartonsPerPallet || 0,
-    shippingCartonsPerPallet: item.shippingCartonsPerPallet || 0,
+    units: (isReceive ? item.cartonsIn : item.cartonsOut) * (item.unitsPerCarton ?? 0),
+    unitsPerCarton: item.unitsPerCarton ?? item.sku?.unitsPerCarton ?? 0,
+    storagePalletsIn: item.storagePalletsIn ?? 0,
+    shippingPalletsOut: item.shippingPalletsOut ?? 0,
+    storageCartonsPerPallet: item.storageCartonsPerPallet ?? 0,
+    shippingCartonsPerPallet: item.shippingCartonsPerPallet ?? 0,
     configLoaded: true,
-    loadingBatch: false,
+    loadingLot: false,
   }))
 
   // Tab configuration based on transaction type
@@ -373,9 +374,9 @@ export default function TransactionDetailPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       SKU
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Batch
-                    </th>
+	                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+	                      Lot
+	                    </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Cartons
                     </th>
@@ -420,14 +421,14 @@ export default function TransactionDetailPage() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="text"
-                          value={item.batchLot}
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
-                          readOnly
-                        />
-                      </td>
+	                      <td className="px-4 py-3 whitespace-nowrap">
+	                        <input
+	                          type="text"
+	                          value={item.lotRef}
+	                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-foreground"
+	                          readOnly
+	                        />
+	                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <input
                           type="number"

@@ -46,9 +46,9 @@ function formatLedgerTimestamp(value: string | Date | null | undefined) {
 
 interface InventorySummary {
   totalSkuCount: number
-  totalBatchCount: number
-  batchesWithInventory: number
-  batchesOutOfStock: number
+  totalLotCount: number
+  lotsWithInventory: number
+  lotsOutOfStock: number
 }
 
 interface InventoryResponse {
@@ -79,7 +79,7 @@ function InventoryPage() {
     isFilterActive,
     uniqueWarehouseOptions,
     uniqueSkuOptions,
-    uniqueBatchOptions,
+    uniqueLotOptions,
     processedBalances,
   } = useInventoryFilters({
     pageKey: PAGE_KEY,
@@ -103,7 +103,7 @@ function InventoryPage() {
     try {
       setLoading(true)
 
-      const response = await fetch('/api/inventory/balances')
+      const response = await fetch(withBasePath('/api/inventory/balances'), { credentials: 'include' })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
         toast.error(`Failed to load inventory balances: ${errorData.error || response.statusText}`)
@@ -170,12 +170,12 @@ function InventoryPage() {
     const totalPallets = balances.reduce((sum, balance) => sum + balance.currentPallets, 0)
     const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
     const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
-    const batchesWithInventoryFallback = balances.filter(
+    const lotsWithInventoryFallback = balances.filter(
       balance => balance.currentCartons > 0
     ).length
-    const totalBatchCountFallback = balances.length
-    const batchesOutOfStockFallback = Math.max(
-      totalBatchCountFallback - batchesWithInventoryFallback,
+    const totalLotCountFallback = balances.length
+    const lotsOutOfStockFallback = Math.max(
+      totalLotCountFallback - lotsWithInventoryFallback,
       0
     )
 
@@ -185,9 +185,9 @@ function InventoryPage() {
       uniqueWarehouses,
       summary: {
         totalSkuCount: summary?.totalSkuCount ?? uniqueSkusFallback,
-        totalBatchCount: summary?.totalBatchCount ?? totalBatchCountFallback,
-        batchesWithInventory: summary?.batchesWithInventory ?? batchesWithInventoryFallback,
-        batchesOutOfStock: summary?.batchesOutOfStock ?? batchesOutOfStockFallback,
+        totalLotCount: summary?.totalLotCount ?? totalLotCountFallback,
+        lotsWithInventory: summary?.lotsWithInventory ?? lotsWithInventoryFallback,
+        lotsOutOfStock: summary?.lotsOutOfStock ?? lotsOutOfStockFallback,
       },
     }
   }, [balances, summary])
@@ -422,19 +422,19 @@ function InventoryPage() {
                         <button
                           type="button"
                           className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                          onClick={() => handleSort('batch')}
+                          onClick={() => handleSort('lot')}
                         >
-                          Batch
-                          {getSortIcon('batch')}
+                          Lot
+                          {getSortIcon('lot')}
                         </button>
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
                               type="button"
-                              aria-label="Filter batch values"
+                              aria-label="Filter lot values"
                               className={cn(
                                 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                isFilterActive(['batch'])
+                                isFilterActive(['lot'])
                                   ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
                                   : 'hover:bg-muted hover:text-primary'
                               )}
@@ -445,34 +445,34 @@ function InventoryPage() {
                           <PopoverContent align="end" className="w-64 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-foreground">
-                                Batch filter
+                                Lot filter
                               </span>
                               <button
                                 type="button"
                                 className="text-xs font-medium text-primary hover:underline"
-                                onClick={() => clearColumnFilter(['batch'])}
+                                onClick={() => clearColumnFilter(['lot'])}
                               >
                                 Clear
                               </button>
                             </div>
                             <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                              {uniqueBatchOptions.map(option => (
+                              {uniqueLotOptions.map(option => (
                                 <label
                                   key={option.value}
                                   className="flex items-center gap-2 text-sm text-foreground"
                                 >
                                   <input
                                     type="checkbox"
-                                    checked={columnFilters.batch.includes(option.value)}
-                                    onChange={() => toggleMultiValueFilter('batch', option.value)}
+                                    checked={columnFilters.lot.includes(option.value)}
+                                    onChange={() => toggleMultiValueFilter('lot', option.value)}
                                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                                   />
                                   <span className="flex-1 text-sm">{option.label}</span>
                                 </label>
                               ))}
-                              {uniqueBatchOptions.length === 0 && (
+                              {uniqueLotOptions.length === 0 && (
                                 <p className="text-xs text-muted-foreground">
-                                  No batch options available.
+                                  No lot options available.
                                 </p>
                               )}
                             </div>
@@ -665,9 +665,9 @@ function InventoryPage() {
                         </td>
                         <td
                           className="px-2 py-2 text-xs text-muted-foreground uppercase truncate"
-                          title={balance.batchLot}
+                          title={balance.lotRef}
                         >
-                          {balance.batchLot}
+                          {balance.lotRef}
                         </td>
                         <td
                           className="px-2 py-2 text-sm text-muted-foreground truncate"

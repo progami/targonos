@@ -86,7 +86,7 @@ export const GET = withAuth(async (request, _session) => {
       warehouseName: entry.warehouseName,
       skuCode: entry.skuCode ?? null,
       skuDescription: entry.skuDescription ?? null,
-      batchLot: entry.batchLot ?? null,
+      lotRef: entry.lotRef ?? null,
       inventoryTransactionId: entry.inventoryTransactionId ?? null,
       storageLedgerId: entry.storageLedgerId ?? null,
       purchaseOrderId: entry.purchaseOrderId ?? null,
@@ -102,4 +102,3 @@ export const GET = withAuth(async (request, _session) => {
     },
   })
 })
-
