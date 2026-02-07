@@ -9,10 +9,12 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
+import { clsx } from 'clsx';
 import {
+  SHEET_TOOLBAR_BUTTON,
   SHEET_TOOLBAR_GROUP,
   SHEET_TOOLBAR_LABEL,
-  SHEET_TOOLBAR_SELECT,
+  SHEET_TOOLBAR_SEGMENTED,
 } from '@/components/sheet-toolbar';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { TimeZoneClocks } from '@/components/timezone-clocks';
@@ -253,20 +255,29 @@ export function WorkbookLayout({
     return (
       <div className={SHEET_TOOLBAR_GROUP}>
         <span className={SHEET_TOOLBAR_LABEL}>Year</span>
-        <select
-          className={SHEET_TOOLBAR_SELECT}
-          value={String(resolvedYear)}
-          onChange={(event) => handleYearSelect(Number(event.target.value))}
-          disabled={isNavigationBusy}
-          aria-label="Select year"
-        >
-          {sortedYears.map((segment) => (
-            <option key={segment.year} value={segment.year}>
-              {segment.year}
-              {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
-            </option>
-          ))}
-        </select>
+        <div role="group" aria-label="Select year" className={SHEET_TOOLBAR_SEGMENTED}>
+          {sortedYears.map((segment) => {
+            const isActive = segment.year === resolvedYear;
+            return (
+              <button
+                key={segment.year}
+                type="button"
+                className={clsx(
+                  SHEET_TOOLBAR_BUTTON,
+                  isActive
+                    ? 'bg-cyan-600 text-white dark:bg-cyan-500'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
+                )}
+                onClick={() => handleYearSelect(segment.year)}
+                disabled={isNavigationBusy && isActive}
+                aria-pressed={isActive}
+              >
+                {segment.year}
+                {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }, [handleYearSelect, isNavigationBusy, isYearAwareSheet, resolvedYear, sortedYears]);
@@ -419,10 +430,10 @@ export function WorkbookLayout({
         <section className="flex flex-1 overflow-hidden">
           <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-auto">
             <header
-              className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
+              className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
               role="banner"
             >
-              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                 {/* App branding - LEFT */}
                 <div className="flex items-center gap-2">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
@@ -486,13 +497,13 @@ export function WorkbookLayout({
               </div>
 
               {hasControls && (
-                <div className="mt-2 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+                <div className="mt-1.5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-1.5 dark:border-slate-800">
                   {headerControls}
                   {yearSwitcher}
                 </div>
               )}
             </header>
-            <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+            <div className="px-4 py-4 sm:px-6 lg:px-8">{children}</div>
           </div>
           {hasContextPane && (
             <div

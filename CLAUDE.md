@@ -10,7 +10,7 @@ All apps share `portal_db` on localhost:5432 with separate schemas per app. Conn
 | atlas | dev_atlas |
 | xplan | dev_xplan |
 | kairos | chronos |
-| sso | dev_auth |
+| sso | auth |
 | plutus | (no DB - uses QuickBooks API) |
 
 Talos also has main schemas: `main_talos_us`, `main_talos_uk`.
@@ -25,7 +25,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ## Testing
 
-- Test via Chrome browser at `https://dev-os.targonglobal.com/<app>`
+- Test via Chrome browser at `https://os.targonglobal.com/<app>`
 - Do not test on localhost
 - **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.

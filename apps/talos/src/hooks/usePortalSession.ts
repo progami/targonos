@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Session } from 'next-auth'
+import { withBasePath } from '@/lib/utils/base-path'
 
 type Status = 'loading' | 'authenticated' | 'unauthenticated'
 
 const SESSION_QUERY_KEY = ['portal-session'] as const
 
 async function fetchSession(): Promise<Session | null> {
-  const response = await fetch('/api/portal/session', {
+  const response = await fetch(withBasePath('/api/portal/session'), {
     credentials: 'include',
   })
   if (!response.ok) {

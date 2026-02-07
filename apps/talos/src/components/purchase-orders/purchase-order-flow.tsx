@@ -69,7 +69,7 @@ interface PurchaseOrderLineSummary {
   id: string
   skuCode: string
   skuDescription: string | null
-  batchLot: string | null
+  lotRef: string | null
   piNumber: string | null
   commodityCode: string | null
   countryOfOrigin: string | null
@@ -102,6 +102,27 @@ interface SkuSummary {
   id: string
   skuCode: string
   description: string
+  unitsPerCarton: number
+  material: string | null
+  cartonDimensionsCm: string | null
+  cartonSide1Cm: number | string | null
+  cartonSide2Cm: number | string | null
+  cartonSide3Cm: number | string | null
+  cartonWeightKg: number | string | null
+  packagingType: string | null
+}
+
+function toNullableNumber(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 interface SupplierOption {
@@ -111,76 +132,6 @@ interface SupplierOption {
   address: string | null
   defaultIncoterms: string | null
   defaultPaymentTerms: string | null
-}
-
-interface BatchOption {
-  batchCode: string
-  unitsPerCarton: number | null
-  cartonDimensionsCm: string | null
-  cartonSide1Cm: number | null
-  cartonSide2Cm: number | null
-  cartonSide3Cm: number | null
-  cartonWeightKg: number | null
-  packagingType: string | null
-}
-
-function _buildBatchPackagingMeta(options: {
-  batch: BatchOption
-  unitsOrdered: number
-  unitsPerCarton: number | null
-}): { text: string; tone: 'muted' | 'warning' } | null {
-  const unitsOrdered = Number(options.unitsOrdered)
-  const unitsPerCarton =
-    options.unitsPerCarton && options.unitsPerCarton > 0 ? options.unitsPerCarton : null
-  const cartons =
-    unitsPerCarton && unitsOrdered > 0 ? Math.ceil(unitsOrdered / unitsPerCarton) : null
-
-  const cartonTriplet = resolveDimensionTripletCm({
-    side1Cm: options.batch.cartonSide1Cm,
-    side2Cm: options.batch.cartonSide2Cm,
-    side3Cm: options.batch.cartonSide3Cm,
-    legacy: options.batch.cartonDimensionsCm,
-  })
-
-  const parts: string[] = []
-
-  if (!cartonTriplet) {
-    parts.push('Carton dims not set')
-
-    if (options.batch.cartonWeightKg) {
-      parts.push(`KG/ctn: ${options.batch.cartonWeightKg.toFixed(2)}`)
-      if (cartons) {
-        parts.push(`KG: ${(options.batch.cartonWeightKg * cartons).toFixed(2)}`)
-      }
-    }
-
-    if (options.batch.packagingType) {
-      parts.push(`Pkg: ${options.batch.packagingType}`)
-    }
-
-    return { tone: 'warning', text: parts.join(' • ') }
-  }
-
-  parts.push(`Carton: ${formatDimensionTripletCm(cartonTriplet)} cm`)
-  const cbmPerCarton =
-    (cartonTriplet.side1Cm * cartonTriplet.side2Cm * cartonTriplet.side3Cm) / 1_000_000
-  parts.push(`CBM/ctn: ${cbmPerCarton.toFixed(3)}`)
-  if (cartons) {
-    parts.push(`CBM: ${(cbmPerCarton * cartons).toFixed(3)}`)
-  }
-
-  if (options.batch.cartonWeightKg) {
-    parts.push(`KG/ctn: ${options.batch.cartonWeightKg.toFixed(2)}`)
-    if (cartons) {
-      parts.push(`KG: ${(options.batch.cartonWeightKg * cartons).toFixed(2)}`)
-    }
-  }
-
-  if (options.batch.packagingType) {
-    parts.push(`Pkg: ${options.batch.packagingType}`)
-  }
-
-  return { tone: 'muted', text: parts.join(' • ') }
 }
 
 type LinePackagingDetails = {
@@ -194,7 +145,6 @@ type LinePackagingDetails = {
 }
 
 function _buildLinePackagingDetails(line: PurchaseOrderLineSummary): LinePackagingDetails | null {
-  if (!line.batchLot?.trim()) return null
   if (!Number.isFinite(line.quantity) || line.quantity <= 0) return null
 
   const cartonTriplet = resolveDimensionTripletCm({
@@ -341,6 +291,9 @@ interface PurchaseOrderSummary {
   poNumber: string | null
   splitGroupId: string | null
   splitParentId: string | null
+  tenantCode?: TenantCode
+  matchedSkuCodes?: string[]
+  crossTenantReadOnly?: boolean
   type: 'PURCHASE' | 'ADJUSTMENT'
   status: POStageStatus
   isLegacy: boolean
@@ -443,6 +396,16 @@ type SupplierAdjustmentEntry = {
   notes: string | null
 }
 
+type CrossTenantPurchaseOrderPayload = PurchaseOrderSummary & {
+  tenantCode: TenantCode
+  matchedSkuCodes: string[]
+  crossTenantReadOnly: true
+  documents: PurchaseOrderDocumentSummary[]
+  forwardingCosts: PurchaseOrderForwardingCostSummary[]
+  costSummary: PurchaseOrderCostLedgerSummary
+  supplierAdjustment: SupplierAdjustmentEntry | null
+}
+
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -468,8 +431,8 @@ const DOCUMENT_STAGE_META: Record<
   RFQ: { label: 'RFQ', icon: FileEdit },
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
-  OCEAN: { label: 'In Transit', icon: Ship },
-  WAREHOUSE: { label: 'At Warehouse', icon: Warehouse },
+  OCEAN: { label: 'Transit', icon: Ship },
+  WAREHOUSE: { label: 'Warehouse', icon: Warehouse },
   SHIPPED: { label: 'Shipped', icon: Package2 },
 }
 
@@ -503,8 +466,8 @@ const STAGES = [
   { value: 'RFQ', label: 'RFQ', icon: FileEdit, color: 'slate' },
   { value: 'ISSUED', label: 'Issued', icon: Send, color: 'emerald' },
   { value: 'MANUFACTURING', label: 'Manufacturing', icon: Factory, color: 'amber' },
-  { value: 'OCEAN', label: 'In Transit', icon: Ship, color: 'blue' },
-  { value: 'WAREHOUSE', label: 'At Warehouse', icon: Warehouse, color: 'purple' },
+  { value: 'OCEAN', label: 'Transit', icon: Ship, color: 'blue' },
+  { value: 'WAREHOUSE', label: 'Warehouse', icon: Warehouse, color: 'purple' },
 ] as const
 
 const INCOTERMS_OPTIONS = [
@@ -670,13 +633,13 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_ADD': {
       if (!newValue) return []
       const skuCode = newValue.skuCode
-      const batchLot = newValue.batchLot
+      const lotRef = typeof newValue.lotRef === 'string' ? newValue.lotRef : null
       const quantity = newValue.quantity
       const currency = newValue.currency
       const unitCost = newValue.unitCost
       const detail = [
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof batchLot === 'string' ? `Batch ${batchLot}` : null,
+        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
         typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
         typeof unitCost === 'number' && Number.isFinite(unitCost) && typeof currency === 'string'
           ? `Unit ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
@@ -689,11 +652,11 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
     case 'LINE_DELETE': {
       if (!oldValue) return []
       const skuCode = oldValue.skuCode
-      const batchLot = oldValue.batchLot
+      const lotRef = typeof oldValue.lotRef === 'string' ? oldValue.lotRef : null
       const quantity = oldValue.quantity
       const detail = [
         typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof batchLot === 'string' ? `Batch ${batchLot}` : null,
+        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
         typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
       ]
         .filter((part): part is string => Boolean(part))
@@ -798,7 +761,13 @@ const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
 
 export type PurchaseOrderFlowMode = 'detail' | 'create'
 
-export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?: string }) {
+type PurchaseOrderFlowProps = {
+  mode: PurchaseOrderFlowMode
+  orderId?: string
+  tenantCode?: TenantCode
+}
+
+export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const router = useRouter()
   const { data: session, status } = useSession()
   const tenantRegion: TenantCode = session?.user?.region ?? 'US'
@@ -807,6 +776,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const weightUnit = getWeightUnitLabel(unitSystem)
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
+  const crossTenantCode = props.tenantCode
+  const isCrossTenantReadOnly = !isCreate && Boolean(crossTenantCode)
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
@@ -910,10 +881,30 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [supplierAdjustmentOpen, setSupplierAdjustmentOpen] = useState(false)
   const [landedBreakdownOpen, setLandedBreakdownOpen] = useState(false)
 
+  // Manual warehouse cost state
+  const [manualWarehouseCosts, setManualWarehouseCosts] = useState<
+    Array<{
+      id: string
+      category: string
+      costName: string
+      amount: number
+      currency: string
+      createdByName: string
+      createdAt: string
+      notes: string | null
+    }>
+  >([])
+  const [manualWarehouseCostsLoading, setManualWarehouseCostsLoading] = useState(false)
+  const [warehouseCostEditing, setWarehouseCostEditing] = useState<'inbound' | 'storage' | null>(null)
+  const [warehouseCostSaving, setWarehouseCostSaving] = useState(false)
+  const [warehouseCostDraft, setWarehouseCostDraft] = useState({
+    costName: '',
+    amount: '',
+    notes: '',
+  })
+
   const [skus, setSkus] = useState<SkuSummary[]>([])
   const [skusLoading, setSkusLoading] = useState(false)
-  const [batchesBySkuId, setBatchesBySkuId] = useState<Record<string, BatchOption[]>>({})
-  const [batchesLoadingBySkuId, setBatchesLoadingBySkuId] = useState<Record<string, boolean>>({})
   const [addLineOpen, setAddLineOpen] = useState(false)
   const [addLineSubmitting, setAddLineSubmitting] = useState(false)
   const [activeBottomTab, setActiveBottomTab] = useState<
@@ -923,7 +914,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
-    batchLot: '',
     unitsOrdered: 1,
     unitsPerCarton: null as number | null,
     notes: '',
@@ -951,9 +941,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         : orderId
           ? `/operations/purchase-orders/${orderId}`
           : '/operations/purchase-orders'
+      const returnPathWithTenant =
+        !isCreate && crossTenantCode
+          ? `${returnPath}?tenant=${encodeURIComponent(crossTenantCode)}`
+          : returnPath
       redirectToPortal(
         '/login',
-        `${window.location.origin}${withBasePath(returnPath)}`
+        `${window.location.origin}${withBasePath(returnPathWithTenant)}`
       )
       return
     }
@@ -965,7 +959,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     const loadWarehouses = async () => {
       try {
         setWarehousesLoading(true)
-        const response = await fetch('/api/warehouses')
+        const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
         if (!response.ok) return
         const payload: unknown = await response.json().catch(() => null)
 
@@ -1003,7 +997,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
     const loadTenant = async () => {
       try {
-        const response = await fetch('/api/tenant/current')
+        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
         if (!response.ok) return
         const payload = await response.json().catch(() => null)
         const currency = payload?.current?.currency
@@ -1035,12 +1029,27 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
       try {
         setLoading(true)
-        const response = await fetch(`/api/purchase-orders/${orderId}`)
+        const endpoint = isCrossTenantReadOnly && crossTenantCode
+          ? `/api/purchase-orders/manufacturing/${encodeURIComponent(crossTenantCode)}/${orderId}`
+          : `/api/purchase-orders/${orderId}`
+        const response = await fetch(withBasePath(endpoint), { credentials: 'include' })
         if (!response.ok) {
           throw new Error('Failed to load purchase order')
         }
         const data = await response.json()
-        setOrder(data)
+        if (isCrossTenantReadOnly && crossTenantCode) {
+          const crossPayload = data as CrossTenantPurchaseOrderPayload
+          setOrder(crossPayload)
+          setDocuments(Array.isArray(crossPayload.documents) ? crossPayload.documents : [])
+          setForwardingCosts(
+            Array.isArray(crossPayload.forwardingCosts) ? crossPayload.forwardingCosts : []
+          )
+          setCostLedgerSummary(crossPayload.costSummary ?? null)
+          setSupplierAdjustment(crossPayload.supplierAdjustment ?? null)
+          setAuditLogs([])
+        } else {
+          setOrder(data)
+        }
       } catch (_error) {
         toast.error('Failed to load purchase order')
         router.push('/operations/purchase-orders')
@@ -1056,7 +1065,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return
     }
     setLoading(false)
-  }, [isCreate, orderId, router, session, status])
+  }, [crossTenantCode, isCreate, isCrossTenantReadOnly, orderId, router, session, status])
 
   useEffect(() => {
     if (!order) return
@@ -1072,12 +1081,15 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   }, [order, orderInfoEditing])
 
   const refreshDocuments = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
     try {
       setDocumentsLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/documents`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/documents`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setDocuments([])
         return
@@ -1091,20 +1103,24 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setDocumentsLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshDocuments()
   }, [refreshDocuments])
 
   const refreshAuditLogs = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
     try {
       setAuditLogsLoading(true)
       const response = await fetch(
-        `/api/audit-logs?entityType=PurchaseOrder&entityId=${encodeURIComponent(orderId)}&limit=200`
+        withBasePath(
+          `/api/audit-logs?entityType=PurchaseOrder&entityId=${encodeURIComponent(orderId)}&limit=200`
+        ),
+        { credentials: 'include' }
       )
 
       if (!response.ok) {
@@ -1120,7 +1136,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setAuditLogsLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshAuditLogs()
@@ -1129,6 +1145,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const patchOrderLine = useCallback(
     async (lineId: string, data: Record<string, unknown>) => {
       if (!order) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        return
+      }
 
       try {
         const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
@@ -1159,7 +1179,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         toast.error('Failed to update line item')
       }
     },
-    [order, refreshAuditLogs]
+    [isCrossTenantReadOnly, order, refreshAuditLogs]
   )
 
   const maybePatchCartonDimensions = useCallback(
@@ -1205,11 +1225,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   )
 
   const refreshForwardingCosts = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
     try {
-      const response = await fetch(`/api/purchase-orders/${orderId}/forwarding-costs`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/forwarding-costs`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setForwardingCosts([])
         return
@@ -1221,19 +1244,22 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } catch {
       setForwardingCosts([])
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshForwardingCosts()
   }, [refreshForwardingCosts])
 
   const refreshCostLedgerSummary = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
     try {
       setCostLedgerLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/costs`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/costs`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setCostLedgerSummary(null)
         return
@@ -1251,13 +1277,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setCostLedgerLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshCostLedgerSummary()
   }, [refreshCostLedgerSummary])
 
   const refreshSupplierAdjustment = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) {
       setSupplierAdjustment(null)
@@ -1266,7 +1293,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
     try {
       setSupplierAdjustmentLoading(true)
-      const response = await fetch(`/api/purchase-orders/${orderId}/supplier-adjustments`)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/supplier-adjustments`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         setSupplierAdjustment(null)
         return
@@ -1340,7 +1369,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     } finally {
       setSupplierAdjustmentLoading(false)
     }
-  }, [order?.id])
+  }, [isCrossTenantReadOnly, order?.id])
 
   useEffect(() => {
     void refreshSupplierAdjustment()
@@ -1362,9 +1391,135 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     })
   }, [supplierAdjustment, supplierAdjustmentEditing])
 
+  const refreshManualWarehouseCosts = useCallback(async () => {
+    if (isCrossTenantReadOnly) return
+    if (!order?.id) return
+    try {
+      setManualWarehouseCostsLoading(true)
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/warehouse-costs`), {
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        setManualWarehouseCosts([])
+        return
+      }
+      const json: unknown = await response.json().catch(() => null)
+      const data =
+        json && typeof json === 'object' && 'data' in json ? (json as { data: unknown }).data : null
+      if (!Array.isArray(data)) {
+        setManualWarehouseCosts([])
+        return
+      }
+      setManualWarehouseCosts(
+        data.map((entry: Record<string, unknown>) => ({
+          id: String(entry.id),
+          category: String(entry.category),
+          costName: String(entry.costName),
+          amount: Number(entry.amount),
+          currency: String(entry.currency),
+          createdByName: String(entry.createdByName),
+          createdAt: String(entry.createdAt),
+          notes: typeof entry.notes === 'string' ? entry.notes : null,
+        }))
+      )
+    } catch {
+      setManualWarehouseCosts([])
+    } finally {
+      setManualWarehouseCostsLoading(false)
+    }
+  }, [isCrossTenantReadOnly, order?.id])
+
+  useEffect(() => {
+    void refreshManualWarehouseCosts()
+  }, [refreshManualWarehouseCosts])
+
+  const saveWarehouseCost = useCallback(
+    async (category: 'Inbound' | 'Storage') => {
+      if (!order) return
+      if (warehouseCostSaving) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        return
+      }
+
+      const amount = Number(warehouseCostDraft.amount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error('Amount must be a positive number')
+        return
+      }
+      if (!warehouseCostDraft.costName.trim()) {
+        toast.error('Cost name is required')
+        return
+      }
+
+      try {
+        setWarehouseCostSaving(true)
+        const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/warehouse-costs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category,
+            costName: warehouseCostDraft.costName.trim(),
+            amount,
+            notes: warehouseCostDraft.notes.trim() ? warehouseCostDraft.notes.trim() : undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          toast.error(`Failed to save warehouse cost (HTTP ${response.status})`)
+          return
+        }
+
+        setWarehouseCostEditing(null)
+        setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+        void refreshManualWarehouseCosts()
+        toast.success(`${category} cost saved`)
+      } catch {
+        toast.error('Failed to save warehouse cost')
+      } finally {
+        setWarehouseCostSaving(false)
+      }
+    },
+    [
+      order,
+      refreshManualWarehouseCosts,
+      warehouseCostDraft.costName,
+      warehouseCostDraft.amount,
+      warehouseCostDraft.notes,
+      warehouseCostSaving,
+      isCrossTenantReadOnly,
+    ]
+  )
+
+  const deleteWarehouseCost = useCallback(
+    async (costId: string) => {
+      if (!order) return
+      if (isCrossTenantReadOnly) return
+      try {
+        const response = await fetchWithCSRF(
+          `/api/purchase-orders/${order.id}/warehouse-costs?costId=${encodeURIComponent(costId)}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          toast.error(`Failed to delete cost entry (HTTP ${response.status})`)
+          return
+        }
+        void refreshManualWarehouseCosts()
+        toast.success('Cost entry deleted')
+      } catch {
+        toast.error('Failed to delete cost entry')
+      }
+    },
+    [order, refreshManualWarehouseCosts, isCrossTenantReadOnly]
+  )
+
   const saveSupplierAdjustment = useCallback(async () => {
     if (!order) return
     if (supplierAdjustmentSaving) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     const amount = Number(supplierAdjustmentDraft.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1406,6 +1561,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     supplierAdjustmentDraft.kind,
     supplierAdjustmentDraft.notes,
     supplierAdjustmentSaving,
+    isCrossTenantReadOnly,
   ])
 
   const forwardingSubtotal = useMemo(
@@ -1417,6 +1573,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
   const storageCostRows = costLedgerSummary?.breakdown?.storage ?? []
   const storageSubtotal = costLedgerSummary?.totals?.storage ?? 0
+
+  const manualInboundCosts = manualWarehouseCosts.filter(c => c.category === 'Inbound')
+  const manualStorageCosts = manualWarehouseCosts.filter(c => c.category === 'Storage')
+  const manualInboundSubtotal = manualInboundCosts.reduce((sum, c) => sum + c.amount, 0)
+  const manualStorageSubtotal = manualStorageCosts.reduce((sum, c) => sum + c.amount, 0)
 
   const startEditFreightCost = useCallback(() => {
     setFreightCostDraft(forwardingSubtotal > 0 ? forwardingSubtotal.toFixed(2) : '')
@@ -1431,6 +1592,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const saveFreightCost = useCallback(async () => {
     if (!order) return
     if (freightCostSaving) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     const raw = freightCostDraft.trim()
     if (!raw) {
@@ -1475,6 +1640,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     order,
     refreshCostLedgerSummary,
     refreshForwardingCosts,
+    isCrossTenantReadOnly,
   ])
 
   const handleDocumentUpload = useCallback(
@@ -1487,6 +1653,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       const input = event.target
       const file = input.files?.[0]
       if (!orderId || !file) return
+      if (isCrossTenantReadOnly) {
+        toast.error('This cross-region manufacturing view is read-only')
+        input.value = ''
+        return
+      }
 
       const key = `${stage}::${documentType}`
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
@@ -1591,7 +1762,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         input.value = ''
       }
     },
-    [order?.id, refreshAuditLogs, refreshDocuments]
+    [isCrossTenantReadOnly, order?.id, refreshAuditLogs, refreshDocuments]
   )
 
   const ensureSkusLoaded = useCallback(async () => {
@@ -1599,13 +1770,73 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
     try {
       setSkusLoading(true)
-      const response = await fetch('/api/skus')
+      const response = await fetch(withBasePath('/api/skus'), { credentials: 'include' })
       if (!response.ok) {
         setSkus([])
         return
       }
       const payload = await response.json().catch(() => null)
-      setSkus(Array.isArray(payload) ? (payload as SkuSummary[]) : [])
+      if (!Array.isArray(payload)) {
+        setSkus([])
+        return
+      }
+
+      const coerceString = (value: unknown): string | null => {
+        if (typeof value !== 'string') return null
+        const trimmed = value.trim()
+        return trimmed ? trimmed : null
+      }
+
+      const coercePositiveInt = (value: unknown): number | null => {
+        if (typeof value === 'number') {
+          return Number.isInteger(value) && value > 0 ? value : null
+        }
+        if (typeof value === 'string' && value.trim()) {
+          const parsed = Number(value.trim())
+          return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+        }
+        return null
+      }
+
+      const coercePositiveNumber = (value: unknown): number | null => {
+        if (typeof value === 'number') {
+          return Number.isFinite(value) && value > 0 ? value : null
+        }
+        if (typeof value === 'string' && value.trim()) {
+          const parsed = Number(value.trim())
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+        }
+        return null
+      }
+
+      const parsed = payload
+        .map((item): SkuSummary | null => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+          const record = item as Record<string, unknown>
+          const id = coerceString(record.id)
+          const skuCode = coerceString(record.skuCode)
+          const description = coerceString(record.description)
+          const unitsPerCarton = coercePositiveInt(record.unitsPerCarton)
+
+          if (!id || !skuCode || !description || !unitsPerCarton) return null
+
+          return {
+            id,
+            skuCode,
+            description,
+            unitsPerCarton,
+            material: coerceString(record.material),
+            cartonDimensionsCm: coerceString(record.cartonDimensionsCm),
+            cartonSide1Cm: coercePositiveNumber(record.cartonSide1Cm),
+            cartonSide2Cm: coercePositiveNumber(record.cartonSide2Cm),
+            cartonSide3Cm: coercePositiveNumber(record.cartonSide3Cm),
+            cartonWeightKg: coercePositiveNumber(record.cartonWeightKg),
+            packagingType: coerceString(record.packagingType),
+          }
+        })
+        .filter((value): value is SkuSummary => value !== null)
+
+      setSkus(parsed)
     } catch {
       setSkus([])
     } finally {
@@ -1626,7 +1857,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
     try {
       setSuppliersLoading(true)
-      const response = await fetch('/api/suppliers', { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include' })
       if (!response.ok) {
         setSuppliers([])
         return
@@ -1703,109 +1934,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     [suppliers]
   )
 
-  const ensureSkuBatchesLoaded = useCallback(
-    async (skuId: string) => {
-      if (!skuId) return
-      if (batchesBySkuId[skuId]) return
-      if (batchesLoadingBySkuId[skuId]) return
-
-      setBatchesLoadingBySkuId(prev => ({ ...prev, [skuId]: true }))
-      try {
-        const response = await fetch(`/api/skus/${encodeURIComponent(skuId)}/batches`, {
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          setBatchesBySkuId(prev => ({ ...prev, [skuId]: [] }))
-          return
-        }
-
-        const payload = await response.json().catch(() => null)
-        const batches = Array.isArray(payload?.batches) ? payload.batches : []
-        const coercePositiveInt = (value: unknown): number | null => {
-          if (typeof value === 'number') {
-            return Number.isInteger(value) && value > 0 ? value : null
-          }
-          if (typeof value === 'string' && value.trim()) {
-            const parsed = Number(value.trim())
-            return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-          }
-          return null
-        }
-        const coercePositiveNumber = (value: unknown): number | null => {
-          if (typeof value === 'number') {
-            return Number.isFinite(value) && value > 0 ? value : null
-          }
-          if (typeof value === 'string' && value.trim()) {
-            const parsed = Number(value.trim())
-            return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-          }
-          return null
-        }
-        const coerceString = (value: unknown): string | null => {
-          if (typeof value !== 'string') return null
-          const trimmed = value.trim()
-          return trimmed ? trimmed : null
-        }
-
-        const parsedBatches: BatchOption[] = batches
-          .map((batch: Record<string, unknown>): BatchOption | null => {
-            const batchCode = String(batch?.batchCode ?? '')
-              .trim()
-              .toUpperCase()
-            if (!batchCode || batchCode === 'DEFAULT') return null
-
-            return {
-              batchCode,
-              unitsPerCarton: coercePositiveInt(batch?.unitsPerCarton),
-              cartonDimensionsCm: coerceString(batch?.cartonDimensionsCm),
-              cartonSide1Cm: coercePositiveNumber(batch?.cartonSide1Cm),
-              cartonSide2Cm: coercePositiveNumber(batch?.cartonSide2Cm),
-              cartonSide3Cm: coercePositiveNumber(batch?.cartonSide3Cm),
-              cartonWeightKg: coercePositiveNumber(batch?.cartonWeightKg),
-              packagingType: (() => {
-                const raw = coerceString(batch?.packagingType)
-                return raw ? raw.toUpperCase() : null
-              })(),
-            }
-          })
-          .filter((batch): batch is BatchOption => Boolean(batch))
-
-        const unique = Array.from(
-          new Map(parsedBatches.map(batch => [batch.batchCode, batch])).values()
-        )
-
-        setBatchesBySkuId(prev => ({ ...prev, [skuId]: unique }))
-      } catch {
-        setBatchesBySkuId(prev => ({ ...prev, [skuId]: [] }))
-      } finally {
-        setBatchesLoadingBySkuId(prev => ({ ...prev, [skuId]: false }))
-      }
-    },
-    [batchesBySkuId, batchesLoadingBySkuId]
-  )
-
   useEffect(() => {
     if (!newLineDraft.skuId) return
-    const options = batchesBySkuId[newLineDraft.skuId]
-    if (!options || options.length === 0) return
-    if (
-      newLineDraft.batchLot &&
-      options.some(option => option.batchCode === newLineDraft.batchLot)
-    ) {
-      return
-    }
+    const sku = skus.find(candidate => candidate.id === newLineDraft.skuId)
+    if (!sku) return
 
     setNewLineDraft(prev => {
-      if (prev.skuId !== newLineDraft.skuId) return prev
-      const selected = options[0]
-      return {
-        ...prev,
-        batchLot: selected.batchCode,
-        unitsPerCarton: selected.unitsPerCarton ?? null,
-      }
+      if (prev.skuId !== sku.id) return prev
+      if (prev.unitsPerCarton && prev.unitsPerCarton > 0) return prev
+      return { ...prev, unitsPerCarton: sku.unitsPerCarton }
     })
-  }, [batchesBySkuId, newLineDraft.batchLot, newLineDraft.skuId])
+  }, [newLineDraft.skuId, skus])
 
   useEffect(() => {
     if (!addLineOpen) return
@@ -1868,7 +2007,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     const loadSplitGroup = async () => {
       try {
         setSplitGroupLoading(true)
-        const response = await fetch(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`)
+        const response = await fetch(
+          withBasePath(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`),
+          { credentials: 'include' }
+        )
         if (!response.ok) {
           setSplitGroupOrders([])
           return
@@ -1937,14 +2079,20 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (activeViewStage !== 'WAREHOUSE') return
 
     const wh = order.stageData.warehouse
+    const dutyAmount = wh?.dutyAmount
+    const normalizedDutyAmount = dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
+    const dutyCurrency = wh?.dutyCurrency
+    const normalizedDutyCurrency =
+      typeof dutyCurrency === 'string' && dutyCurrency.trim().length > 0 ? dutyCurrency : ''
+
     setReceiveFormData({
       warehouseCode: order.warehouseCode ?? '',
       receiveType: order.receiveType ?? '',
       customsEntryNumber: wh?.customsEntryNumber ?? '',
       customsClearedDate: formatDateOnly(wh?.customsClearedDate ?? null),
       receivedDate: formatDateOnly(wh?.receivedDate ?? null),
-      dutyAmount: wh?.dutyAmount != null ? String(wh.dutyAmount) : '',
-      dutyCurrency: wh?.dutyCurrency ?? '',
+      dutyAmount: normalizedDutyAmount,
+      dutyCurrency: normalizedDutyCurrency,
       discrepancyNotes: wh?.discrepancyNotes ?? '',
     })
   }, [activeViewStage, order])
@@ -2066,6 +2214,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     // Show confirmation dialog for cancel
     if (targetStatus === 'CANCELLED') {
@@ -2094,6 +2246,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const executeTransition = async (targetStatus: POStageStatus): Promise<boolean> => {
     if (!order || transitioning) return false
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return false
+    }
 
     try {
       setTransitioning(true)
@@ -2152,15 +2308,13 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
   const handleReceiveInventory = async () => {
     if (!order) return
     if (receivingInventory) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       setReceivingInventory(true)
-
-      const dutyAmount = receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null
-      if (receiveFormData.dutyAmount.trim().length > 0 && (!Number.isFinite(dutyAmount) || dutyAmount < 0)) {
-        toast.error('Duty amount must be a positive number')
-        return
-      }
 
       const lineReceipts = order.lines
         .filter(line => line.status !== 'CANCELLED')
@@ -2173,13 +2327,17 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          dutyAmount:
+            receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null,
+          dutyCurrency:
+            receiveFormData.dutyCurrency.trim().length > 0
+              ? receiveFormData.dutyCurrency.trim().toUpperCase()
+              : null,
           warehouseCode: receiveFormData.warehouseCode,
           receiveType: receiveFormData.receiveType,
           customsEntryNumber: receiveFormData.customsEntryNumber,
           customsClearedDate: receiveFormData.customsClearedDate,
           receivedDate: receiveFormData.receivedDate,
-          dutyAmount,
-          dutyCurrency: receiveFormData.dutyCurrency,
           discrepancyNotes: receiveFormData.discrepancyNotes,
           lineReceipts,
         }),
@@ -2270,14 +2428,16 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     productSubtotal +
     forwardingSubtotal +
     inboundSubtotal +
+    manualInboundSubtotal +
     storageSubtotal +
+    manualStorageSubtotal +
     dutySubtotal +
     supplierAdjustmentSubtotal
   const isTerminalStatus = order
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
   const isReceived = Boolean(order?.postedAt)
-  const isReadOnly = isTerminalStatus || isReceived
+  const isReadOnly = isCrossTenantReadOnly || isTerminalStatus || isReceived
   const canEdit = isCreate ? true : !isReadOnly && order?.status === 'RFQ'
   const canEditDispatchAllocation =
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
@@ -2355,6 +2515,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       setOrderInfoSaving(true)
@@ -2440,7 +2604,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	          lines: draftLines.map(line => ({
 	            skuCode: line.skuCode,
 	            skuDescription: line.skuDescription ? line.skuDescription : undefined,
-	            batchLot: line.batchLot!,
 	            piNumber: line.piNumber ? line.piNumber : undefined,
 	            commodityCode: line.commodityCode ? line.commodityCode : undefined,
 	            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
@@ -2497,6 +2660,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     try {
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
@@ -2524,12 +2691,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       return
     }
 
-    const batchLot = newLineDraft.batchLot.trim().toUpperCase()
-    if (!batchLot) {
-      toast.error('Please select a batch')
-      return
-    }
-
     const unitsOrdered = Number(newLineDraft.unitsOrdered)
     if (!Number.isInteger(unitsOrdered) || unitsOrdered <= 0) {
       toast.error('Please enter a valid units ordered value')
@@ -2545,24 +2706,22 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     if (isCreate) {
       const now = new Date().toISOString()
       const quantity = Math.ceil(unitsOrdered / unitsPerCarton)
-      const batchOptions = batchesBySkuId[newLineDraft.skuId] ?? []
-      const selectedBatch = batchOptions.find(option => option.batchCode === batchLot) ?? null
       const createdLine: PurchaseOrderLineSummary = {
         id: `draft-${now}-${Math.random().toString(36).slice(2, 9)}`,
         skuCode: selectedSku.skuCode,
         skuDescription: selectedSku.description,
-        batchLot,
+        lotRef: null,
         piNumber: null,
         commodityCode: null,
         countryOfOrigin: null,
         netWeightKg: null,
-        material: null,
-        cartonDimensionsCm: selectedBatch?.cartonDimensionsCm ?? null,
-        cartonSide1Cm: selectedBatch?.cartonSide1Cm ?? null,
-        cartonSide2Cm: selectedBatch?.cartonSide2Cm ?? null,
-        cartonSide3Cm: selectedBatch?.cartonSide3Cm ?? null,
-        cartonWeightKg: selectedBatch?.cartonWeightKg ?? null,
-        packagingType: selectedBatch?.packagingType ?? null,
+        material: selectedSku.material,
+        cartonDimensionsCm: selectedSku.cartonDimensionsCm,
+        cartonSide1Cm: toNullableNumber(selectedSku.cartonSide1Cm),
+        cartonSide2Cm: toNullableNumber(selectedSku.cartonSide2Cm),
+        cartonSide3Cm: toNullableNumber(selectedSku.cartonSide3Cm),
+        cartonWeightKg: toNullableNumber(selectedSku.cartonWeightKg),
+        packagingType: selectedSku.packagingType,
         unitsOrdered,
         unitsPerCarton,
         quantity,
@@ -2582,7 +2741,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setAddLineOpen(false)
       setNewLineDraft({
         skuId: '',
-        batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
         notes: '',
@@ -2591,6 +2749,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
     }
 
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('This cross-region manufacturing view is read-only')
+      return
+    }
 
     setAddLineSubmitting(true)
     try {
@@ -2600,7 +2762,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
         body: JSON.stringify({
           skuCode: selectedSku.skuCode,
           skuDescription: selectedSku.description,
-          batchLot,
           unitsOrdered,
           unitsPerCarton,
           currency: tenantCurrency,
@@ -2619,7 +2780,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       setAddLineOpen(false)
       setNewLineDraft({
         skuId: '',
-        batchLot: '',
         unitsOrdered: 1,
         unitsPerCarton: null,
         notes: '',
@@ -2634,6 +2794,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleDownloadPdf = async () => {
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('PDF generation is not available in cross-region read-only mode')
+      return
+    }
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/pdf`))
       if (!response.ok) {
@@ -2665,6 +2829,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 
   const handleDownloadShippingMarks = async () => {
     if (!order) return
+    if (isCrossTenantReadOnly) {
+      toast.error('Shipping marks generation is not available in cross-region read-only mode')
+      return
+    }
 
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`))
@@ -2755,6 +2923,11 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
       />
 	      <PageContent>
 	        <div className="flex flex-col gap-6">
+            {isCrossTenantReadOnly && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Cross-region manufacturing view ({crossTenantCode}) is read-only.
+              </div>
+            )}
 	          {/* Stage Progress Bar */}
 	          {(isCreate ||
 	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
@@ -2903,23 +3076,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                 )}
 	              </div>
 
-	              {order && order.status === 'WAREHOUSE' && (
-	                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 p-4">
-	                  <div>
-	                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-	                      Shipping is handled via Fulfillment Orders
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Create a fulfillment order (FO) to ship inventory out of this warehouse.
-                    </p>
-                  </div>
-                  <Button asChild variant="outline">
-                    <Link href="/operations/fulfillment-orders/new" prefetch={false}>
-                      Create Fulfillment Order
-                    </Link>
-                  </Button>
-                </div>
-              )}
             </div>
 	          )}
 
@@ -3170,7 +3326,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             SKU
                           </th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                            Batch
+                            Lot Ref
                           </th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
                             Units
@@ -3237,8 +3393,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
-                                  {line.batchLot ? line.batchLot : '—'}
+                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
@@ -3457,7 +3613,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           open: true,
                                           type: 'delete-line',
                                           title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this RFQ?`,
+                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this RFQ?`,
                                           lineId: line.id,
                                         })
                                       }
@@ -3482,12 +3638,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   setNewLineDraft(prev => ({
                                     ...prev,
                                     skuId,
-                                    batchLot: '',
                                     unitsOrdered: 1,
                                     unitsPerCarton: null,
                                     notes: '',
                                   }))
-                                  void ensureSkuBatchesLoaded(skuId)
                                 }}
                                 disabled={skusLoading || addLineSubmitting}
                                 className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
@@ -3500,41 +3654,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 ))}
                               </select>
                             </td>
-                            <td className="px-3 py-2 min-w-0">
-                              <select
-                                value={newLineDraft.batchLot}
-                                onChange={e => {
-                                  const batchLot = e.target.value
-                                  setNewLineDraft(prev => {
-                                    const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
-                                    const selected = batches.find(batch => batch.batchCode === batchLot)
-                                    return {
-                                      ...prev,
-                                      batchLot,
-                                      unitsPerCarton: selected?.unitsPerCarton ?? null,
-                                    }
-                                  })
-                                }}
-                                disabled={!newLineDraft.skuId || addLineSubmitting}
-                                className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
-                              >
-                                {!newLineDraft.skuId ? (
-                                  <option value="">—</option>
-                                ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
-                                  <option value="">Loading…</option>
-                                ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
-                                  <>
-                                    <option value="">Select</option>
-                                    {batchesBySkuId[newLineDraft.skuId].map(batch => (
-                                      <option key={batch.batchCode} value={batch.batchCode}>
-                                        {batch.batchCode}
-                                      </option>
-                                    ))}
-                                  </>
-                                ) : (
-                                  <option value="">No batches</option>
-                                )}
-                              </select>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              Auto
                             </td>
                             <td className="px-3 py-2">
                               <Input
@@ -3570,7 +3691,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                     })(),
                                   }))
                                 }
-                                disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                                disabled={!newLineDraft.skuId || addLineSubmitting}
                                 placeholder="—"
                                 className="h-7 w-20 px-2 py-0 text-xs text-right"
                               />
@@ -3592,7 +3713,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 onClick={() => void handleAddLineItem()}
                                 disabled={
                                   !newLineDraft.skuId ||
-                                  !newLineDraft.batchLot ||
                                   !newLineDraft.unitsPerCarton ||
                                   newLineDraft.unitsOrdered <= 0 ||
                                   addLineSubmitting
@@ -3656,7 +3776,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   {line.skuCode}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
-                                  {line.batchLot ? line.batchLot : '—'}
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </p>
                               </div>
                             </div>
@@ -4039,7 +4159,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             SKU
                           </th>
                           <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-                            Batch
+                            Lot Ref
                           </th>
                           <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
                             Units
@@ -4094,8 +4214,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.batchLot ? line.batchLot : undefined}>
-                                  {line.batchLot ? line.batchLot : '—'}
+                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </span>
                               </td>
                               <td className="px-3 py-2">
@@ -4203,7 +4323,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                           open: true,
                                           type: 'delete-line',
                                           title: 'Remove line item',
-                                          message: `Remove SKU ${line.skuCode} (${line.batchLot ? line.batchLot : '—'}) from this draft RFQ?`,
+                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this draft RFQ?`,
                                           lineId: line.id,
                                         })
                                       }
@@ -4227,12 +4347,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 setNewLineDraft(prev => ({
                                   ...prev,
                                   skuId,
-                                  batchLot: '',
                                   unitsOrdered: 1,
                                   unitsPerCarton: null,
                                   notes: '',
                                 }))
-                                void ensureSkuBatchesLoaded(skuId)
                               }}
                               disabled={skusLoading || addLineSubmitting}
                               className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
@@ -4245,42 +4363,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 min-w-0">
-                            <select
-                              value={newLineDraft.batchLot}
-                              onChange={e => {
-                                const batchLot = e.target.value
-                                setNewLineDraft(prev => {
-                                  const batches = prev.skuId ? (batchesBySkuId[prev.skuId] ?? []) : []
-                                  const selected = batches.find(batch => batch.batchCode === batchLot)
-                                  return {
-                                    ...prev,
-                                    batchLot,
-                                    unitsPerCarton: selected?.unitsPerCarton ?? null,
-                                  }
-                                })
-                              }}
-                              disabled={!newLineDraft.skuId || addLineSubmitting}
-                              className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs disabled:opacity-50"
-                            >
-                              {!newLineDraft.skuId ? (
-                                <option value="">—</option>
-                              ) : batchesLoadingBySkuId[newLineDraft.skuId] ? (
-                                <option value="">Loading…</option>
-                              ) : (batchesBySkuId[newLineDraft.skuId]?.length ?? 0) > 0 ? (
-                                <>
-                                  <option value="">Select</option>
-                                  {batchesBySkuId[newLineDraft.skuId].map(batch => (
-                                    <option key={batch.batchCode} value={batch.batchCode}>
-                                      {batch.batchCode}
-                                    </option>
-                                  ))}
-                                </>
-                              ) : (
-                                <option value="">No batches</option>
-                              )}
-                            </select>
-                          </td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">Auto</td>
                           <td className="px-3 py-2">
                             <Input
                               type="number"
@@ -4315,7 +4398,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   })(),
                                 }))
                               }
-                              disabled={!newLineDraft.skuId || !newLineDraft.batchLot || addLineSubmitting}
+                              disabled={!newLineDraft.skuId || addLineSubmitting}
                               placeholder="—"
                               className="h-7 w-20 px-2 py-0 text-xs text-right"
                             />
@@ -4335,7 +4418,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               onClick={() => void handleAddLineItem()}
                               disabled={
                                 !newLineDraft.skuId ||
-                                !newLineDraft.batchLot ||
                                 !newLineDraft.unitsPerCarton ||
                                 newLineDraft.unitsOrdered <= 0 ||
                                 addLineSubmitting
@@ -4386,7 +4468,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   {line.skuCode}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
-                                  {line.batchLot ? line.batchLot : '—'}
+                                  {line.lotRef ? line.lotRef : '—'}
                                 </p>
                               </div>
                             </div>
@@ -5156,7 +5238,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	                          <thead>
 	                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
 	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Cost</th>
 	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Target Total</th>
@@ -5179,9 +5261,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
 	                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
 	                                    <span
 	                                      className="block truncate"
-	                                      title={line.batchLot ? line.batchLot : undefined}
+	                                      title={line.lotRef ? line.lotRef : undefined}
 	                                    >
-	                                      {line.batchLot ? line.batchLot : '—'}
+	                                      {line.lotRef ? line.lotRef : '—'}
 	                                    </span>
 	                                  </td>
 	                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
@@ -5291,7 +5373,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           <thead>
                             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                               <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Batch</th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Unit Cost</th>
                               <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
@@ -5326,9 +5408,9 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                   <td className="px-3 py-2 text-muted-foreground min-w-0">
                                     <span
                                       className="block truncate"
-                                      title={line.batchLot ? line.batchLot : undefined}
+                                      title={line.lotRef ? line.lotRef : undefined}
                                     >
-                                      {line.batchLot ? line.batchLot : '—'}
+                                      {line.lotRef ? line.lotRef : '—'}
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
@@ -5513,8 +5595,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
                                   {costLedgerLoading
                                     ? 'Loading…'
-                                    : inboundSubtotal > 0
-                                      ? `${tenantCurrency} ${inboundSubtotal.toLocaleString(undefined, {
+                                    : (inboundSubtotal + manualInboundSubtotal) > 0
+                                      ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         })}`
@@ -5522,27 +5604,43 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 </p>
                               </div>
 
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => setInboundBreakdownOpen(prev => !prev)}
-                              >
-                                {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {warehouseCostEditing !== 'inbound' && !isCrossTenantReadOnly && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => {
+                                      setInboundBreakdownOpen(true)
+                                      setWarehouseCostEditing('inbound')
+                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                    }}
+                                    disabled={
+                                      warehouseCostSaving ||
+                                      !order.warehouseCode ||
+                                      !order.warehouseName
+                                    }
+                                  >
+                                    + Add Cost
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => setInboundBreakdownOpen(prev => !prev)}
+                                >
+                                  {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
+                                </Button>
+                              </div>
                             </div>
 
                             {inboundBreakdownOpen ? (
-                              costLedgerLoading ? (
+                              costLedgerLoading && manualWarehouseCostsLoading ? (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                                   <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
-                                </div>
-                              ) : inboundCostRows.length === 0 ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">
-                                    No inbound costs found for this receipt.
-                                  </p>
                                 </div>
                               ) : (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -5552,9 +5650,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
                                           Cost
                                         </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
                                           Total
                                         </th>
+                                        <th className="w-16" />
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -5573,8 +5672,127 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                               maximumFractionDigits: 2,
                                             })}
                                           </td>
+                                          <td />
                                         </tr>
                                       ))}
+                                      {manualInboundCosts.map(entry => (
+                                        <tr
+                                          key={entry.id}
+                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                        >
+                                          <td className="px-3 py-2 font-medium text-foreground">
+                                            {entry.costName}
+                                            {entry.notes && (
+                                              <span className="ml-2 text-xs text-muted-foreground">
+                                                ({entry.notes})
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                            {entry.currency}{' '}
+                                            {entry.amount.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}
+                                          </td>
+                                          <td className="px-1 py-2 text-center">
+                                            {!isCrossTenantReadOnly && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                onClick={() => void deleteWarehouseCost(entry.id)}
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </Button>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && warehouseCostEditing !== 'inbound' && (
+                                        <tr>
+                                          <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
+                                            No inbound costs recorded.
+                                          </td>
+                                        </tr>
+                                      )}
+                                      {warehouseCostEditing === 'inbound' && (
+                                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                          <td className="px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                              <Input
+                                                value={warehouseCostDraft.costName}
+                                                onChange={e =>
+                                                  setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))
+                                                }
+                                                disabled={warehouseCostSaving}
+                                                placeholder="Cost name"
+                                                className="h-8 text-sm"
+                                              />
+                                              <Input
+                                                value={warehouseCostDraft.notes}
+                                                onChange={e =>
+                                                  setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))
+                                                }
+                                                disabled={warehouseCostSaving}
+                                                placeholder="Notes"
+                                                className="h-8 text-sm"
+                                              />
+                                            </div>
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            <Input
+                                              type="number"
+                                              inputMode="decimal"
+                                              min="0"
+                                              step="0.01"
+                                              value={warehouseCostDraft.amount}
+                                              onChange={e =>
+                                                setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))
+                                              }
+                                              disabled={warehouseCostSaving}
+                                              placeholder="0.00"
+                                              className="h-8 text-sm text-right"
+                                            />
+                                          </td>
+                                          <td className="px-1 py-2">
+                                            <div className="flex items-center gap-1">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                onClick={() => {
+                                                  setWarehouseCostEditing(null)
+                                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                                }}
+                                                disabled={warehouseCostSaving}
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                                onClick={() => void saveWarehouseCost('Inbound')}
+                                                disabled={
+                                                  warehouseCostSaving ||
+                                                  !warehouseCostDraft.costName.trim() ||
+                                                  !warehouseCostDraft.amount.trim()
+                                                }
+                                              >
+                                                {warehouseCostSaving ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
                                     </tbody>
                                   </table>
                                 </div>
@@ -5591,8 +5809,8 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
                                   {costLedgerLoading
                                     ? 'Loading…'
-                                    : storageSubtotal > 0
-                                      ? `${tenantCurrency} ${storageSubtotal.toLocaleString(undefined, {
+                                    : (storageSubtotal + manualStorageSubtotal) > 0
+                                      ? `${tenantCurrency} ${(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
                                         })}`
@@ -5600,25 +5818,43 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 </p>
                               </div>
 
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => setStorageBreakdownOpen(prev => !prev)}
-                              >
-                                {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {warehouseCostEditing !== 'storage' && !isCrossTenantReadOnly && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => {
+                                      setStorageBreakdownOpen(true)
+                                      setWarehouseCostEditing('storage')
+                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                    }}
+                                    disabled={
+                                      warehouseCostSaving ||
+                                      !order.warehouseCode ||
+                                      !order.warehouseName
+                                    }
+                                  >
+                                    + Add Cost
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => setStorageBreakdownOpen(prev => !prev)}
+                                >
+                                  {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
+                                </Button>
+                              </div>
                             </div>
 
                             {storageBreakdownOpen ? (
-                              costLedgerLoading ? (
+                              costLedgerLoading && manualWarehouseCostsLoading ? (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
                                   <p className="text-sm text-muted-foreground">Loading storage costs…</p>
-                                </div>
-                              ) : storageCostRows.length === 0 ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">No storage costs recorded.</p>
                                 </div>
                               ) : (
                                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -5628,9 +5864,10 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                         <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
                                           Cost
                                         </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
                                           Total
                                         </th>
+                                        <th className="w-16" />
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -5649,8 +5886,127 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                               maximumFractionDigits: 2,
                                             })}
                                           </td>
+                                          <td />
                                         </tr>
                                       ))}
+                                      {manualStorageCosts.map(entry => (
+                                        <tr
+                                          key={entry.id}
+                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                        >
+                                          <td className="px-3 py-2 font-medium text-foreground">
+                                            {entry.costName}
+                                            {entry.notes && (
+                                              <span className="ml-2 text-xs text-muted-foreground">
+                                                ({entry.notes})
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                            {entry.currency}{' '}
+                                            {entry.amount.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })}
+                                          </td>
+                                          <td className="px-1 py-2 text-center">
+                                            {!isCrossTenantReadOnly && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                                onClick={() => void deleteWarehouseCost(entry.id)}
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </Button>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      {storageCostRows.length === 0 && manualStorageCosts.length === 0 && warehouseCostEditing !== 'storage' && (
+                                        <tr>
+                                          <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
+                                            No storage costs recorded.
+                                          </td>
+                                        </tr>
+                                      )}
+                                      {warehouseCostEditing === 'storage' && (
+                                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                          <td className="px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                              <Input
+                                                value={warehouseCostDraft.costName}
+                                                onChange={e =>
+                                                  setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))
+                                                }
+                                                disabled={warehouseCostSaving}
+                                                placeholder="Cost name"
+                                                className="h-8 text-sm"
+                                              />
+                                              <Input
+                                                value={warehouseCostDraft.notes}
+                                                onChange={e =>
+                                                  setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))
+                                                }
+                                                disabled={warehouseCostSaving}
+                                                placeholder="Notes"
+                                                className="h-8 text-sm"
+                                              />
+                                            </div>
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            <Input
+                                              type="number"
+                                              inputMode="decimal"
+                                              min="0"
+                                              step="0.01"
+                                              value={warehouseCostDraft.amount}
+                                              onChange={e =>
+                                                setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))
+                                              }
+                                              disabled={warehouseCostSaving}
+                                              placeholder="0.00"
+                                              className="h-8 text-sm text-right"
+                                            />
+                                          </td>
+                                          <td className="px-1 py-2">
+                                            <div className="flex items-center gap-1">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                                onClick={() => {
+                                                  setWarehouseCostEditing(null)
+                                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                                }}
+                                                disabled={warehouseCostSaving}
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                                onClick={() => void saveWarehouseCost('Storage')}
+                                                disabled={
+                                                  warehouseCostSaving ||
+                                                  !warehouseCostDraft.costName.trim() ||
+                                                  !warehouseCostDraft.amount.trim()
+                                                }
+                                              >
+                                                {warehouseCostSaving ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
                                     </tbody>
                                   </table>
                                 </div>
@@ -5659,207 +6015,187 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                           </div>
                         </div>
 
-	                {/* Supplier Credit/Debit Section */}
-	                {showWarehouseCostsStage && (
-	                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-	                    <div className="flex items-start justify-between gap-3">
-	                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-	                        Supplier Credit/Debit
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        {!supplierAdjustmentEditing && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSupplierAdjustmentOpen(true)
-                              setSupplierAdjustmentEditing(true)
-                            }}
-                            disabled={
-                              supplierAdjustmentLoading ||
-                              supplierAdjustmentSaving ||
-                              !order.warehouseCode ||
-                              !order.warehouseName
-                            }
-                          >
-                            {supplierAdjustment ? 'Edit' : 'Add'}
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
-                          disabled={supplierAdjustmentLoading}
-                        >
-                          {supplierAdjustmentOpen ? 'Hide' : 'Details'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                      {supplierAdjustmentLoading
-                        ? 'Loading…'
-                        : supplierAdjustment
-                          ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}`
-                          : '—'}
-                    </p>
-
-                    {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
-                      supplierAdjustmentLoading ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
-                      </div>
-                    ) : !order.warehouseCode || !order.warehouseName ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">
-                          Supplier credits/debits are recorded after the PO is received at warehouse.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-4">
-                        {supplierAdjustment ? (
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Type
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.currency}{' '}
-                                {supplierAdjustment.amount.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Updated
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatDateOnly(supplierAdjustment.effectiveAt)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Updated By
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {supplierAdjustment.createdByName}
-                              </p>
-                            </div>
-                            <div className="space-y-1 col-span-2 md:col-span-4">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Notes
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {supplierAdjustment.notes ? supplierAdjustment.notes : '—'}
-                              </p>
-                            </div>
+                    {/* Supplier Credit/Debit Section */}
+                    {showWarehouseCostsStage && (
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Supplier Credit/Debit
+                            </h4>
+                            <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                              {supplierAdjustmentLoading
+                                ? 'Loading…'
+                                : supplierAdjustment
+                                  ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}`
+                                  : '—'}
+                            </p>
                           </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No supplier adjustment recorded.</p>
-                        )}
-
-                        {supplierAdjustmentEditing && (
-                          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Kind
-                                </p>
-                                <select
-                                  value={supplierAdjustmentDraft.kind}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      kind: e.target.value as 'credit' | 'debit',
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                  className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                >
-                                  <option value="credit">Credit</option>
-                                  <option value="debit">Debit</option>
-                                </select>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Amount ({tenantCurrency})
-                                </p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.01"
-                                  value={supplierAdjustmentDraft.amount}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      amount: e.target.value,
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                />
-                              </div>
-                              <div className="space-y-1 col-span-2 md:col-span-4">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Notes
-                                </p>
-                                <Input
-                                  value={supplierAdjustmentDraft.notes}
-                                  onChange={e =>
-                                    setSupplierAdjustmentDraft(prev => ({
-                                      ...prev,
-                                      notes: e.target.value,
-                                    }))
-                                  }
-                                  disabled={supplierAdjustmentSaving}
-                                  placeholder="Optional notes"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-end gap-2 mt-4">
+                          <div className="flex items-center gap-1">
+                            {!supplierAdjustmentEditing && !isCrossTenantReadOnly && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setSupplierAdjustmentEditing(false)}
-                                disabled={supplierAdjustmentSaving}
+                                className="h-8 px-2 text-xs"
+                                onClick={() => {
+                                  setSupplierAdjustmentOpen(true)
+                                  setSupplierAdjustmentEditing(true)
+                                }}
+                                disabled={
+                                  supplierAdjustmentLoading ||
+                                  supplierAdjustmentSaving ||
+                                  !order.warehouseCode ||
+                                  !order.warehouseName
+                                }
                               >
-                                Cancel
+                                {supplierAdjustment ? 'Edit' : 'Add'}
                               </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => void saveSupplierAdjustment()}
-                                disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
-                                className="gap-2"
-                              >
-                                {supplierAdjustmentSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                                Save
-                              </Button>
-                            </div>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
+                              disabled={supplierAdjustmentLoading}
+                            >
+                              {supplierAdjustmentOpen ? 'Hide' : 'Details'}
+                            </Button>
                           </div>
-                        )}
+                        </div>
+
+                        {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
+                          supplierAdjustmentLoading ? (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                              <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                      Type
+                                    </th>
+                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
+                                      Amount
+                                    </th>
+                                    <th className="w-16" />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {supplierAdjustment && !supplierAdjustmentEditing && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">
+                                        {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
+                                        {supplierAdjustment.notes && (
+                                          <span className="ml-2 text-xs text-muted-foreground">
+                                            ({supplierAdjustment.notes})
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {supplierAdjustment.currency}{' '}
+                                        {supplierAdjustment.amount.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  {!supplierAdjustment && !supplierAdjustmentEditing && (
+                                    <tr>
+                                      <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
+                                        No supplier adjustment recorded.
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {supplierAdjustmentEditing && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={supplierAdjustmentDraft.kind}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({
+                                                ...prev,
+                                                kind: e.target.value as 'credit' | 'debit',
+                                              }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                          >
+                                            <option value="credit">Credit</option>
+                                            <option value="debit">Debit</option>
+                                          </select>
+                                          <Input
+                                            value={supplierAdjustmentDraft.notes}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({ ...prev, notes: e.target.value }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            placeholder="Notes"
+                                            className="h-8 text-sm"
+                                          />
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          value={supplierAdjustmentDraft.amount}
+                                          onChange={e =>
+                                            setSupplierAdjustmentDraft(prev => ({ ...prev, amount: e.target.value }))
+                                          }
+                                          disabled={supplierAdjustmentSaving}
+                                          placeholder="0.00"
+                                          className="h-8 text-sm text-right"
+                                        />
+                                      </td>
+                                      <td className="px-1 py-2">
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setSupplierAdjustmentEditing(false)}
+                                            disabled={supplierAdjustmentSaving}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                            onClick={() => void saveSupplierAdjustment()}
+                                            disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
+                                          >
+                                            {supplierAdjustmentSaving ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <Check className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        ) : null}
                       </div>
-                    )
-                    ) : null}
-                  </div>
-                )}
+                    )}
 
                 {showWarehouseCostsStage && (
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
@@ -5914,24 +6250,24 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                                 </td>
                               </tr>
                             )}
-                            {inboundSubtotal > 0 && (
+                            {(inboundSubtotal + manualInboundSubtotal) > 0 && (
                               <tr className="border-b border-slate-200 dark:border-slate-700">
                                 <td className="px-3 py-2 text-muted-foreground">Inbound</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-medium">
                                   {tenantCurrency}{' '}
-                                  {inboundSubtotal.toLocaleString(undefined, {
+                                  {(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
                                 </td>
                               </tr>
                             )}
-                            {storageSubtotal > 0 && (
+                            {(storageSubtotal + manualStorageSubtotal) > 0 && (
                               <tr className="border-b border-slate-200 dark:border-slate-700">
                                 <td className="px-3 py-2 text-muted-foreground">Storage</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-medium">
                                   {tenantCurrency}{' '}
-                                  {storageSubtotal.toLocaleString(undefined, {
+                                  {(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
@@ -6424,9 +6760,14 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                           Supplier Banking
                         </p>
-                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">
-                          {formatTextOrDash(order.supplier?.bankingDetails)}
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {order.supplier?.bankingDetails?.trim() ? 'Configured' : 'Not configured'}
                         </p>
+                        {!order.supplier?.bankingDetails?.trim() && (
+                          <p className="text-xs text-muted-foreground">
+                            Set supplier banking details in Suppliers.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -6582,7 +6923,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   )
                 })()}
 
-                {/* In Transit Section */}
+                {/* Transit Section */}
                 {(() => {
                   if (activeViewStage !== 'OCEAN') return null
                   const ocean = order.stageData.ocean
@@ -6594,7 +6935,7 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        In Transit
+                        Transit
                       </h4>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">
@@ -6964,35 +7305,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                             )}
                           </div>
 
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Duty Amount (optional)
-                            </p>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={receiveFormData.dutyAmount}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, dutyAmount: e.target.value }))
-                              }
-                              placeholder="0.00"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Duty Currency (optional)
-                            </p>
-                            <Input
-                              value={receiveFormData.dutyCurrency}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, dutyCurrency: e.target.value }))
-                              }
-                              placeholder="USD"
-                            />
-                          </div>
-
                           <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4" data-gate-key="details.discrepancyNotes">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                               Discrepancy Notes
@@ -7041,16 +7353,6 @@ export function PurchaseOrderFlow(props: { mode: PurchaseOrderFlowMode; orderId?
                               </p>
                               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {formatTextOrDash(formatDateOnly(wh?.customsClearedDate ?? null))}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Duty Amount
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {wh?.dutyAmount != null
-                                  ? `${wh.dutyAmount.toLocaleString()} ${wh.dutyCurrency ?? ''}`
-                                  : '—'}
                               </p>
                             </div>
                             <div className="space-y-1">

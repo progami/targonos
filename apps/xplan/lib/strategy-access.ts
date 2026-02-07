@@ -59,12 +59,18 @@ export function isStrategyAssignmentFieldsMissingError(error: unknown) {
     return true;
   }
 
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {
+    return true;
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   return (
     message.includes('createdById') ||
     message.includes('createdByEmail') ||
     message.includes('assigneeId') ||
-    message.includes('assigneeEmail')
+    message.includes('assigneeEmail') ||
+    message.includes('strategyAssignees') ||
+    message.includes('StrategyAssignee')
   );
 }
 
@@ -94,10 +100,18 @@ export function buildStrategyAccessWhere(actor: StrategyActor) {
 
   const or: Array<Record<string, unknown>> = [];
   if (actor.id) {
-    or.push({ createdById: actor.id }, { assigneeId: actor.id });
+    or.push(
+      { createdById: actor.id },
+      { assigneeId: actor.id },
+      { strategyAssignees: { some: { assigneeId: actor.id } } },
+    );
   }
   if (actor.email) {
-    or.push({ createdByEmail: actor.email }, { assigneeEmail: actor.email });
+    or.push(
+      { createdByEmail: actor.email },
+      { assigneeEmail: actor.email },
+      { strategyAssignees: { some: { assigneeEmail: actor.email } } },
+    );
   }
 
   if (or.length === 0) {

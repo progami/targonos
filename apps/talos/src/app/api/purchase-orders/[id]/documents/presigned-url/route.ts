@@ -153,9 +153,9 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     )
 
     // Browsers cannot PUT directly to our S3 bucket (CORS). Return a same-origin upload URL that
-    // proxies the PUT through our API so older clients keep working.
-    const origin = request.nextUrl.origin
-    const uploadUrl = `${origin}/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
+    // proxies the PUT through our API. Keep this URL relative so the client can apply its base
+    // path logic (e.g. /talos) consistently even when the server environment lacks BASE_PATH.
+    const uploadUrl = `/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
       s3Key
     )}&stage=${encodeURIComponent(stage)}&documentType=${encodeURIComponent(
       documentType

@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { OpsPlanningWorkspace } from '@/components/sheets/ops-planning-workspace';
-import { ProductSetupWorkspace } from '@/components/sheets/product-setup-workspace';
-import { StrategiesWorkspace } from '@/components/sheets/strategies-workspace';
+import { SetupWorkspace } from '@/components/sheets/setup-workspace';
 import {
   SalesPlanningGrid,
   SalesPlanningFocusControl,
@@ -2186,11 +2185,11 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   const resolvedStrategyId = await resolveStrategyId(parsedSearch.strategy, actor);
 
   if (!resolvedStrategyId) {
-    if (config.slug !== '1-strategies') {
+    if (config.slug !== '1-setup') {
       const nextParams = toQueryString(parsedSearch);
       nextParams.delete('strategy');
       const query = nextParams.toString();
-      redirect(`/1-strategies${query ? `?${query}` : ''}`);
+      redirect(`/1-setup${query ? `?${query}` : ''}`);
     }
   } else if (requestedStrategyId && requestedStrategyId !== resolvedStrategyId) {
     const nextParams = toQueryString(parsedSearch);
@@ -2266,7 +2265,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   );
 
   switch (config.slug) {
-    case '1-strategies': {
+    case '1-setup': {
       // Type assertion for strategy model (Prisma types are generated but not resolved correctly at build time)
       const prismaAnyLocal = prisma as unknown as Record<string, any>;
 
@@ -2289,6 +2288,14 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyAssignees: {
+          select: {
+            id: true,
+            assigneeId: true,
+            assigneeEmail: true,
+          },
+          orderBy: { assigneeEmail: 'asc' },
+        },
         createdAt: true,
         updatedAt: true,
         _count: { select: countsSelect },
@@ -2345,6 +2352,11 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: string | null;
         assigneeId: string | null;
         assigneeEmail: string | null;
+        strategyAssignees: Array<{
+          id: string;
+          assigneeId: string;
+          assigneeEmail: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         _count: {
@@ -2365,33 +2377,27 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: s.createdByEmail ?? null,
         assigneeId: s.assigneeId ?? null,
         assigneeEmail: s.assigneeEmail ?? null,
+        strategyAssignees: Array.isArray(s.strategyAssignees) ? s.strategyAssignees : [],
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
         _count: s._count,
       }));
+
+      const productSetupView = strategyId
+        ? await getProductSetupView(strategyId)
+        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [] };
+
       tabularContent = (
-        <StrategiesWorkspace
+        <SetupWorkspace
           strategies={strategies}
           activeStrategyId={resolvedStrategyId}
           viewer={viewer}
+          products={productSetupView.products}
+          operationsParameters={productSetupView.operationsParameters}
+          salesParameters={productSetupView.salesParameters}
+          financeParameters={productSetupView.financeParameters}
         />
       );
-      visualContent = null;
-      break;
-    }
-    case '2-product-setup': {
-      const activeStrategyId = requireStrategyId();
-      const view = await getProductSetupView(activeStrategyId);
-      tabularContent = (
-        <ProductSetupWorkspace
-          strategyId={activeStrategyId}
-          products={view.products}
-          operationsParameters={view.operationsParameters}
-          salesParameters={view.salesParameters}
-          financeParameters={view.financeParameters}
-        />
-      );
-      // Product setup doesn't need visual mode
       visualContent = null;
       break;
     }

@@ -18,6 +18,16 @@ import { NotFoundError, ValidationError, ConflictError } from '@/lib/api'
 import { canApproveStageTransition, hasPermission, isSuperAdmin } from './permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
 import { toPublicOrderNumber } from './purchase-order-utils'
+import {
+  buildCommercialInvoiceReference,
+  buildLotReference,
+  buildPurchaseOrderReference,
+  getNextCommercialInvoiceSequence,
+  getNextPurchaseOrderSequence,
+  normalizeSkuGroup,
+  parseOrderReference,
+  resolveOrderReferenceSeed,
+} from './supply-chain-reference-service'
 import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
@@ -456,6 +466,37 @@ async function requireDocuments(params: {
   }
 }
 
+async function requireLinePiDocuments(params: {
+  prisma: Prisma.TransactionClient
+  purchaseOrderId: string
+  activeLines: PurchaseOrderLine[]
+  issues: Record<string, string>
+}) {
+  const piNumbers: string[] = []
+  for (const line of params.activeLines) {
+    const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
+    if (!piNumber) {
+      recordGateIssue(params.issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
+      continue
+    }
+    piNumbers.push(piNumber)
+  }
+
+  const uniquePiNumbers = Array.from(new Set(piNumbers))
+  if (uniquePiNumbers.length === 0) return
+
+  const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
+  await requireDocuments({
+    prisma: params.prisma,
+    purchaseOrderId: params.purchaseOrderId,
+    stage: PurchaseOrderDocumentStage.ISSUED,
+    documentTypes: requiredDocTypes,
+    issues: params.issues,
+    issueKeyPrefix: 'documents.pi',
+    issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
+  })
+}
+
 function validateCommodityCodeFormat(params: { tenantCode: string; commodityCode: string }): boolean {
   const digits = params.commodityCode.replace(/[^0-9]/g, '')
   if (digits.length < 6) return false
@@ -614,29 +655,12 @@ async function validateTransitionGate(params: {
       supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
     }
 
-    const piNumbers: string[] = []
-    for (const line of activeLines) {
-      const piNumber = typeof line.piNumber === 'string' ? normalizePiNumber(line.piNumber) : ''
-      if (!piNumber) {
-        recordGateIssue(issues, `cargo.lines.${line.id}.piNumber`, 'PI number is required')
-      } else {
-        piNumbers.push(piNumber)
-      }
-    }
-
-    const uniquePiNumbers = Array.from(new Set(piNumbers))
-    if (uniquePiNumbers.length > 0) {
-      const requiredDocTypes = uniquePiNumbers.map(piNumber => buildPiDocumentType(piNumber))
-      await requireDocuments({
-        prisma: params.prisma,
-        purchaseOrderId: params.order.id,
-        stage: PurchaseOrderDocumentStage.ISSUED,
-        documentTypes: requiredDocTypes,
-        issues,
-        issueKeyPrefix: 'documents.pi',
-        issueLabel: (docType) => `PI document (${docType.replace(/^pi_/, '').toUpperCase()})`,
-      })
-    }
+    await requireLinePiDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      activeLines,
+      issues,
+    })
 
     for (const line of activeLines) {
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
@@ -689,6 +713,13 @@ async function validateTransitionGate(params: {
   }
 
   if (params.targetStatus === PurchaseOrderStatus.OCEAN) {
+    await requireLinePiDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      activeLines,
+      issues,
+    })
+
     const allocationRows = Array.isArray(params.stageData.splitAllocations)
       ? params.stageData.splitAllocations
       : null
@@ -1127,46 +1158,18 @@ async function computeManufacturingCargoTotals(
 }
 
 /**
- * Generate the next order number in sequence (TG-<Country>-<number> format)
- * Used as RFQ number in RFQ and becomes PO number at ISSUED.
- *
- * Format: TG-US-2601, TG-US-2602, etc. for US tenant
- *         TG-UK-2601, TG-UK-2602, etc. for UK tenant
- *
- * Starting number: 2601
+ * Generate the next PO reference in sequence.
+ * Format: PO-<number>-<SKU_GROUP>
  */
-export async function generateOrderNumber(): Promise<string> {
+export async function generateOrderNumber(skuGroup: string): Promise<string> {
   const prisma = await getTenantPrisma()
-
-  const tenant = await getCurrentTenant()
-  const prefix = `TG-${tenant.code}-`
-  const startingNumber = 2601
-
-  const lastOrderRows = await prisma.$queryRaw<{ order_number: string | null }[]>`
-    SELECT order_number
-    FROM purchase_orders
-    WHERE order_number LIKE ${`${prefix}%`}
-    ORDER BY CAST(substring(order_number FROM '\\d+$') AS bigint) DESC
-    LIMIT 1
-  `
-
-  const lastOrderNumber = lastOrderRows.length > 0 ? lastOrderRows[0]?.order_number : null
-
-  let nextNumber = startingNumber
-  if (typeof lastOrderNumber === 'string') {
-    const match = lastOrderNumber.match(new RegExp(`^${prefix}(\\d+)$`))
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1
-    }
-  }
-
-  return `${prefix}${nextNumber}`
+  const nextSequence = await getNextPurchaseOrderSequence(prisma, skuGroup)
+  return buildPurchaseOrderReference(nextSequence, skuGroup)
 }
 
 export interface CreatePurchaseOrderLineInput {
   skuCode: string
   skuDescription?: string
-  batchLot: string
   piNumber?: string
   commodityCode?: string
   countryOfOrigin?: string
@@ -1203,6 +1206,7 @@ export async function createPurchaseOrder(
     select: {
       id: true
       skuCode: true
+      skuGroup: true
       description: true
       cartonDimensionsCm: true
       cartonSide1Cm: true
@@ -1213,22 +1217,8 @@ export async function createPurchaseOrder(
     }
   }>
 
-  type LineBatchRecord = Prisma.SkuBatchGetPayload<{
-    select: {
-      skuId: true
-      batchCode: true
-      cartonDimensionsCm: true
-      cartonSide1Cm: true
-      cartonSide2Cm: true
-      cartonSide3Cm: true
-      cartonWeightKg: true
-      packagingType: true
-      storageCartonsPerPallet: true
-      shippingCartonsPerPallet: true
-    }
-  }>
-
   let skuRecordsForLines: LineSkuRecord[] = []
+  let orderSkuGroup: string | null = null
 
   const computeCartonsOrdered = (line: {
     skuCode: string
@@ -1286,7 +1276,6 @@ export async function createPurchaseOrder(
     const normalizedLines = input.lines.map(line => ({
       ...line,
       skuCode: line.skuCode.trim(),
-      batchLot: line.batchLot?.trim() ? line.batchLot.trim().toUpperCase() : undefined,
     }))
 
     const keySet = new Set<string>()
@@ -1295,17 +1284,13 @@ export async function createPurchaseOrder(
         throw new ValidationError('SKU code is required for all line items')
       }
 
-      const key = `${line.skuCode.toLowerCase()}::${line.batchLot?.trim().toUpperCase()}`
+      const key = line.skuCode.toLowerCase()
       if (keySet.has(key)) {
         throw new ValidationError(
-          `Duplicate SKU/batch line detected: ${line.skuCode} ${line.batchLot}. Combine quantities into a single line.`
+          `Duplicate SKU line detected: ${line.skuCode}. Combine quantities into a single line.`
         )
       }
       keySet.add(key)
-
-      if (!line.batchLot || line.batchLot === 'DEFAULT') {
-        throw new ValidationError(`Batch is required for SKU ${line.skuCode}`)
-      }
 
       if (typeof line.currency !== 'string' || line.currency.trim().length === 0) {
         throw new ValidationError(`Currency is required for SKU ${line.skuCode}`)
@@ -1324,6 +1309,7 @@ export async function createPurchaseOrder(
       select: {
         id: true,
         skuCode: true,
+        skuGroup: true,
         description: true,
         cartonDimensionsCm: true,
         cartonSide1Cm: true,
@@ -1341,6 +1327,26 @@ export async function createPurchaseOrder(
       }
     }
 
+    const skuGroups = new Set<string>()
+    for (const skuRecord of skus) {
+      if (typeof skuRecord.skuGroup !== 'string' || skuRecord.skuGroup.trim().length === 0) {
+        throw new ValidationError(
+          `SKU ${skuRecord.skuCode} is missing SKU group. Set SKU group in Config → Products before creating this PO.`
+        )
+      }
+      skuGroups.add(normalizeSkuGroup(skuRecord.skuGroup))
+    }
+
+    if (skuGroups.size !== 1) {
+      throw new ValidationError('All SKUs in a purchase order must share one SKU group')
+    }
+
+    const [resolvedSkuGroup] = Array.from(skuGroups)
+    if (!resolvedSkuGroup) {
+      throw new ValidationError('SKU group is required')
+    }
+    orderSkuGroup = resolvedSkuGroup
+
     input.lines = normalizedLines
     skuRecordsForLines = skus
   }
@@ -1348,8 +1354,16 @@ export async function createPurchaseOrder(
   const MAX_ORDER_NUMBER_ATTEMPTS = 5
   let order: PurchaseOrderWithLines | null = null
 
+  if (!orderSkuGroup) {
+    throw new ValidationError('SKU group is required')
+  }
+
   for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt += 1) {
-    const orderNumber = await generateOrderNumber()
+    const orderNumber = await generateOrderNumber(orderSkuGroup)
+    const generatedOrderReference = parseOrderReference(orderNumber)
+    if (!generatedOrderReference) {
+      throw new ValidationError('Unable to generate a valid PO reference')
+    }
 
 	    try {
 	      order = await prisma.$transaction(async tx => {
@@ -1362,81 +1376,17 @@ export async function createPurchaseOrder(
 	              `Supplier ${counterpartyName} not found. Create it in Config → Suppliers first.`
 	            )
 	          }
-	          const counterpartyNameCanonical = supplier.name
-	          const counterpartyAddress = supplier.address ?? null
+          const counterpartyNameCanonical = supplier.name
+          const counterpartyAddress = supplier.address ?? null
 
           const skuByCode = new Map(skuRecordsForLines.map(sku => [sku.skuCode.toLowerCase(), sku]))
-          const batchByKey = new Map<string, LineBatchRecord>()
 
-	        if (input.lines && input.lines.length > 0) {
-	          const requiredCombos: Array<{ skuId: string; skuCode: string; batchCode: string }> = []
-	          const requiredKeySet = new Set<string>()
-
-	          for (const line of input.lines) {
-	            const skuRecord = skuByCode.get(line.skuCode.trim().toLowerCase())
-	            if (!skuRecord) continue
-
-	            const batchCode = line.batchLot?.trim().toUpperCase() ?? ''
-	            if (!batchCode || batchCode === 'DEFAULT') {
-	              throw new ValidationError(`Batch is required for SKU ${skuRecord.skuCode}`)
-	            }
-
-	            const key = `${skuRecord.id}::${batchCode}`
-	            if (requiredKeySet.has(key)) continue
-	            requiredKeySet.add(key)
-
-	            requiredCombos.push({
-	              skuId: skuRecord.id,
-	              skuCode: skuRecord.skuCode,
-	              batchCode,
-	            })
-	          }
-
-	          if (requiredCombos.length > 0) {
-	            const existing = await tx.skuBatch.findMany({
-	              where: {
-	                OR: requiredCombos.map(combo => ({
-	                  skuId: combo.skuId,
-	                  batchCode: { equals: combo.batchCode, mode: 'insensitive' },
-	                })),
-	              },
-	              select: {
-                  skuId: true,
-                  batchCode: true,
-                  cartonDimensionsCm: true,
-                  cartonSide1Cm: true,
-                  cartonSide2Cm: true,
-                  cartonSide3Cm: true,
-                  cartonWeightKg: true,
-                  packagingType: true,
-                  storageCartonsPerPallet: true,
-                  shippingCartonsPerPallet: true,
-                },
-	            })
-
-	            const existingMap = new Set(
-	              existing.map(row => `${row.skuId}::${row.batchCode.toUpperCase()}`)
-	            )
-
-	            for (const combo of requiredCombos) {
-	              if (!existingMap.has(`${combo.skuId}::${combo.batchCode}`)) {
-	                throw new ValidationError(
-	                  `Batch ${combo.batchCode} not found for SKU ${combo.skuCode}. Create it in Products → Batches first.`
-	                )
-	              }
-	            }
-
-              existing.forEach(row => {
-                batchByKey.set(`${row.skuId}::${row.batchCode.toUpperCase()}`, row)
-              })
-	          }
-	        }
-
-	        return tx.purchaseOrder.create({
-	          data: {
-	            orderNumber,
-	            type: 'PURCHASE',
-	            status: PurchaseOrderStatus.RFQ,
+		        return tx.purchaseOrder.create({
+		          data: {
+		            orderNumber,
+                skuGroup: generatedOrderReference.skuGroup,
+		            type: 'PURCHASE',
+		            status: PurchaseOrderStatus.RFQ,
 	            counterpartyName: counterpartyNameCanonical,
 	            counterpartyAddress,
             expectedDate,
@@ -1450,114 +1400,101 @@ export async function createPurchaseOrder(
             lines:
               input.lines && input.lines.length > 0
                 ? {
-                    create: input.lines.map(line => ({
-                      ...(line.batchLot
-                        ? (() => {
-                            const skuRecord = skuByCode.get(line.skuCode.trim().toLowerCase())
-                            const batchCode = line.batchLot.trim().toUpperCase()
-                            const batchRecord = skuRecord
-                              ? batchByKey.get(`${skuRecord.id}::${batchCode}`)
-                              : null
+                    create: input.lines.map(line => {
+                      const skuRecord = skuByCode.get(line.skuCode.trim().toLowerCase())
 
-                            const baseDimensionsCm =
-                              batchRecord?.cartonDimensionsCm ?? skuRecord?.cartonDimensionsCm ?? null
-                            const baseTriplet = resolveDimensionTripletCm({
-                              side1Cm: batchRecord?.cartonSide1Cm ?? skuRecord?.cartonSide1Cm ?? null,
-                              side2Cm: batchRecord?.cartonSide2Cm ?? skuRecord?.cartonSide2Cm ?? null,
-                              side3Cm: batchRecord?.cartonSide3Cm ?? skuRecord?.cartonSide3Cm ?? null,
-                              legacy: baseDimensionsCm,
-                            })
-                            const overrideTriplet = resolveDimensionTripletCm({
-                              side1Cm: line.cartonSide1Cm ?? null,
-                              side2Cm: line.cartonSide2Cm ?? null,
-                              side3Cm: line.cartonSide3Cm ?? null,
-                              legacy: null,
-                            })
-                            const chosenTriplet = overrideTriplet ?? baseTriplet
-                            const dimensionData = chosenTriplet
-                              ? {
-                                  cartonDimensionsCm: formatDimensionTripletCm(chosenTriplet),
-                                  cartonSide1Cm: new Prisma.Decimal(chosenTriplet.side1Cm.toFixed(2)),
-                                  cartonSide2Cm: new Prisma.Decimal(chosenTriplet.side2Cm.toFixed(2)),
-                                  cartonSide3Cm: new Prisma.Decimal(chosenTriplet.side3Cm.toFixed(2)),
-                                }
-                              : {
-                                  cartonDimensionsCm: baseDimensionsCm,
-                                  cartonSide1Cm: batchRecord?.cartonSide1Cm ?? skuRecord?.cartonSide1Cm ?? null,
-                                  cartonSide2Cm: batchRecord?.cartonSide2Cm ?? skuRecord?.cartonSide2Cm ?? null,
-                                  cartonSide3Cm: batchRecord?.cartonSide3Cm ?? skuRecord?.cartonSide3Cm ?? null,
-                                }
-
-                            const overrideCartonWeightKg =
-                              typeof line.cartonWeightKg === 'number' && Number.isFinite(line.cartonWeightKg)
-                                ? new Prisma.Decimal(line.cartonWeightKg.toFixed(3))
-                                : null
-
-                            return {
-                              batchLot: batchRecord?.batchCode ?? batchCode,
-                              skuDescription:
-                                typeof line.skuDescription === 'string' && line.skuDescription.trim()
-                                  ? line.skuDescription
-                                  : skuRecord?.description ?? '',
-                              ...dimensionData,
-                              cartonWeightKg:
-                                overrideCartonWeightKg ??
-                                batchRecord?.cartonWeightKg ??
-                                skuRecord?.cartonWeightKg ??
-                                null,
-                              packagingType: batchRecord?.packagingType ?? skuRecord?.packagingType ?? null,
-                              storageCartonsPerPallet: batchRecord?.storageCartonsPerPallet ?? null,
-                              shippingCartonsPerPallet: batchRecord?.shippingCartonsPerPallet ?? null,
-                            }
-                          })()
+                      const baseDimensionsCm = skuRecord?.cartonDimensionsCm ?? null
+                      const baseTriplet = resolveDimensionTripletCm({
+                        side1Cm: skuRecord?.cartonSide1Cm ?? null,
+                        side2Cm: skuRecord?.cartonSide2Cm ?? null,
+                        side3Cm: skuRecord?.cartonSide3Cm ?? null,
+                        legacy: baseDimensionsCm,
+                      })
+                      const overrideTriplet = resolveDimensionTripletCm({
+                        side1Cm: line.cartonSide1Cm ?? null,
+                        side2Cm: line.cartonSide2Cm ?? null,
+                        side3Cm: line.cartonSide3Cm ?? null,
+                        legacy: null,
+                      })
+                      const chosenTriplet = overrideTriplet ?? baseTriplet
+                      const dimensionData = chosenTriplet
+                        ? {
+                            cartonDimensionsCm: formatDimensionTripletCm(chosenTriplet),
+                            cartonSide1Cm: new Prisma.Decimal(chosenTriplet.side1Cm.toFixed(2)),
+                            cartonSide2Cm: new Prisma.Decimal(chosenTriplet.side2Cm.toFixed(2)),
+                            cartonSide3Cm: new Prisma.Decimal(chosenTriplet.side3Cm.toFixed(2)),
+                          }
                         : {
-                            skuDescription:
-                              typeof line.skuDescription === 'string' && line.skuDescription.trim()
-                                ? line.skuDescription
-                                : skuByCode.get(line.skuCode.trim().toLowerCase())?.description ?? '',
-                          }),
-                      unitsOrdered: line.unitsOrdered,
-                      unitsPerCarton: line.unitsPerCarton,
-                      skuCode: line.skuCode,
-                      piNumber:
-                        typeof line.piNumber === 'string' && line.piNumber.trim().length > 0
-                          ? normalizePiNumber(line.piNumber)
-                          : null,
-                      commodityCode:
-                        typeof line.commodityCode === 'string' && line.commodityCode.trim().length > 0
-                          ? line.commodityCode.trim()
-                          : null,
-                      countryOfOrigin:
-                        typeof line.countryOfOrigin === 'string' && line.countryOfOrigin.trim().length > 0
-                          ? line.countryOfOrigin.trim()
-                          : null,
-                      netWeightKg:
-                        typeof line.netWeightKg === 'number' && Number.isFinite(line.netWeightKg)
-                          ? new Prisma.Decimal(line.netWeightKg.toFixed(3))
-                          : null,
-                      material:
-                        typeof line.material === 'string' && line.material.trim().length > 0
-                          ? line.material.trim()
-                          : null,
-                      quantity: computeCartonsOrdered({
-                        skuCode: line.skuCode,
+                            cartonDimensionsCm: baseDimensionsCm,
+                            cartonSide1Cm: skuRecord?.cartonSide1Cm ?? null,
+                            cartonSide2Cm: skuRecord?.cartonSide2Cm ?? null,
+                            cartonSide3Cm: skuRecord?.cartonSide3Cm ?? null,
+                          }
+
+                      const overrideCartonWeightKg =
+                        typeof line.cartonWeightKg === 'number' && Number.isFinite(line.cartonWeightKg)
+                          ? new Prisma.Decimal(line.cartonWeightKg.toFixed(3))
+                          : null
+
+                      return {
+                        lotRef: buildLotReference(
+                          generatedOrderReference.sequence,
+                          generatedOrderReference.skuGroup,
+                          line.skuCode
+                        ),
+                        skuDescription:
+                          typeof line.skuDescription === 'string' && line.skuDescription.trim()
+                            ? line.skuDescription
+                            : skuRecord?.description ?? '',
+                        ...dimensionData,
+                        cartonWeightKg: overrideCartonWeightKg ?? skuRecord?.cartonWeightKg ?? null,
+                        packagingType: skuRecord?.packagingType ?? null,
+                        storageCartonsPerPallet: null,
+                        shippingCartonsPerPallet: null,
                         unitsOrdered: line.unitsOrdered,
                         unitsPerCarton: line.unitsPerCarton,
-                      }),
-                      totalCost:
-                        typeof line.totalCost === 'number' && Number.isFinite(line.totalCost)
-                          ? Math.abs(line.totalCost).toFixed(2)
-                          : undefined,
-                      unitCost:
-                        typeof line.totalCost === 'number' &&
-                        Number.isFinite(line.totalCost) &&
-                        line.unitsOrdered > 0
-                          ? (Number(Math.abs(line.totalCost).toFixed(2)) / line.unitsOrdered).toFixed(2)
-                          : undefined,
-                      currency: line.currency.trim().toUpperCase(),
-                      lineNotes: line.notes,
-                      status: 'PENDING',
-                    })),
+                        skuCode: line.skuCode,
+                        productionDate: null,
+                        piNumber:
+                          typeof line.piNumber === 'string' && line.piNumber.trim().length > 0
+                            ? normalizePiNumber(line.piNumber)
+                            : null,
+                        commodityCode:
+                          typeof line.commodityCode === 'string' && line.commodityCode.trim().length > 0
+                            ? line.commodityCode.trim()
+                            : null,
+                        countryOfOrigin:
+                          typeof line.countryOfOrigin === 'string' && line.countryOfOrigin.trim().length > 0
+                            ? line.countryOfOrigin.trim()
+                            : null,
+                        netWeightKg:
+                          typeof line.netWeightKg === 'number' && Number.isFinite(line.netWeightKg)
+                            ? new Prisma.Decimal(line.netWeightKg.toFixed(3))
+                            : null,
+                        material:
+                          typeof line.material === 'string' && line.material.trim().length > 0
+                            ? line.material.trim()
+                            : null,
+                        quantity: computeCartonsOrdered({
+                          skuCode: line.skuCode,
+                          unitsOrdered: line.unitsOrdered,
+                          unitsPerCarton: line.unitsPerCarton,
+                        }),
+                        totalCost:
+                          typeof line.totalCost === 'number' && Number.isFinite(line.totalCost)
+                            ? Math.abs(line.totalCost).toFixed(2)
+                            : undefined,
+                        unitCost:
+                          typeof line.totalCost === 'number' &&
+                          Number.isFinite(line.totalCost) &&
+                          line.unitsOrdered > 0
+                            ? (Number(Math.abs(line.totalCost).toFixed(2)) / line.unitsOrdered).toFixed(2)
+                            : undefined,
+                        currency: line.currency.trim().toUpperCase(),
+                        lineNotes: line.notes,
+                        status: 'PENDING',
+                      }
+                    }),
                   }
                 : undefined,
           },
@@ -1657,7 +1594,7 @@ export async function transitionPurchaseOrderStage(
         warehouseName: true,
         skuCode: true,
         skuDescription: true,
-        batchLot: true,
+        lotRef: true,
         transactionDate: true,
       },
     })
@@ -1706,7 +1643,7 @@ export async function transitionPurchaseOrderStage(
         warehouseName: transaction.warehouseName,
         skuCode: transaction.skuCode,
         skuDescription: transaction.skuDescription,
-        batchLot: transaction.batchLot,
+        lotRef: transaction.lotRef,
         transactionDate: transaction.transactionDate,
       }))
     )
@@ -1743,7 +1680,33 @@ export async function transitionPurchaseOrderStage(
   }
 
   if (targetStatus === PurchaseOrderStatus.ISSUED && !order.poNumber) {
-    updateData.poNumber = toPublicOrderNumber(order.orderNumber)
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: order.orderNumber,
+      poNumber: order.poNumber,
+      skuGroup: order.skuGroup,
+    })
+    updateData.poNumber = buildPurchaseOrderReference(
+      orderReferenceSeed.sequence,
+      orderReferenceSeed.skuGroup
+    )
+  }
+
+  const existingCommercialInvoiceNumber =
+    typeof order.commercialInvoiceNumber === 'string' ? order.commercialInvoiceNumber.trim() : ''
+  const shouldGenerateCommercialInvoiceNumber =
+    targetStatus === PurchaseOrderStatus.OCEAN && existingCommercialInvoiceNumber.length === 0
+
+  if (shouldGenerateCommercialInvoiceNumber) {
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: order.orderNumber,
+      poNumber: order.poNumber,
+      skuGroup: order.skuGroup,
+    })
+    const nextCiSequence = await getNextCommercialInvoiceSequence(prisma, orderReferenceSeed.skuGroup)
+    updateData.commercialInvoiceNumber = buildCommercialInvoiceReference(
+      nextCiSequence,
+      orderReferenceSeed.skuGroup
+    )
   }
 
   // Stage 2: Manufacturing fields
@@ -1796,7 +1759,10 @@ export async function transitionPurchaseOrderStage(
   if (filteredStageData.masterBillOfLading !== undefined) {
     updateData.masterBillOfLading = filteredStageData.masterBillOfLading
   }
-  if (filteredStageData.commercialInvoiceNumber !== undefined) {
+  if (
+    filteredStageData.commercialInvoiceNumber !== undefined &&
+    updateData.commercialInvoiceNumber === undefined
+  ) {
     updateData.commercialInvoiceNumber = filteredStageData.commercialInvoiceNumber
   }
   if (filteredStageData.packingListRef !== undefined) {
@@ -1990,13 +1956,17 @@ export async function transitionPurchaseOrderStage(
             : null
 
       if (unitCost === null) {
-        throw new ValidationError(`Missing unit cost for line ${line.skuCode}${line.batchLot ? ` (${line.batchLot})` : ''}`)
+        throw new ValidationError(
+          `Missing unit cost for line ${line.skuCode}${line.lotRef ? ` (${line.lotRef})` : ''}`
+        )
       }
 
       const originalTotalCost =
         line.totalCost !== null && line.totalCost !== undefined ? new Prisma.Decimal(line.totalCost) : null
       if (originalTotalCost === null) {
-        throw new ValidationError(`Missing total cost for line ${line.skuCode}${line.batchLot ? ` (${line.batchLot})` : ''}`)
+        throw new ValidationError(
+          `Missing total cost for line ${line.skuCode}${line.lotRef ? ` (${line.lotRef})` : ''}`
+        )
       }
 
       const shipNowUnits = shipNowCartons * line.unitsPerCarton
@@ -2037,7 +2007,8 @@ export async function transitionPurchaseOrderStage(
         remainderLineSeeds.push({
           skuCode: line.skuCode,
           skuDescription: line.skuDescription,
-          batchLot: line.batchLot,
+          lotRef: line.lotRef,
+          productionDate: line.productionDate,
           piNumber: line.piNumber,
           commodityCode: line.commodityCode,
           countryOfOrigin: line.countryOfOrigin,
@@ -2168,23 +2139,39 @@ export async function transitionPurchaseOrderStage(
     warehouseName: string
     skuCode: string
     skuDescription: string
-    batchLot: string
+    lotRef: string
     transactionDate: Date
   }> = []
 
   const MAX_SPLIT_ORDER_ATTEMPTS = 5
   let createdRemainderOrderId: string | null = null
+  const orderReferenceSeed = dispatchSplitPlan
+    ? resolveOrderReferenceSeed({
+        orderNumber: order.orderNumber,
+        poNumber: order.poNumber,
+        skuGroup: order.skuGroup,
+      })
+    : null
 
   // Execute the transition + inventory impacts atomically.
   let updatedOrder: PurchaseOrder | null = null
 
   for (let attempt = 0; attempt < MAX_SPLIT_ORDER_ATTEMPTS; attempt += 1) {
     createdRemainderOrderId = null
-    const remainderOrderNumber = dispatchSplitPlan ? await generateOrderNumber() : null
+    const remainderOrderNumber =
+      dispatchSplitPlan && orderReferenceSeed
+        ? await generateOrderNumber(orderReferenceSeed.skuGroup)
+        : null
+    const remainderOrderReference =
+      typeof remainderOrderNumber === 'string' ? parseOrderReference(remainderOrderNumber) : null
 
     try {
       updatedOrder = await prisma.$transaction(async tx => {
         if (dispatchSplitPlan && remainderOrderNumber) {
+          if (!remainderOrderReference) {
+            throw new ValidationError('Unable to generate a valid split PO reference')
+          }
+
           for (const update of dispatchSplitPlan.shippingLineUpdates) {
             await tx.purchaseOrderLine.update({
               where: { id: update.lineId },
@@ -2195,6 +2182,7 @@ export async function transitionPurchaseOrderStage(
           const remainder = await tx.purchaseOrder.create({
             data: {
               orderNumber: remainderOrderNumber,
+              skuGroup: remainderOrderReference.skuGroup,
               poNumber: toPublicOrderNumber(remainderOrderNumber),
               splitGroupId: dispatchSplitPlan.groupId,
               splitParentId: order.id,
@@ -2240,6 +2228,11 @@ export async function transitionPurchaseOrderStage(
             await tx.purchaseOrderLine.createMany({
               data: dispatchSplitPlan.remainderLineSeeds.map(seed => ({
                 ...seed,
+                lotRef: buildLotReference(
+                  remainderOrderReference.sequence,
+                  remainderOrderReference.skuGroup,
+                  seed.skuCode
+                ),
                 purchaseOrderId: remainder.id,
               })),
             })
@@ -2326,425 +2319,7 @@ export async function transitionPurchaseOrderStage(
         })
       }
     }
-
-    if (targetStatus === PurchaseOrderStatus.WAREHOUSE) {
-      // Receiving inventory is handled via a dedicated receive action, not the stage transition.
-      /*
-      const batchCodes = Array.from(new Set(activeLines.map(line => String(line.batchLot))))
-      const batchRecords = await tx.skuBatch.findMany({
-        where: {
-          skuId: { in: skus.map(sku => sku.id) },
-          batchCode: { in: batchCodes },
-        },
-        select: {
-          skuId: true,
-          batchCode: true,
-          unitsPerCarton: true,
-          cartonDimensionsCm: true,
-          cartonWeightKg: true,
-          packagingType: true,
-          storageCartonsPerPallet: true,
-          shippingCartonsPerPallet: true,
-        },
-      })
-      const batchMap = new Map(
-        batchRecords.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch])
-      )
-
-      const createdTransactions: Array<{
-        id: string
-        skuCode: string
-        cartons: number
-        pallets: number
-        cartonDimensionsCm: string | null
-        warehouseCode: string
-        warehouseName: string
-        skuDescription: string
-        batchLot: string
-        transactionDate: Date
-      }> = []
-
-      let totalStoragePalletsIn = 0
-      const referenceId =
-        nextOrder.commercialInvoiceNumber ??
-        nextOrder.proformaInvoiceNumber ??
-        toPublicOrderNumber(nextOrder.orderNumber)
-
-      for (const line of activeLines) {
-        const sku = skuMap.get(line.skuCode)
-        if (!sku) continue
-
-        const batchLot = String(line.batchLot)
-        const batch = batchMap.get(`${sku.id}::${batchLot}`)
-        if (!batch) {
-          throw new ValidationError(
-            `Batch ${batchLot} is not configured for SKU ${line.skuCode}. Create it in Config → Products → Batches.`
-          )
-        }
-
-        const storageCartonsPerPallet = batch.storageCartonsPerPallet ?? null
-        const shippingCartonsPerPallet = batch.shippingCartonsPerPallet ?? null
-
-        if (!storageCartonsPerPallet || storageCartonsPerPallet <= 0) {
-          throw new ValidationError(
-            `Storage cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
-          )
-        }
-
-        if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
-          throw new ValidationError(
-            `Shipping cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
-          )
-        }
-
-        const cartons = line.quantity
-        if (!Number.isInteger(cartons) || cartons <= 0) {
-          throw new ValidationError(`Invalid cartons quantity for SKU ${line.skuCode}`)
-        }
-
-        const unitsPerCarton = line.unitsPerCarton ?? batch.unitsPerCarton ?? sku.unitsPerCarton ?? 1
-
-        const { storagePalletsIn } = calculatePalletValues({
-          transactionType: 'RECEIVE',
-          cartons,
-          storageCartonsPerPallet,
-        })
-
-        if (storagePalletsIn <= 0) {
-          throw new ValidationError(`Storage pallet count is required for inbound transactions`)
-        }
-
-        const txRow = await tx.inventoryTransaction.create({
-          data: {
-            warehouseCode: warehouse.code,
-            warehouseName: warehouse.name,
-            warehouseAddress: warehouse.address,
-            skuCode: sku.skuCode,
-            skuDescription: line.skuDescription ?? sku.description,
-            unitDimensionsCm: sku.unitDimensionsCm,
-            unitWeightKg: sku.unitWeightKg,
-            cartonDimensionsCm: batch.cartonDimensionsCm ?? sku.cartonDimensionsCm,
-            cartonWeightKg: batch.cartonWeightKg ?? sku.cartonWeightKg,
-            packagingType: batch.packagingType ?? sku.packagingType,
-            unitsPerCarton,
-            batchLot,
-            transactionType: TransactionType.RECEIVE,
-            referenceId,
-            cartonsIn: cartons,
-            cartonsOut: 0,
-            storagePalletsIn,
-            shippingPalletsOut: 0,
-            storageCartonsPerPallet,
-            shippingCartonsPerPallet,
-            shipName: null,
-            trackingNumber: null,
-            supplier: nextOrder.counterpartyName ?? null,
-            attachments: null,
-            transactionDate: receivedAt,
-            pickupDate: receivedAt,
-            createdById: user.id,
-            createdByName: user.name,
-            purchaseOrderId: nextOrder.id,
-            purchaseOrderLineId: line.id,
-            isReconciled: false,
-            isDemo: false,
-          },
-          select: {
-            id: true,
-            purchaseOrderId: true,
-            purchaseOrderLineId: true,
-            skuCode: true,
-            cartonDimensionsCm: true,
-            storagePalletsIn: true,
-            warehouseCode: true,
-            warehouseName: true,
-            skuDescription: true,
-            batchLot: true,
-            transactionDate: true,
-          },
-        })
-
-        totalStoragePalletsIn += Number(txRow.storagePalletsIn ?? 0)
-
-        createdTransactions.push({
-          id: txRow.id,
-          purchaseOrderId: txRow.purchaseOrderId,
-          purchaseOrderLineId: txRow.purchaseOrderLineId,
-          skuCode: txRow.skuCode,
-          cartons,
-          pallets: Number(txRow.storagePalletsIn ?? 0),
-          cartonDimensionsCm: txRow.cartonDimensionsCm,
-          warehouseCode: txRow.warehouseCode,
-          warehouseName: txRow.warehouseName,
-          skuDescription: txRow.skuDescription,
-          batchLot: txRow.batchLot,
-          transactionDate: txRow.transactionDate,
-        })
-
-        await tx.purchaseOrderLine.update({
-          where: { id: line.id },
-          data: {
-            postedQuantity: cartons,
-            quantityReceived: cartons,
-            status:
-              cartons >= line.quantity
-                ? PurchaseOrderLineStatus.POSTED
-                : PurchaseOrderLineStatus.PENDING,
-          },
-        })
-      }
-
-      if (createdTransactions.length === 0) {
-        throw new ValidationError('No inventory transactions were created for this receipt')
-      }
-
-      if (totalStoragePalletsIn <= 0) {
-        throw new ValidationError('Storage pallet count is required for inbound transactions')
-      }
-
-      const rates = await tx.costRate.findMany({
-        where: {
-          warehouseId: warehouse.id,
-          isActive: true,
-          effectiveDate: { lte: receivedAt },
-          OR: [{ endDate: null }, { endDate: { gte: receivedAt } }],
-        },
-        orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }],
-      })
-
-      const ratesByCostName = new Map<
-        string,
-        { costName: string; costValue: number; unitOfMeasure: string }
-      >()
-      for (const rate of rates) {
-        if (!ratesByCostName.has(rate.costName)) {
-          ratesByCostName.set(rate.costName, {
-            costName: rate.costName,
-            costValue: Number(rate.costValue),
-            unitOfMeasure: rate.unitOfMeasure,
-          })
-        }
-      }
-
-      let inboundLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
-      try {
-        inboundLedgerEntries = buildTacticalCostLedgerEntries({
-          transactionType: 'RECEIVE',
-          receiveType: nextOrder.receiveType,
-          shipMode: null,
-          ratesByCostName,
-          lines: createdTransactions.map(row => ({
-            transactionId: row.id,
-            skuCode: row.skuCode,
-            cartons: row.cartons,
-            pallets: row.pallets,
-            cartonDimensionsCm: row.cartonDimensionsCm,
-          })),
-          warehouseCode: warehouse.code,
-          warehouseName: warehouse.name,
-          createdAt: receivedAt,
-          createdByName: user.name,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Cost calculation failed'
-        throw new ValidationError(message)
-      }
-
-      if (inboundLedgerEntries.length > 0) {
-        await tx.costLedger.createMany({ data: inboundLedgerEntries })
-
-        const transactionIds = createdTransactions.map(row => row.id)
-        const inserted = await tx.costLedger.findMany({
-          where: {
-            transactionId: { in: transactionIds },
-            costCategory: CostCategory.Inbound,
-          },
-          select: {
-            id: true,
-            transactionId: true,
-            costCategory: true,
-            costName: true,
-            quantity: true,
-            unitRate: true,
-            totalCost: true,
-            warehouseCode: true,
-            warehouseName: true,
-            createdAt: true,
-            createdByName: true,
-          },
-        })
-
-        const txById = new Map(createdTransactions.map(row => [row.id, row]))
-        const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
-          const txRow = txById.get(row.transactionId)
-          if (!txRow) {
-            throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
-          }
-
-          return {
-            id: row.id,
-            sourceType: FinancialLedgerSourceType.COST_LEDGER,
-            sourceId: row.id,
-            category: toFinancialCategory(row.costCategory),
-            costName: row.costName,
-            quantity: row.quantity,
-            unitRate: row.unitRate,
-            amount: row.totalCost,
-            warehouseCode: row.warehouseCode,
-            warehouseName: row.warehouseName,
-            skuCode: txRow.skuCode,
-            skuDescription: txRow.skuDescription,
-            batchLot: txRow.batchLot,
-            inventoryTransactionId: row.transactionId,
-            purchaseOrderId: txRow.purchaseOrderId,
-            purchaseOrderLineId: txRow.purchaseOrderLineId,
-            effectiveAt: row.createdAt,
-            createdAt: row.createdAt,
-            createdByName: row.createdByName,
-          }
-        })
-
-        if (financialEntries.length > 0) {
-          await tx.financialLedgerEntry.createMany({
-            data: financialEntries,
-            skipDuplicates: true,
-          })
-        }
-      }
-
-      const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
-        where: {
-          purchaseOrderId: nextOrder.id,
-        },
-        select: {
-          costName: true,
-          totalCost: true,
-        },
-        orderBy: [{ createdAt: 'asc' }],
-      })
-
-      const transactionIds = createdTransactions.map(row => row.id)
-      await tx.costLedger.deleteMany({
-        where: {
-          transactionId: { in: transactionIds },
-          costCategory: CostCategory.Forwarding,
-        },
-      })
-      await tx.financialLedgerEntry.deleteMany({
-        where: {
-          sourceType: FinancialLedgerSourceType.COST_LEDGER,
-          inventoryTransactionId: { in: transactionIds },
-          category: FinancialLedgerCategory.Forwarding,
-        },
-      })
-
-      if (forwardingCosts.length > 0) {
-        const lines = createdTransactions.map(row => ({
-          transactionId: row.id,
-          skuCode: row.skuCode,
-          cartons: row.cartons,
-          cartonDimensionsCm: row.cartonDimensionsCm,
-        }))
-
-        let forwardingLedgerEntries: Prisma.CostLedgerCreateManyInput[] = []
-        try {
-          forwardingLedgerEntries = forwardingCosts.flatMap(cost =>
-            buildPoForwardingCostLedgerEntries({
-              costName: cost.costName,
-              totalCost: Number(cost.totalCost),
-              lines,
-              warehouseCode: warehouse.code,
-              warehouseName: warehouse.name,
-              createdAt: receivedAt,
-              createdByName: user.name,
-            })
-          )
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Cost allocation failed'
-          throw new ValidationError(message)
-        }
-
-        if (forwardingLedgerEntries.length > 0) {
-          await tx.costLedger.createMany({ data: forwardingLedgerEntries })
-
-          const inserted = await tx.costLedger.findMany({
-            where: {
-              transactionId: { in: transactionIds },
-              costCategory: CostCategory.Forwarding,
-            },
-            select: {
-              id: true,
-              transactionId: true,
-              costCategory: true,
-              costName: true,
-              quantity: true,
-              unitRate: true,
-              totalCost: true,
-              warehouseCode: true,
-              warehouseName: true,
-              createdAt: true,
-              createdByName: true,
-            },
-          })
-
-          const txById = new Map(createdTransactions.map(row => [row.id, row]))
-          const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
-            const txRow = txById.get(row.transactionId)
-            if (!txRow) {
-              throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
-            }
-
-            return {
-              id: row.id,
-              sourceType: FinancialLedgerSourceType.COST_LEDGER,
-              sourceId: row.id,
-              category: toFinancialCategory(row.costCategory),
-              costName: row.costName,
-              quantity: row.quantity,
-              unitRate: row.unitRate,
-              amount: row.totalCost,
-              warehouseCode: row.warehouseCode,
-              warehouseName: row.warehouseName,
-              skuCode: txRow.skuCode,
-              skuDescription: txRow.skuDescription,
-              batchLot: txRow.batchLot,
-              inventoryTransactionId: row.transactionId,
-              purchaseOrderId: txRow.purchaseOrderId,
-              purchaseOrderLineId: txRow.purchaseOrderLineId,
-              effectiveAt: row.createdAt,
-              createdAt: row.createdAt,
-              createdByName: row.createdByName,
-            }
-          })
-
-          if (financialEntries.length > 0) {
-            await tx.financialLedgerEntry.createMany({
-              data: financialEntries,
-              skipDuplicates: true,
-            })
-          }
-        }
-      }
-
-      await tx.purchaseOrder.update({
-        where: { id: nextOrder.id },
-        data: {
-          postedAt: nextOrder.postedAt ?? receivedAt,
-        },
-      })
-
-      storageCostInputs.push(
-        ...createdTransactions.map(row => ({
-          warehouseCode: row.warehouseCode,
-          warehouseName: row.warehouseName,
-          skuCode: row.skuCode,
-          skuDescription: row.skuDescription,
-          batchLot: row.batchLot,
-          transactionDate: row.transactionDate,
-        }))
-      )
-      */
-    }
+    // Receiving inventory is handled via a dedicated receive action, not the stage transition.
 
         const refreshed = await tx.purchaseOrder.findUnique({
           where: { id: nextOrder.id },
@@ -2820,7 +2395,7 @@ export async function transitionPurchaseOrderStage(
       recordStorageCostEntry(input).catch(storageError => {
         const message = storageError instanceof Error ? storageError.message : 'Unknown error'
         console.error(
-          `Storage cost recording failed for ${input.warehouseCode}/${input.skuCode}/${input.batchLot}:`,
+          `Storage cost recording failed for ${input.warehouseCode}/${input.skuCode}/${input.lotRef}:`,
           message
         )
       })
@@ -2863,7 +2438,7 @@ export async function receivePurchaseOrderInventory(params: {
   }
 
   if (order.status !== PurchaseOrderStatus.WAREHOUSE) {
-    throw new ConflictError('Inventory can only be received at the At Warehouse stage')
+    throw new ConflictError('Inventory can only be received at the Warehouse stage')
   }
 
   if (order.postedAt) {
@@ -3045,7 +2620,7 @@ export async function receivePurchaseOrderInventory(params: {
     warehouseName: string
     skuCode: string
     skuDescription: string
-    batchLot: string
+    lotRef: string
     transactionDate: Date
   }> = []
 
@@ -3073,30 +2648,18 @@ export async function receivePurchaseOrderInventory(params: {
       },
     })
     const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
-
-    const batchCodes = Array.from(
-      new Set(activeLines.map(line => (typeof line.batchLot === 'string' ? line.batchLot : '')))
-    ).filter(code => code.trim().length > 0)
-
-    const batchRecords = await tx.skuBatch.findMany({
+    const warehouseSkuConfigs = await tx.warehouseSkuStorageConfig.findMany({
       where: {
+        warehouseId: warehouse!.id,
         skuId: { in: skus.map(sku => sku.id) },
-        batchCode: { in: batchCodes },
       },
       select: {
         skuId: true,
-        batchCode: true,
-        unitsPerCarton: true,
-        cartonDimensionsCm: true,
-        cartonWeightKg: true,
-        packagingType: true,
         storageCartonsPerPallet: true,
         shippingCartonsPerPallet: true,
       },
     })
-    const batchMap = new Map(
-      batchRecords.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch])
-    )
+    const configBySkuId = new Map(warehouseSkuConfigs.map(row => [row.skuId, row]))
 
     const createdTransactions: Array<{
       id: string
@@ -3109,7 +2672,7 @@ export async function receivePurchaseOrderInventory(params: {
       warehouseCode: string
       warehouseName: string
       skuDescription: string
-      batchLot: string
+      lotRef: string
       transactionDate: Date
     }> = []
 
@@ -3125,28 +2688,26 @@ export async function receivePurchaseOrderInventory(params: {
         throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
       }
 
-      const batchLot = typeof line.batchLot === 'string' ? line.batchLot : ''
-      const batch =
-        batchLot.trim().length > 0 ? batchMap.get(`${sku.id}::${batchLot}`) : undefined
+      const config = configBySkuId.get(sku.id) ?? null
 
       const storageCartonsPerPallet =
         line.storageCartonsPerPallet && line.storageCartonsPerPallet > 0
           ? line.storageCartonsPerPallet
-          : batch?.storageCartonsPerPallet ?? null
+          : config?.storageCartonsPerPallet ?? null
       const shippingCartonsPerPallet =
         line.shippingCartonsPerPallet && line.shippingCartonsPerPallet > 0
           ? line.shippingCartonsPerPallet
-          : batch?.shippingCartonsPerPallet ?? null
+          : config?.shippingCartonsPerPallet ?? null
 
       if (!storageCartonsPerPallet || storageCartonsPerPallet <= 0) {
         throw new ValidationError(
-          `Storage cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Storage cartons per pallet is required for SKU ${line.skuCode} in warehouse ${warehouse!.code}.`
         )
       }
 
       if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${line.skuCode} batch ${batchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Shipping cartons per pallet is required for SKU ${line.skuCode} in warehouse ${warehouse!.code}.`
         )
       }
 
@@ -3189,11 +2750,11 @@ export async function receivePurchaseOrderInventory(params: {
           skuDescription: line.skuDescription ?? sku.description,
           unitDimensionsCm: sku.unitDimensionsCm,
           unitWeightKg: sku.unitWeightKg,
-          cartonDimensionsCm: line.cartonDimensionsCm ?? batch?.cartonDimensionsCm ?? sku.cartonDimensionsCm,
-          cartonWeightKg: line.cartonWeightKg ?? batch?.cartonWeightKg ?? sku.cartonWeightKg,
-          packagingType: line.packagingType ?? batch?.packagingType ?? sku.packagingType,
+          cartonDimensionsCm: line.cartonDimensionsCm ?? sku.cartonDimensionsCm,
+          cartonWeightKg: line.cartonWeightKg ?? sku.cartonWeightKg,
+          packagingType: line.packagingType ?? sku.packagingType,
           unitsPerCarton: line.unitsPerCarton,
-          batchLot,
+          lotRef: line.lotRef,
           transactionType: TransactionType.RECEIVE,
           referenceId,
           cartonsIn: cartons,
@@ -3225,7 +2786,7 @@ export async function receivePurchaseOrderInventory(params: {
           warehouseCode: true,
           warehouseName: true,
           skuDescription: true,
-          batchLot: true,
+          lotRef: true,
           transactionDate: true,
         },
       })
@@ -3243,7 +2804,7 @@ export async function receivePurchaseOrderInventory(params: {
         warehouseCode: txRow.warehouseCode,
         warehouseName: txRow.warehouseName,
         skuDescription: txRow.skuDescription,
-        batchLot: txRow.batchLot,
+        lotRef: txRow.lotRef,
         transactionDate: txRow.transactionDate,
       })
 
@@ -3357,7 +2918,7 @@ export async function receivePurchaseOrderInventory(params: {
           warehouseName: row.warehouseName,
           skuCode: txRow.skuCode,
           skuDescription: txRow.skuDescription,
-          batchLot: txRow.batchLot,
+          lotRef: txRow.lotRef,
           inventoryTransactionId: row.transactionId,
           purchaseOrderId: txRow.purchaseOrderId,
           purchaseOrderLineId: txRow.purchaseOrderLineId,
@@ -3470,7 +3031,7 @@ export async function receivePurchaseOrderInventory(params: {
             warehouseName: row.warehouseName,
             skuCode: txRow.skuCode,
             skuDescription: txRow.skuDescription,
-            batchLot: txRow.batchLot,
+            lotRef: txRow.lotRef,
             inventoryTransactionId: row.transactionId,
             purchaseOrderId: txRow.purchaseOrderId,
             purchaseOrderLineId: txRow.purchaseOrderLineId,
@@ -3572,7 +3133,7 @@ export async function receivePurchaseOrderInventory(params: {
         warehouseName: row.warehouseName,
         skuCode: row.skuCode,
         skuDescription: row.skuDescription,
-        batchLot: row.batchLot,
+        lotRef: row.lotRef,
         transactionDate: row.transactionDate,
       }))
     )
@@ -3599,7 +3160,7 @@ export async function receivePurchaseOrderInventory(params: {
       recordStorageCostEntry(input).catch(storageError => {
         const message = storageError instanceof Error ? storageError.message : 'Unknown error'
         console.error(
-          `Storage cost recording failed for ${input.warehouseCode}/${input.skuCode}/${input.batchLot}:`,
+          `Storage cost recording failed for ${input.warehouseCode}/${input.skuCode}/${input.lotRef}:`,
           message
         )
       })
@@ -3700,6 +3261,11 @@ export async function generatePurchaseOrderShippingMarks(params: {
       recordGateIssue(issues, `cargo.lines.${line.id}.material`, 'Material is required')
     }
 
+    const lotRef = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
+    if (!lotRef) {
+      recordGateIssue(issues, `cargo.lines.${line.id}.lotRef`, 'Lot reference is required')
+    }
+
     const netWeightKg = line.netWeightKg ? Number(line.netWeightKg) : null
     if (netWeightKg === null || !Number.isFinite(netWeightKg) || netWeightKg <= 0) {
       recordGateIssue(issues, `cargo.lines.${line.id}.netWeightKg`, 'Net weight is required')
@@ -3763,7 +3329,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const grossWeightKg = Number(line.cartonWeightKg)
     const netWeightLabel = formatWeightDisplayFromKg(netWeightKg, unitSystem, 1)
     const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
-    const shippingMark = `${line.skuCode}${line.batchLot ? ` - ${line.batchLot}` : ''}`
+    const shippingMark = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
 
     const perCarton: string[] = []
     for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
@@ -4025,6 +3591,7 @@ export function serializePurchaseOrder(
   return {
     id: order.id,
     orderNumber: toPublicOrderNumber(order.orderNumber),
+    skuGroup: order.skuGroup ?? null,
     poNumber: order.poNumber,
     splitGroupId: order.splitGroupId ?? null,
     splitParentId: order.splitParentId ?? null,
@@ -4083,7 +3650,7 @@ export function serializePurchaseOrder(
 	      id: line.id,
 	      skuCode: line.skuCode,
 	      skuDescription: line.skuDescription,
-	      batchLot: line.batchLot,
+	      lotRef: line.lotRef,
         piNumber: line.piNumber ?? null,
         commodityCode: line.commodityCode ?? null,
         countryOfOrigin: line.countryOfOrigin ?? null,

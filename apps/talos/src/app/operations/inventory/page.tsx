@@ -31,7 +31,7 @@ import {
 } from '@/hooks/useInventoryFilters'
 import { getMovementTypeFromTransaction, getMovementMultiplier } from '@/lib/utils/movement-types'
 
-const LEDGER_TIME_FORMAT = 'PPP p'
+const LEDGER_TIME_FORMAT = 'MMM d, yyyy h:mm a'
 
 function formatLedgerTimestamp(value: string | Date | null | undefined) {
   if (!value) {
@@ -46,9 +46,9 @@ function formatLedgerTimestamp(value: string | Date | null | undefined) {
 
 interface InventorySummary {
   totalSkuCount: number
-  totalBatchCount: number
-  batchesWithInventory: number
-  batchesOutOfStock: number
+  totalLotCount: number
+  lotsWithInventory: number
+  lotsOutOfStock: number
 }
 
 interface InventoryResponse {
@@ -79,7 +79,7 @@ function InventoryPage() {
     isFilterActive,
     uniqueWarehouseOptions,
     uniqueSkuOptions,
-    uniqueBatchOptions,
+    uniqueLotOptions,
     processedBalances,
   } = useInventoryFilters({
     pageKey: PAGE_KEY,
@@ -103,7 +103,7 @@ function InventoryPage() {
     try {
       setLoading(true)
 
-      const response = await fetch('/api/inventory/balances')
+      const response = await fetch(withBasePath('/api/inventory/balances'), { credentials: 'include' })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
         toast.error(`Failed to load inventory balances: ${errorData.error || response.statusText}`)
@@ -170,12 +170,12 @@ function InventoryPage() {
     const totalPallets = balances.reduce((sum, balance) => sum + balance.currentPallets, 0)
     const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
     const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
-    const batchesWithInventoryFallback = balances.filter(
+    const lotsWithInventoryFallback = balances.filter(
       balance => balance.currentCartons > 0
     ).length
-    const totalBatchCountFallback = balances.length
-    const batchesOutOfStockFallback = Math.max(
-      totalBatchCountFallback - batchesWithInventoryFallback,
+    const totalLotCountFallback = balances.length
+    const lotsOutOfStockFallback = Math.max(
+      totalLotCountFallback - lotsWithInventoryFallback,
       0
     )
 
@@ -185,9 +185,9 @@ function InventoryPage() {
       uniqueWarehouses,
       summary: {
         totalSkuCount: summary?.totalSkuCount ?? uniqueSkusFallback,
-        totalBatchCount: summary?.totalBatchCount ?? totalBatchCountFallback,
-        batchesWithInventory: summary?.batchesWithInventory ?? batchesWithInventoryFallback,
-        batchesOutOfStock: summary?.batchesOutOfStock ?? batchesOutOfStockFallback,
+        totalLotCount: summary?.totalLotCount ?? totalLotCountFallback,
+        lotsWithInventory: summary?.lotsWithInventory ?? lotsWithInventoryFallback,
+        lotsOutOfStock: summary?.lotsOutOfStock ?? lotsOutOfStockFallback,
       },
     }
   }, [balances, summary])
@@ -239,13 +239,13 @@ function InventoryPage() {
           <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-x-auto flex-1">
             {/* Scrollable table area */}
             <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
-              <table className="w-full min-w-[1200px] table-auto text-sm">
+              <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-48">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '9%' }}>
                       <span>Source</span>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-56">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '10%' }}>
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -310,7 +310,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -373,9 +373,9 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-64">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '13%' }}>
                       <div className="flex items-center gap-1">
-                        <span>SKU Description</span>
+                        <span>Description</span>
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
@@ -417,24 +417,24 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
                           className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                          onClick={() => handleSort('batch')}
+                          onClick={() => handleSort('lot')}
                         >
-                          Batch
-                          {getSortIcon('batch')}
+                          Lot
+                          {getSortIcon('lot')}
                         </button>
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
                               type="button"
-                              aria-label="Filter batch values"
+                              aria-label="Filter lot values"
                               className={cn(
                                 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                isFilterActive(['batch'])
+                                isFilterActive(['lot'])
                                   ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
                                   : 'hover:bg-muted hover:text-primary'
                               )}
@@ -445,34 +445,34 @@ function InventoryPage() {
                           <PopoverContent align="end" className="w-64 space-y-3">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-foreground">
-                                Batch filter
+                                Lot filter
                               </span>
                               <button
                                 type="button"
                                 className="text-xs font-medium text-primary hover:underline"
-                                onClick={() => clearColumnFilter(['batch'])}
+                                onClick={() => clearColumnFilter(['lot'])}
                               >
                                 Clear
                               </button>
                             </div>
                             <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                              {uniqueBatchOptions.map(option => (
+                              {uniqueLotOptions.map(option => (
                                 <label
                                   key={option.value}
                                   className="flex items-center gap-2 text-sm text-foreground"
                                 >
                                   <input
                                     type="checkbox"
-                                    checked={columnFilters.batch.includes(option.value)}
-                                    onChange={() => toggleMultiValueFilter('batch', option.value)}
+                                    checked={columnFilters.lot.includes(option.value)}
+                                    onChange={() => toggleMultiValueFilter('lot', option.value)}
                                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                                   />
                                   <span className="flex-1 text-sm">{option.label}</span>
                                 </label>
                               ))}
-                              {uniqueBatchOptions.length === 0 && (
+                              {uniqueLotOptions.length === 0 && (
                                 <p className="text-xs text-muted-foreground">
-                                  No batch options available.
+                                  No lot options available.
                                 </p>
                               )}
                             </div>
@@ -480,30 +480,30 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-40">
-                      <span>Reference ID</span>
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
+                      <span>Ref ID</span>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '6%' }}>
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
                         onClick={() => handleSort('cartons')}
                       >
-                        Cartons
+                        Ctns
                         {getSortIcon('cartons')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '6%' }}>
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
                         onClick={() => handleSort('pallets')}
                       >
-                        Pallets
+                        Plts
                         {getSortIcon('pallets')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '7%' }}>
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -513,8 +513,8 @@ function InventoryPage() {
                         {getSortIcon('units')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Movement Type</th>
-                    <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>Type</th>
+                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '17%' }}>
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -634,7 +634,7 @@ function InventoryPage() {
                     return (
                       <tr key={balance.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                         <td
-                          className="px-3 py-2 text-sm font-semibold text-foreground whitespace-nowrap"
+                          className="px-2 py-2 text-sm font-semibold text-foreground truncate"
                           title={
                             [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n') || undefined
                           }
@@ -651,26 +651,26 @@ function InventoryPage() {
                             sourceDisplay
                           )}
                         </td>
-                        <td className="px-3 py-2 text-sm font-medium text-foreground whitespace-nowrap">
+                        <td className="px-2 py-2 text-sm font-medium text-foreground truncate">
                           {balance.warehouse.code || balance.warehouse.name || '—'}
                         </td>
-                        <td className="px-3 py-2 text-sm font-semibold text-foreground whitespace-nowrap">
+                        <td className="px-2 py-2 text-sm font-semibold text-foreground truncate">
                           {balance.sku.skuCode}
                         </td>
                         <td
-                          className="px-3 py-2 text-sm text-muted-foreground max-w-[16rem] truncate"
+                          className="px-2 py-2 text-sm text-muted-foreground truncate"
                           title={balance.sku.description || undefined}
                         >
                           {balance.sku.description || '—'}
                         </td>
                         <td
-                          className="px-3 py-2 text-xs text-muted-foreground uppercase whitespace-nowrap max-w-[10rem] truncate"
-                          title={balance.batchLot}
+                          className="px-2 py-2 text-xs text-muted-foreground uppercase truncate"
+                          title={balance.lotRef}
                         >
-                          {balance.batchLot}
+                          {balance.lotRef}
                         </td>
                         <td
-                          className="px-3 py-2 text-sm text-muted-foreground whitespace-nowrap max-w-[10rem] truncate"
+                          className="px-2 py-2 text-sm text-muted-foreground truncate"
                           title={
                             [balance.lastTransactionReference, balance.lastTransactionId]
                               .filter(Boolean)
@@ -689,46 +689,43 @@ function InventoryPage() {
                             (balance.lastTransactionReference ?? '—')
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right text-sm font-semibold text-primary whitespace-nowrap">
+                        <td className="px-2 py-2 text-right text-sm font-semibold text-primary whitespace-nowrap">
                           {signedCartons.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
+                        <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
                           {signedPallets.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
+                        <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
                           {signedUnits.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-sm whitespace-nowrap">
-                          <Badge variant={movementBadgeVariant} className="uppercase">
+                        <td className="px-2 py-2 text-sm whitespace-nowrap">
+                          <Badge variant={movementBadgeVariant} className="uppercase text-[10px]">
                             {movementLabel}
                           </Badge>
                         </td>
-                        <td className="px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                        <td className="px-2 py-2 text-xs text-muted-foreground truncate">
                           {lastTransactionDisplay ?? '—'}
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t bg-muted/80 text-xs uppercase tracking-wide text-muted-foreground">
+                    <td colSpan={6} className="px-2 py-2 font-semibold text-left">Totals</td>
+                    <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">
+                      {tableTotals.cartons.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
+                      {tableTotals.pallets.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
+                      {tableTotals.units.toLocaleString()}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
               </table>
-            </div>
-            {/* Totals bar - fixed at bottom outside scroll area */}
-            <div className="border-t bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60 flex-shrink-0">
-              <div className="min-w-[1200px]">
-                <div className="grid grid-cols-[repeat(11,minmax(0,1fr))] text-xs uppercase tracking-wide text-muted-foreground">
-                  <div className="col-span-6 px-3 py-2 font-semibold text-left">Totals</div>
-                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right text-primary whitespace-nowrap">
-                    {tableTotals.cartons.toLocaleString()}
-                  </div>
-                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right whitespace-nowrap">
-                    {tableTotals.pallets.toLocaleString()}
-                  </div>
-                  <div className="col-span-1 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right whitespace-nowrap">
-                    {tableTotals.units.toLocaleString()}
-                  </div>
-                  <div className="col-span-2" />
-                </div>
-              </div>
             </div>
           </div>
         </div>

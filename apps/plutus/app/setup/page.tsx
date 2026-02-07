@@ -1221,7 +1221,7 @@ export default function SetupPage() {
   // Show loading while checking connection or loading setup
   if (isCheckingConnection || isLoadingSetup) {
     return (
-      <main className="flex-1">
+      <main className="flex-1 page-enter">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           <PageHeader
             title="Accounts & Taxes Setup Wizard"
@@ -1240,7 +1240,7 @@ export default function SetupPage() {
   }
 
   return (
-    <main className="flex-1">
+    <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Accounts & Taxes Setup Wizard"

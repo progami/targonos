@@ -8,38 +8,11 @@ import {
   isValidTenantCode,
   getTenantConfig,
   getAllTenants,
-  TENANT_CODES,
   TenantCode,
 } from '@/lib/tenant/constants'
-import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
+import { getAccessibleTenantCodesForEmail } from '@/lib/tenant/access'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * Check which tenants a user has access to by email
- * Queries each tenant database to see if user exists there
- */
-async function getUserAccessibleTenants(email: string): Promise<TenantCode[]> {
-  const accessibleTenants: TenantCode[] = []
-
-  for (const tenantCode of TENANT_CODES) {
-    try {
-      const prisma = await getTenantPrismaClient(tenantCode)
-      const user = await prisma.user.findFirst({
-        where: { email, isActive: true },
-        select: { id: true },
-      })
-      if (user) {
-        accessibleTenants.push(tenantCode)
-      }
-    } catch (error) {
-      // Database not configured or connection error - skip this tenant
-      console.warn(`[tenant/current] Could not check tenant ${tenantCode}:`, error)
-    }
-  }
-
-  return accessibleTenants
-}
 
 /**
  * GET /api/tenant/current
@@ -63,7 +36,7 @@ export async function GET() {
 
     if (userEmail) {
       // Query all tenant databases to find where this user exists
-      accessibleCodes = await getUserAccessibleTenants(userEmail)
+      accessibleCodes = await getAccessibleTenantCodesForEmail(userEmail)
     }
 
     const cookieTenantCode = isValidTenantCode(tenantCookie) ? tenantCookie : null

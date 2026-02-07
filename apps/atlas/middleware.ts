@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getCandidateSessionCookieNames, decodePortalSession, getAppEntitlement } from '@targon/auth'
+import { getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+
 import { portalUrl } from '@/lib/portal'
 import { resolveAppOrigin } from '@/lib/request-origin'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  // Use same default as next.config.js for consistency
+
   const normalizeBasePath = (value?: string | null) => {
     if (!value) return ''
     const trimmed = value.trim()
@@ -25,8 +26,6 @@ export async function middleware(request: NextRequest) {
     ? pathname.slice(basePath.length) || '/'
     : pathname
 
-  // Public routes - only specific endpoints, NOT all /api/ routes
-  // Security: Removed '/' and '/api/setup/departments' from public routes
   const PUBLIC_PREFIXES = ['/_next', '/favicon.ico']
   const PUBLIC_ROUTES = ['/health', '/api/health', '/no-access', '/api/access-requests']
   const isPublic =
@@ -34,52 +33,45 @@ export async function middleware(request: NextRequest) {
     PUBLIC_PREFIXES.some((p) => normalizedPath.startsWith(p))
 
   if (!isPublic) {
-    const debug = process.env.NODE_ENV !== 'production'
-    const legacyAtlasKey = String.fromCharCode(104, 114, 109, 115)
     const cookieNames = Array.from(new Set([
       ...getCandidateSessionCookieNames('targon'),
       ...getCandidateSessionCookieNames('atlas'),
-      ...getCandidateSessionCookieNames(legacyAtlasKey),
+      ...getCandidateSessionCookieNames(String.fromCharCode(104, 114, 109, 115)),
     ]))
-    const cookieHeader = request.headers.get('cookie')
-    const sharedSecret = process.env.PORTAL_AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
 
-    const decoded = await decodePortalSession({
-      cookieHeader,
+    const decision = await requireAppEntry({
+      request,
+      appId: 'atlas',
+      lifecycle: 'active',
+      entryPolicy: 'role_gated',
       cookieNames,
-      secret: sharedSecret,
-      debug,
+      debug: process.env.NODE_ENV !== 'production',
     })
 
-    const hasSession = !!decoded
-    const atlasEntitlement = decoded
-      ? getAppEntitlement(decoded.roles, 'atlas') ?? getAppEntitlement(decoded.roles, legacyAtlasKey)
-      : undefined
-    const hasAccess = hasSession && !!atlasEntitlement
+    if (!decision.allowed) {
+      console.info('[authz][atlas] denied', {
+        path: normalizedPath,
+        status: decision.status,
+        reason: decision.reason,
+      })
 
-    if (!hasAccess) {
-      // For API routes, return 401/403 instead of redirect
       if (normalizedPath.startsWith('/api/')) {
-        const errorMsg = hasSession ? 'No access to Atlas' : 'Authentication required'
+        const status = decision.status === 'unauthenticated' ? 401 : 403
+        const errorMsg = decision.status === 'unauthenticated' ? 'Authentication required' : 'No access to Atlas'
         return NextResponse.json(
-          { error: errorMsg },
-          { status: hasSession ? 403 : 401 }
+          { error: errorMsg, reason: decision.reason },
+          { status },
         )
       }
 
-      // User has session but no Atlas access - redirect to no-access page
-      if (hasSession && !atlasEntitlement) {
+      if (decision.status === 'forbidden') {
         const url = request.nextUrl.clone()
         url.pathname = basePath ? `${basePath}/no-access` : '/no-access'
         url.search = ''
         return NextResponse.redirect(url)
       }
 
-      // No session at all
       const login = portalUrl('/login', request)
-      if (debug) {
-        console.log('[atlas middleware] missing session, redirecting to', login.toString())
-      }
       const callbackOrigin = resolveAppOrigin(request)
       const callbackPathname = (() => {
         if (!basePath) return request.nextUrl.pathname
@@ -88,7 +80,7 @@ export async function middleware(request: NextRequest) {
       })()
       const callbackUrl = new URL(
         callbackPathname + request.nextUrl.search + request.nextUrl.hash,
-        callbackOrigin
+        callbackOrigin,
       )
       login.searchParams.set('callbackUrl', callbackUrl.toString())
       return NextResponse.redirect(login)

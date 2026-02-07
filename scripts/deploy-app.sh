@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus" >&2
+  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -71,7 +71,7 @@ compute_changed_files() {
 any_changed() {
   local pattern="$1"
   local file
-  for file in "${changed_files[@]}"; do
+  for file in "${changed_files[@]-}"; do
     if [[ "$file" == $pattern ]]; then
       return 0
     fi
@@ -82,7 +82,7 @@ any_changed() {
 any_changed_under() {
   local prefix="$1"
   local file
-  for file in "${changed_files[@]}"; do
+  for file in "${changed_files[@]-}"; do
     if [[ "$file" == "$prefix"* ]]; then
       return 0
     fi
@@ -135,7 +135,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/talos"
     pm2_name="${PM2_PREFIX}-talos"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-batch-attributes && pnpm --filter $workspace db:migrate:sku-batch-amazon-defaults && pnpm --filter $workspace db:migrate:sku-batch-amazon-item-package-dimensions && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields"
+    migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views"
     build_cmd="pnpm --filter $workspace build"
     ;;
   sso|targon|targonos)
@@ -191,6 +191,14 @@ case "$app_key" in
     prisma_cmd=""
     build_cmd="pnpm --filter $workspace build"
     ;;
+  argus)
+    workspace="@targon/argus"
+    app_dir="$REPO_DIR/apps/argus"
+    pm2_name="${PM2_PREFIX}-argus"
+    prisma_cmd="pnpm --filter $workspace prisma:generate"
+    migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
+    build_cmd="pnpm --filter $workspace build"
+    ;;
   *)
     echo "Unknown app key: $app_key" >&2
     exit 1
@@ -214,6 +222,85 @@ fi
 log() { printf '\033[36m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 warn() { printf '\033[33m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 error() { printf '\033[31m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*" >&2; }
+
+run_pm2_sanitized() {
+  CI= \
+  GITHUB_ACTIONS= \
+  GITHUB_PERSONAL_ACCESS_TOKEN= \
+  GITHUB_TOKEN= \
+  GH_TOKEN= \
+  GEMINI_API_KEY= \
+  CLAUDECODE= \
+  CLAUDE_CODE_ENTRYPOINT= \
+  CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
+  "$@"
+}
+
+pm2_field_by_name() {
+  local process_name="$1"
+  local field="$2"
+
+  pm2 jlist | node -e '
+const fs = require("fs");
+const processName = process.argv[1];
+const field = process.argv[2];
+const list = JSON.parse(fs.readFileSync(0, "utf8"));
+const target = list.find((entry) => entry && entry.name === processName);
+if (!target) process.exit(2);
+const env = target.pm2_env || {};
+let value = "";
+if (field === "pm_cwd") value = env.pm_cwd || env.cwd || "";
+if (field === "status") value = env.status || "";
+if (field === "pm_id") value = target.pm_id;
+process.stdout.write(String(value));
+' "$process_name" "$field"
+}
+
+start_and_verify_pm2_process() {
+  local process_name="$1"
+  local expected_cwd="$2"
+  local expected_sha="$3"
+
+  if pm2_field_by_name "$process_name" "pm_id" >/dev/null 2>&1; then
+    run_pm2_sanitized pm2 delete "$process_name" >/dev/null
+  fi
+  run_pm2_sanitized pm2 start "$REPO_DIR/ecosystem.config.js" --only "$process_name" --update-env
+
+  local status
+  if ! status="$(pm2_field_by_name "$process_name" "status" 2>/dev/null)"; then
+    error "Failed to find PM2 process after start: $process_name"
+    exit 1
+  fi
+
+  if [[ "$status" != "online" ]]; then
+    error "PM2 process is not online after start ($process_name): status=$status"
+    exit 1
+  fi
+
+  local actual_cwd
+  if ! actual_cwd="$(pm2_field_by_name "$process_name" "pm_cwd" 2>/dev/null)"; then
+    error "Failed to read runtime cwd for $process_name"
+    exit 1
+  fi
+
+  if [[ "$actual_cwd" != "$expected_cwd" ]]; then
+    error "Runtime cwd drift for $process_name: expected \"$expected_cwd\", got \"$actual_cwd\""
+    exit 1
+  fi
+
+  local actual_sha
+  if ! actual_sha="$(git -C "$actual_cwd" rev-parse HEAD 2>/dev/null)"; then
+    error "Failed to resolve git HEAD in runtime cwd for $process_name: $actual_cwd"
+    exit 1
+  fi
+
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    error "Runtime SHA drift for $process_name: expected \"$expected_sha\", got \"$actual_sha\""
+    exit 1
+  fi
+
+  log "Runtime verified for $process_name (cwd=$actual_cwd sha=$actual_sha)"
+}
 
 load_env_file() {
   local file="$1"
@@ -373,6 +460,9 @@ else
   fi
   log "Git pull complete"
 fi
+
+deploy_runtime_sha="$(git -C "$REPO_DIR" rev-parse HEAD)"
+log "Target runtime SHA: $deploy_runtime_sha"
 
 # Step 1.5: Detect what changed in this deploy range (if available)
 if compute_changed_files; then
@@ -656,107 +746,20 @@ if [[ "$app_key" == "kairos" ]]; then
   log "Step 7: Using KAIROS_ML_URL=${KAIROS_ML_URL}"
 
   log "Step 7: Starting $kairos_ml_pm2_name"
-  CI= \
-  GITHUB_ACTIONS= \
-  GITHUB_PERSONAL_ACCESS_TOKEN= \
-  GITHUB_TOKEN= \
-  GH_TOKEN= \
-  GEMINI_API_KEY= \
-  CLAUDECODE= \
-  CLAUDE_CODE_ENTRYPOINT= \
-  CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-  pm2 start "$kairos_ml_pm2_name" --update-env 2>/dev/null || \
-  CI= \
-  GITHUB_ACTIONS= \
-  GITHUB_PERSONAL_ACCESS_TOKEN= \
-  GITHUB_TOKEN= \
-  GH_TOKEN= \
-  GEMINI_API_KEY= \
-  CLAUDECODE= \
-  CLAUDE_CODE_ENTRYPOINT= \
-  CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-  pm2 restart "$kairos_ml_pm2_name" --update-env 2>/dev/null || \
-  CI= \
-  GITHUB_ACTIONS= \
-  GITHUB_PERSONAL_ACCESS_TOKEN= \
-  GITHUB_TOKEN= \
-  GH_TOKEN= \
-  GEMINI_API_KEY= \
-  CLAUDECODE= \
-  CLAUDE_CODE_ENTRYPOINT= \
-  CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-  pm2 start "$REPO_DIR/ecosystem.config.js" --only "$kairos_ml_pm2_name" --update-env
-  log "$kairos_ml_pm2_name started"
+  start_and_verify_pm2_process "$kairos_ml_pm2_name" "$kairos_ml_dir" "$deploy_runtime_sha"
+  log "$kairos_ml_pm2_name started and verified"
 fi
 
 log "Step 7: Starting $pm2_name"
-CI= \
-GITHUB_ACTIONS= \
-GITHUB_PERSONAL_ACCESS_TOKEN= \
-GITHUB_TOKEN= \
-GH_TOKEN= \
-GEMINI_API_KEY= \
-CLAUDECODE= \
-CLAUDE_CODE_ENTRYPOINT= \
-CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-pm2 start "$pm2_name" --update-env 2>/dev/null || \
-CI= \
-GITHUB_ACTIONS= \
-GITHUB_PERSONAL_ACCESS_TOKEN= \
-GITHUB_TOKEN= \
-GH_TOKEN= \
-GEMINI_API_KEY= \
-CLAUDECODE= \
-CLAUDE_CODE_ENTRYPOINT= \
-CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-pm2 restart "$pm2_name" --update-env 2>/dev/null || \
-CI= \
-GITHUB_ACTIONS= \
-GITHUB_PERSONAL_ACCESS_TOKEN= \
-GITHUB_TOKEN= \
-GH_TOKEN= \
-GEMINI_API_KEY= \
-CLAUDECODE= \
-CLAUDE_CODE_ENTRYPOINT= \
-CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-pm2 start "$REPO_DIR/ecosystem.config.js" --only "$pm2_name" --update-env
-log "$pm2_name started"
+start_and_verify_pm2_process "$pm2_name" "$app_dir" "$deploy_runtime_sha"
+log "$pm2_name started and verified"
 
 if [[ "$app_key" == "hermes" ]]; then
   hermes_workers=("${PM2_PREFIX}-hermes-orders-sync" "${PM2_PREFIX}-hermes-request-review")
   for worker in "${hermes_workers[@]}"; do
     log "Step 7: Starting $worker"
-    CI= \
-    GITHUB_ACTIONS= \
-    GITHUB_PERSONAL_ACCESS_TOKEN= \
-    GITHUB_TOKEN= \
-    GH_TOKEN= \
-    GEMINI_API_KEY= \
-    CLAUDECODE= \
-    CLAUDE_CODE_ENTRYPOINT= \
-    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-    pm2 start "$worker" --update-env 2>/dev/null || \
-    CI= \
-    GITHUB_ACTIONS= \
-    GITHUB_PERSONAL_ACCESS_TOKEN= \
-    GITHUB_TOKEN= \
-    GH_TOKEN= \
-    GEMINI_API_KEY= \
-    CLAUDECODE= \
-    CLAUDE_CODE_ENTRYPOINT= \
-    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-    pm2 restart "$worker" --update-env 2>/dev/null || \
-    CI= \
-    GITHUB_ACTIONS= \
-    GITHUB_PERSONAL_ACCESS_TOKEN= \
-    GITHUB_TOKEN= \
-    GH_TOKEN= \
-    GEMINI_API_KEY= \
-    CLAUDECODE= \
-    CLAUDE_CODE_ENTRYPOINT= \
-    CLAUDE_CODE_MAX_OUTPUT_TOKENS= \
-    pm2 start "$REPO_DIR/ecosystem.config.js" --only "$worker" --update-env
-    log "$worker started"
+    start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
+    log "$worker started and verified"
   done
 fi
 

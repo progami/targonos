@@ -5,6 +5,7 @@ import { CalendarClock, Loader2, RefreshCw, Send, Sparkles } from "lucide-react"
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
+import { DispatchStatusBadge, OrderStatusBadge } from "@/components/hermes/status-badge";
 import { PageHeader } from "@/components/hermes/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,18 @@ type AttemptRow = {
   errorCode: string | null;
   errorMessage: string | null;
   createdAt: string;
+};
+
+type DispatchUpdateResponse = {
+  ok: true;
+  dispatch: {
+    id: string;
+    state: string;
+    scheduledAt: string;
+    expiresAt: string | null;
+    sentAt: string | null;
+    lastError: string | null;
+  };
 };
 
 function fmtDateShort(iso: string | null): string {
@@ -99,21 +112,8 @@ function connectionLabel(c: AmazonConnection): string {
   return `${c.accountName} • ${c.region}${marketplacePart}`;
 }
 
-function stateBadge(state: string | null) {
-  if (!state) return <Badge variant="outline">Not queued</Badge>;
-  if (state === "sent") return <Badge variant="secondary">Sent</Badge>;
-  if (state === "queued") return <Badge variant="outline">Queued</Badge>;
-  if (state === "sending") return <Badge variant="outline">Sending</Badge>;
-  if (state === "failed") return <Badge variant="destructive">Failed</Badge>;
-  if (state === "skipped") return <Badge variant="outline">Skipped</Badge>;
-  return <Badge variant="outline">{state}</Badge>;
-}
-
 function attemptBadge(status: AttemptRow["status"]) {
-  if (status === "sent") return <Badge variant="secondary">sent</Badge>;
-  if (status === "ineligible") return <Badge variant="outline">ineligible</Badge>;
-  if (status === "throttled") return <Badge variant="outline">throttled</Badge>;
-  return <Badge variant="destructive">failed</Badge>;
+  return <DispatchStatusBadge status={status} />;
 }
 
 type BackfillPreset = { label: string; days: number };
@@ -200,6 +200,7 @@ export function OrdersClient() {
   const [detailsOrder, setDetailsOrder] = React.useState<RecentOrder | null>(null);
   const [detailsAttempts, setDetailsAttempts] = React.useState<AttemptRow[]>([]);
   const [detailsAttemptsLoading, setDetailsAttemptsLoading] = React.useState(false);
+  const [detailsActionLoading, setDetailsActionLoading] = React.useState<null | "queue" | "requeue" | "cancel">(null);
 
   // Table filters
   const filterOrderId = ordersPrefs.filterOrderId;
@@ -330,6 +331,25 @@ export function OrdersClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uiHydrated, connectionId, pageSize, filterOrderId, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
 
+  function applyDetailsDispatchUpdate(dispatch: DispatchUpdateResponse["dispatch"]) {
+    setDetailsOrder((prev) => {
+      if (!prev) return prev;
+      if (prev.dispatchId !== dispatch.id) return prev;
+      return {
+        ...prev,
+        dispatchState: dispatch.state,
+        dispatchScheduledAt: dispatch.scheduledAt,
+        dispatchExpiresAt: dispatch.expiresAt,
+        dispatchSentAt: dispatch.sentAt,
+      };
+    });
+  }
+
+  async function refreshOrdersInPlace() {
+    await loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
+    loadOrdersTotal();
+  }
+
   React.useEffect(() => {
     const dispatchId = detailsOrder?.dispatchId;
     if (!detailsOpen || !detailsOrder || !dispatchId) return;
@@ -360,6 +380,91 @@ export function OrdersClient() {
         setDetailsAttemptsLoading(false);
       });
   }, [detailsOpen, detailsOrder, connectionId]);
+
+  async function queueReviewRequestForDetailsOrder() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("queue");
+    try {
+      const res = await fetch(hermesApiUrl("/api/solicitations/request-review"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectionId,
+          orderId: detailsOrder.orderId,
+          marketplaceId: detailsOrder.marketplaceId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      toast.success("Queued review request");
+      await refreshOrdersInPlace();
+      setDetailsOpen(false);
+    } catch (e: any) {
+      toast.error("Failed to queue review request", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
+
+  async function requeueDetailsDispatchNow() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (!detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("requeue");
+    try {
+      const res = await fetch(hermesApiUrl("/api/dispatches/requeue"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId, dispatchId: detailsOrder.dispatchId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      applyDetailsDispatchUpdate((json as DispatchUpdateResponse).dispatch);
+      toast.success("Requeued");
+      await refreshOrdersInPlace();
+    } catch (e: any) {
+      toast.error("Failed to requeue", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
+
+  async function cancelDetailsDispatch() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (!detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("cancel");
+    try {
+      const res = await fetch(hermesApiUrl("/api/dispatches/cancel"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId, dispatchId: detailsOrder.dispatchId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      applyDetailsDispatchUpdate((json as DispatchUpdateResponse).dispatch);
+      toast.success("Canceled");
+      await refreshOrdersInPlace();
+    } catch (e: any) {
+      toast.error("Failed to cancel", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -949,9 +1054,9 @@ export function OrdersClient() {
                       </TableCell>
                       <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                        <OrderStatusBadge status={o.orderStatus} />
                       </TableCell>
-                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                      <TableCell className="text-right"><DispatchStatusBadge status={o.dispatchState} /></TableCell>
                     </TableRow>
                   );
                 })}
@@ -997,14 +1102,57 @@ export function OrdersClient() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{marketplaceDisplay(detailsOrder.marketplaceId)}</Badge>
-                {detailsOrder.orderStatus ? <Badge variant="outline">{detailsOrder.orderStatus}</Badge> : null}
+                {detailsOrder.orderStatus ? <OrderStatusBadge status={detailsOrder.orderStatus} /> : null}
                 {detailsOrder.purchaseDate ? (
                   <Badge variant="outline">Purchase {fmtDateShort(detailsOrder.purchaseDate)}</Badge>
                 ) : null}
                 {detailsOrder.latestDeliveryDate ? (
                   <Badge variant="outline">Delivery {fmtDateShort(detailsOrder.latestDeliveryDate)}</Badge>
                 ) : null}
-                <span className="ml-auto">{stateBadge(detailsOrder.dispatchState)}</span>
+                <span className="ml-auto"><DispatchStatusBadge status={detailsOrder.dispatchState} /></span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {detailsOrder.dispatchId ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={detailsActionLoading !== null || detailsOrder.dispatchState === "sent" || detailsOrder.dispatchState === "sending"}
+                      title={(detailsOrder.dispatchState === "sending") ? "Cannot requeue while sending" : undefined}
+                      onClick={requeueDetailsDispatchNow}
+                    >
+                      {detailsActionLoading === "requeue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Requeue now
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={detailsActionLoading !== null || detailsOrder.dispatchState === "sent" || detailsOrder.dispatchState === "sending"}
+                      title={(detailsOrder.dispatchState === "sending") ? "Cannot cancel while sending" : undefined}
+                      onClick={cancelDetailsDispatch}
+                    >
+                      {detailsActionLoading === "cancel" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Cancel (skip)
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={detailsActionLoading !== null}
+                    onClick={queueReviewRequestForDetailsOrder}
+                  >
+                    {detailsActionLoading === "queue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                    Queue review request
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {detailsOrder.dispatchId ? "Applies to this order’s review-request dispatch." : "Creates a review-request dispatch (worker sends asynchronously)."}
+                </span>
               </div>
 
               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">

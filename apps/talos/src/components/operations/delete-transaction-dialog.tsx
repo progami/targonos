@@ -19,7 +19,7 @@ interface DeleteTransactionDialogProps {
  cartonsIn: number
  cartonsOut: number
  sku?: { skuCode: string }
- batchLot?: string
+ lotRef?: string
  }>
  }
  validation: {
@@ -35,7 +35,7 @@ interface DeleteTransactionDialogProps {
  }>
  currentInventory?: {
  skuCode: string
- batchLot: string
+ lotRef: string
  quantity: number
  allocated: number
  available: number
@@ -111,7 +111,7 @@ export function DeleteTransactionDialog({
   <ul className="space-y-1 text-sm text-green-700 dark:text-green-400">
  {isReceive && (
  <>
- <li>• Remove {quantity} cartons of {lineItem?.sku?.skuCode} (Batch: {lineItem?.batchLot}) from inventory</li>
+ <li>• Remove {quantity} cartons of {lineItem?.sku?.skuCode} (Lot: {lineItem?.lotRef}) from inventory</li>
  <li>• Delete transaction record</li>
  <li>• This action cannot be undone</li>
  </>

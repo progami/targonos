@@ -9,6 +9,15 @@ const credentialsSchema = z.object({
     emailOrUsername: z.string().min(1),
     password: z.string().min(1),
 });
+const groupMembershipsSchema = z.record(z.string().email(), z.array(z.string().min(1))).transform((raw) => {
+    const normalized = {};
+    for (const [email, groups] of Object.entries(raw)) {
+        normalized[email.trim().toLowerCase()] = groups
+            .map((group) => group.trim())
+            .filter(Boolean);
+    }
+    return normalized;
+});
 const userSelect = {
     id: true,
     email: true,
@@ -16,8 +25,21 @@ const userSelect = {
     firstName: true,
     lastName: true,
     passwordHash: true,
+    authzVersion: true,
+    roles: {
+        select: {
+            role: {
+                select: {
+                    name: true,
+                },
+            },
+        },
+    },
     appAccess: {
         select: {
+            role: true,
+            source: true,
+            locked: true,
             departments: true,
             app: {
                 select: {
@@ -27,73 +49,55 @@ const userSelect = {
         },
     },
 };
-function parseEmailSet(raw) {
-    return new Set((raw ?? '')
-        .split(/[,\s]+/)
-        .map((value) => value.trim().toLowerCase())
-        .filter(Boolean));
-}
-const DEFAULT_PORTAL_BOOTSTRAP_ADMINS = new Set(['jarrar@targonglobal.com']);
-function portalBootstrapAdminEmailSet() {
-    const configured = parseEmailSet(process.env.PORTAL_BOOTSTRAP_ADMIN_EMAILS);
-    return new Set([...DEFAULT_PORTAL_BOOTSTRAP_ADMINS, ...configured]);
-}
-function defaultPortalAdminApps() {
-    return [
-        { slug: 'talos', name: 'Talos', departments: ['Ops'] },
-        { slug: 'atlas', name: 'Atlas', departments: ['People Ops'] },
-        { slug: 'website', name: 'Website', departments: [] },
-        { slug: 'kairos', name: 'Kairos', departments: ['Product'] },
-        { slug: 'xplan', name: 'xplan', departments: ['Product'] },
-        { slug: 'hermes', name: 'Hermes', departments: ['Account / Listing'] },
-    ];
-}
-async function ensureBootstrapPortalAdminUser(normalizedEmail) {
-    const prisma = getPortalAuthPrisma();
-    await prisma.$transaction(async (tx) => {
-        const usernameBase = (normalizedEmail.split('@')[0] || 'admin')
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9._-]+/g, '-')
-            .replace(/^-+|-+$/g, '') || 'admin';
-        const existingUser = await tx.user.findUnique({
-            where: { email: normalizedEmail },
-            select: { id: true, username: true },
-        });
-        const userId = existingUser
-            ? (await tx.user.update({
-                where: { email: normalizedEmail },
-                data: {
-                    isActive: true,
-                    username: existingUser.username ?? usernameBase,
-                },
-                select: { id: true },
-            })).id
-            : (await tx.user.create({
-                data: {
-                    email: normalizedEmail,
-                    username: usernameBase,
-                    passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
-                    firstName: null,
-                    lastName: null,
-                    isActive: true,
-                    isDemo: false,
-                },
-                select: { id: true },
-            })).id;
-        for (const app of defaultPortalAdminApps()) {
-            const appRecord = await tx.app.upsert({
-                where: { slug: app.slug },
-                update: {},
-                create: { slug: app.slug, name: app.name, description: null },
-                select: { id: true },
-            });
-            await tx.userApp.upsert({
-                where: { userId_appId: { userId, appId: appRecord.id } },
-                update: { departments: app.departments },
-                create: { userId, appId: appRecord.id, departments: app.departments },
-            });
+function normalizeAppRole(value) {
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'viewer') {
+            return 'viewer';
         }
+    }
+    return 'viewer';
+}
+function normalizeDepartments(value) {
+    return Array.isArray(value)
+        ? value.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+}
+function normalizeOptionalName(value) {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    return trimmed;
+}
+function parseGroupMembershipsFromEnv() {
+    const raw = process.env.GOOGLE_GROUP_MEMBERSHIPS_JSON;
+    if (!raw || raw.trim() === '') {
+        return {};
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return groupMembershipsSchema.parse(parsed);
+    }
+    catch (error) {
+        throw new Error(`GOOGLE_GROUP_MEMBERSHIPS_JSON is invalid: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function bumpAuthzVersion(tx, userId) {
+    await tx.user.update({
+        where: { id: userId },
+        data: {
+            authzVersion: {
+                increment: 1,
+            },
+        },
+        select: { id: true },
     });
 }
 export async function provisionPortalUser(options) {
@@ -146,10 +150,23 @@ export async function provisionPortalUser(options) {
             });
             await tx.userApp.upsert({
                 where: { userId_appId: { userId, appId: appRecord.id } },
-                update: { departments: app.departments },
-                create: { userId, appId: appRecord.id, departments: app.departments },
+                update: {
+                    role: app.role ?? 'viewer',
+                    source: app.source ?? 'manual',
+                    locked: app.locked ?? false,
+                    departments: app.departments,
+                },
+                create: {
+                    userId,
+                    appId: appRecord.id,
+                    role: app.role ?? 'viewer',
+                    source: app.source ?? 'manual',
+                    locked: app.locked ?? false,
+                    departments: app.departments,
+                },
             });
         }
+        await bumpAuthzVersion(tx, userId);
         const user = await tx.user.findUnique({
             where: { id: userId },
             select: userSelect,
@@ -160,6 +177,274 @@ export async function provisionPortalUser(options) {
         return user;
     });
     return mapPortalUser(provisioned);
+}
+export async function upsertManualUserAppGrant(input) {
+    if (!process.env.PORTAL_DB_URL) {
+        throw new Error('PORTAL_DB_URL must be configured to update app grants.');
+    }
+    const prisma = getPortalAuthPrisma();
+    const user = await prisma.$transaction(async (tx) => {
+        const existingUser = await tx.user.findUnique({
+            where: { id: input.userId },
+            select: { id: true },
+        });
+        if (!existingUser) {
+            throw new Error('PortalUserMissing');
+        }
+        const appRecord = await tx.app.upsert({
+            where: { slug: input.appSlug },
+            update: {
+                ...(input.appName ? { name: input.appName } : {}),
+            },
+            create: {
+                slug: input.appSlug,
+                name: input.appName ?? input.appSlug,
+                description: null,
+            },
+            select: { id: true },
+        });
+        await tx.userApp.upsert({
+            where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
+            update: {
+                role: input.role,
+                source: 'manual',
+                locked: input.locked ?? true,
+                departments: input.departments ?? [],
+            },
+            create: {
+                userId: input.userId,
+                appId: appRecord.id,
+                role: input.role,
+                source: 'manual',
+                locked: input.locked ?? true,
+                departments: input.departments ?? [],
+            },
+        });
+        await bumpAuthzVersion(tx, input.userId);
+        return tx.user.findUnique({
+            where: { id: input.userId },
+            select: userSelect,
+        });
+    });
+    if (!user) {
+        throw new Error('PortalUserMissing');
+    }
+    return mapPortalUser(user);
+}
+export async function removeManualUserAppGrant(userId, appSlug) {
+    if (!process.env.PORTAL_DB_URL) {
+        throw new Error('PORTAL_DB_URL must be configured to update app grants.');
+    }
+    const prisma = getPortalAuthPrisma();
+    const updated = await prisma.$transaction(async (tx) => {
+        const existingUser = await tx.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+        if (!existingUser) {
+            throw new Error('PortalUserMissing');
+        }
+        const appRecord = await tx.app.findUnique({
+            where: { slug: appSlug },
+            select: { id: true },
+        });
+        if (appRecord) {
+            await tx.userApp.deleteMany({
+                where: {
+                    userId,
+                    appId: appRecord.id,
+                    source: 'manual',
+                },
+            });
+        }
+        await bumpAuthzVersion(tx, userId);
+        return tx.user.findUnique({
+            where: { id: userId },
+            select: userSelect,
+        });
+    });
+    if (!updated) {
+        throw new Error('PortalUserMissing');
+    }
+    return mapPortalUser(updated);
+}
+export async function syncGroupBasedAppAccess() {
+    if (!process.env.PORTAL_DB_URL) {
+        return {
+            updatedUsers: 0,
+            upsertedGrants: 0,
+            deletedGrants: 0,
+            skippedLocked: 0,
+        };
+    }
+    const membershipsByEmail = parseGroupMembershipsFromEnv();
+    const prisma = getPortalAuthPrisma();
+    const [users, mappings] = await Promise.all([
+        prisma.user.findMany({
+            where: { isActive: true },
+            select: {
+                id: true,
+                email: true,
+            },
+        }),
+        prisma.groupAppMapping.findMany({
+            where: { isActive: true },
+            select: {
+                googleGroup: true,
+                role: true,
+                departments: true,
+                app: {
+                    select: {
+                        id: true,
+                        slug: true,
+                    },
+                },
+            },
+        }),
+    ]);
+    const mappingByGroup = new Map();
+    for (const mapping of mappings) {
+        const key = mapping.googleGroup.trim();
+        const list = mappingByGroup.get(key) ?? [];
+        list.push({
+            appId: mapping.app.id,
+            role: normalizeAppRole(mapping.role),
+            departments: normalizeDepartments(mapping.departments),
+        });
+        mappingByGroup.set(key, list);
+    }
+    let updatedUsers = 0;
+    let upsertedGrants = 0;
+    let deletedGrants = 0;
+    let skippedLocked = 0;
+    for (const user of users) {
+        const groupNames = membershipsByEmail[user.email.toLowerCase()] ?? [];
+        const desiredByApp = new Map();
+        for (const groupName of groupNames) {
+            const mappingsForGroup = mappingByGroup.get(groupName);
+            if (!mappingsForGroup)
+                continue;
+            for (const mapping of mappingsForGroup) {
+                const existing = desiredByApp.get(mapping.appId);
+                if (!existing) {
+                    desiredByApp.set(mapping.appId, {
+                        role: mapping.role,
+                        departments: mapping.departments,
+                    });
+                    continue;
+                }
+                const deptSet = new Set([...existing.departments, ...mapping.departments]);
+                desiredByApp.set(mapping.appId, {
+                    role: 'viewer',
+                    departments: Array.from(deptSet),
+                });
+            }
+        }
+        const result = await prisma.$transaction(async (tx) => {
+            const existing = await tx.userApp.findMany({
+                where: {
+                    userId: user.id,
+                },
+                select: {
+                    appId: true,
+                    role: true,
+                    source: true,
+                    locked: true,
+                    departments: true,
+                },
+            });
+            let changed = false;
+            let localUpserts = 0;
+            let localDeletes = 0;
+            let localSkippedLocked = 0;
+            const existingGroupMap = new Map(existing.filter((entry) => entry.source === 'group').map((entry) => [entry.appId, entry]));
+            const existingByAppMap = new Map(existing.map((entry) => [entry.appId, entry]));
+            for (const [appId, desired] of desiredByApp.entries()) {
+                const currentAny = existingByAppMap.get(appId);
+                if (currentAny?.source === 'manual') {
+                    localSkippedLocked += 1;
+                    continue;
+                }
+                if (currentAny?.locked && currentAny.source !== 'group') {
+                    localSkippedLocked += 1;
+                    continue;
+                }
+                const current = existingGroupMap.get(appId);
+                const currentRole = current ? normalizeAppRole(current.role) : null;
+                const currentDepartments = current ? normalizeDepartments(current.departments) : [];
+                const sameRole = currentRole === desired.role;
+                const sameDepartments = currentDepartments.length === desired.departments.length
+                    && currentDepartments.every((dept, idx) => dept === desired.departments[idx]);
+                if (sameRole && sameDepartments) {
+                    continue;
+                }
+                await tx.userApp.upsert({
+                    where: {
+                        userId_appId: {
+                            userId: user.id,
+                            appId,
+                        },
+                    },
+                    update: {
+                        role: desired.role,
+                        departments: desired.departments,
+                        source: 'group',
+                        locked: false,
+                    },
+                    create: {
+                        userId: user.id,
+                        appId,
+                        role: desired.role,
+                        departments: desired.departments,
+                        source: 'group',
+                        locked: false,
+                    },
+                });
+                changed = true;
+                localUpserts += 1;
+            }
+            for (const [appId, current] of existingGroupMap.entries()) {
+                if (desiredByApp.has(appId)) {
+                    continue;
+                }
+                if (current.locked) {
+                    localSkippedLocked += 1;
+                    continue;
+                }
+                await tx.userApp.delete({
+                    where: {
+                        userId_appId: {
+                            userId: user.id,
+                            appId,
+                        },
+                    },
+                });
+                changed = true;
+                localDeletes += 1;
+            }
+            if (changed) {
+                await bumpAuthzVersion(tx, user.id);
+            }
+            return {
+                changed,
+                localUpserts,
+                localDeletes,
+                localSkippedLocked,
+            };
+        });
+        if (result.changed) {
+            updatedUsers += 1;
+        }
+        upsertedGrants += result.localUpserts;
+        deletedGrants += result.localDeletes;
+        skippedLocked += result.localSkippedLocked;
+    }
+    return {
+        updatedUsers,
+        upsertedGrants,
+        deletedGrants,
+        skippedLocked,
+    };
 }
 export async function authenticateWithPortalDirectory(input) {
     const { emailOrUsername, password } = credentialsSchema.parse(input);
@@ -203,18 +488,22 @@ function handleDevFallback(emailOrUsername, password) {
 function buildDemoUser() {
     const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase();
     const entitlements = {
-        talos: { departments: ['Ops'] },
-        atlas: { departments: ['People Ops'] },
-        website: { departments: [] },
-        kairos: { departments: ['Product'] },
-        'xplan': { departments: ['Product'] },
-        hermes: { departments: ['Account / Listing'] },
+        talos: { role: 'viewer', departments: ['Ops'] },
+        atlas: { role: 'viewer', departments: ['People Ops'] },
+        website: { role: 'viewer', departments: [] },
+        kairos: { role: 'viewer', departments: ['Product'] },
+        xplan: { role: 'viewer', departments: ['Product'] },
+        hermes: { role: 'viewer', departments: ['Account / Listing'] },
+        plutus: { role: 'viewer', departments: ['Finance'] },
+        argus: { role: 'viewer', departments: ['Account / Listing'] },
     };
     return {
         id: DEMO_ADMIN_UUID,
         email: process.env.DEMO_ADMIN_EMAIL || 'dev-admin@targonglobal.com',
         username: demoUsername,
         fullName: 'Development Admin',
+        authzVersion: 1,
+        globalRoles: ['platform_admin'],
         entitlements,
     };
 }
@@ -226,6 +515,7 @@ export async function getUserEntitlements(userId) {
     const assignments = await prisma.userApp.findMany({
         where: { userId },
         select: {
+            role: true,
             departments: true,
             app: {
                 select: {
@@ -237,10 +527,83 @@ export async function getUserEntitlements(userId) {
     const entitlements = {};
     for (const assignment of assignments) {
         entitlements[assignment.app.slug] = {
-            departments: Array.isArray(assignment.departments) ? assignment.departments : [],
+            role: normalizeAppRole(assignment.role),
+            departments: normalizeDepartments(assignment.departments),
         };
     }
     return entitlements;
+}
+export async function getUserGlobalRoles(userId) {
+    if (!process.env.PORTAL_DB_URL) {
+        return [];
+    }
+    const prisma = getPortalAuthPrisma();
+    const userRoles = await prisma.userRole.findMany({
+        where: { userId },
+        select: {
+            role: {
+                select: {
+                    name: true,
+                },
+            },
+        },
+    });
+    return userRoles.map((entry) => entry.role.name);
+}
+export async function getUserAuthz(userId) {
+    if (!process.env.PORTAL_DB_URL) {
+        return {
+            version: 1,
+            globalRoles: ['platform_admin'],
+            apps: buildDemoUser().entitlements,
+        };
+    }
+    const prisma = getPortalAuthPrisma();
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+            authzVersion: true,
+            appAccess: {
+                select: {
+                    role: true,
+                    departments: true,
+                    app: {
+                        select: {
+                            slug: true,
+                        },
+                    },
+                },
+            },
+            roles: {
+                select: {
+                    role: {
+                        select: {
+                            name: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+    if (!user) {
+        return {
+            version: 1,
+            globalRoles: [],
+            apps: {},
+        };
+    }
+    const apps = {};
+    for (const assignment of user.appAccess) {
+        apps[assignment.app.slug] = {
+            role: normalizeAppRole(assignment.role),
+            departments: normalizeDepartments(assignment.departments),
+        };
+    }
+    return {
+        version: user.authzVersion,
+        globalRoles: user.roles.map((entry) => entry.role.name),
+        apps,
+    };
 }
 export async function getUserByEmail(email) {
     const normalizedEmail = email.trim().toLowerCase();
@@ -254,33 +617,76 @@ export async function getUserByEmail(email) {
         return null;
     }
     const prisma = getPortalAuthPrisma();
-    const fetchUser = async () => prisma.user.findFirst({
+    const user = await prisma.user.findFirst({
         where: {
             email: normalizedEmail,
             isActive: true,
         },
         select: userSelect,
     });
-    let user = await fetchUser();
-    if (portalBootstrapAdminEmailSet().has(normalizedEmail)) {
-        const requiredSlugs = defaultPortalAdminApps().map((app) => app.slug);
-        const currentSlugs = user ? new Set(user.appAccess.map((entry) => entry.app.slug)) : new Set();
-        const hasAllAppAccess = user ? requiredSlugs.every((slug) => currentSlugs.has(slug)) : false;
-        if (!user || !hasAllAppAccess) {
-            await ensureBootstrapPortalAdminUser(normalizedEmail);
-            user = await fetchUser();
-        }
-    }
     if (!user)
         return null;
+    return mapPortalUser(user);
+}
+export async function getOrCreatePortalUserByEmail(options) {
+    const normalizedEmail = options.email.trim().toLowerCase();
+    if (!normalizedEmail)
+        return null;
+    if (!process.env.PORTAL_DB_URL) {
+        const demoUser = buildDemoUser();
+        if (demoUser.email.toLowerCase() === normalizedEmail) {
+            return demoUser;
+        }
+        return null;
+    }
+    const firstName = normalizeOptionalName(options.firstName);
+    const lastName = normalizeOptionalName(options.lastName);
+    const prisma = getPortalAuthPrisma();
+    const user = await prisma.$transaction(async (tx) => {
+        const existingUser = await tx.user.findUnique({
+            where: { email: normalizedEmail },
+            select: { id: true },
+        });
+        if (existingUser) {
+            await tx.user.update({
+                where: { id: existingUser.id },
+                data: {
+                    isActive: true,
+                    ...(firstName !== undefined ? { firstName } : {}),
+                    ...(lastName !== undefined ? { lastName } : {}),
+                },
+                select: { id: true },
+            });
+        }
+        else {
+            await tx.user.create({
+                data: {
+                    email: normalizedEmail,
+                    username: null,
+                    passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
+                    firstName: firstName ?? null,
+                    lastName: lastName ?? null,
+                    isActive: true,
+                    isDemo: false,
+                },
+                select: { id: true },
+            });
+        }
+        return tx.user.findUnique({
+            where: { email: normalizedEmail },
+            select: userSelect,
+        });
+    });
+    if (!user) {
+        return null;
+    }
     return mapPortalUser(user);
 }
 function mapPortalUser(user) {
     const entitlements = user.appAccess.reduce((acc, assignment) => {
         acc[assignment.app.slug] = {
-            departments: Array.isArray(assignment.departments)
-                ? assignment.departments
-                : [],
+            role: normalizeAppRole(assignment.role),
+            departments: normalizeDepartments(assignment.departments),
         };
         return acc;
     }, {});
@@ -289,6 +695,8 @@ function mapPortalUser(user) {
         email: user.email,
         username: user.username,
         fullName: [user.firstName, user.lastName].filter(Boolean).join(' ') || null,
+        authzVersion: user.authzVersion,
+        globalRoles: user.roles.map((entry) => entry.role.name),
         entitlements,
     };
 }
