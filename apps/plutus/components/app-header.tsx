@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   ArrowLeftRight,
   BarChart3,
+  Bell,
   Boxes,
   ChevronDown,
   ListChecks,
@@ -20,9 +21,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { type Marketplace, useMarketplaceStore } from '@/lib/store/marketplace';
 
 function LogoIcon({ className }: { className?: string }) {
   return (
@@ -59,6 +69,36 @@ function QboStatusFallback() {
   );
 }
 
+const MARKETPLACE_OPTIONS: Array<{ value: Marketplace; label: string; flag: string }> = [
+  { value: 'all', label: 'All Marketplaces', flag: '' },
+  { value: 'US', label: 'US - Amazon.com', flag: '\u{1F1FA}\u{1F1F8}' },
+  { value: 'UK', label: 'UK - Amazon.co.uk', flag: '\u{1F1EC}\u{1F1E7}' },
+];
+
+function MarketplaceSelector() {
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
+  const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
+
+  const current = MARKETPLACE_OPTIONS.find((o) => o.value === marketplace);
+
+  return (
+    <Select value={marketplace} onValueChange={(v) => setMarketplace(v as Marketplace)}>
+      <SelectTrigger className="h-8 w-[155px] gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
+        <SelectValue>
+          {current?.flag ? `${current.flag} ${current.label}` : current?.label}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {MARKETPLACE_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.flag ? `${opt.flag}  ${opt.label}` : opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 type NavItem =
   | {
       href: string;
@@ -74,7 +114,7 @@ type NavItem =
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptText },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/analytics', label: 'Benchmarking', icon: BarChart3 },
   {
     label: 'Accounts & Taxes',
     icon: ListChecks,
@@ -90,6 +130,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/audit-data', label: 'Audit Data' },
       { href: '/settlement-processing', label: 'Settlement Processing' },
       { href: '/bills', label: 'Bills' },
+      { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -101,9 +142,9 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md dark:bg-slate-950/90">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-8">
-          <Link href="/" className="flex items-center gap-2.5">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-6">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-teal-500 to-brand-teal-600 text-white shadow-sm shadow-brand-teal-500/25 dark:from-brand-cyan dark:to-brand-teal-400 dark:text-slate-900 dark:shadow-brand-cyan/20">
               <LogoIcon className="h-5 w-5" />
             </div>
@@ -113,40 +154,29 @@ export function AppHeader() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden items-center gap-0.5 md:flex">
+          <nav className="hidden items-center gap-0.5 lg:flex">
             {NAV_ITEMS.map((item) => {
               if ('href' in item) {
-                const Icon = item.icon;
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                      'group relative whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150',
                       isActive
                         ? 'text-brand-teal-700 dark:text-brand-cyan'
                         : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
                     )}
                   >
-                    <Icon
-                      className={cn(
-                        'h-4 w-4 transition-colors duration-150',
-                        isActive
-                          ? 'text-brand-teal-600 dark:text-brand-cyan'
-                          : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
-                      )}
-                    />
-                    <span>{item.label}</span>
-                    {/* Active bottom indicator */}
+                    {item.label}
                     {isActive && (
-                      <span className="absolute -bottom-[13px] left-3 right-3 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
+                      <span className="absolute -bottom-[13px] left-2.5 right-2.5 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
                     )}
                   </Link>
                 );
               }
 
-              const Icon = item.icon;
               const anyActive = item.items.some(
                 (submenu) => pathname === submenu.href || pathname.startsWith(`${submenu.href}/`),
               );
@@ -157,24 +187,16 @@ export function AppHeader() {
                     <button
                       type="button"
                       className={cn(
-                        'group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                        'group relative flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150',
                         anyActive
                           ? 'text-brand-teal-700 dark:text-brand-cyan'
                           : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
                       )}
                     >
-                      <Icon
-                        className={cn(
-                          'h-4 w-4 transition-colors duration-150',
-                          anyActive
-                            ? 'text-brand-teal-600 dark:text-brand-cyan'
-                            : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
-                        )}
-                      />
                       <span>{item.label}</span>
-                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                      <ChevronDown className="h-3 w-3 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                       {anyActive && (
-                        <span className="absolute -bottom-[13px] left-3 right-3 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
+                        <span className="absolute -bottom-[13px] left-2.5 right-2.5 h-[2px] rounded-full bg-brand-teal-500 dark:bg-brand-cyan" />
                       )}
                     </button>
                   </DropdownMenuTrigger>
@@ -191,7 +213,30 @@ export function AppHeader() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="hidden lg:block">
+            <MarketplaceSelector />
+          </div>
+
+          {/* Notification bell */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4.5 w-4.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+              <DropdownMenuItem disabled className="text-sm text-slate-500 dark:text-slate-400">
+                No notifications
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Suspense fallback={<QboStatusFallback />}>
             <QboStatusIndicator />
           </Suspense>
@@ -200,7 +245,7 @@ export function AppHeader() {
           {/* Mobile menu toggle */}
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5 md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5 lg:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
@@ -214,8 +259,11 @@ export function AppHeader() {
 
       {/* Mobile nav overlay */}
       {mobileOpen && (
-        <nav className="border-t border-slate-200/50 bg-white/98 backdrop-blur-md dark:border-white/5 dark:bg-slate-950/98 md:hidden">
+        <nav className="border-t border-slate-200/50 bg-white/98 backdrop-blur-md dark:border-white/5 dark:bg-slate-950/98 lg:hidden">
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-3 sm:px-6">
+            <div className="mb-2 px-3 md:hidden">
+              <MarketplaceSelector />
+            </div>
             {NAV_ITEMS.map((item) => {
               if ('href' in item) {
                 const Icon = item.icon;

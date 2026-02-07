@@ -196,7 +196,7 @@ export default function SettlementProcessingPage() {
 
   return (
     <main className="flex-1 page-enter">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Settlement Processing"
           kicker="Plutus"
@@ -210,6 +210,14 @@ export default function SettlementProcessingPage() {
             </Link>
           }
         />
+
+        <div className="mt-2 mb-4 text-xs text-slate-500 dark:text-slate-400">
+          You can also process individual settlements directly from the{' '}
+          <Link href="/settlements" className="font-medium text-brand-teal-600 underline dark:text-brand-cyan">
+            settlement detail
+          </Link>{' '}
+          page using the &ldquo;Process Settlement&rdquo; button.
+        </div>
 
         {isLoading && (
           <Card className="border-slate-200/70 dark:border-white/10 mt-6">

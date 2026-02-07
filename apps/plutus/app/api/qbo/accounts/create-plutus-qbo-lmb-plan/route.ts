@@ -1,43 +1,30 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import { QboAuthError, type QboConnection } from '@/lib/qbo/api';
+import { QboAuthError } from '@/lib/qbo/api';
 import { ensurePlutusQboLmbPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-lmb-plan';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { randomUUID } from 'crypto';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const logger = createLogger({ name: 'qbo-create-plutus-lmb-accounts' });
-
-function shouldUseSecureCookies(request: NextRequest): boolean {
-  let isHttps = request.nextUrl.protocol === 'https:';
-  if (!isHttps) {
-    const forwardedProto = request.headers.get('x-forwarded-proto');
-    if (forwardedProto === 'https') {
-      isHttps = true;
-    }
-  }
-  return isHttps;
-}
 
 export async function POST(request: NextRequest) {
   const requestId = randomUUID();
 
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
-      logger.info('Missing qbo_connection cookie', { requestId });
+    if (!connection) {
+      logger.info('Missing qbo_connection', { requestId });
       return NextResponse.json({ error: 'Not connected to QBO', requestId }, { status: 401 });
     }
 
-    const connection: QboConnection = JSON.parse(connectionCookie);
     logger.info('Ensuring Plutus LMB plan accounts', {
       requestId,
       realmId: connection.realmId,
       expiresAt: connection.expiresAt,
     });
-    await ensureServerQboConnection(connection);
 
     const body = (await request.json()) as {
       brandNames: string[];
@@ -55,13 +42,6 @@ export async function POST(request: NextRequest) {
         realmId: result.updatedConnection.realmId,
         expiresAt: result.updatedConnection.expiresAt,
       });
-      cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
-        httpOnly: true,
-        secure: shouldUseSecureCookies(request),
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(result.updatedConnection);
     }
 
@@ -69,6 +49,19 @@ export async function POST(request: NextRequest) {
       requestId,
       created: result.created.length,
       skipped: result.skipped.length,
+    });
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'ACCOUNTS_CREATED',
+      entityType: 'QboAccount',
+      details: {
+        createdCount: result.created.length,
+        skippedCount: result.skipped.length,
+        brandNames: body.brandNames,
+      },
     });
 
     return NextResponse.json({
