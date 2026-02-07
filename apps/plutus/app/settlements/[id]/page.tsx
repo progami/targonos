@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -77,24 +78,6 @@ type SettlementDetailResponse = {
   };
 };
 
-type InvoiceSummary = {
-  invoice: string;
-  minDate: string;
-  maxDate: string;
-  rowCount: number;
-  skuCount: number;
-};
-
-type AuditAnalyzeResponse = {
-  fileName: string;
-  innerName: string;
-  size: number;
-  rowCount: number;
-  minDate: string;
-  maxDate: string;
-  invoiceSummaries: InvoiceSummary[];
-};
-
 type SettlementProcessingPreview = {
   marketplace: string;
   settlementJournalEntryId: string;
@@ -109,6 +92,11 @@ type SettlementProcessingPreview = {
   returns: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
   cogsJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
   pnlJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
+};
+
+type StoredAuditDataResponse = {
+  uploads: Array<{ id: string; filename: string; rowCount: number; invoiceCount: number; uploadedAt: string }>;
+  invoiceIds: string[];
 };
 
 type ConnectionStatus = { connected: boolean };
@@ -177,36 +165,32 @@ async function fetchSettlement(id: string): Promise<SettlementDetailResponse> {
   return res.json();
 }
 
-async function analyzeAuditFile(file: File): Promise<AuditAnalyzeResponse> {
-  const formData = new FormData();
-  formData.set('file', file);
-  const res = await fetch(`${basePath}/api/plutus/audit-data/analyze`, { method: 'POST', body: formData });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error);
-  }
-  return data;
+async function fetchStoredAuditData(): Promise<StoredAuditDataResponse> {
+  const res = await fetch(`${basePath}/api/plutus/audit-data`);
+  return res.json();
 }
 
-async function fetchPreview(settlementId: string, file: File, invoiceId: string): Promise<SettlementProcessingPreview> {
-  const formData = new FormData();
-  formData.set('file', file);
-  formData.set('invoice', invoiceId);
-  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/preview`, { method: 'POST', body: formData });
+async function fetchPreview(settlementId: string, invoiceId: string): Promise<SettlementProcessingPreview> {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/preview`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ invoiceId }),
+  });
   const data = await res.json();
   return data;
 }
 
-async function processSettlement(settlementId: string, file: File, invoiceId: string) {
-  const formData = new FormData();
-  formData.set('file', file);
-  formData.set('invoice', invoiceId);
-  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/process`, { method: 'POST', body: formData });
+async function postSettlement(settlementId: string, invoiceId: string) {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/process`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ invoiceId }),
+  });
   const data = await res.json();
   if (!res.ok) {
-    return { ok: false, data };
+    return { ok: false as const, data };
   }
-  return { ok: true, data };
+  return { ok: true as const, data };
 }
 
 function SignedAmount({
@@ -242,16 +226,10 @@ export default function SettlementDetailPage() {
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState(initialTab === 'analysis' ? 'analysis' : initialTab === 'history' ? 'history' : 'sales');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
-
-  const [auditFile, setAuditFile] = useState<File | null>(null);
-  const [auditAnalyze, setAuditAnalyze] = useState<AuditAnalyzeResponse | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<string>('');
   const [preview, setPreview] = useState<SettlementProcessingPreview | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
@@ -267,6 +245,12 @@ export default function SettlementDetailPage() {
     queryFn: () => fetchSettlement(settlementId),
     enabled: connection?.connected === true,
     staleTime: 30 * 1000,
+  });
+
+  const { data: auditData, isLoading: isLoadingAuditData } = useQuery({
+    queryKey: ['plutus-audit-data'],
+    queryFn: fetchStoredAuditData,
+    staleTime: 60 * 1000,
   });
 
   const settlement = data?.settlement;
@@ -285,46 +269,14 @@ export default function SettlementDetailPage() {
     return <NotConnectedScreen title="Settlement Details" />;
   }
 
-  async function handleAuditSelected(file: File) {
-    setAuditFile(file);
-    setAuditAnalyze(null);
-    setSelectedInvoice('');
-    setPreview(null);
-    setAnalysisError(null);
-    setIsAnalyzing(true);
-
-    try {
-      const analyzed = await analyzeAuditFile(file);
-      setAuditAnalyze(analyzed);
-
-      const invoices = analyzed.invoiceSummaries;
-      if (invoices.length === 1) {
-        const only = invoices[0];
-        if (!only) throw new Error('No invoice found');
-        setSelectedInvoice(only.invoice);
-        setIsPreviewLoading(true);
-        const nextPreview = await fetchPreview(settlementId, file, only.invoice);
-        setPreview(nextPreview);
-        setIsPreviewLoading(false);
-      }
-    } catch (e) {
-      setAnalysisError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }
-
   async function handleInvoiceSelected(invoiceId: string) {
     setSelectedInvoice(invoiceId);
     setPreview(null);
     setAnalysisError(null);
-
-    const file = auditFile;
-    if (!file) return;
-
     setIsPreviewLoading(true);
+
     try {
-      const nextPreview = await fetchPreview(settlementId, file, invoiceId);
+      const nextPreview = await fetchPreview(settlementId, invoiceId);
       setPreview(nextPreview);
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : String(e));
@@ -334,8 +286,6 @@ export default function SettlementDetailPage() {
   }
 
   async function handlePost() {
-    const file = auditFile;
-    if (!file) return;
     if (selectedInvoice.trim() === '') return;
 
     setIsPosting(true);
@@ -350,7 +300,7 @@ export default function SettlementDetailPage() {
         return;
       }
 
-      const result = await processSettlement(settlementId, file, selectedInvoice);
+      const result = await postSettlement(settlementId, selectedInvoice);
       if (!result.ok) {
         setPreview(result.data);
         return;
@@ -419,6 +369,9 @@ export default function SettlementDetailPage() {
       setIsRollingBack(false);
     }
   }
+
+  const storedInvoiceIds = auditData?.invoiceIds ?? [];
+  const hasStoredData = storedInvoiceIds.length > 0;
 
   return (
     <main className="flex-1 page-enter">
@@ -596,73 +549,65 @@ export default function SettlementDetailPage() {
                         <div>
                           <div className="text-sm font-semibold text-slate-900 dark:text-white">Audit Data</div>
                           <div className="text-sm text-slate-500 dark:text-slate-400">
-                            Upload the LMB Audit Data file (CSV or ZIP) for this settlement.
+                            Select the LMB invoice to process for this settlement.
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv,.zip"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              void handleAuditSelected(file);
-                            }}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const el = fileInputRef.current;
-                              if (!el) return;
-                              el.click();
-                            }}
-                          >
-                            Choose file
-                          </Button>
-                          {auditFile && (
-                            <Badge variant="secondary" className="max-w-[16rem] truncate" title={auditFile.name}>
-                              {auditFile.name}
-                            </Badge>
-                          )}
-                        </div>
+                        <Link
+                          href="/audit-data"
+                          className="text-sm font-medium text-brand-teal-600 hover:text-brand-teal-700 dark:text-brand-cyan dark:hover:text-brand-cyan/80"
+                        >
+                          Manage Audit Data
+                        </Link>
                       </div>
 
-                      <div
-                        className={[
-                          'rounded-xl border border-dashed p-5 transition-colors',
-                          isDraggingFile
-                            ? 'border-brand-teal-400 bg-brand-teal-50/70 dark:bg-brand-cyan/10'
-                            : 'border-slate-200 bg-white dark:border-white/10 dark:bg-white/5',
-                        ].join(' ')}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setIsDraggingFile(true);
-                        }}
-                        onDragLeave={() => setIsDraggingFile(false)}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setIsDraggingFile(false);
-                          const file = e.dataTransfer.files?.[0];
-                          if (!file) return;
-                          void handleAuditSelected(file);
-                        }}
-                      >
-                        <div className="flex flex-col items-center gap-2 text-center">
-                          <svg className="h-8 w-8 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                          </svg>
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">
-                            Drop the file here
-                          </div>
-                          <div className="text-sm text-slate-500 dark:text-slate-400">
-                            Or use &ldquo;Choose file&rdquo;. Once uploaded, Plutus will detect invoice groups and compute a preview.
+                      {isLoadingAuditData && (
+                        <div className="space-y-2">
+                          <Skeleton className="h-9 w-full" />
+                        </div>
+                      )}
+
+                      {!isLoadingAuditData && !hasStoredData && (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <svg className="h-8 w-8 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9.75m3 0H9.75m0 0v3m0-3v-3m-6-3.375c0-1.036.84-1.875 1.875-1.875H9M3.75 21h16.5M3.75 21V6.375c0-1.036.84-1.875 1.875-1.875h3" />
+                            </svg>
+                            <div className="text-sm font-medium text-slate-900 dark:text-white">
+                              No audit data uploaded yet
+                            </div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                              Upload the LMB Audit Data CSV on the{' '}
+                              <Link href="/audit-data" className="font-medium text-brand-teal-600 underline dark:text-brand-cyan">
+                                Audit Data
+                              </Link>{' '}
+                              page first.
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+
+                      {!isLoadingAuditData && hasStoredData && (
+                        <div className="grid gap-2 sm:grid-cols-2 items-end">
+                          <div>
+                            <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Invoice</div>
+                            <Select value={selectedInvoice} onValueChange={(v) => void handleInvoiceSelected(v)}>
+                              <SelectTrigger className="bg-white dark:bg-slate-900">
+                                <SelectValue placeholder="Select invoice…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {storedInvoiceIds.map((id) => (
+                                  <SelectItem key={id} value={id}>
+                                    {id}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {storedInvoiceIds.length} invoice{storedInvoiceIds.length === 1 ? '' : 's'} available from uploaded audit data.
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -670,44 +615,6 @@ export default function SettlementDetailPage() {
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
                       {analysisError}
                     </div>
-                  )}
-
-                  {isAnalyzing && <div className="text-sm text-slate-500">Analyzing audit file…</div>}
-
-                  {auditAnalyze && (
-                    <Card className="border-slate-200/70 dark:border-white/10">
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{auditAnalyze.fileName}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {auditAnalyze.rowCount} rows • {auditAnalyze.minDate} → {auditAnalyze.maxDate}
-                          </div>
-                        </div>
-
-                        {auditAnalyze.invoiceSummaries.length > 1 && (
-                          <div className="grid gap-2 sm:grid-cols-2 items-end">
-                            <div>
-                              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Invoice</div>
-                              <Select value={selectedInvoice} onValueChange={(v) => void handleInvoiceSelected(v)}>
-                                <SelectTrigger className="bg-white dark:bg-slate-900">
-                                  <SelectValue placeholder="Select invoice…" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {auditAnalyze.invoiceSummaries.map((inv) => (
-                                    <SelectItem key={inv.invoice} value={inv.invoice}>
-                                      {inv.invoice} ({inv.skuCount} SKUs)
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              Choose the invoice group to process.
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
                   )}
 
                   {isPreviewLoading && <div className="text-sm text-slate-500">Computing preview…</div>}
