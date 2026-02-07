@@ -102,7 +102,11 @@ export function parseSellerboardOrdersWeeklyUnits(
       continue;
     }
 
-    const units = Math.max(0, Math.round(rawUnits));
+    const units = Math.round(rawUnits);
+    if (units <= 0) {
+      rowsSkipped += 1;
+      continue;
+    }
     const reportDate = getUtcDateForTimeZone(purchaseDateUtc, options.reportTimeZone);
     const weekNumber = weekNumberForDate(reportDate, planning.calendar);
     if (weekNumber == null) {
@@ -126,6 +130,7 @@ export function parseSellerboardOrdersWeeklyUnits(
   const weeklyUnits: SellerboardWeeklyUnits[] = [];
   for (const [productCode, byWeek] of weeklyByProduct.entries()) {
     for (const [weekNumber, units] of byWeek.entries()) {
+      if (units <= 0) continue;
       const weekDate = planning.calendar.weekDates.get(weekNumber);
       if (!weekDate) continue;
       weeklyUnits.push({ productCode, weekNumber, units });
