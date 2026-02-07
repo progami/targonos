@@ -1,6 +1,13 @@
 -- ERD v9 alignment updates for Talos purchase-order flow.
 -- Keeps the operational schema intact while ensuring ERD views match the latest ERD v9 spec.
 
+-- PostgreSQL does not allow CREATE OR REPLACE VIEW to change the column list/order.
+-- Drop the v9 compliance views we are reshaping before recreating them.
+DROP VIEW IF EXISTS "po_ci";
+DROP VIEW IF EXISTS "purchase_order";
+DROP VIEW IF EXISTS "sku";
+DROP VIEW IF EXISTS "grn";
+
 CREATE OR REPLACE VIEW "sku" AS
 SELECT
   s."id" AS "sku_id",
@@ -214,4 +221,3 @@ SELECT
   "freight_receipt_url",
   "transaction_cert_url"
 FROM "goods_receipt";
-
