@@ -611,6 +611,111 @@ export async function fetchBills(
 }
 
 /**
+ * Fetch a single Bill by ID
+ */
+export async function fetchBillById(
+  connection: QboConnection,
+  billId: string,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+
+  const response = await fetchWithRetry(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to fetch bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+/**
+ * Update a Bill's line item account references.
+ */
+export async function updateBillLineAccounts(
+  connection: QboConnection,
+  billId: string,
+  syncToken: string,
+  lineUpdates: Array<{ lineId: string; accountId: string; accountName: string }>,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const fetchUrl = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+  const fetchResponse = await fetchWithRetry(fetchUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!fetchResponse.ok) {
+    const errorText = await fetchResponse.text();
+    logger.error('Failed to fetch bill for update', { billId, status: fetchResponse.status, error: errorText });
+    throw new Error(`Failed to fetch bill for update: ${fetchResponse.status} ${errorText}`);
+  }
+
+  const fetchData = (await fetchResponse.json()) as { Bill: QboBill };
+  const bill = fetchData.Bill;
+
+  const updateMap = new Map(lineUpdates.map((u) => [u.lineId, u]));
+  const updatedLines = (bill.Line ?? []).map((line) => {
+    const update = updateMap.get(line.Id);
+    if (update && line.AccountBasedExpenseLineDetail) {
+      return {
+        ...line,
+        AccountBasedExpenseLineDetail: {
+          ...line.AccountBasedExpenseLineDetail,
+          AccountRef: {
+            value: update.accountId,
+            name: update.accountName,
+          },
+        },
+      };
+    }
+    return line;
+  });
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const payload = {
+    ...bill,
+    SyncToken: syncToken,
+    Line: updatedLines,
+  };
+
+  logger.info('Updating bill line accounts in QBO', { billId, lineUpdates });
+
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to update bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+/**
  * Fetch a single JournalEntry by ID
  */
 export async function fetchJournalEntryById(
