@@ -103,30 +103,25 @@ function renameColumnIfNeeded(table: string, from: string, to: string): string {
   `
 }
 
-function dropSkuBatchEnforcement(): string {
-  return `
-    -- ERD v9 removed the SKU batch concept; lots are generated per PO line.
-    -- Drop legacy constraint triggers + function that enforced "each SKU must have a batch".
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM pg_trigger
-        WHERE tgname = 'trg_skus_require_batch'
-          AND tgrelid = 'skus'::regclass
-      ) THEN
-        DROP TRIGGER IF EXISTS trg_skus_require_batch ON "skus";
-      END IF;
-    END $$;
-
-    DO $$
-    BEGIN
-      IF to_regclass('sku_batches') IS NOT NULL THEN
-        DROP TRIGGER IF EXISTS trg_sku_batches_require_batch ON "sku_batches";
-      END IF;
-    END $$;
-
-    DROP FUNCTION IF EXISTS "enforce_sku_batch_presence"();
-  `
+function dropSkuBatchEnforcement(): string[] {
+  return [
+    `
+      -- ERD v9 removed the SKU batch concept; lots are generated per PO line.
+      -- Drop legacy constraint triggers + function that enforced "each SKU must have a batch".
+      DROP TRIGGER IF EXISTS trg_skus_require_batch ON "skus";
+    `,
+    `
+      DO $$
+      BEGIN
+        IF to_regclass('sku_batches') IS NOT NULL THEN
+          EXECUTE 'DROP TRIGGER IF EXISTS trg_sku_batches_require_batch ON sku_batches';
+        END IF;
+      END $$;
+    `,
+    `
+      DROP FUNCTION IF EXISTS "enforce_sku_batch_presence"();
+    `,
+  ]
 }
 
 function dropPurchaseOrderLineBatchLot(): string {
@@ -219,7 +214,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `,
 
     // Remove legacy SKU batch enforcement + drop the last remaining batch_lot column on PO lines.
-    dropSkuBatchEnforcement(),
+    ...dropSkuBatchEnforcement(),
     dropPurchaseOrderLineBatchLot(),
   ]
 
