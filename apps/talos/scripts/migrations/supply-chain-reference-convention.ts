@@ -173,21 +173,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       AND seed."sku_group" IS NOT NULL
       AND seed."sequence_text" IS NOT NULL
       AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,
-    `CREATE OR REPLACE VIEW "lot" AS
-    SELECT
-      pol."purchase_order_id" AS "po_id",
-      s."id" AS "sku_id",
-      pol."lot_ref" AS "lot_ref",
-      pol."units_ordered" AS "qty_units",
-      pol."units_per_carton",
-      pol."quantity" AS "cartons",
-      pol."unit_cost",
-      pol."pi_number" AS "pi_ref",
-      pol."production_date"::date AS "production_date",
-      pol."status"::text AS "status"
-    FROM "purchase_order_lines" pol
-    LEFT JOIN "skus" s
-      ON s."sku_code" = pol."sku_code"`,
   ]
 
   console.log(`\n[${tenant}] Applying supply chain naming convention schema/backfill`)

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { navItems } from "@/components/app-shell/nav";
+import { navGroups } from "@/components/app-shell/nav";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
@@ -69,27 +69,35 @@ export function AppSidebar() {
       <Separator />
       <ScrollArea className="min-h-0 flex-1">
         <nav className="px-3 py-3">
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-              const Icon = item.icon;
+          {navGroups.map((group, gIdx) => (
+            <div key={group.label}>
+              {gIdx > 0 ? <Separator className="my-2" /> : null}
+              <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </div>
+              <ul className="space-y-1">
+                {group.items.map((item) => {
+                  const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                  const Icon = item.icon;
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
-                      active && "bg-accent text-accent-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
+                          active && "bg-accent text-accent-foreground"
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
       </ScrollArea>
       <Separator />
