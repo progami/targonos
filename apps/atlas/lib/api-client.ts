@@ -1484,7 +1484,9 @@ export type CreditCard = {
   title: string
   cardholderName?: string | null
   brand: CreditCardBrand
+  cardNumber?: string | null
   last4: string
+  cvv?: string | null
   expMonth: number
   expYear: number
   department: PasswordDepartment
@@ -1513,7 +1515,9 @@ export const CreditCardsApi = {
     title: string
     cardholderName?: string | null
     brand: CreditCardBrand
-    last4: string
+    cardNumber?: string | null
+    last4?: string
+    cvv?: string | null
     expMonth: number
     expYear: number
     department?: PasswordDepartment
@@ -1530,7 +1534,9 @@ export const CreditCardsApi = {
     title: string
     cardholderName: string | null
     brand: CreditCardBrand
+    cardNumber: string | null
     last4: string
+    cvv: string | null
     expMonth: number
     expYear: number
     department: PasswordDepartment

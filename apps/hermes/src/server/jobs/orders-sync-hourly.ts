@@ -118,7 +118,8 @@ async function syncConnection(connectionId: string, marketplaceIds: string[]) {
   const maxPages = getInt("HERMES_ORDERS_SYNC_MAX_PAGES_PER_RUN", 50);
   const maxResultsPerPage = Math.max(1, Math.min(getInt("HERMES_ORDERS_SYNC_MAX_RESULTS_PER_PAGE", 100), 100));
 
-  const enqueue = getBool("HERMES_ORDERS_SYNC_ENQUEUE_REVIEW_REQUESTS", true);
+  const dryRun = getBool("HERMES_DRY_RUN", false);
+  const enqueue = dryRun ? false : getBool("HERMES_ORDERS_SYNC_ENQUEUE_REVIEW_REQUESTS", true);
   const schedule = buildScheduleFromEnv();
 
   const orderStatuses = csv(process.env.HERMES_ORDERS_SYNC_ORDER_STATUSES ?? "Shipped,PartiallyShipped");

@@ -128,6 +128,11 @@ const stsCache = g.__hermesStsCache ?? (g.__hermesStsCache = new Map());
 
 // -------------------------------------------------------------------------
 
+function isDryRun(): boolean {
+  const v = process.env.HERMES_DRY_RUN;
+  return v === "1" || v === "true";
+}
+
 export class SpApiClient {
   constructor(private config: SpApiConfig) {}
 
@@ -317,6 +322,16 @@ export class SpApiClient {
   }
 
   async request(opts: SpApiRequestOpts): Promise<SpApiResponse> {
+    // Safety net: block all POST requests in dry-run mode.
+    if (isDryRun() && opts.method === "POST") {
+      console.log(`[hermes:dry-run] BLOCKED ${opts.method} ${opts.path}`);
+      return {
+        status: 200,
+        body: { dryRun: true, blocked: `${opts.method} ${opts.path}` },
+        headers: {},
+      };
+    }
+
     const opKey = opts.rateLimitKey ?? `${opts.method} ${opts.path.split("?")[0]}`;
     const limiterKey = this.limiterKey(opKey);
 
