@@ -15,7 +15,7 @@ export type OrdersPreferences = {
 };
 
 export type InsightsPreferences = {
-  rangeDays: 7 | 30 | 90;
+  rangeDays: 7 | 30 | 90 | 365;
 };
 
 export type LogsPreferences = {
@@ -146,7 +146,7 @@ function parseInsightsPreferences(raw: unknown): InsightsPreferences {
 
   const rangeDaysRaw = v.rangeDays;
   const rangeDays: InsightsPreferences["rangeDays"] =
-    rangeDaysRaw === 7 || rangeDaysRaw === 30 || rangeDaysRaw === 90
+    rangeDaysRaw === 7 || rangeDaysRaw === 30 || rangeDaysRaw === 90 || rangeDaysRaw === 365
       ? rangeDaysRaw
       : DEFAULT_INSIGHTS.rangeDays;
 
