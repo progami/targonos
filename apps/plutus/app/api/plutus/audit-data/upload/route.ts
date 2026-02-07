@@ -14,6 +14,7 @@ function toUint8Array(buf: ArrayBuffer): Uint8Array {
 }
 
 export async function POST(req: Request) {
+  try {
   const formData = await req.formData();
   const file = formData.get('file');
 
@@ -139,4 +140,8 @@ export async function POST(req: Request) {
     uploadedAt: upload.uploadedAt.toISOString(),
     invoiceSummaries,
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
