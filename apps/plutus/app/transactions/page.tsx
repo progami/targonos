@@ -165,7 +165,7 @@ export default function TransactionsPage() {
         endDate: normalizedEndDate,
       }),
     enabled: connection !== undefined && connection.connected === true,
-    staleTime: 15 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const currency = connection?.homeCurrency ? connection.homeCurrency : 'USD';

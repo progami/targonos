@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import { fetchAccounts, fetchJournalEntries, QboAuthError, type QboAccount, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { fetchAccounts, fetchJournalEntries, QboAuthError, type QboAccount, type QboJournalEntry } from '@/lib/qbo/api';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { db } from '@/lib/db';
 
 const logger = createLogger({ name: 'plutus-analytics' });
-
-function shouldUseSecureCookies(req: NextRequest): boolean {
-  let isHttps = req.nextUrl.protocol === 'https:';
-  if (!isHttps) {
-    const forwardedProto = req.headers.get('x-forwarded-proto');
-    if (forwardedProto === 'https') {
-      isHttps = true;
-    }
-  }
-  return isHttps;
-}
 
 type ChannelId = 'targon-us' | 'targon-uk';
 
@@ -136,14 +124,10 @@ function descendantsOf(rootId: string, childrenByParent: Map<string, string[]>):
 
 export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
-    if (!connectionCookie) {
+    const connection = await getQboConnection();
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const searchParams = req.nextUrl.searchParams;
     const period = requireMonth(searchParams.get('month'));
@@ -263,13 +247,6 @@ export async function GET(req: NextRequest) {
     }
 
     if (activeConnection !== connection) {
-      cookieStore.set('qbo_connection', JSON.stringify(activeConnection), {
-        httpOnly: true,
-        secure: shouldUseSecureCookies(req),
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(activeConnection);
     }
 

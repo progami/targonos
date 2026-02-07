@@ -1,42 +1,20 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 import { getApiBaseUrl } from '@/lib/qbo/client';
-import { getValidToken, type QboConnection } from '@/lib/qbo/api';
+import { getValidToken } from '@/lib/qbo/api';
 import type { QboConnectionStatus, QboCompanyInfoResponse, QboPreferences } from '@/lib/qbo/types';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-status' });
 
-function shouldUseSecureCookies(req: NextRequest): boolean {
-  let isHttps = req.nextUrl.protocol === 'https:';
-  if (!isHttps) {
-    const forwardedProto = req.headers.get('x-forwarded-proto');
-    if (forwardedProto === 'https') {
-      isHttps = true;
-    }
-  }
-  return isHttps;
-}
+export async function GET() {
+  const connection = await getQboConnection();
 
-export async function GET(req: NextRequest) {
-  const cookieStore = await cookies();
-  const connectionCookie = cookieStore.get('qbo_connection')?.value;
-
-  if (!connectionCookie) {
+  if (!connection) {
     return NextResponse.json<QboConnectionStatus>({
       connected: false,
     });
   }
-
-  let connection: QboConnection;
-  try {
-    connection = JSON.parse(connectionCookie);
-  } catch {
-    logger.error('Failed to parse QBO connection cookie');
-    return NextResponse.json<QboConnectionStatus>({ connected: false });
-  }
-  await ensureServerQboConnection(connection);
 
   // Try to get a valid token (auto-refreshes if expired)
   let accessToken = connection.accessToken;
@@ -44,16 +22,8 @@ export async function GET(req: NextRequest) {
     const result = await getValidToken(connection);
     accessToken = result.accessToken;
 
-      // Update cookie if token was refreshed
-      if (result.updatedConnection) {
-        cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
-          httpOnly: true,
-          secure: shouldUseSecureCookies(req),
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 100, // 100 days
-          path: '/',
-        });
-        await saveServerQboConnection(result.updatedConnection);
+    if (result.updatedConnection) {
+      await saveServerQboConnection(result.updatedConnection);
       logger.info('QBO token refreshed successfully');
     }
   } catch (refreshError) {

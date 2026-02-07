@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BackButton } from '@/components/back-button';
+import { Search } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useChartOfAccountsStore } from '@/lib/store/chart-of-accounts';
 import { cn } from '@/lib/utils';
@@ -62,18 +70,10 @@ function RefreshIcon({ className }: { className?: string }) {
   );
 }
 
-function SearchIcon({ className }: { className?: string }) {
+function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
   );
 }
@@ -86,10 +86,10 @@ function FilterIcon({ className }: { className?: string }) {
   );
 }
 
-function CheckIcon({ className }: { className?: string }) {
+function ChevronDownIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
     </svg>
   );
 }
@@ -102,7 +102,6 @@ function formatCurrency(amount: number, currency: string = 'USD') {
   }).format(amount);
 }
 
-// Column Filter Dropdown Component
 function ColumnFilterDropdown({
   label,
   options,
@@ -148,7 +147,7 @@ function ColumnFilterDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide transition-colors',
+          'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
           isActive
             ? 'text-brand-teal-600 dark:text-brand-teal-400'
             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -242,7 +241,6 @@ export default function ChartOfAccountsPage() {
     return data ? data.total : 0;
   }, [data]);
 
-  // Get unique values for each filterable column
   const accountTypes = useMemo(() => {
     const types = new Set(accounts.map((a) => a.type));
     return Array.from(types).sort();
@@ -258,7 +256,6 @@ export default function ChartOfAccountsPage() {
     return Array.from(curr).sort();
   }, [accounts]);
 
-  // Count accounts by source
   const sourceCounts = useMemo(() => {
     const qbo = accounts.filter((a) => a.source === 'qbo').length;
     const lmb = accounts.filter((a) => a.source === 'lmb').length;
@@ -282,41 +279,13 @@ export default function ChartOfAccountsPage() {
 
   const activeFiltersCount = (selectedTypes.size > 0 ? 1 : 0) + (selectedDetailTypes.size > 0 ? 1 : 0) + (selectedCurrencies.size > 0 ? 1 : 0);
 
-  const clearAllFilters = () => {
-    clearFilters();
-  };
-
-  // Show not connected screen once we know connection status is false
   if (!isCheckingConnection && connectionStatus?.connected === false) {
     return <NotConnectedScreen title="Chart of Accounts" />;
   }
 
-  if (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to load accounts';
-
-    return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50 p-8 text-center">
-            <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2">Error</h2>
-            <p className="text-red-600 dark:text-red-300 mb-4">{errorMessage}</p>
-            <Button onClick={handleRefresh} variant="outline">
-              <RefreshIcon className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background page-enter">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-2">
-          <BackButton />
-        </div>
+    <main className="flex-1 page-enter">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Chart of Accounts"
           variant="accent"
@@ -328,227 +297,205 @@ export default function ChartOfAccountsPage() {
           }
         />
 
-        {/* Source Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-white/5 rounded-lg w-fit">
-          <button
-            onClick={() => setSourceFilter('all')}
-            className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all',
-              sourceFilter === 'all'
-                ? 'bg-brand-teal-500 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
-            )}
+        <div className="mt-6 grid gap-4">
+          {/* Source Tabs */}
+          <Tabs
+            value={sourceFilter}
+            onValueChange={(v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
           >
-            All
-            <span className={cn(
-              'ml-2 text-xs px-1.5 py-0.5 rounded',
-              sourceFilter === 'all'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
-            )}>{sourceCounts.all}</span>
-          </button>
-          <button
-            onClick={() => setSourceFilter('qbo')}
-            className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all',
-              sourceFilter === 'qbo'
-                ? 'bg-brand-teal-500 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
-            )}
-          >
-            QBO Created
-            <span className={cn(
-              'ml-2 text-xs px-1.5 py-0.5 rounded',
-              sourceFilter === 'qbo'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
-            )}>{sourceCounts.qbo}</span>
-          </button>
-          <button
-            onClick={() => setSourceFilter('lmb')}
-            className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all',
-              sourceFilter === 'lmb'
-                ? 'bg-brand-teal-500 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5'
-            )}
-          >
-            LMB / Plutus
-            <span className={cn(
-              'ml-2 text-xs px-1.5 py-0.5 rounded',
-              sourceFilter === 'lmb'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
-            )}>{sourceCounts.lmb}</span>
-          </button>
-        </div>
+            <TabsList>
+              <TabsTrigger value="all">
+                All
+                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.all}</span>
+              </TabsTrigger>
+              <TabsTrigger value="qbo">
+                QBO Created
+                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.qbo}</span>
+              </TabsTrigger>
+              <TabsTrigger value="lmb">
+                LMB / Plutus
+                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.lmb}</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        {/* Search Bar and Status */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name or number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 bg-white text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/30 focus:border-brand-teal-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-slate-500"
-            />
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Active filters indicator */}
-            {(activeFiltersCount > 0 || search || sourceFilter !== 'all') && (
-              <button
-                onClick={clearAllFilters}
-                className="text-sm text-brand-teal-600 dark:text-brand-teal-400 hover:underline"
-              >
-                Clear all filters
-              </button>
-            )}
-            {/* Count */}
-            <div className="text-sm text-slate-500 dark:text-slate-400">
-              {filteredAccounts.length === total
-                ? `${total} accounts`
-                : `${filteredAccounts.length} of ${total} accounts`}
-            </div>
-          </div>
-        </div>
-
-        {/* Accounts Table */}
-        <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-slate-900">
-          {isLoading || isCheckingConnection ? (
-            <div className="divide-y divide-slate-100 dark:divide-white/5">
-              {Array.from({ length: 15 }).map((_, i) => (
-                <div key={i} className="px-4 py-3 flex items-center gap-4">
-                  <div className="h-4 w-48 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse ml-auto" />
-                </div>
-              ))}
-            </div>
-          ) : filteredAccounts.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-slate-500 dark:text-slate-400">
-                {search || activeFiltersCount > 0 ? 'No accounts match your filters' : 'No accounts found'}
-              </p>
-            </div>
-          ) : (
-            <div>
-              {/* Table Header with Filters */}
-              <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/10">
-                <div className="col-span-1 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Code
-                </div>
-                <div className="col-span-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  Name
-                </div>
-                <div className="col-span-2">
-                  <ColumnFilterDropdown
-                    label="Type"
-                    options={accountTypes}
-                    selectedValues={selectedTypes}
-                    onSelectionChange={(values) => setSelectedTypesRaw(Array.from(values))}
-                    isActive={selectedTypes.size > 0}
-                  />
-                </div>
-                <div className="col-span-3">
-                  <ColumnFilterDropdown
-                    label="Detail Type"
-                    options={detailTypes}
-                    selectedValues={selectedDetailTypes}
-                    onSelectionChange={(values) => setSelectedDetailTypesRaw(Array.from(values))}
-                    isActive={selectedDetailTypes.size > 0}
-                  />
-                </div>
-                <div className="col-span-1">
-                  <ColumnFilterDropdown
-                    label="Currency"
-                    options={currencies}
-                    selectedValues={selectedCurrencies}
-                    onSelectionChange={(values) => setSelectedCurrenciesRaw(Array.from(values))}
-                    isActive={selectedCurrencies.size > 0}
-                  />
-                </div>
-                <div className="col-span-2 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide text-right">
-                  Balance
-                </div>
-              </div>
-
-              {/* Table Content */}
-              <div className="divide-y divide-slate-100 dark:divide-white/5">
-                {filteredAccounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="grid grid-cols-12 gap-4 px-4 py-3 table-row-hover"
-                  >
-                    {/* Code */}
-                    <div className="col-span-1 flex items-center text-slate-600 dark:text-slate-400 text-sm font-mono">
-                      {account.acctNum ? account.acctNum : '—'}
-                    </div>
-
-                    {/* Name */}
-                    <div
-                      className="col-span-3 flex items-center min-w-0"
-                      style={{ paddingLeft: `${account.depth * 20}px` }}
-                      title={account.fullyQualifiedName ? account.fullyQualifiedName : account.name}
-                    >
-                      {account.depth > 0 && (
-                        <span className="mr-1.5 text-slate-300 dark:text-slate-600 flex-shrink-0 select-none font-mono text-xs">└</span>
-                      )}
-                      <span className="font-medium text-slate-900 dark:text-white truncate">
-                        {account.name}
-                      </span>
-                      {account.source === 'lmb' && (
-                        <span className="ml-2 flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 rounded">
-                          LMB
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Type */}
-                    <div className="col-span-2 flex items-center text-slate-600 dark:text-slate-400 text-sm truncate">
-                      {account.type}
-                    </div>
-
-                    {/* Detail Type */}
-                    <div className="col-span-3 flex items-center text-slate-600 dark:text-slate-400 text-sm truncate">
-                      {account.subType ? account.subType : '—'}
-                    </div>
-
-                    {/* Currency */}
-                    <div className="col-span-1 flex items-center text-slate-600 dark:text-slate-400 text-sm">
-                      {account.currency}
-                    </div>
-
-                    {/* Balance */}
-                    <div className="col-span-2 flex items-center justify-end">
-                      <span className={cn(
-                        'font-mono text-sm tabular-nums',
-                        account.balance < 0
-                          ? 'text-red-600 dark:text-red-400'
-                          : account.balance > 0
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-400 dark:text-slate-500'
-                      )}>
-                        {formatCurrency(account.balance, account.currency)}
-                      </span>
-                    </div>
+          {/* Filter Bar */}
+          <Card className="border-slate-200/70 dark:border-white/10">
+            <CardContent className="p-4">
+              <div className="grid gap-3 md:grid-cols-[1fr,auto] md:items-end">
+                <div className="space-y-1.5">
+                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                    Search
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by name or number..."
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500" />
-          Synced from QuickBooks Online
+                <div className="flex items-center gap-3">
+                  {/* Count */}
+                  <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                    {filteredAccounts.length === total
+                      ? `${total} accounts`
+                      : `${filteredAccounts.length} of ${total}`}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => clearFilters()}
+                    disabled={!search && sourceFilter === 'all' && activeFiltersCount === 0}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Table */}
+          <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table className="table-striped">
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
+                      <TableHead className="font-semibold w-[80px]">Code</TableHead>
+                      <TableHead className="font-semibold">Name</TableHead>
+                      <TableHead className="font-semibold">
+                        <ColumnFilterDropdown
+                          label="Type"
+                          options={accountTypes}
+                          selectedValues={selectedTypes}
+                          onSelectionChange={(values) => setSelectedTypesRaw(Array.from(values))}
+                          isActive={selectedTypes.size > 0}
+                        />
+                      </TableHead>
+                      <TableHead className="font-semibold">
+                        <ColumnFilterDropdown
+                          label="Detail Type"
+                          options={detailTypes}
+                          selectedValues={selectedDetailTypes}
+                          onSelectionChange={(values) => setSelectedDetailTypesRaw(Array.from(values))}
+                          isActive={selectedDetailTypes.size > 0}
+                        />
+                      </TableHead>
+                      <TableHead className="font-semibold">
+                        <ColumnFilterDropdown
+                          label="Currency"
+                          options={currencies}
+                          selectedValues={selectedCurrencies}
+                          onSelectionChange={(values) => setSelectedCurrenciesRaw(Array.from(values))}
+                          isActive={selectedCurrencies.size > 0}
+                        />
+                      </TableHead>
+                      <TableHead className="font-semibold text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(isLoading || isCheckingConnection) && (
+                      <>
+                        {Array.from({ length: 12 }).map((_, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell colSpan={6} className="py-4">
+                              <Skeleton className="h-6 w-full" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    )}
+
+                    {!isLoading && !isCheckingConnection && error && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                          {error instanceof Error ? error.message : String(error)}
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {!isLoading && !isCheckingConnection && !error && filteredAccounts.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6}>
+                          <EmptyState
+                            title="No accounts found"
+                            description={search || activeFiltersCount > 0 ? 'No accounts match your current filters. Try adjusting the search or filters.' : 'No accounts found.'}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {!isLoading &&
+                      !isCheckingConnection &&
+                      !error &&
+                      filteredAccounts.map((account) => (
+                        <TableRow key={account.id} className="table-row-hover">
+                          {/* Code */}
+                          <TableCell className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                            {account.acctNum ? account.acctNum : '—'}
+                          </TableCell>
+
+                          {/* Name with hierarchy indentation */}
+                          <TableCell>
+                            <div
+                              className="flex items-center min-w-0"
+                              style={{ paddingLeft: `${account.depth * 20}px` }}
+                              title={account.fullyQualifiedName ? account.fullyQualifiedName : account.name}
+                            >
+                              {account.depth > 0 && (
+                                <span className="mr-1.5 text-slate-300 dark:text-slate-600 flex-shrink-0 select-none font-mono text-xs">└</span>
+                              )}
+                              <span className="font-medium text-slate-900 dark:text-white truncate text-sm">
+                                {account.name}
+                              </span>
+                              {account.source === 'lmb' && (
+                                <Badge variant="secondary" className="ml-2 flex-shrink-0 text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 border-0">
+                                  LMB
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Type */}
+                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                            {account.type}
+                          </TableCell>
+
+                          {/* Detail Type */}
+                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                            {account.subType ? account.subType : '—'}
+                          </TableCell>
+
+                          {/* Currency */}
+                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                            {account.currency}
+                          </TableCell>
+
+                          {/* Balance */}
+                          <TableCell className="text-right">
+                            <span className={cn(
+                              'font-mono text-sm tabular-nums',
+                              account.balance < 0
+                                ? 'text-red-600 dark:text-red-400'
+                                : account.balance > 0
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                            )}>
+                              {formatCurrency(account.balance, account.currency)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

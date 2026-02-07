@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const AccountMappingsSchema = z.object({
   accountMappings: z.object({
@@ -56,6 +58,17 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'CONFIG_UPDATED',
+      entityType: 'SetupConfig',
+      details: {
+        accountsCreated: accountsCreated ?? existing?.accountsCreated ?? false,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

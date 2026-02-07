@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   ArrowLeftRight,
   BarChart3,
+  Bell,
   Boxes,
   ChevronDown,
   ListChecks,
@@ -20,9 +21,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { type Marketplace, useMarketplaceStore } from '@/lib/store/marketplace';
 
 function LogoIcon({ className }: { className?: string }) {
   return (
@@ -59,6 +69,36 @@ function QboStatusFallback() {
   );
 }
 
+const MARKETPLACE_OPTIONS: Array<{ value: Marketplace; label: string; flag: string }> = [
+  { value: 'all', label: 'All Marketplaces', flag: '' },
+  { value: 'US', label: 'US - Amazon.com', flag: '\u{1F1FA}\u{1F1F8}' },
+  { value: 'UK', label: 'UK - Amazon.co.uk', flag: '\u{1F1EC}\u{1F1E7}' },
+];
+
+function MarketplaceSelector() {
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
+  const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
+
+  const current = MARKETPLACE_OPTIONS.find((o) => o.value === marketplace);
+
+  return (
+    <Select value={marketplace} onValueChange={(v) => setMarketplace(v as Marketplace)}>
+      <SelectTrigger className="h-8 w-[180px] gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
+        <SelectValue>
+          {current?.flag ? `${current.flag} ${current.label}` : current?.label}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {MARKETPLACE_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.flag ? `${opt.flag}  ${opt.label}` : opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 type NavItem =
   | {
       href: string;
@@ -74,7 +114,7 @@ type NavItem =
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptText },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/analytics', label: 'Benchmarking', icon: BarChart3 },
   {
     label: 'Accounts & Taxes',
     icon: ListChecks,
@@ -90,6 +130,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/audit-data', label: 'Audit Data' },
       { href: '/settlement-processing', label: 'Settlement Processing' },
       { href: '/bills', label: 'Bills' },
+      { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -192,6 +233,29 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="hidden md:block">
+            <MarketplaceSelector />
+          </div>
+
+          {/* Notification bell */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4.5 w-4.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+              <DropdownMenuItem disabled className="text-sm text-slate-500 dark:text-slate-400">
+                No notifications
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Suspense fallback={<QboStatusFallback />}>
             <QboStatusIndicator />
           </Suspense>
@@ -216,6 +280,9 @@ export function AppHeader() {
       {mobileOpen && (
         <nav className="border-t border-slate-200/50 bg-white/98 backdrop-blur-md dark:border-white/5 dark:bg-slate-950/98 md:hidden">
           <div className="mx-auto max-w-7xl space-y-1 px-4 py-3 sm:px-6">
+            <div className="mb-2 px-3 md:hidden">
+              <MarketplaceSelector />
+            </div>
             {NAV_ITEMS.map((item) => {
               if ('href' in item) {
                 const Icon = item.icon;

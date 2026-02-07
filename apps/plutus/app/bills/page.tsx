@@ -181,6 +181,7 @@ export default function BillsPage() {
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
     queryFn: fetchConnectionStatus,
+    staleTime: 5 * 60 * 1000,
   });
 
   const scannerEnabled = tab === 'scanner' && connection !== undefined && connection.connected === true;
@@ -192,6 +193,7 @@ export default function BillsPage() {
       return fetchBills(page, normalizedStartDate, normalizedEndDate);
     },
     enabled: scannerEnabled,
+    staleTime: 5 * 60 * 1000,
   });
 
   const bills = useMemo(() => {
