@@ -456,7 +456,7 @@ export default function CreditCardsPage() {
                 options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
               />
               <FormField
-                label="CVV"
+                label="CVC"
                 name="cvv"
                 placeholder="123"
                 value={formData.cvv}
