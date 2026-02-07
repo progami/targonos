@@ -269,7 +269,8 @@ function mergeBrandComponentCents(
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
-  auditCsvText: string;
+  auditCsvText?: string;
+  auditRows?: LmbAuditRow[];
   sourceFilename: string;
   invoiceId?: string;
 }): Promise<{ preview: SettlementProcessingPreview; updatedConnection?: QboConnection }> {
@@ -284,7 +285,9 @@ export async function computeSettlementPreview(input: {
   const meta = parseLmbSettlementDocNumber(settlement.DocNumber);
   const marketplace = meta.marketplace.id;
 
-  const parsedAudit = parseLmbAuditCsv(input.auditCsvText);
+  const parsedAudit = input.auditRows
+    ? { headers: [] as string[], rows: input.auditRows }
+    : parseLmbAuditCsv(input.auditCsvText!);
   const invoiceGroups = groupByInvoice(parsedAudit.rows);
 
   const requestedInvoice = input.invoiceId ? input.invoiceId.trim() : '';
@@ -941,7 +944,8 @@ export async function computeSettlementPreview(input: {
 export async function processSettlement(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
-  auditCsvText: string;
+  auditCsvText?: string;
+  auditRows?: LmbAuditRow[];
   sourceFilename: string;
   invoiceId?: string;
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
