@@ -81,6 +81,39 @@ model SetupConfig {
   updatedAt DateTime @updatedAt
 }
 
+/// AuditDataUpload tracks a single LMB Audit Data CSV upload.
+/// One CSV may contain rows for multiple settlements (Invoice groups).
+model AuditDataUpload {
+  id        String   @id @default(cuid())
+  filename  String
+  rowCount  Int
+  invoiceCount Int
+  uploadedAt DateTime @default(now())
+
+  rows AuditDataRow[]
+}
+
+/// AuditDataRow stores a single parsed row from an LMB Audit Data CSV.
+/// Rows are grouped by invoiceId which maps to one LMB settlement.
+model AuditDataRow {
+  id        String   @id @default(cuid())
+
+  invoiceId   String
+  market      String
+  date        String   // YYYY-MM-DD
+  orderId     String
+  sku         String
+  quantity    Int
+  description String
+  net         Int      // cents
+
+  uploadId String
+  upload   AuditDataUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([uploadId])
+}
+
 /// SettlementProcessing tracks Plutus processing for a single LMB settlement invoice group.
 /// Used for idempotency, history, and settlement list status.
 model SettlementProcessing {
