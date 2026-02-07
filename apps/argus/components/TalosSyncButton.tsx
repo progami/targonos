@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Loader2 } from 'lucide-react';
 
 export function TalosSyncButton() {
   const router = useRouter();
@@ -28,16 +30,14 @@ export function TalosSyncButton() {
 
   return (
     <div className="flex items-center gap-3">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={running}
-        className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        {running ? 'Syncing…' : 'Sync now'}
-      </button>
-      {error ? <span className="text-sm text-red-700">{error}</span> : null}
+      <Button onClick={onClick} disabled={running} size="sm">
+        {running ? (
+          <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Syncing</>
+        ) : (
+          <><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Sync Now</>
+        )}
+      </Button>
+      {error && <span className="text-sm text-danger-600">{error}</span>}
     </div>
   );
 }
-
