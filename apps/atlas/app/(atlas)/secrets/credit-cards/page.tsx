@@ -57,7 +57,8 @@ type CreditCardFormData = {
   title: string
   cardholderName: string
   brand: CreditCardBrand
-  last4: string
+  cardNumber: string
+  cvv: string
   expMonth: number
   expYear: number
   department: PasswordDepartment
@@ -69,7 +70,8 @@ const defaultFormData: CreditCardFormData = {
   title: '',
   cardholderName: '',
   brand: 'VISA',
-  last4: '',
+  cardNumber: '',
+  cvv: '',
   expMonth: 1,
   expYear: new Date().getFullYear(),
   department: 'FINANCE',
@@ -146,7 +148,8 @@ export default function CreditCardsPage() {
       title: card.title,
       cardholderName: card.cardholderName ?? '',
       brand: card.brand,
-      last4: card.last4,
+      cardNumber: card.cardNumber ?? '',
+      cvv: card.cvv ?? '',
       expMonth: card.expMonth,
       expYear: card.expYear,
       department: card.department,
@@ -161,6 +164,8 @@ export default function CreditCardsPage() {
     setSaving(true)
     try {
       const cardholderName = formData.cardholderName.trim() ? formData.cardholderName : null
+      const cardNumber = formData.cardNumber.trim() ? formData.cardNumber : null
+      const cvv = formData.cvv.trim() ? formData.cvv : null
       const url = formData.url.trim() ? formData.url : null
       const notes = formData.notes.trim() ? formData.notes : null
 
@@ -169,7 +174,8 @@ export default function CreditCardsPage() {
           title: formData.title,
           cardholderName,
           brand: formData.brand,
-          last4: formData.last4,
+          cardNumber,
+          cvv,
           expMonth: formData.expMonth,
           expYear: formData.expYear,
           department: formData.department,
@@ -181,7 +187,8 @@ export default function CreditCardsPage() {
           title: formData.title,
           cardholderName,
           brand: formData.brand,
-          last4: formData.last4,
+          cardNumber,
+          cvv,
           expMonth: formData.expMonth,
           expYear: formData.expYear,
           department: formData.department,
@@ -239,12 +246,24 @@ export default function CreditCardsPage() {
       },
       {
         accessorKey: 'last4',
-        header: 'Last 4',
-        cell: ({ row }) => (
-          <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
-            •••• {row.original.last4}
-          </code>
-        ),
+        header: 'Number',
+        cell: ({ row }) => {
+          const card = row.original
+          if (card.cardNumber) {
+            const digits = card.cardNumber.replace(/\s+/g, '')
+            const masked = '•'.repeat(digits.length - 4) + digits.slice(-4)
+            return (
+              <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
+                {masked}
+              </code>
+            )
+          }
+          return (
+            <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
+              •••• {card.last4}
+            </code>
+          )
+        },
         enableSorting: false,
       },
       {
@@ -413,15 +432,15 @@ export default function CreditCardsPage() {
             />
 
             <FormField
-              label="Last 4"
-              name="last4"
+              label="Card Number"
+              name="cardNumber"
               required
-              placeholder="1234"
-              value={formData.last4}
-              onChange={(e) => setFormData(prev => ({ ...prev, last4: e.target.value }))}
+              placeholder="4111 1111 1111 1234"
+              value={formData.cardNumber}
+              onChange={(e) => setFormData(prev => ({ ...prev, cardNumber: e.target.value }))}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <SelectField
                 label="Expiry Month"
                 name="expMonth"
@@ -435,6 +454,13 @@ export default function CreditCardsPage() {
                 value={String(formData.expYear)}
                 onChange={(e) => setFormData(prev => ({ ...prev, expYear: Number(e.target.value) }))}
                 options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+              />
+              <FormField
+                label="CVV"
+                name="cvv"
+                placeholder="123"
+                value={formData.cvv}
+                onChange={(e) => setFormData(prev => ({ ...prev, cvv: e.target.value }))}
               />
             </div>
 
