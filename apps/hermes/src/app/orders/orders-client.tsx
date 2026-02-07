@@ -5,6 +5,7 @@ import { CalendarClock, Loader2, RefreshCw, Send, Sparkles } from "lucide-react"
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
+import { DispatchStatusBadge, OrderStatusBadge } from "@/components/hermes/status-badge";
 import { PageHeader } from "@/components/hermes/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,21 +112,8 @@ function connectionLabel(c: AmazonConnection): string {
   return `${c.accountName} • ${c.region}${marketplacePart}`;
 }
 
-function stateBadge(state: string | null) {
-  if (!state) return <Badge variant="outline">Not queued</Badge>;
-  if (state === "sent") return <Badge variant="secondary">Sent</Badge>;
-  if (state === "queued") return <Badge variant="outline">Queued</Badge>;
-  if (state === "sending") return <Badge variant="outline">Sending</Badge>;
-  if (state === "failed") return <Badge variant="destructive">Failed</Badge>;
-  if (state === "skipped") return <Badge variant="outline">Skipped</Badge>;
-  return <Badge variant="outline">{state}</Badge>;
-}
-
 function attemptBadge(status: AttemptRow["status"]) {
-  if (status === "sent") return <Badge variant="secondary">sent</Badge>;
-  if (status === "ineligible") return <Badge variant="outline">ineligible</Badge>;
-  if (status === "throttled") return <Badge variant="outline">throttled</Badge>;
-  return <Badge variant="destructive">failed</Badge>;
+  return <DispatchStatusBadge status={status} />;
 }
 
 type BackfillPreset = { label: string; days: number };
@@ -1066,9 +1054,9 @@ export function OrdersClient() {
                       </TableCell>
                       <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                        <OrderStatusBadge status={o.orderStatus} />
                       </TableCell>
-                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                      <TableCell className="text-right"><DispatchStatusBadge status={o.dispatchState} /></TableCell>
                     </TableRow>
                   );
                 })}
@@ -1114,14 +1102,14 @@ export function OrdersClient() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{marketplaceDisplay(detailsOrder.marketplaceId)}</Badge>
-                {detailsOrder.orderStatus ? <Badge variant="outline">{detailsOrder.orderStatus}</Badge> : null}
+                {detailsOrder.orderStatus ? <OrderStatusBadge status={detailsOrder.orderStatus} /> : null}
                 {detailsOrder.purchaseDate ? (
                   <Badge variant="outline">Purchase {fmtDateShort(detailsOrder.purchaseDate)}</Badge>
                 ) : null}
                 {detailsOrder.latestDeliveryDate ? (
                   <Badge variant="outline">Delivery {fmtDateShort(detailsOrder.latestDeliveryDate)}</Badge>
                 ) : null}
-                <span className="ml-auto">{stateBadge(detailsOrder.dispatchState)}</span>
+                <span className="ml-auto"><DispatchStatusBadge status={detailsOrder.dispatchState} /></span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">

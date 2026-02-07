@@ -5,8 +5,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { hermesApiUrl } from "@/lib/base-path";
+import { DispatchStatusBadge } from "@/components/hermes/status-badge";
 import { PageHeader } from "@/components/hermes/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,12 +37,6 @@ function fmtDateTime(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function statusBadge(status: AttemptRow["status"]) {
-  if (status === "sent") return <Badge variant="secondary">sent</Badge>;
-  if (status === "ineligible") return <Badge variant="outline">ineligible</Badge>;
-  if (status === "throttled") return <Badge variant="outline">throttled</Badge>;
-  return <Badge variant="destructive">failed</Badge>;
-}
 
 export function LogsClient() {
   const {
@@ -221,7 +215,7 @@ export function LogsClient() {
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDateTime(r.createdAt)}</TableCell>
                     <TableCell className="whitespace-nowrap">{r.type}</TableCell>
-                    <TableCell>{statusBadge(r.status)}</TableCell>
+                    <TableCell><DispatchStatusBadge status={r.status} /></TableCell>
                     <TableCell className="font-mono text-[11px]">{r.orderId}</TableCell>
                     <TableCell className="hidden md:table-cell tabular-nums">{r.httpStatus ?? "—"}</TableCell>
                     <TableCell className="hidden md:table-cell">{r.errorCode ?? "—"}</TableCell>

@@ -1,7 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { withAppBasePath } from '@/lib/base-path';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Loader2, Save } from 'lucide-react';
 
 type Rule = {
   id: string;
@@ -9,28 +15,39 @@ type Rule = {
   thresholds: unknown;
 };
 
-function stringifyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return '{}';
-  }
+type ThresholdFields = {
+  titleChanged?: boolean;
+  priceDeltaPct?: number;
+  priceDeltaAbs?: number;
+  ratingDelta?: number;
+  enterExitTop10?: boolean;
+  enterExitTop100?: boolean;
+  positionDelta?: number;
+};
+
+function parseThresholds(t: unknown): ThresholdFields {
+  if (t && typeof t === 'object') return t as ThresholdFields;
+  return {};
 }
 
-export function AlertRulesClient(props: { targetId: string; initialRules: Rule[] }) {
-  const [rules, setRules] = useState<Rule[]>(props.initialRules);
+export function AlertRulesClient(props: { targetId: string; targetType: string; rules: Rule[] }) {
+  const [rules, setRules] = useState<Rule[]>(props.rules);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-
-  const editors = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const rule of rules) {
-      map[rule.id] = stringifyJson(rule.thresholds);
+  const [edits, setEdits] = useState<Record<string, ThresholdFields>>(() => {
+    const map: Record<string, ThresholdFields> = {};
+    for (const rule of props.rules) {
+      map[rule.id] = parseThresholds(rule.thresholds);
     }
     return map;
-  }, [rules]);
+  });
 
-  const [thresholdEditors, setThresholdEditors] = useState<Record<string, string>>(editors);
+  function updateEdit(ruleId: string, field: string, value: unknown) {
+    setEdits((prev) => ({
+      ...prev,
+      [ruleId]: { ...prev[ruleId], [field]: value },
+    }));
+  }
 
   async function patchRule(id: string, data: { enabled?: boolean; thresholds?: unknown }) {
     const res = await fetch(withAppBasePath(`/api/alerts/rules/${id}`), {
@@ -60,13 +77,11 @@ export function AlertRulesClient(props: { targetId: string; initialRules: Rule[]
     }
   }
 
-  async function onSaveThresholds(rule: Rule) {
+  async function onSave(rule: Rule) {
     setError(null);
     setBusy(rule.id);
     try {
-      const text = thresholdEditors[rule.id] ?? '{}';
-      const parsed = JSON.parse(text) as unknown;
-      await patchRule(rule.id, { thresholds: parsed });
+      await patchRule(rule.id, { thresholds: edits[rule.id] ?? {} });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -91,7 +106,7 @@ export function AlertRulesClient(props: { targetId: string; initialRules: Rule[]
       const rule = json?.rule as Rule | undefined;
       if (!rule) throw new Error('Malformed response');
       setRules((prev) => [...prev, rule]);
-      setThresholdEditors((prev) => ({ ...prev, [rule.id]: stringifyJson(rule.thresholds) }));
+      setEdits((prev) => ({ ...prev, [rule.id]: parseThresholds(rule.thresholds) }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -99,62 +114,152 @@ export function AlertRulesClient(props: { targetId: string; initialRules: Rule[]
     }
   }
 
+  const isAsin = props.targetType === 'ASIN';
+  const isSearch = props.targetType === 'SEARCH';
+  const isBestsellers = props.targetType === 'BROWSE_BESTSELLERS';
+
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-slate-800">Alert rules</div>
-        <button
-          type="button"
-          onClick={onAddRule}
-          disabled={busy === 'add'}
-          className="rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
-        >
-          Add rule
-        </button>
-      </div>
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-md border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">{error}</div>
+      )}
 
-      {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
+      {rules.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No alert rules configured.</p>
+      ) : (
+        <div className="space-y-3">
+          {rules.map((rule) => {
+            const fields = edits[rule.id] ?? {};
+            return (
+              <div key={rule.id} className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={rule.enabled ? 'success' : 'neutral'} className="text-2xs">
+                      {rule.enabled ? 'Active' : 'Disabled'}
+                    </Badge>
+                    <span className="font-mono text-2xs text-muted-foreground">{rule.id.slice(0, 8)}</span>
+                  </div>
+                  <Switch
+                    checked={rule.enabled}
+                    disabled={busy === rule.id}
+                    onChange={(e) => onToggle(rule, e.target.checked)}
+                  />
+                </div>
 
-      <div className="space-y-4">
-        {rules.map((rule) => (
-          <div key={rule.id} className="rounded border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-slate-800">Rule {rule.id.slice(0, 8)}…</div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={rule.enabled}
-                  disabled={busy === rule.id}
-                  onChange={(e) => onToggle(rule, e.target.checked)}
-                />
-                <span>Enabled</span>
-              </label>
-            </div>
+                {/* Threshold fields based on target type */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {isAsin && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={fields.titleChanged ?? false}
+                          onChange={(e) => updateEdit(rule.id, 'titleChanged', e.target.checked)}
+                        />
+                        <Label className="text-xs">Alert on title change</Label>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Price delta %</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8 text-xs"
+                          value={fields.priceDeltaPct ?? ''}
+                          onChange={(e) => updateEdit(rule.id, 'priceDeltaPct', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="e.g. 5"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Price delta $</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="h-8 text-xs"
+                          value={fields.priceDeltaAbs ?? ''}
+                          onChange={(e) => updateEdit(rule.id, 'priceDeltaAbs', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="e.g. 1.00"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Rating delta</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8 text-xs"
+                          value={fields.ratingDelta ?? ''}
+                          onChange={(e) => updateEdit(rule.id, 'ratingDelta', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="e.g. 0.2"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {isSearch && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={fields.enterExitTop10 ?? false}
+                          onChange={(e) => updateEdit(rule.id, 'enterExitTop10', e.target.checked)}
+                        />
+                        <Label className="text-xs">Alert on enter/exit top 10</Label>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Position delta</Label>
+                        <Input
+                          type="number"
+                          className="h-8 text-xs"
+                          value={fields.positionDelta ?? ''}
+                          onChange={(e) => updateEdit(rule.id, 'positionDelta', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="e.g. 5"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {isBestsellers && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={fields.enterExitTop100 ?? false}
+                          onChange={(e) => updateEdit(rule.id, 'enterExitTop100', e.target.checked)}
+                        />
+                        <Label className="text-xs">Alert on enter/exit top 100</Label>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Position delta</Label>
+                        <Input
+                          type="number"
+                          className="h-8 text-xs"
+                          value={fields.positionDelta ?? ''}
+                          onChange={(e) => updateEdit(rule.id, 'positionDelta', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="e.g. 10"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
 
-            <div className="mt-3">
-              <div className="text-xs font-medium text-slate-700">Thresholds (JSON)</div>
-              <textarea
-                className="mt-1 h-32 w-full rounded border border-slate-300 px-3 py-2 font-mono text-xs"
-                value={thresholdEditors[rule.id] ?? '{}'}
-                onChange={(e) => setThresholdEditors((prev) => ({ ...prev, [rule.id]: e.target.value }))}
-              />
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => onSaveThresholds(rule)}
-                  disabled={busy === rule.id}
-                  className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  Save thresholds
-                </button>
+                <div className="flex justify-end">
+                  <Button size="sm" variant="outline" onClick={() => onSave(rule)} disabled={busy === rule.id}>
+                    {busy === rule.id ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Save
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            );
+          })}
+        </div>
+      )}
 
-        {rules.length === 0 ? <div className="text-sm text-slate-500">No rules yet.</div> : null}
-      </div>
+      <Button variant="outline" size="sm" onClick={onAddRule} disabled={busy === 'add'}>
+        {busy === 'add' ? (
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+        )}
+        Add Rule
+      </Button>
     </div>
   );
 }
-

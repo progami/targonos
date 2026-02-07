@@ -6,19 +6,13 @@ import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
 import { hermesApiUrl } from "@/lib/base-path";
+import { ConnectionStatusBadge } from "@/components/hermes/status-badge";
 import { PageHeader } from "@/components/hermes/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useConnectionsStore } from "@/stores/connections-store";
-
-function statusBadge(status: AmazonConnection["status"]) {
-  if (status === "connected") return <Badge variant="secondary">connected</Badge>;
-  if (status === "needs_reauth") return <Badge variant="outline">needs_reauth</Badge>;
-  return <Badge variant="destructive">disconnected</Badge>;
-}
 
 export function AccountsClient() {
   const { connections, loaded, loading, hasHydrated, fetch: fetchConnections } = useConnectionsStore();
@@ -111,7 +105,7 @@ export function AccountsClient() {
                     <TableCell className="hidden md:table-cell font-mono text-[11px] text-muted-foreground">
                       {c.marketplaceIds.join(", ")}
                     </TableCell>
-                    <TableCell>{statusBadge(c.status)}</TableCell>
+                    <TableCell><ConnectionStatusBadge status={c.status} /></TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"

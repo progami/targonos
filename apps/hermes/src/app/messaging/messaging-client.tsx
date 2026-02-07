@@ -93,9 +93,14 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
-function shortMarketplace(id: string) {
+const MARKETPLACE_LABELS: Record<string, string> = {
+  ATVPDKIKX0DER: "US",
+  A1F83G8C2ARO7P: "UK",
+};
+
+function marketplaceDisplay(id: string): string {
   if (!id) return "";
-  return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-3)}` : id;
+  return MARKETPLACE_LABELS[id] ?? (id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-3)}` : id);
 }
 
 export function MessagingClient() {
@@ -291,7 +296,7 @@ export function MessagingClient() {
                       <TableRow key={o.orderId}>
                         <TableCell className="font-mono text-[11px]">{o.orderId}</TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <Badge variant="secondary">{shortMarketplace(o.marketplaceId)}</Badge>
+                          <Badge variant="secondary">{marketplaceDisplay(o.marketplaceId)}</Badge>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground">
                           {o.purchaseDate ? formatDate(o.purchaseDate) : "—"}
@@ -609,7 +614,7 @@ function BuyerMessageDialog(props: {
                 {order.orderStatus ?? "—"}
               </Badge>
               <Badge variant="outline" className="text-xs">
-                {shortMarketplace(order.marketplaceId)}
+                {marketplaceDisplay(order.marketplaceId)}
               </Badge>
               {buyerLocale ? (
                 <Badge variant="secondary" className="text-xs">

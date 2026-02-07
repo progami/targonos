@@ -167,28 +167,13 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       (seed."sequence_text")::integer,
       seed."sku_group",
       upper(regexp_replace(pol."sku_code", '[^A-Za-z0-9]', '', 'g'))
-    )
-    FROM order_seed seed
-    WHERE pol."purchase_order_id" = seed."purchase_order_id"
-      AND seed."sku_group" IS NOT NULL
-      AND seed."sequence_text" IS NOT NULL
-      AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,
-    `CREATE OR REPLACE VIEW "lot" AS
-    SELECT
-      pol."purchase_order_id" AS "po_id",
-      s."id" AS "sku_id",
-      pol."lot_ref" AS "lot_ref",
-      pol."units_ordered" AS "qty_units",
-      pol."units_per_carton",
-      pol."quantity" AS "cartons",
-      pol."unit_cost",
-      pol."pi_number" AS "pi_ref",
-      pol."production_date"::date AS "production_date",
-      pol."status"::text AS "status"
-    FROM "purchase_order_lines" pol
-    LEFT JOIN "skus" s
-      ON s."sku_code" = pol."sku_code"`,
-  ]
+	    )
+	    FROM order_seed seed
+	    WHERE pol."purchase_order_id" = seed."purchase_order_id"
+	      AND seed."sku_group" IS NOT NULL
+	      AND seed."sequence_text" IS NOT NULL
+	      AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,
+	  ]
 
   console.log(`\n[${tenant}] Applying supply chain naming convention schema/backfill`)
   for (const statement of statements) {

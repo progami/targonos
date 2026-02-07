@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { CalendarClock, Clock, Loader2, PackageSearch, Send } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -16,6 +16,7 @@ import {
 } from "recharts";
 
 import { hermesApiUrl } from "@/lib/base-path";
+import { KpiCard } from "@/components/hermes/kpi-card";
 import { PageHeader } from "@/components/hermes/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -388,6 +389,15 @@ export function InsightsClient() {
     return sum;
   }, [scopedOverviews]);
 
+  const totalOrders = React.useMemo(() => {
+    let sum = 0;
+    for (const { overview } of scopedOverviews) {
+      if (!overview) continue;
+      sum += overview.summary.orders.shipped + overview.summary.orders.pending + overview.summary.orders.canceled;
+    }
+    return sum;
+  }, [scopedOverviews]);
+
   const hasAnyOverview = React.useMemo(() => scopedOverviews.some((x) => x.overview), [scopedOverviews]);
 
   const overviewOrderRange = React.useMemo(() => {
@@ -561,6 +571,29 @@ export function InsightsClient() {
         }
       />
 
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <KpiCard
+          label={`Sent (${rangeDays}d)`}
+          value={hasAnyOverview ? fmtInt(sentInRange) : "—"}
+          icon={Send}
+        />
+        <KpiCard
+          label="Queued today"
+          value={hasAnyOverview ? fmtInt(queuedToday) : "—"}
+          icon={Clock}
+        />
+        <KpiCard
+          label="Queued tomorrow"
+          value={hasAnyOverview ? fmtInt(queuedTomorrow) : "—"}
+          icon={CalendarClock}
+        />
+        <KpiCard
+          label="Total orders"
+          value={hasAnyOverview ? fmtInt(totalOrders) : "—"}
+          icon={PackageSearch}
+        />
+      </div>
+
       {connections.length > 1 ? (
         <Card>
           <CardHeader className="py-3">
@@ -637,18 +670,15 @@ export function InsightsClient() {
         </Card>
       ) : null}
 
-      <Tabs defaultValue="table">
+      <Tabs defaultValue="chart">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="table">Table</TabsTrigger>
             <TabsTrigger value="chart">Chart</TabsTrigger>
+            <TabsTrigger value="table">Table</TabsTrigger>
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-1.5">
             {overviewOrderRange ? <Badge variant="outline">Orders {overviewOrderRange}</Badge> : null}
-            <Badge variant="secondary">Sent ({rangeDays}d) {hasAnyOverview ? fmtInt(sentInRange) : "—"}</Badge>
-            <Badge variant="outline">Queued today {hasAnyOverview ? fmtInt(queuedToday) : "—"}</Badge>
-            <Badge variant="outline">Queued tomorrow {hasAnyOverview ? fmtInt(queuedTomorrow) : "—"}</Badge>
             {allLoading ? (
               <Badge variant="outline" className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
