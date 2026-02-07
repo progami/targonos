@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'react-hot-toast'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface UploadProgress {
  loaded: number
@@ -38,7 +39,7 @@ export function useS3Upload(options: UseS3UploadOptions = {}) {
 
  try {
  // Step 1: Get presigned URL
- const presignedResponse = await fetch('/api/upload/generate-presigned-url', {
+ const presignedResponse = await fetch(withBasePath('/api/upload/generate-presigned-url'), {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({

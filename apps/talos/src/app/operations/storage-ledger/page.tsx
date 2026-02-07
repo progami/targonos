@@ -138,7 +138,7 @@ function createDefaultFilters(): StorageLedgerColumnFilters {
     skuCodes: [],
     weekEnding: '',
     description: '',
-    batch: '',
+    lot: '',
     status: [],
     palletDaysMin: '',
     palletDaysMax: '',
@@ -193,8 +193,8 @@ function filterEntries(
       }
     }
 
-    if (filters.batch) {
-      if (!entry.batchLot.toLowerCase().includes(filters.batch.toLowerCase())) {
+    if (filters.lot) {
+      if (!entry.lotRef.toLowerCase().includes(filters.lot.toLowerCase())) {
         return false
       }
     }
@@ -234,4 +234,3 @@ function filterEntries(
     return true
   })
 }
-

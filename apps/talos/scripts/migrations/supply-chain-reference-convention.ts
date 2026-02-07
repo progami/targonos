@@ -69,6 +69,7 @@ Ensures schema + backfills for:
 - skus.sku_group
 - purchase_orders.sku_group
 - purchase_order_lines.lot_ref
+- purchase_order_lines.production_date
 
 Usage:
   pnpm --filter @targon/talos tsx scripts/migrations/supply-chain-reference-convention.ts [options]
@@ -87,6 +88,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
     `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "lot_ref" TEXT`,
+    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "production_date" date`,
     `WITH sku_reference_groups AS (
       SELECT
         pol."sku_code",
@@ -181,14 +183,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       pol."quantity" AS "cartons",
       pol."unit_cost",
       pol."pi_number" AS "pi_ref",
-      sb."production_date"::date AS "production_date",
+      pol."production_date"::date AS "production_date",
       pol."status"::text AS "status"
     FROM "purchase_order_lines" pol
     LEFT JOIN "skus" s
-      ON s."sku_code" = pol."sku_code"
-    LEFT JOIN "sku_batches" sb
-      ON sb."sku_id" = s."id"
-     AND sb."batch_code" = pol."batch_lot"`,
+      ON s."sku_code" = pol."sku_code"`,
   ]
 
   console.log(`\n[${tenant}] Applying supply chain naming convention schema/backfill`)
@@ -220,4 +219,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

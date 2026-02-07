@@ -69,7 +69,7 @@ export const GET = withAuth(async (request, _session) => {
  warehouseName: true,
  skuCode: true,
  skuDescription: true,
- batchLot: true
+ lotRef: true
  }
  })
 
@@ -98,7 +98,7 @@ export const GET = withAuth(async (request, _session) => {
  warehouseName: transaction.warehouseName,
  skuCode: transaction.skuCode,
  skuDescription: transaction.skuDescription,
- batchLot: transaction.batchLot
+ lotRef: transaction.lotRef
  }
  : undefined
  }

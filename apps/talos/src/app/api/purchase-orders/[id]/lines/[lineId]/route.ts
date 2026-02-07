@@ -15,7 +15,6 @@ import {
 const UpdateLineSchema = z.object({
   skuCode: z.string().trim().min(1).optional(),
   skuDescription: z.string().optional(),
-  batchLot: z.string().trim().min(1).optional(),
   piNumber: z.string().trim().nullable().optional(),
   commodityCode: z.string().trim().nullable().optional(),
   countryOfOrigin: z.string().trim().nullable().optional(),
@@ -106,8 +105,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     id: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
-    lotRef: line.lotRef ?? null,
-    batchLot: line.batchLot,
+    lotRef: line.lotRef,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
@@ -342,38 +340,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       result.data.skuCode !== undefined &&
       result.data.skuCode.trim().toLowerCase() !== line.skuCode.trim().toLowerCase()
 
-    const currentBatchLot = line.batchLot?.trim().toUpperCase() ?? null
-    const requestedBatchLot = result.data.batchLot?.trim()
-    const normalizedRequestedBatchLot =
-      requestedBatchLot && requestedBatchLot.length > 0 ? requestedBatchLot.toUpperCase() : null
-
-    if (skuCodeChanged && !normalizedRequestedBatchLot) {
-      return ApiResponses.badRequest('Batch is required when changing SKU')
-    }
-
-    if (normalizedRequestedBatchLot === 'DEFAULT') {
-      return ApiResponses.badRequest('Batch is required')
-    }
-
-    const batchLotChanged =
-      normalizedRequestedBatchLot !== null && normalizedRequestedBatchLot !== currentBatchLot
-
-    const needsSkuBatchSnapshot = skuCodeChanged || batchLotChanged
-
-    if (needsSkuBatchSnapshot) {
-      const nextSkuCode = (result.data.skuCode ?? line.skuCode).trim()
-      const nextBatchLot = (normalizedRequestedBatchLot ?? currentBatchLot ?? '')
-        .trim()
-        .toUpperCase()
-
-      if (!nextBatchLot || nextBatchLot === 'DEFAULT') {
-        return ApiResponses.badRequest('Batch is required')
+    if (skuCodeChanged) {
+      const nextSkuCode = result.data.skuCode?.trim() ?? ''
+      if (!nextSkuCode) {
+        return ApiResponses.badRequest('SKU is required')
       }
 
       const sku = await prisma.sku.findFirst({
         where: { skuCode: nextSkuCode },
         select: {
-          id: true,
           skuCode: true,
           skuGroup: true,
           description: true,
@@ -394,31 +369,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       if (!sku.isActive) {
         return ApiResponses.badRequest(
           `SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`
-        )
-      }
-
-      const existingBatch = await prisma.skuBatch.findFirst({
-        where: {
-          skuId: sku.id,
-          batchCode: { equals: nextBatchLot, mode: 'insensitive' },
-        },
-        select: {
-          id: true,
-          batchCode: true,
-          cartonDimensionsCm: true,
-          cartonSide1Cm: true,
-          cartonSide2Cm: true,
-          cartonSide3Cm: true,
-          cartonWeightKg: true,
-          packagingType: true,
-          storageCartonsPerPallet: true,
-          shippingCartonsPerPallet: true,
-        },
-      })
-
-      if (!existingBatch) {
-        return ApiResponses.badRequest(
-          `Batch ${nextBatchLot} not found for SKU ${sku.skuCode}. Create it in Products → Batches first.`
         )
       }
 
@@ -448,23 +398,21 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         skuGroup: effectiveSkuGroup,
       })
 
-      updateData.batchLot = existingBatch.batchCode
       updateData.lotRef = buildLotReference(
         orderReferenceSeed.sequence,
         orderReferenceSeed.skuGroup,
         sku.skuCode
       )
-      updateData.cartonDimensionsCm =
-        existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null
-      updateData.cartonSide1Cm = existingBatch.cartonSide1Cm ?? sku.cartonSide1Cm ?? null
-      updateData.cartonSide2Cm = existingBatch.cartonSide2Cm ?? sku.cartonSide2Cm ?? null
-      updateData.cartonSide3Cm = existingBatch.cartonSide3Cm ?? sku.cartonSide3Cm ?? null
-      updateData.cartonWeightKg = existingBatch.cartonWeightKg ?? sku.cartonWeightKg ?? null
-      updateData.packagingType = existingBatch.packagingType ?? sku.packagingType ?? null
-      updateData.storageCartonsPerPallet = existingBatch.storageCartonsPerPallet ?? null
-      updateData.shippingCartonsPerPallet = existingBatch.shippingCartonsPerPallet ?? null
+      updateData.cartonDimensionsCm = sku.cartonDimensionsCm ?? null
+      updateData.cartonSide1Cm = sku.cartonSide1Cm ?? null
+      updateData.cartonSide2Cm = sku.cartonSide2Cm ?? null
+      updateData.cartonSide3Cm = sku.cartonSide3Cm ?? null
+      updateData.cartonWeightKg = sku.cartonWeightKg ?? null
+      updateData.packagingType = sku.packagingType ?? null
+      updateData.storageCartonsPerPallet = null
+      updateData.shippingCartonsPerPallet = null
 
-      if (skuCodeChanged && result.data.skuDescription === undefined) {
+      if (result.data.skuDescription === undefined) {
         updateData.skuDescription = sku.description
       }
     }
@@ -491,8 +439,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription ?? null,
-    lotRef: line.lotRef ?? null,
-    batchLot: line.batchLot ?? null,
+    lotRef: line.lotRef,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
@@ -519,8 +466,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription ?? null,
-    lotRef: updated.lotRef ?? null,
-    batchLot: updated.batchLot ?? null,
+    lotRef: updated.lotRef,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
@@ -569,8 +515,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     id: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription,
-    lotRef: updated.lotRef ?? null,
-    batchLot: updated.batchLot,
+    lotRef: updated.lotRef,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
@@ -650,8 +595,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
       lineId: line.id,
       skuCode: line.skuCode,
       skuDescription: line.skuDescription ?? null,
-      lotRef: line.lotRef ?? null,
-      batchLot: line.batchLot ?? null,
+      lotRef: line.lotRef,
       cartonDimensionsCm: line.cartonDimensionsCm ?? null,
       cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
       cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),

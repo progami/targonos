@@ -10,7 +10,7 @@ interface StorageLedgerEntryRow {
  warehouseName: string
  skuCode: string
  skuDescription: string
- batchLot: string
+ lotRef: string
  weekEndingDate: Date
  closingBalance: number
  closingPallets: number
@@ -39,7 +39,7 @@ function generateStorageLedgerCSV(entries: StorageLedgerEntryRow[]): string {
  'Warehouse Name',
  'SKU Code',
  'SKU Description',
- 'Batch',
+ 'Lot Ref',
  'Closing Cartons',
  'Closing Pallets',
  'Pallet Days',
@@ -60,7 +60,7 @@ function generateStorageLedgerCSV(entries: StorageLedgerEntryRow[]): string {
  `"${entry.warehouseName}"`,
  `"${entry.skuCode}"`,
  `"${entry.skuDescription.replace(/"/g, '""')}"`,
- `"${entry.batchLot}"`,
+ `"${entry.lotRef}"`,
  entry.closingBalance,
  entry.closingPallets,
  entry.palletDays,
@@ -133,7 +133,7 @@ export const GET = withAuth(async (request, session) => {
  warehouseName: true,
  skuCode: true,
  skuDescription: true,
- batchLot: true,
+ lotRef: true,
  weekEndingDate: true,
  closingBalance: true,
  closingPallets: true,

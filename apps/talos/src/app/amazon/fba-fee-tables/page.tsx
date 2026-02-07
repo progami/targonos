@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 import {
   SMALL_STANDARD_TABLE_2026,
   LARGE_STANDARD_OZ_TABLE_2026,
@@ -128,8 +129,7 @@ export default function FbaFeeTablesPage() {
     if (status === 'loading') return
 
     if (!session) {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-      redirectToPortal('/login', `${window.location.origin}${basePath}/amazon/fba-fee-tables`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/amazon/fba-fee-tables')}`)
       return
     }
 
