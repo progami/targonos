@@ -893,14 +893,28 @@ export function PurchaseOrdersPanel({
       }
     }
 
-    cols.push({
-      key: 'created',
-      header: buildColumnHeader('Created'),
-      fit: true,
-      thClassName: 'w-[96px]',
-      tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-      render: order => formatDateDisplay(order.createdAt),
-    })
+    cols.push(
+      {
+        key: 'created-by',
+        header: buildColumnHeader('Created By'),
+        fit: true,
+        thClassName: 'w-[120px]',
+        tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground',
+        render: order => (
+          <span className="block max-w-full truncate" title={order.createdByName ?? undefined}>
+            {formatTextOrDash(order.createdByName)}
+          </span>
+        ),
+      },
+      {
+        key: 'created',
+        header: buildColumnHeader('Created'),
+        fit: true,
+        thClassName: 'w-[96px]',
+        tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+        render: order => formatDateDisplay(order.createdAt),
+      }
+    )
 
     return cols
   }, [
