@@ -67,9 +67,11 @@ function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
 
 function mapBill(bill: QboBill, accountsById: Map<string, QboAccount>): TransactionRow {
   const lines: TransactionLine[] = (bill.Line ?? [])
-    .filter((line) => line.AccountBasedExpenseLineDetail !== undefined)
+    .filter((line) => line.AccountBasedExpenseLineDetail !== undefined || line.ItemBasedExpenseLineDetail !== undefined)
     .map((line) => {
-      const accountRef = line.AccountBasedExpenseLineDetail?.AccountRef;
+      const accountRef = line.AccountBasedExpenseLineDetail?.AccountRef
+        ? line.AccountBasedExpenseLineDetail.AccountRef
+        : line.ItemBasedExpenseLineDetail?.AccountRef;
       const accountId = accountRef?.value;
       const account = accountId ? accountsById.get(accountId) : undefined;
 
@@ -100,9 +102,11 @@ function mapBill(bill: QboBill, accountsById: Map<string, QboAccount>): Transact
 
 function mapPurchase(purchase: QboPurchase, accountsById: Map<string, QboAccount>): TransactionRow {
   const lines: TransactionLine[] = (purchase.Line ?? [])
-    .filter((line) => line.AccountBasedExpenseLineDetail !== undefined)
+    .filter((line) => line.AccountBasedExpenseLineDetail !== undefined || line.ItemBasedExpenseLineDetail !== undefined)
     .map((line) => {
-      const accountRef = line.AccountBasedExpenseLineDetail?.AccountRef;
+      const accountRef = line.AccountBasedExpenseLineDetail?.AccountRef
+        ? line.AccountBasedExpenseLineDetail.AccountRef
+        : line.ItemBasedExpenseLineDetail?.AccountRef;
       const accountId = accountRef?.value;
       const account = accountId ? accountsById.get(accountId) : undefined;
 
@@ -157,6 +161,7 @@ function mapJournalEntry(journalEntry: QboJournalEntry, accountsById: Map<string
       debitTotal += line.amount;
     }
   }
+  debitTotal = Math.round(debitTotal * 100) / 100;
 
   return {
     id: journalEntry.Id,
