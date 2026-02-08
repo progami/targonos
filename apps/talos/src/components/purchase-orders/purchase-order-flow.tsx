@@ -792,7 +792,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
   const crossTenantCode = props.tenantCode
-  const isCrossTenantReadOnly = !isCreate && Boolean(crossTenantCode)
+  const isCrossTenantReadOnly = !isCreate && Boolean(crossTenantCode) && crossTenantCode !== tenantRegion
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
