@@ -163,7 +163,7 @@ function StatusPill({ status }: { status: SettlementDetailResponse['settlement']
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
   if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
   if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
-  return <Badge variant="outline">Plutus: Pending</Badge>;
+  return <Badge variant="destructive">Plutus: Pending</Badge>;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -242,7 +242,7 @@ function SignedAmount({
   return (
     <span className={cn(
       'font-medium tabular-nums',
-      postingType === 'Credit' ? 'text-emerald-600 dark:text-emerald-400' : '',
+      signed < 0 ? 'text-red-600 dark:text-red-400' : '',
     )}>
       {formatMoney(signed, currency)}
     </span>
@@ -673,7 +673,7 @@ export default function SettlementDetailPage() {
           }
           actions={
             settlement ? (
-              <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="flex flex-col items-start gap-3 sm:items-end">
                 <div className="flex flex-wrap gap-2">
                   <StatusPill status={settlement.lmbStatus} />
                   <PlutusPill status={settlement.plutusStatus} />

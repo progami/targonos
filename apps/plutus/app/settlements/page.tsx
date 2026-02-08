@@ -101,7 +101,7 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   if (status === 'Processed') return <Badge variant="success">Processed</Badge>;
   if (status === 'RolledBack') return <Badge variant="secondary">Rolled back</Badge>;
   if (status === 'Blocked') return <Badge variant="destructive">Blocked</Badge>;
-  return <Badge variant="outline">Pending</Badge>;
+  return <Badge variant="destructive">Pending</Badge>;
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
