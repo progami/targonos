@@ -615,7 +615,9 @@ if [[ -n "$migrate_cmd" ]]; then
         fi
         ;;
       plutus)
-        run_migrations="true"
+        if any_changed "apps/plutus/prisma/schema.prisma"; then
+          run_migrations="true"
+        fi
         ;;
       xplan)
         if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then
