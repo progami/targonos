@@ -166,7 +166,7 @@ function computeSettlementTotal(
     const account = accountsById.get(accountId);
     if (!account) continue;
 
-    if (account.AccountType !== 'Bank') continue;
+    if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
 
     found = true;
     const signed = line.JournalEntryLineDetail.PostingType === 'Debit' ? amount : -amount;
