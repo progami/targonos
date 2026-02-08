@@ -5,6 +5,7 @@
 DROP VIEW IF EXISTS "discrepancy";
 DROP VIEW IF EXISTS "grn_line_item";
 DROP VIEW IF EXISTS "grn";
+DROP VIEW IF EXISTS "goods_receipt";
 DROP VIEW IF EXISTS "ci_allocation";
 DROP VIEW IF EXISTS "po_ci";
 DROP VIEW IF EXISTS "commercial_invoice";
@@ -120,29 +121,6 @@ SELECT
   w."contact_phone" AS "phone"
 FROM "warehouses" w;
 
-CREATE OR REPLACE VIEW "lot" AS
-SELECT
-  pol."id" AS "lot_id",
-  s."id" AS "sku_id",
-  pol."purchase_order_id" AS "rfq_id",
-  pol."purchase_order_id" AS "po_id",
-  pol."lot_ref",
-  pol."units_ordered" AS "qty_units",
-  pol."units_per_carton",
-  pol."quantity" AS "cartons",
-  pol."unit_cost",
-  pol."pi_number" AS "pi_ref",
-  pol."carton_side1_cm",
-  pol."carton_side2_cm",
-  pol."carton_side3_cm",
-  pol."carton_weight_kg",
-  pol."production_date"::date AS "production_date",
-  pol."status"::text AS "status",
-  pol."created_at" AS "created_at"
-FROM "purchase_order_lines" pol
-LEFT JOIN "skus" s
-  ON s."sku_code" = pol."sku_code";
-
 CREATE OR REPLACE VIEW "rfq" AS
 WITH doc_urls AS (
   SELECT
@@ -155,14 +133,14 @@ WITH doc_urls AS (
 SELECT
   po."id" AS "rfq_id",
   po."order_number" AS "rfq_ref",
-  po."sku_group",
+  po."sku_group" AS "sku_group",
   po."ship_to_country" AS "destination",
   po."expected_date"::date AS "cargo_ready_date",
   po."incoterms",
   po."payment_terms",
   po."notes",
   po."status"::text AS "status",
-  po."created_at",
+  po."created_at" AS "created_at",
   po."created_by_name" AS "created_by",
   docs."rfq_pdf_url",
   docs."inventory_summary_url"
@@ -264,19 +242,30 @@ LEFT JOIN doc_urls docs
 LEFT JOIN ledger_totals led
   ON led."purchase_order_id" = po."id"
 WHERE po."is_legacy" = false
-  AND po."status"::text <> 'RFQ'
-  AND po."status"::text <> 'REJECTED'
   AND po."rfq_approved_at" IS NOT NULL;
 
-CREATE OR REPLACE VIEW "po_ci" AS
+CREATE OR REPLACE VIEW "lot" AS
 SELECT
   pol."id" AS "lot_id",
-  pol."purchase_order_id" AS "ci_id",
-  pol."units_ordered" AS "qty_on_shipment"
+  s."id" AS "sku_id",
+  pol."purchase_order_id" AS "rfq_id",
+  pol."purchase_order_id" AS "po_id",
+  pol."lot_ref" AS "lot_ref",
+  pol."units_ordered" AS "qty_units",
+  pol."units_per_carton",
+  pol."quantity" AS "cartons",
+  pol."unit_cost",
+  pol."pi_number" AS "pi_ref",
+  pol."carton_side1_cm",
+  pol."carton_side2_cm",
+  pol."carton_side3_cm",
+  pol."carton_weight_kg",
+  pol."production_date"::date AS "production_date",
+  pol."status"::text AS "status",
+  pol."created_at" AS "created_at"
 FROM "purchase_order_lines" pol
-JOIN "purchase_orders" po
-  ON po."id" = pol."purchase_order_id"
-WHERE po."is_legacy" = false;
+LEFT JOIN "skus" s
+  ON s."sku_code" = pol."sku_code";
 
 CREATE OR REPLACE VIEW "commercial_invoice" AS
 WITH line_totals AS (
@@ -330,6 +319,16 @@ LEFT JOIN doc_urls docs
   ON docs."purchase_order_id" = po."id"
 WHERE po."is_legacy" = false;
 
+CREATE OR REPLACE VIEW "po_ci" AS
+SELECT
+  pol."id" AS "lot_id",
+  pol."purchase_order_id" AS "ci_id",
+  pol."units_ordered"::integer AS "qty_on_shipment"
+FROM "purchase_order_lines" pol
+JOIN "purchase_orders" po
+  ON po."id" = pol."purchase_order_id"
+WHERE po."is_legacy" = false;
+
 CREATE OR REPLACE VIEW "ci_allocation" AS
 SELECT
   po."id" AS "ci_id",
@@ -343,11 +342,26 @@ JOIN "purchase_orders" po
   ON po."id" = pol."purchase_order_id"
 LEFT JOIN "warehouses" w
   ON w."code" = po."warehouse_code"
-WHERE po."is_legacy" = false
-  AND po."warehouse_code" IS NOT NULL;
+WHERE po."is_legacy" = false;
 
 CREATE OR REPLACE VIEW "grn" AS
-WITH doc_urls AS (
+WITH line_totals AS (
+  SELECT
+    grl."goods_receipt_id",
+    SUM(grl."quantity")::integer AS "total_received"
+  FROM "goods_receipt_lines" grl
+  GROUP BY grl."goods_receipt_id"
+),
+first_lot AS (
+  SELECT DISTINCT ON (grl."goods_receipt_id")
+    grl."goods_receipt_id",
+    pol."id" AS "lot_id"
+  FROM "goods_receipt_lines" grl
+  LEFT JOIN "purchase_order_lines" pol
+    ON pol."id" = grl."purchase_order_line_id"
+  ORDER BY grl."goods_receipt_id", grl."created_at", grl."id"
+),
+doc_urls AS (
   SELECT
     d."purchase_order_id",
     MAX(CASE WHEN d."document_type" = 'grn' THEN d."s3_key" END) AS "grn_doc_url",
@@ -360,38 +374,39 @@ WITH doc_urls AS (
   GROUP BY d."purchase_order_id"
 )
 SELECT
-  grl."id" AS "grn_id",
+  gr."id" AS "grn_id",
   gr."reference_number" AS "grn_ref",
   gr."purchase_order_id" AS "ci_id",
-  grl."purchase_order_line_id" AS "lot_id",
-  gr."warehouse_id",
+  fl."lot_id" AS "lot_id",
+  gr."warehouse_id" AS "warehouse_id",
   po."receive_type"::text AS "receive_type",
   po."customs_entry_number" AS "import_entry_number",
   po."customs_cleared_date"::date AS "customs_cleared_date",
   gr."received_at"::date AS "received_date",
   po."discrepancy_notes" AS "discrepancy_notes",
-  grl."quantity" AS "total_received",
+  COALESCE(lt."total_received", 0) AS "total_received",
   docs."grn_doc_url",
   docs."customs_clearance_url",
   docs."cube_master_url",
   docs."freight_receipt_url",
   docs."transaction_cert_url",
   gr."status"::text AS "status"
-FROM "goods_receipt_lines" grl
-JOIN "goods_receipts" gr
-  ON gr."id" = grl."goods_receipt_id"
-JOIN "purchase_orders" po
+FROM "goods_receipts" gr
+LEFT JOIN "purchase_orders" po
   ON po."id" = gr."purchase_order_id"
+LEFT JOIN line_totals lt
+  ON lt."goods_receipt_id" = gr."id"
+LEFT JOIN first_lot fl
+  ON fl."goods_receipt_id" = gr."id"
 LEFT JOIN doc_urls docs
-  ON docs."purchase_order_id" = gr."purchase_order_id"
-WHERE po."is_legacy" = false;
+  ON docs."purchase_order_id" = gr."purchase_order_id";
 
 CREATE OR REPLACE VIEW "grn_line_item" AS
 SELECT
   grl."id" AS "line_id",
-  grl."id" AS "grn_id",
-  grl."purchase_order_line_id" AS "lot_id",
-  pol."units_ordered" AS "expected_qty",
+  grl."goods_receipt_id" AS "grn_id",
+  pol."id" AS "lot_id",
+  pol."quantity" AS "expected_qty",
   grl."quantity" AS "received_qty",
   CASE
     WHEN grl."variance_quantity" < 0 THEN ABS(grl."variance_quantity")
@@ -403,13 +418,8 @@ SELECT
     ELSE 'DISCREPANCY'
   END AS "status"
 FROM "goods_receipt_lines" grl
-JOIN "goods_receipts" gr
-  ON gr."id" = grl."goods_receipt_id"
-JOIN "purchase_orders" po
-  ON po."id" = gr."purchase_order_id"
-LEFT JOIN "purchase_order_lines" pol
-  ON pol."id" = grl."purchase_order_line_id"
-WHERE po."is_legacy" = false;
+JOIN "purchase_order_lines" pol
+  ON pol."id" = grl."purchase_order_line_id";
 
 CREATE OR REPLACE VIEW "discrepancy" AS
 SELECT
@@ -425,7 +435,4 @@ SELECT
 FROM "goods_receipt_lines" grl
 JOIN "goods_receipts" gr
   ON gr."id" = grl."goods_receipt_id"
-JOIN "purchase_orders" po
-  ON po."id" = gr."purchase_order_id"
-WHERE po."is_legacy" = false
-  AND grl."variance_quantity" <> 0;
+WHERE grl."variance_quantity" <> 0;
