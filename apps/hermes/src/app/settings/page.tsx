@@ -71,13 +71,13 @@ export default function SettingsPage() {
             <div className="text-xs text-muted-foreground">Insights range</div>
             <Tabs
               value={String(rangeDays)}
-              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 | 365 })}
+              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 0 | 7 | 30 | 90 })}
             >
               <TabsList className="h-9">
                 <TabsTrigger value="7">7d</TabsTrigger>
                 <TabsTrigger value="30">30d</TabsTrigger>
                 <TabsTrigger value="90">90d</TabsTrigger>
-                <TabsTrigger value="365">All</TabsTrigger>
+                <TabsTrigger value="0">All</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

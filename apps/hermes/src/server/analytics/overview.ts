@@ -80,11 +80,36 @@ export async function getAnalyticsOverview(params: {
 }): Promise<AnalyticsOverview> {
   const pool = getPgPool();
 
-  const rangeDays = Math.max(1, Math.min(params.rangeDays, 365));
   const to = new Date();
 
-  // Inclusive day range (e.g. 30d => today + previous 29 days)
-  const from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+  let rangeDays: number;
+  let from: Date;
+
+  if (params.rangeDays <= 0) {
+    // "All" mode: start from the earliest sent dispatch
+    const earliestRow = params.connectionId
+      ? await pool.query(
+          `SELECT MIN(sent_at) AS earliest FROM hermes_dispatches WHERE connection_id = $1 AND type = 'request_review' AND sent_at IS NOT NULL;`,
+          [params.connectionId]
+        )
+      : await pool.query(
+          `SELECT MIN(sent_at) AS earliest FROM hermes_dispatches WHERE type = 'request_review' AND sent_at IS NOT NULL;`
+        );
+
+    const earliest = (earliestRow.rows[0] as any)?.earliest;
+    if (earliest) {
+      from = startOfUtcDay(new Date(earliest));
+      rangeDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+    } else {
+      // No dispatches sent yet — fall back to 30 days
+      rangeDays = 30;
+      from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+    }
+  } else {
+    rangeDays = Math.max(1, Math.min(params.rangeDays, 3650));
+    // Inclusive day range (e.g. 30d => today + previous 29 days)
+    from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+  }
 
   const connectionId = params.connectionId;
 

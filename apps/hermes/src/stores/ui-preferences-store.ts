@@ -15,7 +15,7 @@ export type OrdersPreferences = {
 };
 
 export type InsightsPreferences = {
-  rangeDays: 7 | 30 | 90 | 365;
+  rangeDays: 0 | 7 | 30 | 90;
 };
 
 export type LogsPreferences = {
@@ -146,9 +146,9 @@ function parseInsightsPreferences(raw: unknown): InsightsPreferences {
 
   const rangeDaysRaw = v.rangeDays;
   const rangeDays: InsightsPreferences["rangeDays"] =
-    rangeDaysRaw === 7 || rangeDaysRaw === 30 || rangeDaysRaw === 90 || rangeDaysRaw === 365
+    rangeDaysRaw === 0 || rangeDaysRaw === 7 || rangeDaysRaw === 30 || rangeDaysRaw === 90
       ? rangeDaysRaw
-      : DEFAULT_INSIGHTS.rangeDays;
+      : rangeDaysRaw === 365 ? 0 : DEFAULT_INSIGHTS.rangeDays;
 
   return { rangeDays };
 }
