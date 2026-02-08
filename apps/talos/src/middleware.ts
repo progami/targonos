@@ -133,9 +133,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  const requestTenantOverride = request.headers.get('x-tenant')
+  const effectiveTenant = isValidTenantCode(requestTenantOverride)
+    ? requestTenantOverride
+    : tenantCookie
   const response = NextResponse.next()
-  if (hasTenant) {
-    response.headers.set('x-tenant', tenantCookie)
+  if (isValidTenantCode(effectiveTenant)) {
+    response.headers.set('x-tenant', effectiveTenant)
   }
 
   return response
