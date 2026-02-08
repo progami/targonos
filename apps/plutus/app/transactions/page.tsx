@@ -506,7 +506,7 @@ export default function TransactionsPage() {
                 </Table>
               </div>
 
-              {data && (
+              {data && data.pagination.totalCount > 0 && (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
                   <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                     Showing {(data.pagination.page - 1) * data.pagination.pageSize + 1}–{Math.min(data.pagination.page * data.pagination.pageSize, data.pagination.totalCount)} of {data.pagination.totalCount}
