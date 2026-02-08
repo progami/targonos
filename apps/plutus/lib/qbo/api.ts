@@ -136,6 +136,10 @@ export interface QboPurchase {
         name: string;
       };
     };
+    ItemBasedExpenseLineDetail?: {
+      ItemRef?: { value: string; name: string };
+      AccountRef?: { value: string; name: string };
+    };
   }>;
   MetaData?: {
     CreateTime: string;
@@ -163,6 +167,10 @@ export interface QboBill {
         value: string;
         name: string;
       };
+    };
+    ItemBasedExpenseLineDetail?: {
+      ItemRef?: { value: string; name: string };
+      AccountRef?: { value: string; name: string };
     };
   }>;
   MetaData?: {
@@ -300,12 +308,12 @@ export async function fetchJournalEntries(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = journalEntries.length;
         }
+      } else {
+        logger.warn('Journal entry count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Journal entry count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -374,7 +382,7 @@ export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
     Bill?: QboBill[];
-    Account: QboAccount[];
+    Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
     totalCount?: number;
     startPosition?: number;
@@ -511,12 +519,12 @@ export async function fetchPurchases(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = purchases.length;
         }
+      } else {
+        logger.warn('Purchase count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Purchase count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -598,12 +606,12 @@ export async function fetchBills(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = bills.length;
         }
+      } else {
+        logger.warn('Bill count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Bill count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
