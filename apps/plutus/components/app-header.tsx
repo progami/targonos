@@ -69,10 +69,10 @@ function QboStatusFallback() {
   );
 }
 
-const MARKETPLACE_OPTIONS: Array<{ value: Marketplace; label: string; flag: string }> = [
-  { value: 'all', label: 'All Marketplaces', flag: '' },
-  { value: 'US', label: 'US - Amazon.com', flag: '\u{1F1FA}\u{1F1F8}' },
-  { value: 'UK', label: 'UK - Amazon.co.uk', flag: '\u{1F1EC}\u{1F1E7}' },
+const MARKETPLACE_OPTIONS: Array<{ value: Marketplace; label: string; shortLabel: string; flag: string }> = [
+  { value: 'all', label: 'All Marketplaces', shortLabel: 'All', flag: '' },
+  { value: 'US', label: 'US - Amazon.com', shortLabel: 'US', flag: '\u{1F1FA}\u{1F1F8}' },
+  { value: 'UK', label: 'UK - Amazon.co.uk', shortLabel: 'UK', flag: '\u{1F1EC}\u{1F1E7}' },
 ];
 
 function MarketplaceSelector() {
@@ -83,9 +83,9 @@ function MarketplaceSelector() {
 
   return (
     <Select value={marketplace} onValueChange={(v) => setMarketplace(v as Marketplace)}>
-      <SelectTrigger className="h-8 w-[155px] gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
+      <SelectTrigger className="h-8 w-auto gap-1.5 border-slate-200 bg-white text-xs font-medium dark:border-white/10 dark:bg-slate-900">
         <SelectValue>
-          {current?.flag ? `${current.flag} ${current.label}` : current?.label}
+          {current?.flag ? `${current.flag} ${current.shortLabel}` : current?.shortLabel}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
