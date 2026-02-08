@@ -156,14 +156,14 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
-  return <Badge variant="destructive">Plutus: Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -242,7 +242,7 @@ function SignedAmount({
   return (
     <span className={cn(
       'font-medium tabular-nums',
-      signed < 0 ? 'text-red-600 dark:text-red-400' : '',
+      postingType === 'Credit' ? 'text-emerald-600 dark:text-emerald-400' : '',
     )}>
       {formatMoney(signed, currency)}
     </span>

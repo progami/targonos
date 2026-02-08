@@ -93,15 +93,15 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Rolled back</Badge>;
-  if (status === 'Blocked') return <Badge variant="destructive">Blocked</Badge>;
-  return <Badge variant="destructive">Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  if (status === 'Blocked') return <Badge variant="destructive">Plutus Blocked</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
