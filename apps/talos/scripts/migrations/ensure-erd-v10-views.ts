@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
-import type { TenantCode } from '../../src/lib/tenant/constants'
+import { TENANTS, type TenantCode } from '../../src/lib/tenant/constants'
 
 type ScriptOptions = {
   tenants: TenantCode[]
@@ -77,10 +77,26 @@ Options:
 `)
 }
 
+function resolveSchemaName(tenant: TenantCode): string {
+  const url = process.env[TENANTS[tenant].envKey]
+  if (url) {
+    try {
+      const parsed = new URL(url)
+      const schema = parsed.searchParams.get('schema')
+      if (schema) return schema
+    } catch {
+      // fall through
+    }
+  }
+  return tenant === 'US' ? 'dev_talos_us' : 'dev_talos_uk'
+}
+
 async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const prisma = await getTenantPrismaClient(tenant)
+  const schema = resolveSchemaName(tenant)
 
   const statements = [
+    `SET search_path TO "${schema}"`,
     `DROP VIEW IF EXISTS "discrepancy"`,
     `DROP VIEW IF EXISTS "grn_line_item"`,
     `DROP VIEW IF EXISTS "grn"`,
