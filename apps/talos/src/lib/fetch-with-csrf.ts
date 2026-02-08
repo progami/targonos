@@ -16,22 +16,27 @@ function normalizeRequestUrl(url: string): string {
 }
 
 // Utility function to make fetch requests with CSRF token
-export async function fetchWithCSRF(url: string, options: RequestInit = {}): Promise<Response> {
+export async function fetchWithCSRF(url: string, options: RequestInit & { tenantOverride?: string } = {}): Promise<Response> {
+ const { tenantOverride, ...fetchOptions } = options
  const resolvedUrl = normalizeRequestUrl(url)
  const csrfToken = getCookie('csrf-token');
- 
- const headers = new Headers(options.headers);
- const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
+ const headers = new Headers(fetchOptions.headers);
+ const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
  if (!isFormData && !headers.has('Content-Type')) {
    headers.set('Content-Type', 'application/json');
  }
- 
+
  if (csrfToken) {
  headers.set('x-csrf-token', csrfToken);
  }
+
+ if (tenantOverride) {
+ headers.set('x-tenant', tenantOverride);
+ }
  
  const response = await fetch(resolvedUrl, {
- ...options,
+ ...fetchOptions,
  headers,
  credentials: 'include' // Ensure cookies are sent
  });
@@ -49,7 +54,7 @@ export async function fetchWithCSRF(url: string, options: RequestInit = {}): Pro
  if (newCsrfToken && newCsrfToken !== csrfToken) {
  headers.set('x-csrf-token', newCsrfToken);
  return fetch(resolvedUrl, {
- ...options,
+ ...fetchOptions,
  headers,
  credentials: 'include'
  });
