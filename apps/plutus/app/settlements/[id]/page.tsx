@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
@@ -127,18 +128,16 @@ function formatPeriod(start: string | null, end: string | null): string {
   const endYear = endDate.getUTCFullYear();
   const sameYear = startYear === endYear;
 
-  const startMonth = startDate.getUTCMonth();
-  const endMonth = endDate.getUTCMonth();
-  const sameMonth = sameYear && startMonth === endMonth;
-
   const startText = startDate.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
     year: sameYear ? undefined : 'numeric',
   });
 
   const endText = endDate.toLocaleDateString('en-US', {
-    month: sameMonth ? undefined : 'short',
+    timeZone: 'UTC',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
@@ -157,14 +156,14 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
-  return <Badge variant="outline">Plutus: Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -243,7 +242,7 @@ function SignedAmount({
   return (
     <span className={cn(
       'font-medium tabular-nums',
-      postingType === 'Credit' ? 'text-emerald-600 dark:text-emerald-400' : '',
+      signed < 0 ? 'text-red-600 dark:text-red-400' : '',
     )}>
       {formatMoney(signed, currency)}
     </span>
@@ -659,10 +658,13 @@ export default function SettlementDetailPage() {
           description={
             settlement ? (
               <div className="space-y-1">
-                <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{settlement.docNumber}</div>
-                <div>
-                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} • Posted{' '}
-                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US')}
+                <div className="font-mono text-sm text-slate-700 dark:text-slate-300">{settlement.docNumber}</div>
+                <div className="text-sm text-slate-700 dark:text-slate-200">
+                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} &middot; Posted{' '}
+                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
                 </div>
               </div>
             ) : (
@@ -671,13 +673,18 @@ export default function SettlementDetailPage() {
           }
           actions={
             settlement ? (
-              <div className="flex flex-col items-start gap-2 sm:items-end">
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill status={settlement.lmbStatus} />
+              <div className="flex flex-col items-start gap-3 sm:items-end">
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 group"
+                  >
+                    <StatusPill status={settlement.lmbStatus} />
+                    <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                  </a>
                   <PlutusPill status={settlement.plutusStatus} />
-                </div>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">
-                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {settlement.plutusStatus === 'Pending' && (

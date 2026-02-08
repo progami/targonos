@@ -107,8 +107,8 @@ function formatPeriod(start: string | null, end: string | null): string {
   const s = new Date(`${start}T00:00:00Z`);
   const e = new Date(`${end}T00:00:00Z`);
   const sameYear = s.getUTCFullYear() === e.getUTCFullYear();
-  const startText = s.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' });
-  const endText = e.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const startText = s.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' });
+  const endText = e.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
   return `${startText} – ${endText}`;
 }
 
