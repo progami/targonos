@@ -157,6 +157,7 @@ function computeSettlementTotal(
 ): number | null {
   let total = 0;
   let found = false;
+  let hasAnyLine = false;
 
   for (const line of entry.Line) {
     const amount = line.Amount;
@@ -166,6 +167,8 @@ function computeSettlementTotal(
     const account = accountsById.get(accountId);
     if (!account) continue;
 
+    hasAnyLine = true;
+
     if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
 
     found = true;
@@ -173,7 +176,9 @@ function computeSettlementTotal(
     total += signed;
   }
 
-  if (!found) return null;
+  if (!found) {
+    return hasAnyLine ? 0 : null;
+  }
 
   return total;
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
@@ -127,10 +128,6 @@ function formatPeriod(start: string | null, end: string | null): string {
   const endYear = endDate.getUTCFullYear();
   const sameYear = startYear === endYear;
 
-  const startMonth = startDate.getUTCMonth();
-  const endMonth = endDate.getUTCMonth();
-  const sameMonth = sameYear && startMonth === endMonth;
-
   const startText = startDate.toLocaleDateString('en-US', {
     timeZone: 'UTC',
     month: 'short',
@@ -140,7 +137,7 @@ function formatPeriod(start: string | null, end: string | null): string {
 
   const endText = endDate.toLocaleDateString('en-US', {
     timeZone: 'UTC',
-    month: sameMonth ? undefined : 'short',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
@@ -661,10 +658,13 @@ export default function SettlementDetailPage() {
           description={
             settlement ? (
               <div className="space-y-1">
-                <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{settlement.docNumber}</div>
-                <div>
-                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} • Posted{' '}
-                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                <div className="font-mono text-sm text-slate-700 dark:text-slate-300">{settlement.docNumber}</div>
+                <div className="text-sm text-slate-700 dark:text-slate-200">
+                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} &middot; Posted{' '}
+                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
                 </div>
               </div>
             ) : (
@@ -678,10 +678,15 @@ export default function SettlementDetailPage() {
                   <StatusPill status={settlement.lmbStatus} />
                   <PlutusPill status={settlement.plutusStatus} />
                 </div>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">
-                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
-                </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`, '_blank')}
+                  >
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Open in QBO
+                  </Button>
                   {settlement.plutusStatus === 'Pending' && (
                     <ProcessSettlementDialog
                       settlementId={settlementId}

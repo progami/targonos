@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Play, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Play, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,10 +65,6 @@ function formatPeriod(start: string | null, end: string | null): string {
   const endYear = endDate.getUTCFullYear();
   const sameYear = startYear === endYear;
 
-  const startMonth = startDate.getUTCMonth();
-  const endMonth = endDate.getUTCMonth();
-  const sameMonth = sameYear && startMonth === endMonth;
-
   const startText = startDate.toLocaleDateString('en-US', {
     timeZone: 'UTC',
     month: 'short',
@@ -78,7 +74,7 @@ function formatPeriod(start: string | null, end: string | null): string {
 
   const endText = endDate.toLocaleDateString('en-US', {
     timeZone: 'UTC',
-    month: sameMonth ? undefined : 'short',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
@@ -444,18 +440,18 @@ export default function SettlementsPage() {
                                 <div className="truncate text-sm font-medium text-slate-900 dark:text-white group-hover:text-brand-teal-600 dark:group-hover:text-brand-cyan transition-colors">
                                   {s.marketplace.label}
                                 </div>
-                                <div className="mt-0.5 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
+                                <div className="mt-0.5 truncate font-mono text-sm text-slate-700 dark:text-slate-300">
                                   {s.docNumber}
                                 </div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="align-top text-sm">
-                            <div className="text-slate-700 dark:text-slate-200">
+                            <div className="font-medium text-slate-900 dark:text-white">
                               {formatPeriod(s.periodStart, s.periodEnd)}
                             </div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                            <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
                           </TableCell>
                           <TableCell className="align-top text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
@@ -473,6 +469,7 @@ export default function SettlementsPage() {
                                   { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
                                   { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
                                   { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                                  { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
                                 Action
