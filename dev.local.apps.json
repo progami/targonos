@@ -3,11 +3,9 @@
   "apps": {
     "talos": 3001,
     "atlas": 3006,
-    "fcc": 3003,
     "website": 3105,
     "xplan": 3008,
     "kairos": 3010,
-    "margin-master": 3007,
     "plutus": 3012,
     "hermes": 3014,
     "argus": 3016

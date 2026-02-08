@@ -93,25 +93,29 @@ export default function AuditDataPage() {
       setUploadResult(null);
       setUploadError(null);
 
-      const formData = new FormData();
-      formData.set('file', file);
+      try {
+        const formData = new FormData();
+        formData.set('file', file);
 
-      const res = await fetch(`${basePath}/api/plutus/audit-data/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+        const res = await fetch(`${basePath}/api/plutus/audit-data/upload`, {
+          method: 'POST',
+          body: formData,
+        });
 
-      const json = await res.json();
+        const json = await res.json();
 
-      if (!res.ok) {
-        setUploadError(json.error ?? 'Upload failed');
+        if (!res.ok) {
+          setUploadError(json.error ?? 'Upload failed');
+          return;
+        }
+
+        setUploadResult(json as UploadResult);
+        queryClient.invalidateQueries({ queryKey: ['audit-data-uploads'] });
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
         setIsUploading(false);
-        return;
       }
-
-      setUploadResult(json as UploadResult);
-      setIsUploading(false);
-      queryClient.invalidateQueries({ queryKey: ['audit-data-uploads'] });
     },
     [queryClient],
   );

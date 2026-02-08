@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight, ExternalLink, Play, Search } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -64,18 +65,16 @@ function formatPeriod(start: string | null, end: string | null): string {
   const endYear = endDate.getUTCFullYear();
   const sameYear = startYear === endYear;
 
-  const startMonth = startDate.getUTCMonth();
-  const endMonth = endDate.getUTCMonth();
-  const sameMonth = sameYear && startMonth === endMonth;
-
   const startText = startDate.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
     year: sameYear ? undefined : 'numeric',
   });
 
   const endText = endDate.toLocaleDateString('en-US', {
-    month: sameMonth ? undefined : 'short',
+    timeZone: 'UTC',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
@@ -94,15 +93,15 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Rolled back</Badge>;
-  if (status === 'Blocked') return <Badge variant="destructive">Blocked</Badge>;
-  return <Badge variant="outline">Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  if (status === 'Blocked') return <Badge variant="destructive">Plutus Blocked</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
@@ -140,11 +139,13 @@ async function fetchSettlements({
   search,
   startDate,
   endDate,
+  marketplace,
 }: {
   page: number;
   search: string;
   startDate: string | null;
   endDate: string | null;
+  marketplace: Marketplace;
 }): Promise<SettlementsResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -152,6 +153,7 @@ async function fetchSettlements({
   if (search.trim() !== '') params.set('search', search.trim());
   if (startDate !== null && startDate.trim() !== '') params.set('startDate', startDate.trim());
   if (endDate !== null && endDate.trim() !== '') params.set('endDate', endDate.trim());
+  if (marketplace !== 'all') params.set('marketplace', marketplace);
 
   const res = await fetch(`${basePath}/api/plutus/settlements?${params.toString()}`);
   if (!res.ok) {
@@ -170,8 +172,25 @@ function SettlementsEmptyIcon() {
   );
 }
 
+type AutopostCheckResult = {
+  processed: Array<{ settlementId: string; docNumber: string; invoiceId: string }>;
+  skipped: Array<{ settlementId: string; docNumber: string; reason: string }>;
+  errors: Array<{ settlementId: string; docNumber: string; error: string }>;
+};
+
+async function runAutopostCheck(): Promise<AutopostCheckResult> {
+  const res = await fetch(`${basePath}/api/plutus/autopost/check`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
+
 export default function SettlementsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
   const page = useSettlementsListStore((s) => s.page);
@@ -202,10 +221,10 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate],
-    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate }),
+    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace],
+    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace }),
     enabled: connection !== undefined && connection.connected === true,
-    staleTime: 15 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const settlements = useMemo(() => {
@@ -218,10 +237,32 @@ export default function SettlementsPage() {
     const total = data?.pagination.totalCount ?? 0;
     const processed = settlements.filter((s) => s.plutusStatus === 'Processed').length;
     const pending = settlements.filter((s) => s.plutusStatus === 'Pending').length;
+    const hasAnyTotal = settlements.some((s) => s.settlementTotal !== null);
     const totalAmount = settlements.reduce((sum, s) => sum + (s.settlementTotal ?? 0), 0);
     const primaryCurrency = settlements[0]?.marketplace.currency ?? 'USD';
-    return { total, processed, pending, totalAmount, primaryCurrency };
+    return { total, processed, pending, hasAnyTotal, totalAmount, primaryCurrency };
   }, [data, settlements]);
+
+  const autoprocessMutation = useMutation({
+    mutationFn: runAutopostCheck,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+      const processedCount = result.processed.length;
+      const skippedCount = result.skipped.length;
+      const errorCount = result.errors.length;
+
+      if (processedCount > 0) {
+        toast.success(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`);
+      } else if (errorCount > 0) {
+        toast.error(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`);
+      } else {
+        toast.info(`No settlements to auto-process (${skippedCount} skipped)`);
+      }
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Auto-process failed');
+    },
+  });
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlements" />;
@@ -230,7 +271,17 @@ export default function SettlementsPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Settlements" variant="accent" />
+        <div className="flex items-center justify-between">
+          <PageHeader title="Settlements" variant="accent" />
+          <Button
+            variant="outline"
+            onClick={() => autoprocessMutation.mutate()}
+            disabled={autoprocessMutation.isPending}
+          >
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+            {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
+          </Button>
+        </div>
 
         {/* KPI Strip */}
         {!isLoading && data && (
@@ -247,7 +298,7 @@ export default function SettlementsPage() {
             />
             <StatCard
               label="Settlement Value"
-              value={formatMoney(stats.totalAmount, stats.primaryCurrency)}
+              value={stats.hasAnyTotal ? formatMoney(stats.totalAmount, stats.primaryCurrency) : 'No data'}
             />
             <StatCard
               label="Processed"
@@ -389,25 +440,34 @@ export default function SettlementsPage() {
                                 <div className="truncate text-sm font-medium text-slate-900 dark:text-white group-hover:text-brand-teal-600 dark:group-hover:text-brand-cyan transition-colors">
                                   {s.marketplace.label}
                                 </div>
-                                <div className="mt-0.5 truncate font-mono text-xs text-slate-500 dark:text-slate-400">
+                                <div className="mt-0.5 truncate font-mono text-sm text-slate-700 dark:text-slate-300">
                                   {s.docNumber}
                                 </div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="align-top text-sm">
-                            <div className="text-slate-700 dark:text-slate-200">
+                            <div className="font-medium text-slate-900 dark:text-white">
                               {formatPeriod(s.periodStart, s.periodEnd)}
                             </div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US')}
+                            <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
                           </TableCell>
                           <TableCell className="align-top text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
                           </TableCell>
                           <TableCell className="align-top">
-                            <StatusPill status={s.lmbStatus} />
+                            <a
+                              href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 group"
+                            >
+                              <StatusPill status={s.lmbStatus} />
+                              <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                            </a>
                           </TableCell>
                           <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-2">
@@ -418,6 +478,7 @@ export default function SettlementsPage() {
                                   { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
                                   { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
                                   { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                                  { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
                                 Action

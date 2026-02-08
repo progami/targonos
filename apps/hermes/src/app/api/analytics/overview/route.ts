@@ -14,7 +14,7 @@ async function handleGet(req: Request) {
 
   const schema = z.object({
     connectionId: z.string().min(1).optional(),
-    rangeDays: z.coerce.number().int().min(1).max(365).optional(),
+    rangeDays: z.coerce.number().int().min(0).max(3650).optional(),
   });
 
   const parsed = schema.safeParse({

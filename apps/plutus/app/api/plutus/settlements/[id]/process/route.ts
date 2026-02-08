@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import { QboAuthError, type QboConnection } from '@/lib/qbo/api';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { QboAuthError } from '@/lib/qbo/api';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
 import { unzipSync, strFromU8 } from 'fflate';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 export const runtime = 'nodejs';
 
@@ -75,14 +76,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
   try {
     const { id: settlementJournalEntryId } = await context.params;
 
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
-    if (!connectionCookie) {
+    const connection = await getQboConnection();
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const contentType = req.headers.get('content-type') ?? '';
 
@@ -128,19 +125,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
 
     if (processed.updatedConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(processed.updatedConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(processed.updatedConnection);
     }
 
     if (!processed.result.ok) {
       return NextResponse.json(processed.result.preview, { status: 400 });
     }
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'SETTLEMENT_PROCESSED',
+      entityType: 'SettlementProcessing',
+      entityId: settlementJournalEntryId,
+      details: {
+        marketplace: processed.result.preview.marketplace,
+        invoiceId: processed.result.preview.invoiceId,
+      },
+    });
 
     return NextResponse.json(processed.result, { status: 200 });
   } catch (error) {

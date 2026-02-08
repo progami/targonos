@@ -47,7 +47,7 @@ export const useTransactionsStore = create<TransactionsState>()(
       setEndDate: (endDate) => set({ endDate }),
       setPage: (page) => set({ page }),
       setPageSize: (pageSize) => set({ pageSize }),
-      clear: () => set({ ...DEFAULT_STATE }),
+      clear: () => set({ searchInput: '', search: '', startDate: '', endDate: '', page: 1 }),
     }),
     {
       name: 'plutus-transactions',

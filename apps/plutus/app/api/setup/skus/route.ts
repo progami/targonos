@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@targon/prisma-plutus';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const SkuSchema = z.object({
   sku: z.string().min(1),
@@ -96,6 +98,17 @@ export async function POST(request: NextRequest) {
     const updatedSkus = await db.sku.findMany({
       include: { brand: true },
       orderBy: { createdAt: 'asc' },
+    });
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'SKU_UPDATED',
+      entityType: 'Sku',
+      details: {
+        skuCount: updatedSkus.length,
+      },
     });
 
     return NextResponse.json({

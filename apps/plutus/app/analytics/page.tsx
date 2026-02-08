@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { BarChart3 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -11,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { useMarketplaceStore } from '@/lib/store/marketplace';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -273,10 +275,17 @@ export default function AnalyticsPage() {
     staleTime: 30 * 1000,
   });
 
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
+
   const now = new Date();
   const defaultMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const [month, setMonth] = useState(defaultMonth);
   const [channel, setChannel] = useState('targon-us');
+
+  useEffect(() => {
+    if (marketplace === 'US') setChannel('targon-us');
+    if (marketplace === 'UK') setChannel('targon-uk');
+  }, [marketplace]);
 
   const analyticsQuery = useQuery({
     queryKey: ['plutus-analytics', month, channel],
@@ -354,7 +363,7 @@ export default function AnalyticsPage() {
   }, [data]);
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Analytics" />;
+    return <NotConnectedScreen title="Benchmarking" />;
   }
 
   return (
@@ -424,40 +433,50 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <MetricCard
-              title="Sales growth"
-              value={salesGrowth === null ? '—' : formatSignedPercent(salesGrowth)}
-              detail={
-                current
-                  ? `Sales: ${formatMoneyFromCents(current.salesCents, currency)}`
-                  : ' '
-              }
-              percentile={salesGrowth === null ? null : percentileRank(growthSeries, salesGrowth)}
-            />
-            <MetricCard
-              title="Fee ratio"
-              value={feeRatio === null ? '—' : `${feeRatio.toFixed(2)}%`}
-              detail={
-                current
-                  ? `Fees: ${formatMoneyFromCents(current.sellerFeesCents + current.fbaFeesCents, currency)}`
-                  : ' '
-              }
-              percentile={feeRatio === null ? null : percentileRank(feeRatioSeries, feeRatio)}
-            />
-            <MetricCard
-              title="Refund ratio"
-              value={refundRatio === null ? '—' : `${refundRatio.toFixed(2)}%`}
-              detail={current ? `Refunds: ${formatMoneyFromCents(current.refundsCents, currency)}` : ' '}
-              percentile={refundRatio === null ? null : percentileRank(refundRatioSeries, refundRatio)}
-            />
-            <MetricCard
-              title="Total storage fees ratio"
-              value={storageRatio === null ? '—' : `${storageRatio.toFixed(2)}%`}
-              detail={current ? `Storage: ${formatMoneyFromCents(current.storageFeesCents, currency)}` : ' '}
-              percentile={storageRatio === null ? null : percentileRank(storageRatioSeries, storageRatio)}
-            />
-          </div>
+          {data && data.settlementsInPeriod === 0 ? (
+            <div className="text-center py-16">
+              <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium">No Benchmarking Data Yet</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Process at least one settlement to see benchmarking analytics.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <MetricCard
+                title="Sales growth"
+                value={salesGrowth === null ? '—' : formatSignedPercent(salesGrowth)}
+                detail={
+                  current
+                    ? `Sales: ${formatMoneyFromCents(current.salesCents, currency)}`
+                    : ' '
+                }
+                percentile={salesGrowth === null ? null : percentileRank(growthSeries, salesGrowth)}
+              />
+              <MetricCard
+                title="Fee ratio"
+                value={feeRatio === null ? '—' : `${feeRatio.toFixed(2)}%`}
+                detail={
+                  current
+                    ? `Fees: ${formatMoneyFromCents(current.sellerFeesCents + current.fbaFeesCents, currency)}`
+                    : ' '
+                }
+                percentile={feeRatio === null ? null : percentileRank(feeRatioSeries, feeRatio)}
+              />
+              <MetricCard
+                title="Refund ratio"
+                value={refundRatio === null ? '—' : `${refundRatio.toFixed(2)}%`}
+                detail={current ? `Refunds: ${formatMoneyFromCents(current.refundsCents, currency)}` : ' '}
+                percentile={refundRatio === null ? null : percentileRank(refundRatioSeries, refundRatio)}
+              />
+              <MetricCard
+                title="Total storage fees ratio"
+                value={storageRatio === null ? '—' : `${storageRatio.toFixed(2)}%`}
+                detail={current ? `Storage: ${formatMoneyFromCents(current.storageFeesCents, currency)}` : ' '}
+                percentile={storageRatio === null ? null : percentileRank(storageRatioSeries, storageRatio)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </main>

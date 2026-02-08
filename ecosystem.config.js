@@ -75,18 +75,6 @@ module.exports = {
     },
 
     {
-      name: 'dev-xplan-sellerboard-sync',
-      cwd: path.join(DEV_DIR, 'apps/xplan'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/sellerboard-sync-cron.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3108 },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
       name: 'dev-kairos',
       cwd: path.join(DEV_DIR, 'apps/kairos'),
       script: 'node_modules/next/dist/bin/next',
@@ -263,18 +251,6 @@ module.exports = {
       max_memory_restart: '300M'
     },
 
-    {
-      name: 'main-xplan-sellerboard-sync',
-      cwd: path.join(MAIN_DIR, 'apps/xplan'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/sellerboard-sync-cron.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3008 },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
     {
       name: 'main-kairos',
       cwd: path.join(MAIN_DIR, 'apps/kairos'),
