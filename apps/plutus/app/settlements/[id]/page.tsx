@@ -242,7 +242,7 @@ function SignedAmount({
   return (
     <span className={cn(
       'font-medium tabular-nums',
-      postingType === 'Credit' ? 'text-emerald-600 dark:text-emerald-400' : '',
+      signed < 0 ? 'text-red-600 dark:text-red-400' : '',
     )}>
       {formatMoney(signed, currency)}
     </span>
