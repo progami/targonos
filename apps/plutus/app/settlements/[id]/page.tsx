@@ -674,19 +674,19 @@ export default function SettlementDetailPage() {
           actions={
             settlement ? (
               <div className="flex flex-col items-start gap-3 sm:items-end">
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill status={settlement.lmbStatus} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 group"
+                  >
+                    <StatusPill status={settlement.lmbStatus} />
+                    <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                  </a>
                   <PlutusPill status={settlement.plutusStatus} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`, '_blank')}
-                  >
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    Open in QBO
-                  </Button>
                   {settlement.plutusStatus === 'Pending' && (
                     <ProcessSettlementDialog
                       settlementId={settlementId}
