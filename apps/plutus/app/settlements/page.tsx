@@ -466,7 +466,7 @@ export default function SettlementsPage() {
                               className="inline-flex items-center gap-1.5 group"
                             >
                               <StatusPill status={s.lmbStatus} />
-                              <ExternalLink className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
                             </a>
                           </TableCell>
                           <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
