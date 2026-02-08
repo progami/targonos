@@ -543,13 +543,13 @@ export function InsightsClient() {
           <div className="flex items-center gap-2">
             <Tabs
               value={String(rangeDays)}
-              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 7 | 30 | 90 | 365 })}
+              onValueChange={(v) => setInsightsPreferences({ rangeDays: Number(v) as 0 | 7 | 30 | 90 })}
             >
               <TabsList>
                 <TabsTrigger value="7">7d</TabsTrigger>
                 <TabsTrigger value="30">30d</TabsTrigger>
                 <TabsTrigger value="90">90d</TabsTrigger>
-                <TabsTrigger value="365">All</TabsTrigger>
+                <TabsTrigger value="0">All</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -574,7 +574,7 @@ export function InsightsClient() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KpiCard
-          label={`Sent (${rangeDays === 365 ? "all" : `${rangeDays}d`})`}
+          label={`Sent (${rangeDays === 0 ? "all" : `${rangeDays}d`})`}
           value={hasAnyOverview ? fmtInt(sentInRange) : "—"}
           icon={Send}
         />
@@ -607,7 +607,7 @@ export function InsightsClient() {
                   <TableRow>
                     <TableHead>Account</TableHead>
                     <TableHead className="text-right">Sent / shipped</TableHead>
-                    <TableHead className="text-right">Sent ({rangeDays === 365 ? "all" : `${rangeDays}d`})</TableHead>
+                    <TableHead className="text-right">Sent ({rangeDays === 0 ? "all" : `${rangeDays}d`})</TableHead>
                     <TableHead className="text-right">Queued</TableHead>
                     <TableHead className="text-right">Pending</TableHead>
                     <TableHead className="text-right">Canceled</TableHead>
