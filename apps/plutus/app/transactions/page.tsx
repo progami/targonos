@@ -165,7 +165,7 @@ export default function TransactionsPage() {
         endDate: normalizedEndDate,
       }),
     enabled: connection !== undefined && connection.connected === true,
-    staleTime: 15 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const currency = connection?.homeCurrency ? connection.homeCurrency : 'USD';
@@ -386,7 +386,7 @@ export default function TransactionsPage() {
                                 </button>
                               </TableCell>
                               <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
-                                {new Date(`${row.txnDate}T00:00:00Z`).toLocaleDateString('en-US')}
+                                {new Date(`${row.txnDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC' })}
                               </TableCell>
                               <TableCell className="align-top">
                                 <TypeBadge type={row.type} />

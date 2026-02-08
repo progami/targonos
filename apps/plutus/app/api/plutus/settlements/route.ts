@@ -1,10 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import type { QboAccount, QboConnection, QboJournalEntry } from '@/lib/qbo/api';
+import type { QboAccount, QboJournalEntry } from '@/lib/qbo/api';
 import { fetchAccounts, fetchJournalEntries, QboAuthError } from '@/lib/qbo/api';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { db } from '@/lib/db';
 
 const logger = createLogger({ name: 'plutus-settlements' });
@@ -156,7 +155,8 @@ function computeSettlementTotal(
   entry: QboJournalEntry,
   accountsById: Map<string, QboAccount>,
 ): number | null {
-  const candidates: Array<{ amount: number; postingType: 'Debit' | 'Credit' }> = [];
+  let total = 0;
+  let found = false;
 
   for (const line of entry.Line) {
     const amount = line.Amount;
@@ -166,42 +166,34 @@ function computeSettlementTotal(
     const account = accountsById.get(accountId);
     if (!account) continue;
 
-    if (account.AccountType !== 'Bank') continue;
+    if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
 
-    candidates.push({
-      amount,
-      postingType: line.JournalEntryLineDetail.PostingType,
-    });
+    found = true;
+    const signed = line.JournalEntryLineDetail.PostingType === 'Debit' ? amount : -amount;
+    total += signed;
   }
 
-  if (candidates.length === 0) return null;
+  if (!found) return null;
 
-  let selected = candidates[0];
-  for (const candidate of candidates) {
-    if (candidate.amount > selected.amount) selected = candidate;
-  }
-
-  return selected.postingType === 'Debit' ? selected.amount : -selected.amount;
+  return total;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
-    if (!connectionCookie) {
+    const connection = await getQboConnection();
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const searchParams = req.nextUrl.searchParams;
     const rawStartDate = searchParams.get('startDate');
     const rawEndDate = searchParams.get('endDate');
     const rawSearch = searchParams.get('search');
+    const rawMarketplace = searchParams.get('marketplace');
     const startDate = rawStartDate === null ? undefined : rawStartDate;
     const endDate = rawEndDate === null ? undefined : rawEndDate;
     const search = rawSearch === null ? undefined : rawSearch.trim();
+    const marketplaceFilter = rawMarketplace === 'US' || rawMarketplace === 'UK' ? rawMarketplace : null;
 
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
@@ -209,7 +201,11 @@ export async function GET(req: NextRequest) {
     const pageSize = parseInt(rawPageSize === null ? '25' : rawPageSize, 10);
     const startPosition = (page - 1) * pageSize + 1;
 
-    const docNumberContains = search === undefined ? 'LMB-' : search;
+    const docNumberContains = search !== undefined
+      ? search
+      : marketplaceFilter !== null
+        ? `LMB-${marketplaceFilter}-`
+        : 'LMB-';
 
     const { journalEntries, totalCount, updatedConnection } = await fetchJournalEntries(connection, {
       startDate,
@@ -230,13 +226,6 @@ export async function GET(req: NextRequest) {
         : connection;
 
     if (activeConnection !== connection) {
-      cookieStore.set('qbo_connection', JSON.stringify(activeConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(activeConnection);
     }
 

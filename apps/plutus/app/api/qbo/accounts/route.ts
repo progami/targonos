@@ -1,23 +1,11 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
-import { fetchAccounts, QboAuthError, type QboConnection } from '@/lib/qbo/api';
+import { NextResponse } from 'next/server';
+import { fetchAccounts, QboAuthError } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { getAccountSource } from '@/lib/lmb/default-accounts';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-accounts' });
-
-function shouldUseSecureCookies(request: NextRequest): boolean {
-  let isHttps = request.nextUrl.protocol === 'https:';
-  if (!isHttps) {
-    const forwardedProto = request.headers.get('x-forwarded-proto');
-    if (forwardedProto === 'https') {
-      isHttps = true;
-    }
-  }
-  return isHttps;
-}
 
 // QBO Account Type order (matches QuickBooks Online Chart of Accounts view)
 const ACCOUNT_TYPE_ORDER: Record<string, number> = {
@@ -38,39 +26,28 @@ const ACCOUNT_TYPE_ORDER: Record<string, number> = {
   'Other Expense': 15,
 };
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const requestId = randomUUID();
 
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
-      logger.info('Missing qbo_connection cookie', { requestId });
+    if (!connection) {
+      logger.info('Missing qbo_connection', { requestId });
       return NextResponse.json({ error: 'Not connected to QBO', requestId }, { status: 401 });
     }
 
-    const connection: QboConnection = JSON.parse(connectionCookie);
     logger.info('Fetching QBO accounts', { requestId, realmId: connection.realmId, expiresAt: connection.expiresAt });
-    await ensureServerQboConnection(connection);
 
     const { accounts, updatedConnection } = await fetchAccounts(connection, {
       includeInactive: true,
     });
 
-    // Update cookie if token was refreshed
     if (updatedConnection) {
       logger.info('QBO access token refreshed', {
         requestId,
         realmId: updatedConnection.realmId,
         expiresAt: updatedConnection.expiresAt,
-      });
-      cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
-        httpOnly: true,
-        secure: shouldUseSecureCookies(request),
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
       });
       await saveServerQboConnection(updatedConnection);
     }

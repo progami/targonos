@@ -182,7 +182,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 }
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
-  MANUFACTURING: ['box_artwork'],
+  MANUFACTURING: ['inspection_report'],
   OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
   WAREHOUSE: ['grn', 'custom_declaration'],
 }
@@ -784,14 +784,21 @@ async function validateTransitionGate(params: {
       recordGateIssue(issues, 'details.manufacturingStartDate', 'Manufacturing start date is required')
     }
 
+    const artworkDocTypes = activeLines.map(
+      line => `box_artwork_${line.skuCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+    )
     await requireDocuments({
       prisma: params.prisma,
       purchaseOrderId: params.order.id,
       stage: PurchaseOrderDocumentStage.MANUFACTURING,
-      documentTypes: ['box_artwork'],
+      documentTypes: [...artworkDocTypes, 'inspection_report'],
       issues,
       issueKeyPrefix: 'documents',
-      issueLabel: () => 'Box artwork',
+      issueLabel: (docType) => {
+        if (docType === 'inspection_report') return 'Inspection report'
+        const skuCode = docType.replace(/^box_artwork_/, '').toUpperCase()
+        return `Box artwork (${skuCode})`
+      },
     })
   }
 

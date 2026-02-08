@@ -6,16 +6,27 @@ import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_CSV_ROWS = 500_000;
+
 function toUint8Array(buf: ArrayBuffer): Uint8Array {
   return new Uint8Array(buf);
 }
 
 export async function POST(req: Request) {
+  try {
   const formData = await req.formData();
   const file = formData.get('file');
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'Missing file' }, { status: 400 });
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return NextResponse.json(
+      { error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is 10MB.` },
+      { status: 400 },
+    );
   }
 
   const bytes = toUint8Array(await file.arrayBuffer());
@@ -45,6 +56,13 @@ export async function POST(req: Request) {
   const parsed = parseLmbAuditCsv(csvText);
   if (parsed.rows.length === 0) {
     return NextResponse.json({ error: 'Audit file has no data rows' }, { status: 400 });
+  }
+
+  if (parsed.rows.length > MAX_CSV_ROWS) {
+    return NextResponse.json(
+      { error: `CSV has ${parsed.rows.length.toLocaleString()} rows. Maximum allowed is ${MAX_CSV_ROWS.toLocaleString()} rows.` },
+      { status: 400 },
+    );
   }
 
   // Count unique invoices
@@ -122,4 +140,8 @@ export async function POST(req: Request) {
     uploadedAt: upload.uploadedAt.toISOString(),
     invoiceSummaries,
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

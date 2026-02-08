@@ -182,15 +182,6 @@ interface SkuRow {
   itemSide2Cm?: number | string | null
   itemSide3Cm?: number | string | null
   itemWeightKg?: number | string | null
-  material?: string | null
-  packSize: number | null
-  unitsPerCarton?: number | null
-  cartonDimensionsCm?: string | null
-  cartonSide1Cm?: number | string | null
-  cartonSide2Cm?: number | string | null
-  cartonSide3Cm?: number | string | null
-  cartonWeightKg?: number | string | null
-  packagingType?: string | null
   defaultSupplierId?: string | null
   secondarySupplierId?: string | null
   _count?: { inventoryTransactions: number }
@@ -207,14 +198,6 @@ interface SkuFormState {
   description: string
   isActive: boolean
   asin: string
-  packSize: string
-  unitsPerCarton: string
-  material: string
-  packagingType: string
-  cartonSide1Cm: string
-  cartonSide2Cm: string
-  cartonSide3Cm: string
-  cartonWeightKg: string
   category: string
   subcategory: string
   sizeTier: string
@@ -251,12 +234,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     side2Cm: sku?.unitSide2Cm,
     side3Cm: sku?.unitSide3Cm,
     legacy: sku?.unitDimensionsCm,
-  })
-  const cartonTriplet = resolveDimensionTripletCm({
-    side1Cm: sku?.cartonSide1Cm,
-    side2Cm: sku?.cartonSide2Cm,
-    side3Cm: sku?.cartonSide3Cm,
-    legacy: sku?.cartonDimensionsCm,
   })
   const amazonItemPackageTriplet = resolveDimensionTripletCm({
     side1Cm: sku?.amazonItemPackageSide1Cm,
@@ -317,7 +294,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
   }
 
   const unitWeightInput = formatWeightInput(parseFiniteNumber(sku?.unitWeightKg))
-  const cartonWeightInput = formatWeightInput(parseFiniteNumber(sku?.cartonWeightKg))
   const amazonItemPackageWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonReferenceWeightKg))
   const itemWeightInput = formatWeightInput(parseFiniteNumber(sku?.itemWeightKg))
   const amazonItemWeightInput = formatWeightInput(parseFiniteNumber(sku?.amazonItemWeightKg))
@@ -331,14 +307,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     description: sku?.description ?? '',
     isActive: sku ? sku.isActive : true,
     asin: sku?.asin ?? '',
-    packSize: sku ? (sku.packSize != null ? String(sku.packSize) : '') : '1',
-    unitsPerCarton: sku ? (sku.unitsPerCarton != null ? String(sku.unitsPerCarton) : '1') : '1',
-    material: sku?.material ?? '',
-    packagingType: sku?.packagingType ?? '',
-    cartonSide1Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side1Cm) : '',
-    cartonSide2Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side2Cm) : '',
-    cartonSide3Cm: cartonTriplet ? formatLengthInput(cartonTriplet.side3Cm) : '',
-    cartonWeightKg: cartonWeightInput,
     category,
     subcategory: sku?.subcategory ?? '',
     sizeTier: sku?.sizeTier ?? '',
@@ -933,74 +901,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	      }
 	    }
 
-	    // Parse packaging fields (SKU-level)
-	    const packSizeRaw = formState.packSize.trim()
-	    const packSize = packSizeRaw ? Number.parseInt(packSizeRaw, 10) : null
-	    if (packSize === null || !Number.isFinite(packSize) || packSize <= 0) {
-	      toast.error('Pack size must be a positive number')
-	      return
-	    }
-
-	    const unitsPerCartonRaw = formState.unitsPerCarton.trim()
-	    const unitsPerCarton = unitsPerCartonRaw ? Number.parseInt(unitsPerCartonRaw, 10) : null
-	    if (unitsPerCarton === null || !Number.isFinite(unitsPerCarton) || unitsPerCarton <= 0) {
-	      toast.error('Units per carton must be a positive number')
-	      return
-	    }
-
-	    const materialRaw = formState.material.trim()
-	    const material = materialRaw ? materialRaw : null
-	    const packagingTypeRaw = formState.packagingType.trim()
-	    const packagingType = packagingTypeRaw ? packagingTypeRaw : null
-
-	    const cartonSide1Raw = formState.cartonSide1Cm.trim()
-	    const cartonSide2Raw = formState.cartonSide2Cm.trim()
-	    const cartonSide3Raw = formState.cartonSide3Cm.trim()
-	    const cartonWeightRaw = formState.cartonWeightKg.trim()
-
-	    let cartonSide1Cm: number | null = null
-	    let cartonSide2Cm: number | null = null
-	    let cartonSide3Cm: number | null = null
-
-	    const hasAnyCartonDimension = cartonSide1Raw || cartonSide2Raw || cartonSide3Raw
-	    if (hasAnyCartonDimension) {
-	      if (!cartonSide1Raw || !cartonSide2Raw || !cartonSide3Raw) {
-	        toast.error('Carton dimensions require length, width, and height')
-	        return
-	      }
-
-	      const cartonSide1Input = Number.parseFloat(cartonSide1Raw)
-	      const cartonSide2Input = Number.parseFloat(cartonSide2Raw)
-	      const cartonSide3Input = Number.parseFloat(cartonSide3Raw)
-
-	      if (!Number.isFinite(cartonSide1Input) || cartonSide1Input <= 0) {
-	        toast.error('Carton length must be a positive number')
-	        return
-	      }
-	      if (!Number.isFinite(cartonSide2Input) || cartonSide2Input <= 0) {
-	        toast.error('Carton width must be a positive number')
-	        return
-	      }
-	      if (!Number.isFinite(cartonSide3Input) || cartonSide3Input <= 0) {
-	        toast.error('Carton height must be a positive number')
-	        return
-	      }
-
-	      cartonSide1Cm = convertLengthToCm(cartonSide1Input, unitSystem)
-	      cartonSide2Cm = convertLengthToCm(cartonSide2Input, unitSystem)
-	      cartonSide3Cm = convertLengthToCm(cartonSide3Input, unitSystem)
-	    }
-
-	    let cartonWeightKg: number | null = null
-	    if (cartonWeightRaw) {
-	      const cartonWeightInput = Number.parseFloat(cartonWeightRaw)
-	      if (!Number.isFinite(cartonWeightInput) || cartonWeightInput <= 0) {
-	        toast.error(`Carton weight (${weightUnit}) must be a positive number`)
-	        return
-	      }
-	      cartonWeightKg = convertWeightToKg(cartonWeightInput, unitSystem)
-	    }
-	
 	    setIsSubmitting(true)
 	    try {
 	      const subcategoryTrimmed = formState.subcategory.trim()
@@ -1012,14 +912,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	        asin: asinValue,
 	        description,
 	        isActive: formState.isActive,
-	        packSize,
-	        unitsPerCarton,
-	        material,
-	        packagingType,
-	        cartonSide1Cm,
-	        cartonSide2Cm,
-	        cartonSide3Cm,
-	        cartonWeightKg,
 	        defaultSupplierId: formState.defaultSupplierId ? formState.defaultSupplierId : null,
 	        secondarySupplierId: formState.secondarySupplierId ? formState.secondarySupplierId : null,
 	        category: categoryValue,
@@ -1721,135 +1613,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
 	                  </Tabs>
 	                </div>
 
-	                <div className="md:col-span-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-	                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-	                    Packaging
-	                  </h3>
-	                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-	                    Carton specs and packing defaults used for inventory, shipping, and costing.
-	                  </p>
-	                </div>
-
-	                <div className="space-y-1">
-	                  <Label htmlFor="packSize">Pack Size</Label>
-	                  <Input
-	                    id="packSize"
-	                    type="number"
-	                    min={1}
-	                    value={formState.packSize}
-	                    onChange={event => setFormState(prev => ({ ...prev, packSize: event.target.value }))}
-	                    required
-	                  />
-	                </div>
-
-	                <div className="space-y-1">
-	                  <Label htmlFor="unitsPerCarton">Units per Carton</Label>
-	                  <Input
-	                    id="unitsPerCarton"
-	                    type="number"
-	                    min={1}
-	                    value={formState.unitsPerCarton}
-	                    onChange={event =>
-	                      setFormState(prev => ({ ...prev, unitsPerCarton: event.target.value }))
-	                    }
-	                    required
-	                  />
-	                </div>
-
-	                <div className="space-y-1">
-	                  <Label htmlFor="packagingType">Packaging Type</Label>
-	                  <select
-	                    id="packagingType"
-	                    value={formState.packagingType}
-	                    onChange={event =>
-	                      setFormState(prev => ({ ...prev, packagingType: event.target.value }))
-	                    }
-	                    className="w-full rounded-md border border-border/60 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-soft focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-	                  >
-	                    <option value="">Optional</option>
-	                    <option value="BOX">Box</option>
-	                    <option value="POLYBAG">Polybag</option>
-	                  </select>
-	                </div>
-
-	                <div className="space-y-1">
-	                  <Label htmlFor="material">Material</Label>
-	                  <Input
-	                    id="material"
-	                    value={formState.material}
-	                    onChange={event => setFormState(prev => ({ ...prev, material: event.target.value }))}
-	                    placeholder="Optional"
-	                  />
-	                </div>
-
-	                <div className="md:col-span-2 pt-2">
-	                  <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-	                    Carton
-	                  </h5>
-	                </div>
-
-	                <div className="space-y-1 md:col-span-2">
-	                  <Label>Carton dimensions ({lengthUnit})</Label>
-	                  <div className="grid grid-cols-3 gap-2">
-	                    <Input
-	                      id="cartonSide1Cm"
-	                      type="number"
-	                      step="0.01"
-	                      min={0.01}
-	                      value={formState.cartonSide1Cm}
-	                      onChange={event =>
-	                        setFormState(prev => ({ ...prev, cartonSide1Cm: event.target.value }))
-	                      }
-	                      placeholder="L"
-	                      inputMode="decimal"
-	                    />
-	                    <Input
-	                      id="cartonSide2Cm"
-	                      type="number"
-	                      step="0.01"
-	                      min={0.01}
-	                      value={formState.cartonSide2Cm}
-	                      onChange={event =>
-	                        setFormState(prev => ({ ...prev, cartonSide2Cm: event.target.value }))
-	                      }
-	                      placeholder="W"
-	                      inputMode="decimal"
-	                    />
-	                    <Input
-	                      id="cartonSide3Cm"
-	                      type="number"
-	                      step="0.01"
-	                      min={0.01}
-	                      value={formState.cartonSide3Cm}
-	                      onChange={event =>
-	                        setFormState(prev => ({ ...prev, cartonSide3Cm: event.target.value }))
-	                      }
-	                      placeholder="H"
-	                      inputMode="decimal"
-	                    />
-	                  </div>
-	                </div>
-
-	                <div className="space-y-1">
-	                  <Label htmlFor="cartonWeightKg">Carton weight ({weightUnit})</Label>
-	                  <Input
-	                    id="cartonWeightKg"
-	                    type="number"
-	                    step="0.001"
-	                    min={0.001}
-	                    value={formState.cartonWeightKg}
-	                    onChange={event =>
-	                      setFormState(prev => ({ ...prev, cartonWeightKg: event.target.value }))
-	                    }
-	                    placeholder="Optional"
-	                  />
-	                </div>
-
-	                <div className="md:col-span-2">
-	                  <p className="text-xs text-slate-500 dark:text-slate-400">
-	                    Pallet configuration (cartons per pallet) is set per warehouse in Configuration → Warehouses.
-	                  </p>
-	                </div>
 		              </div>
 		            </div>
 
