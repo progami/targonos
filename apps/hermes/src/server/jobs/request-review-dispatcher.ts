@@ -115,6 +115,18 @@ async function getHardFailureCount(dispatchId: string): Promise<number> {
   return res.rows[0]?.n ?? 0;
 }
 
+async function getIneligibleInfo(dispatchId: string): Promise<{ count: number; daysSinceFirst: number | null }> {
+  const pool = getPgPool();
+  const res = await pool.query<{ n: number; first_at: Date | null }>(
+    `SELECT COUNT(1)::int AS n, MIN(created_at) AS first_at FROM hermes_dispatch_attempts WHERE dispatch_id = $1 AND status = 'ineligible' AND error_code = 'NO_ACTION';`,
+    [dispatchId]
+  );
+  const count = res.rows[0]?.n ?? 0;
+  const firstAt = res.rows[0]?.first_at;
+  const daysSinceFirst = firstAt ? (Date.now() - new Date(firstAt).getTime()) / (24 * 60 * 60 * 1000) : null;
+  return { count, daysSinceFirst };
+}
+
 async function hasSentAttempt(dispatchId: string): Promise<boolean> {
   const pool = getPgPool();
   const res = await pool.query<{ n: number }>(
@@ -181,6 +193,7 @@ async function fetchDueDispatches(limit: number): Promise<DispatchRow[]> {
 
 async function processDispatch(row: DispatchRow, opts: {
   maxHardFailures: number;
+  ineligibleWindowDays: number;
 }): Promise<void> {
   const claimed = await claimDispatchForSending(row.id);
   if (!claimed) return; // Another worker got it.
@@ -217,6 +230,21 @@ async function processDispatch(row: DispatchRow, opts: {
       errorMessage: `Max hard failures (${opts.maxHardFailures}) reached`,
     });
     await markDispatchFailed(row.id, `max_hard_failures_${opts.maxHardFailures}`);
+    return;
+  }
+
+  // Amazon's solicitation window is 5-30 days after delivery. If we've been
+  // getting NO_ACTION for over 30 days the window has almost certainly closed.
+  const ineligible = await getIneligibleInfo(row.id);
+  if (ineligible.count > 0 && ineligible.daysSinceFirst !== null && ineligible.daysSinceFirst >= opts.ineligibleWindowDays) {
+    await appendAttempt({
+      dispatchId: row.id,
+      attemptNo,
+      status: "ineligible",
+      errorCode: "INELIGIBLE_WINDOW_EXPIRED",
+      errorMessage: `Skipped after ${ineligible.count} ineligible attempts over ${Math.round(ineligible.daysSinceFirst)}d — outside Amazon's 5-30 day solicitation window`,
+    });
+    await markDispatchSkipped(row.id, `ineligible_window_expired_${ineligible.count}`);
     return;
   }
 
@@ -371,12 +399,13 @@ async function main() {
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);
   const batchSize = getInt("HERMES_WORKER_BATCH_SIZE", 10);
   const maxHardFailures = getInt("HERMES_MAX_HARD_FAILURES", getInt("HERMES_MAX_ATTEMPTS", 5));
+  const ineligibleWindowDays = getInt("HERMES_INELIGIBLE_WINDOW_DAYS", 30);
   const stuckMinutes = getInt("HERMES_STUCK_SENDING_MINUTES", 15);
 
   console.log(`[${nowIso()}] Hermes worker started (request_review)`);
   console.log(
     JSON.stringify(
-      { loopMs, batchSize, maxHardFailures, stuckMinutes },
+      { loopMs, batchSize, maxHardFailures, ineligibleWindowDays, stuckMinutes },
       null,
       2
     )
@@ -408,7 +437,7 @@ async function main() {
 
       for (const row of due) {
         try {
-          await processDispatch(row, { maxHardFailures });
+          await processDispatch(row, { maxHardFailures, ineligibleWindowDays });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(`[${nowIso()}] Dispatch ${row.id} error: ${message}`);
