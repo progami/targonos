@@ -193,6 +193,27 @@ export const EMPLOYEE_FIELD_OWNERSHIP: Record<string, EmployeeFieldOwnership> = 
     uiLabel: 'Editable by HR only',
     lockedReason: 'Only HR and Super Admin can edit this field',
   },
+  exitReason: {
+    permission: 'MANAGER_EDITABLE',
+    editableBy: 'HR',
+    requiresApproval: false,
+    uiLabel: 'Editable by HR only',
+    lockedReason: 'Only HR and Super Admin can edit this field',
+  },
+  lastWorkingDay: {
+    permission: 'MANAGER_EDITABLE',
+    editableBy: 'HR',
+    requiresApproval: false,
+    uiLabel: 'Editable by HR only',
+    lockedReason: 'Only HR and Super Admin can edit this field',
+  },
+  exitNotes: {
+    permission: 'MANAGER_EDITABLE',
+    editableBy: 'HR',
+    requiresApproval: false,
+    uiLabel: 'Editable by HR only',
+    lockedReason: 'Only HR and Super Admin can edit this field',
+  },
   reportsToId: {
     permission: 'MANAGER_EDITABLE',
     editableBy: 'HR',

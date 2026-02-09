@@ -11,6 +11,7 @@ const TaskCategoryEnum = z.enum(['GENERAL', 'CASE', 'POLICY']);
 const CreateTaskSchema = z.object({
   title: z.string().min(1).max(200).trim(),
   description: z.string().max(5000).trim().optional().nullable(),
+  actionUrl: z.string().max(2000).trim().optional().nullable(),
   category: TaskCategoryEnum.optional(),
   dueDate: z
     .string()
@@ -145,6 +146,7 @@ export async function POST(req: Request) {
       data: {
         title: data.title,
         description: data.description ?? null,
+        actionUrl: data.actionUrl ?? null,
         category: data.category ?? 'GENERAL',
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         createdById: currentEmployeeId,

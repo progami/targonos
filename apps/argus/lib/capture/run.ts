@@ -68,7 +68,7 @@ export async function captureTarget(browser: Browser, target: WatchTarget): Prom
 
       const url = buildAsinUrl(config, target.asin);
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('#productTitle', { timeout: 45_000 });
+      await page.waitForSelector('script[type="application/ld+json"]', { timeout: 45_000 });
 
       const snap = await getPageSnapshot(page);
       const screenshot = await page.screenshot({ fullPage: true });
@@ -83,6 +83,9 @@ export async function captureTarget(browser: Browser, target: WatchTarget): Prom
       }
 
       const extracted = extractAsinFields(snap.html);
+      if (!extracted.normalized.title) {
+        throw new Error(`ASIN extraction failed: title is empty (url: ${snap.url})`);
+      }
       const normalizedExtracted = {
         type: 'ASIN',
         asin: target.asin.toUpperCase(),
@@ -122,6 +125,9 @@ export async function captureTarget(browser: Browser, target: WatchTarget): Prom
       }
 
       const extracted = extractSearchResults(snap.html, { trackedAsins: target.trackedAsins, limit: 48 });
+      if (extracted.normalized.results.length === 0) {
+        throw new Error(`SEARCH extraction failed: results array is empty (url: ${snap.url})`);
+      }
       const normalizedExtracted = {
         type: 'SEARCH',
         keyword: target.keyword,
@@ -177,6 +183,9 @@ export async function captureTarget(browser: Browser, target: WatchTarget): Prom
       }
 
       const extracted = extractBestsellers(snap.html, { trackedAsins: target.trackedAsins, limit: 100 });
+      if (extracted.normalized.topAsins.length === 0) {
+        throw new Error(`BESTSELLERS extraction failed: topAsins array is empty (url: ${snap.url})`);
+      }
       const normalizedExtracted = {
         type: 'BROWSE_BESTSELLERS',
         sourceUrl: target.sourceUrl,

@@ -3319,7 +3319,12 @@ export async function generatePurchaseOrderShippingMarks(params: {
     },
   })
 
-  const labels = activeLines.flatMap(line => {
+  const poNumber = order.poNumber ? escapeHtml(order.poNumber) : ''
+  const consignee = order.shipToName ? escapeHtml(order.shipToName) : ''
+  const destination = [order.shipToCity, order.shipToCountry].filter(Boolean).join(', ')
+  const portOfDischarge = order.portOfDischarge ? escapeHtml(order.portOfDischarge) : ''
+
+  const labels = activeLines.map(line => {
     const cartonRange = resolveLineCartonRange(line)
     const cartonTriplet = resolveDimensionTripletCm({
       side1Cm: line.cartonSide1Cm,
@@ -3338,25 +3343,24 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
     const shippingMark = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
 
-    const perCarton: string[] = []
-    for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
-      perCarton.push(`
-        <div class="label">
-          <div class="label-header">${escapeHtml(piNumber)}</div>
-          <div class="label-row"><span class="k">Carton</span><span class="v">${index} of ${cartonRange.total}</span></div>
-          <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
-          <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
-          <div class="label-row"><span class="k">Units</span><span class="v">${line.unitsPerCarton} pcs</span></div>
-          <div class="label-row"><span class="k">N/W</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">G/W</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Dims</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
-          <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
-          <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
-        </div>
-      `)
-    }
-
-    return perCarton
+    return `
+      <div class="label">
+        <div class="label-header">${escapeHtml(piNumber)}</div>
+        <div class="label-row"><span class="k">PO</span><span class="v">${poNumber}</span></div>
+        <div class="label-row"><span class="k">Consignee</span><span class="v">${consignee}</span></div>${destination ? `
+        <div class="label-row"><span class="k">Destination</span><span class="v">${escapeHtml(destination)}</span></div>` : ''}${portOfDischarge ? `
+        <div class="label-row"><span class="k">Port</span><span class="v">${portOfDischarge}</span></div>` : ''}
+        <div class="label-row"><span class="k">Cartons</span><span class="v">${cartonRange.start}–${cartonRange.end} of ${cartonRange.total}</span></div>
+        <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
+        <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
+        <div class="label-row"><span class="k">Units/Carton</span><span class="v">${line.unitsPerCarton} pcs</span></div>
+        <div class="label-row"><span class="k">N/W per carton</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">G/W per carton</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">Dims (L×W×H)</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+        <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
+        <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
+      </div>
+    `
   })
 
   return `<!doctype html>
@@ -3379,6 +3383,12 @@ export async function generatePurchaseOrderShippingMarks(params: {
       .v { color: #000; font-size: 15px; font-weight: 600; text-align: right; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
       .label-footer { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; text-align: center; font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: 0.06em; color: #000; }
+      .handling { margin-top: 20px; padding: 10px 16px; background: white; border: 2px solid #000; }
+      .handling-title { font-weight: 900; font-size: 13px; text-transform: uppercase; text-align: center; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .handling-icons { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+      .handling-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .handling-icon svg { width: 36px; height: 36px; }
+      .handling-icon span { font-size: 9px; font-weight: 700; text-transform: uppercase; text-align: center; line-height: 1.2; }
       @media print {
         @page { size: A4; margin: 10mm; }
         body { background: white; padding: 0; }
@@ -3395,6 +3405,49 @@ export async function generatePurchaseOrderShippingMarks(params: {
     </div>
     <div class="labels">
       ${labels.join('')}
+    </div>
+    <div class="handling">
+      <div class="handling-title">Handling Instructions / 操作说明</div>
+      <div class="handling-icons">
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <polygon points="30,55 50,20 70,55" fill="none" />
+            <polygon points="30,80 50,45 70,80" fill="none" />
+          </svg>
+          <span>This Side Up<br/>此面朝上</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <path d="M35,85 L35,40 Q35,25 50,25 Q65,25 65,40 L65,55" />
+            <line x1="35" y1="85" x2="65" y2="85" />
+            <line x1="65" y1="55" x2="75" y2="70" />
+            <line x1="65" y1="55" x2="55" y2="70" />
+            <line x1="50" y1="25" x2="50" y2="15" />
+          </svg>
+          <span>Fragile<br/>易碎品</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <path d="M50,20 L50,55 M40,20 Q50,10 60,20" />
+            <line x1="35" y1="45" x2="30" y2="55" />
+            <line x1="65" y1="45" x2="70" y2="55" />
+            <line x1="42" y1="60" x2="38" y2="70" />
+            <line x1="58" y1="60" x2="62" y2="70" />
+            <line x1="50" y1="65" x2="50" y2="75" />
+            <path d="M25,80 Q40,70 50,80 Q60,70 75,80" />
+          </svg>
+          <span>Keep Dry<br/>防潮</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <rect x="25" y="50" width="50" height="30" />
+            <rect x="30" y="30" width="40" height="20" stroke-dasharray="6,3" />
+            <line x1="20" y1="20" x2="80" y2="80" stroke-width="4" />
+            <line x1="80" y1="20" x2="20" y2="80" stroke-width="4" />
+          </svg>
+          <span>Do Not Stack<br/>禁止堆放</span>
+        </div>
+      </div>
     </div>
   </body>
 </html>`
