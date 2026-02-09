@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
-import type { TenantCode } from '../../src/lib/tenant/constants'
+import { TENANTS, type TenantCode } from '../../src/lib/tenant/constants'
 
 type ScriptOptions = {
   tenants: TenantCode[]
@@ -63,9 +63,9 @@ function parseArgs(): ScriptOptions {
 
 function showHelp() {
   console.log(`
-Ensure ERD v10 Views
+Ensure ERD v10.1 Views
 
-Creates ERD v10 compatibility views in the tenant schema.
+Creates ERD v10.1 compatibility views in the tenant schema.
 
 Usage:
   pnpm --filter @targon/talos tsx scripts/migrations/ensure-erd-v10-views.ts [options]
@@ -77,10 +77,26 @@ Options:
 `)
 }
 
+function resolveSchemaName(tenant: TenantCode): string {
+  const url = process.env[TENANTS[tenant].envKey]
+  if (url) {
+    try {
+      const parsed = new URL(url)
+      const schema = parsed.searchParams.get('schema')
+      if (schema) return schema
+    } catch {
+      // fall through
+    }
+  }
+  return tenant === 'US' ? 'dev_talos_us' : 'dev_talos_uk'
+}
+
 async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const prisma = await getTenantPrismaClient(tenant)
+  const schema = resolveSchemaName(tenant)
 
   const statements = [
+    `SET search_path TO "${schema}"`,
     `DROP VIEW IF EXISTS "discrepancy"`,
     `DROP VIEW IF EXISTS "grn_line_item"`,
     `DROP VIEW IF EXISTS "grn"`,
@@ -214,7 +230,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       po."incoterms",
       po."payment_terms",
       po."notes",
-      (po."status"::text = 'CANCELLED') AS "is_cancelled",
+      po."status"::text AS "status",
       po."created_at" AS "created_at",
       po."created_by_name" AS "created_by",
       docs."rfq_pdf_url",
@@ -271,7 +287,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       s."id" AS "supplier_id",
       po."ship_to_country" AS "destination",
       po."rfq_approved_at"::date AS "issue_date",
-      (po."status"::text = 'CANCELLED') AS "is_cancelled",
+      po."status"::text AS "status",
       po."expected_date"::date AS "cargo_ready_date",
       po."incoterms",
       po."payment_terms",
@@ -322,13 +338,19 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       pol."id" AS "lot_id",
       s."id" AS "sku_id",
       pol."purchase_order_id" AS "rfq_id",
+      pol."purchase_order_id" AS "po_id",
       pol."lot_ref" AS "lot_ref",
       pol."units_ordered" AS "qty_units",
       pol."units_per_carton",
       pol."quantity" AS "cartons",
       pol."unit_cost",
       pol."pi_number" AS "pi_ref",
+      pol."carton_side1_cm",
+      pol."carton_side2_cm",
+      pol."carton_side3_cm",
+      pol."carton_weight_kg",
       pol."production_date"::date AS "production_date",
+      pol."status"::text AS "status",
       pol."created_at" AS "created_at"
     FROM "purchase_order_lines" pol
     LEFT JOIN "skus" s
@@ -374,7 +396,8 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       COALESCE(ft."freight_cost_usd", 0) AS "freight_cost_usd",
       docs."ci_doc_url",
       docs."bl_doc_url",
-      docs."packing_list_doc_url"
+      docs."packing_list_doc_url",
+      po."status"::text AS "status"
     FROM "purchase_orders" po
     LEFT JOIN line_totals lt
       ON lt."purchase_order_id" = po."id"
@@ -451,7 +474,8 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       docs."customs_clearance_url",
       docs."cube_master_url",
       docs."freight_receipt_url",
-      docs."transaction_cert_url"
+      docs."transaction_cert_url",
+      gr."status"::text AS "status"
     FROM "goods_receipts" gr
     LEFT JOIN "purchase_orders" po
       ON po."id" = gr."purchase_order_id"
@@ -472,7 +496,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         WHEN grl."variance_quantity" < 0 THEN ABS(grl."variance_quantity")
         ELSE 0
       END AS "damaged_qty",
-      grl."variance_quantity" AS "delta"
+      grl."variance_quantity" AS "delta",
+      CASE
+        WHEN grl."variance_quantity" = 0 THEN 'MATCHED'
+        ELSE 'DISCREPANCY'
+      END AS "status"
     FROM "goods_receipt_lines" grl
     JOIN "purchase_order_lines" pol
       ON pol."id" = grl."purchase_order_line_id"`,
@@ -493,7 +521,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     WHERE grl."variance_quantity" <> 0`,
   ] as const
 
-  console.log(`\n[${tenant}] Ensuring ERD v10 views exist`)
+  console.log(`\n[${tenant}] Ensuring ERD v10.1 views exist`)
   for (const statement of statements) {
     if (options.dryRun) {
       console.log(`[${tenant}] DRY RUN: ${statement}`)

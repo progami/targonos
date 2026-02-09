@@ -173,11 +173,6 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
     suggestions.cogsShrinkage = shrinkage.id;
   }
 
-  const productExpenses = findAccountByExactName(accounts, { name: 'Product Expenses', type: 'Cost of Goods Sold' });
-  if (productExpenses) {
-    suggestions.productExpenses = productExpenses.id;
-  }
-
   const amazonSales = findAccountByExactName(accounts, { name: 'Amazon Sales', type: 'Income' });
   if (amazonSales) {
     suggestions.amazonSales = amazonSales.id;
@@ -216,6 +211,11 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
   const promotions = findAccountByExactName(accounts, { name: 'Amazon Promotions', type: 'Cost of Goods Sold' });
   if (promotions) {
     suggestions.amazonPromotions = promotions.id;
+  }
+
+  const productExpenses = findAccountByExactName(accounts, { name: 'Product Expenses', type: 'Expense' });
+  if (productExpenses) {
+    suggestions.productExpenses = productExpenses.id;
   }
 
   return suggestions;
@@ -268,13 +268,16 @@ const COGS_ACCOUNTS = [
   { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
   { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
   { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
-  { key: 'productExpenses', label: 'Product Expenses', type: 'Cost of Goods Sold' },
 ];
 
 const WAREHOUSING_ACCOUNTS = [
   { key: 'warehousing3pl', label: '3PL', type: 'Cost of Goods Sold' },
   { key: 'warehousingAmazonFc', label: 'Amazon FC', type: 'Cost of Goods Sold' },
   { key: 'warehousingAwd', label: 'AWD', type: 'Cost of Goods Sold' },
+];
+
+const PRODUCT_EXPENSES_ACCOUNTS = [
+  { key: 'productExpenses', label: 'Product Expenses', type: 'Expense' },
 ];
 
 const LMB_ACCOUNTS = [
@@ -288,7 +291,7 @@ const LMB_ACCOUNTS = [
   { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
 ];
 
-const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...WAREHOUSING_ACCOUNTS, ...LMB_ACCOUNTS];
+const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...WAREHOUSING_ACCOUNTS, ...PRODUCT_EXPENSES_ACCOUNTS, ...LMB_ACCOUNTS];
 
 // Sidebar
 function Sidebar({
@@ -715,6 +718,7 @@ function AccountsSection({
         {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
         {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
+        {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
         {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
       </div>
 

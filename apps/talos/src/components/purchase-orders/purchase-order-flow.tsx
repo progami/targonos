@@ -745,26 +745,6 @@ function formatTextOrDash(value: string | null | undefined) {
   return value
 }
 
-type CargoSubTabKey = 'details' | 'attributes'
-
-const isIssuedShippingMarksKey = (key: string): boolean => {
-  return (
-    key.includes('.commodityCode') ||
-    key.includes('.countryOfOrigin') ||
-    key.includes('.material') ||
-    key.includes('.netWeightKg') ||
-    key.includes('.cartonWeightKg') ||
-    key.includes('.cartonDimensions') ||
-    key.includes('.unitsPerCarton')
-  )
-}
-
-const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
-  if (!key.startsWith('cargo.')) return null
-  if (isIssuedShippingMarksKey(key)) return 'attributes'
-  return 'details'
-}
-
 export type PurchaseOrderFlowMode = 'detail' | 'create'
 
 type PurchaseOrderFlowProps = {
@@ -783,9 +763,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
   const tenantOverride = props.tenantCode
-  const tenantFetchHeaders: HeadersInit = tenantOverride
-    ? { 'x-tenant': tenantOverride }
-    : {}
+  const tenantFetchHeaders = useMemo<HeadersInit>(
+    () => tenantOverride ? { 'x-tenant': tenantOverride } : {},
+    [tenantOverride]
+  )
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
@@ -919,7 +900,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     'details' | 'cargo' | 'costs' | 'documents' | 'history'
   >('details')
   const [productCostsEditing, setProductCostsEditing] = useState(false)
-  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
     unitsOrdered: 1,
@@ -2100,22 +2080,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return details
   }, [gateIssues])
 
-  const cargoSubTabIssues = useMemo(() => {
-    const issues: Record<CargoSubTabKey, boolean> = {
-      details: false,
-      attributes: false,
-    }
-
-    if (!gateIssues) return issues
-
-    for (const key of Object.keys(gateIssues)) {
-      const target = resolveCargoSubTabForGateKey(key)
-      if (!target) continue
-      issues[target] = true
-    }
-
-    return issues
-  }, [gateIssues])
 
   const cargoLineIssueCountById = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -2146,13 +2110,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const jumpToGateKey = (gateKey: string) => {
     const targetTab = tabForGateKey(gateKey)
     setActiveBottomTab(targetTab)
-
-    if (targetTab === 'cargo') {
-      const targetCargoSubTab = resolveCargoSubTabForGateKey(gateKey)
-      if (targetCargoSubTab) {
-        setCargoSubTab(targetCargoSubTab)
-      }
-    }
 
     setTimeout(() => {
       const element = document.querySelector(`[data-gate-key="${gateKey}"]`)
@@ -3234,93 +3191,76 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 </div>
 
-                {/* Sub-tabs */}
-                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('details')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'details'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Details
-                    {cargoSubTabIssues.details && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-	                  <button
-	                    type="button"
-	                    onClick={() => setCargoSubTab('attributes')}
-	                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-	                      cargoSubTab === 'attributes'
-	                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-	                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-	                    }`}
-	                  >
-	                    <Package2 className="h-4 w-4" />
-	                    Attributes
-	                    {cargoSubTabIssues.attributes && (
-	                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-	                    )}
-	                  </button>
-	                </div>
-
-                {/* Details Sub-tab */}
-                {cargoSubTab === 'details' && (
+                {/* Cargo Lines Table */}
                   <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full table-fixed text-sm">
+                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units/Ctn
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Cartons
                           </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            HS Code
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Country
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Carton Size ({lengthUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Net ({weightUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Gross ({weightUnit})
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Material
+                          </th>
                           {canEditDispatchAllocation && (
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                               Ship Now
                             </th>
                           )}
-	                          {activeViewStage === 'ISSUED' && (
-	                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-	                              PI #
-	                            </th>
-	                          )}
-	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-	                            <>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                                Recvd
-	                              </th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
-	                                Delta
-	                              </th>
-	                            </>
-	                          )}
-	                          {canEdit && <th className="w-[70px]"></th>}
-	                        </tr>
-	                      </thead>
+                          {activeViewStage === 'ISSUED' && (
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              PI #
+                            </th>
+                          )}
+                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+                            <>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Recvd
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Delta
+                              </th>
+                            </>
+                          )}
+                          {canEdit && <th className="w-[60px]"></th>}
+                        </tr>
+                      </thead>
 	                      <tbody>
 	                        {flowLines.length === 0 ? (
 	                          <tr>
 	                            <td
 	                              colSpan={
-	                                5 +
+	                                11 +
 	                                (canEditDispatchAllocation ? 1 : 0) +
 	                                (activeViewStage === 'ISSUED' ? 1 : 0) +
 	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
@@ -3332,13 +3272,31 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </td>
                           </tr>
                         ) : (
-                          flowLines.map(line => (
+                          flowLines.map(line => {
+                            const canEditAttributes =
+                              !isReadOnly &&
+                              order.status === activeViewStage &&
+                              (order.status === 'RFQ' || order.status === 'ISSUED')
+                            const issuePrefix = `cargo.lines.${line.id}`
+                            const issue = (suffix: string): string | null => {
+                              const key = `${issuePrefix}.${suffix}`
+                              return gateIssues ? gateIssues[key] ?? null : null
+                            }
+                            const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
+                            const cartonTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: line.cartonDimensionsCm ?? null,
+                            })
+
+                            return (
                             <tr
                               key={line.id}
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-1">
                                   {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
                                     <span className="text-xs font-semibold text-rose-600">!</span>
                                   )}
@@ -3347,7 +3305,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
                                 <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
                                   {line.lotRef ? line.lotRef : '—'}
                                 </span>
@@ -3404,12 +3362,114 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   line.unitsPerCarton.toLocaleString()
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
+                              </td>
+                              {/* Attribute columns */}
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.commodityCode ?? ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
+                                    }}
+                                    className={cn('h-7 w-24 px-1 py-0 text-xs', issue('commodityCode') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.commodityCode ?? '—'}</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <span className={cn('text-xs', issue('countryOfOrigin') ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300')}>
+                                  {supplierCountry ?? '—'}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                {canEditAttributes ? (
+                                  <div className="flex gap-0.5">
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
+                                      defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="1"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
+                                      defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="2"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
+                                      defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="3"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">
+                                    {cartonTriplet
+                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
+                                      : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                {canEditAttributes ? (
+                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                    defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) { void patchOrderLine(line.id, { netWeightKg: null }); return }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Net weight must be a positive number'); return }
+                                      void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                    }}
+                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('netWeightKg') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                {canEditAttributes ? (
+                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                    defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) { void patchOrderLine(line.id, { cartonWeightKg: null }); return }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Gross weight must be a positive number'); return }
+                                      void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                    }}
+                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('cartonWeightKg') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.material ?? ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
+                                    }}
+                                    className={cn('h-7 w-20 px-1 py-0 text-xs', issue('material') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.material ?? '—'}</span>
+                                )}
                               </td>
                               {canEditDispatchAllocation && (
                                 <td
-                                  className="px-3 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
+                                  className="px-2 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
                                   data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
                                 >
                                   {(() => {
@@ -3580,7 +3640,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </td>
                               )}
                             </tr>
-                          ))
+                          )}
+                          )
                         )}
                         {/* Inline Add Row */}
                         {canEdit && (
@@ -3658,9 +3719,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
                               })()}
                             </td>
-                            {canEditDispatchAllocation && <td className="px-3 py-2">—</td>}
-                            {activeViewStage === 'ISSUED' && <td className="px-3 py-2">—</td>}
-                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            {canEditDispatchAllocation && <td className="px-2 py-2">—</td>}
+                            {activeViewStage === 'ISSUED' && <td className="px-2 py-2">—</td>}
+                            <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                             <td className="px-2 py-2 whitespace-nowrap text-right">
                               <Button
                                 type="button"
@@ -3687,343 +3754,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       </tbody>
                     </table>
                   </div>
-                )}
-                {/* Attributes Sub-tab */}
-                {cargoSubTab === 'attributes' && (
-                  <div className="space-y-3">
-                    {flowLines.length === 0 ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                      </div>
-                    ) : (
-                      flowLines.map(line => {
-                        const canEditAttributes =
-                          !isReadOnly &&
-                          order.status === activeViewStage &&
-                          (order.status === 'RFQ' || order.status === 'ISSUED')
-
-                        const issuePrefix = `cargo.lines.${line.id}`
-                        const issue = (suffix: string): string | null => {
-                          const key = `${issuePrefix}.${suffix}`
-                          return gateIssues ? gateIssues[key] ?? null : null
-                        }
-
-                        const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
-
-                        const cartonTriplet = resolveDimensionTripletCm({
-                          side1Cm: line.cartonSide1Cm ?? null,
-                          side2Cm: line.cartonSide2Cm ?? null,
-                          side3Cm: line.cartonSide3Cm ?? null,
-                          legacy: line.cartonDimensionsCm ?? null,
-                        })
-
-                        return (
-                          <div
-                            key={line.id}
-                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                  <span className="text-xs font-semibold text-rose-600">!</span>
-                                )}
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                  {line.skuCode}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Commodity Code
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      defaultValue={line.commodityCode ?? ''}
-                                      data-gate-key={`${issuePrefix}.commodityCode`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, {
-                                          commodityCode: trimmed.length > 0 ? trimmed : null,
-                                        })
-                                      }}
-                                      className={cn(
-                                        'h-8 px-2 py-0 text-xs',
-                                        issue('commodityCode') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('commodityCode') && (
-                                      <p className="text-xs text-rose-600">{issue('commodityCode')}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                                    data-gate-key={`${issuePrefix}.commodityCode`}
-                                  >
-                                    {line.commodityCode ? line.commodityCode : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Country
-                                </p>
-                                {(() => {
-                                  const countryIssue = issue('countryOfOrigin')
-                                  return (
-                                    <>
-                                      <p
-                                        className={cn(
-                                          'text-sm font-medium',
-                                          countryIssue ? 'text-rose-600' : 'text-slate-900 dark:text-slate-100'
-                                        )}
-                                      >
-                                        {supplierCountry ? supplierCountry : '—'}
-                                      </p>
-                                      {countryIssue && <p className="text-xs text-rose-600">{countryIssue}</p>}
-                                    </>
-                                  )
-                                })()}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Units/Ctn
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={String(line.unitsPerCarton)}
-                                      data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) return
-                                        const parsed = Number.parseInt(trimmed, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) {
-                                          toast.error('Units per carton must be a positive integer')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('unitsPerCarton') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('unitsPerCarton') && (
-                                      <p className="text-xs text-rose-600">{issue('unitsPerCarton')}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                  >
-                                    {line.unitsPerCarton.toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Carton Size ({lengthUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <div
-                                      className="flex gap-1 justify-start"
-                                      data-gate-key={`${issuePrefix}.cartonDimensions`}
-                                    >
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="L"
-                                        defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="1"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="W"
-                                        defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="2"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="H"
-                                        defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="3"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                    </div>
-                                    {cartonDimsIssue && <p className="text-xs text-rose-600">{cartonDimsIssue}</p>}
-                                  </>
-                                ) : (
-                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                    {cartonTriplet
-                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
-                                      : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Net ({weightUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.netWeightKg`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { netWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Net weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('netWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('netWeightKg') && <p className="text-xs text-rose-600">{issue('netWeightKg')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.netWeightKg`}
-                                  >
-                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Gross ({weightUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { cartonWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Gross weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('cartonWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('cartonWeightKg') && <p className="text-xs text-rose-600">{issue('cartonWeightKg')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                  >
-                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Material
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      defaultValue={line.material ?? ''}
-                                      data-gate-key={`${issuePrefix}.material`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
-                                      }}
-                                      className={cn(
-                                        'h-8 px-2 py-0 text-xs',
-                                        issue('material') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('material') && <p className="text-xs text-rose-600">{issue('material')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                                    data-gate-key={`${issuePrefix}.material`}
-                                  >
-                                    {line.material ? line.material : '—'}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-	                    )}
-	                  </div>
-	                )}
 	              </div>
 	            ) : (
 	              <div>
@@ -4067,83 +3797,66 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 </div>
 
-                {/* Sub-tabs */}
-                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('details')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'details'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Details
-                    {cargoSubTabIssues.details && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('attributes')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'attributes'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <Package2 className="h-4 w-4" />
-                    Attributes
-                    {cargoSubTabIssues.attributes && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Details Sub-tab */}
-                {cargoSubTab === 'details' && (
+                {/* Cargo Lines Table */}
                   <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full table-fixed text-sm">
+                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units/Ctn
                           </th>
-	                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                            Cartons
-	                          </th>
-	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-	                            <>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                                Recvd
-	                              </th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
-	                                Delta
-	                              </th>
-	                            </>
-	                          )}
-	                          {canEdit && <th className="w-[70px]"></th>}
-	                        </tr>
-	                      </thead>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Cartons
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            HS Code
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Country
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Carton Size ({lengthUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Net ({weightUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Gross ({weightUnit})
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Material
+                          </th>
+                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+                            <>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Recvd
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Delta
+                              </th>
+                            </>
+                          )}
+                          {canEdit && <th className="w-[60px]"></th>}
+                        </tr>
+                      </thead>
 	                      <tbody>
 	                        {draftLines.length === 0 ? (
 	                          <tr>
 	                            <td
 	                              colSpan={
-	                                5 +
+	                                11 +
 	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
 	                                (canEdit ? 1 : 0)
 	                              }
@@ -4153,13 +3866,27 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                            </td>
 	                          </tr>
                         ) : (
-                          draftLines.map(line => (
+                          draftLines.map(line => {
+                            const issuePrefix = `cargo.lines.${line.id}`
+                            const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
+                              setDraftLines(prev =>
+                                prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
+                              )
+                            }
+                            const cartonTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: line.cartonDimensionsCm ?? null,
+                            })
+
+                            return (
                             <tr
                               key={line.id}
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-1">
                                   {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
                                     <span className="text-xs font-semibold text-rose-600">!</span>
                                   )}
@@ -4168,7 +3895,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
                                 <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
                                   {line.lotRef ? line.lotRef : '—'}
                                 </span>
@@ -4229,9 +3956,98 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   />
                                 </div>
                               </td>
-	                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+	                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
 	                                {line.quantity.toLocaleString()}
 	                              </td>
+                              {/* Attribute columns */}
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                <Input
+                                  value={line.commodityCode ?? ''}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                  }}
+                                  className="h-7 w-24 px-1 py-0 text-xs"
+                                />
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <span className="text-xs text-slate-700 dark:text-slate-300">{supplierCountry ?? '—'}</span>
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                <div className="flex gap-0.5">
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
+                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: next, side2Cm: current.cartonSide2Cm ?? null, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide1Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
+                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: next, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide2Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
+                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: current.cartonSide2Cm ?? null, side3Cm: next, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide3Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({ ...current, netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
+                                  }}
+                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({ ...current, cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
+                                  }}
+                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
+                                <Input
+                                  value={line.material ?? ''}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
+                                  }}
+                                  className="h-7 w-20 px-1 py-0 text-xs"
+                                />
+                              </td>
 	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
 	                                (() => {
 	                                  const received = line.quantityReceived ?? null
@@ -4290,7 +4106,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </td>
                               )}
                             </tr>
-                          ))
+                          )}
+                          )
                         )}
                         {/* Inline Add Row for Create Mode */}
                         <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
@@ -4365,7 +4182,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
                             })()}
                           </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                           <td className="px-2 py-2 whitespace-nowrap text-right">
                             <Button
                               type="button"
@@ -4391,240 +4214,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       </tbody>
                     </table>
                   </div>
-                )}
-                {/* Attributes Sub-tab */}
-                {cargoSubTab === 'attributes' && (
-                  <div className="space-y-3">
-                    {draftLines.length === 0 ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                      </div>
-                    ) : (
-                      draftLines.map(line => {
-                        const issuePrefix = `cargo.lines.${line.id}`
-
-                        const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
-                          setDraftLines(prev =>
-                            prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
-                          )
-                        }
-
-                        return (
-                          <div
-                            key={line.id}
-                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                  <span className="text-xs font-semibold text-rose-600">!</span>
-                                )}
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                  {line.skuCode}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commodity Code</p>
-                                <Input
-                                  value={line.commodityCode ?? ''}
-                                  data-gate-key={`${issuePrefix}.commodityCode`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
-                                  }}
-                                  className="h-8 px-2 py-0 text-xs"
-                                />
-                              </div>
-
-                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Country</p>
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {supplierCountry ? supplierCountry : '—'}
-                                </p>
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Units/Ctn</p>
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min="1"
-                                  step="1"
-                                  value={String(line.unitsPerCarton)}
-                                  data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                  onChange={e => {
-                                    const parsed = Number.parseInt(e.target.value, 10)
-                                    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-                                    updateLine(current => ({ ...current, unitsPerCarton: next }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Carton Size ({lengthUnit})</p>
-                                <div className="flex gap-1 justify-start" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="L"
-                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: next,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide1Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="W"
-                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: next,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide2Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="H"
-                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: next,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide3Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net ({weightUnit})</p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                  data-gate-key={`${issuePrefix}.netWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({
-                                      ...current,
-                                      netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                    }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gross ({weightUnit})</p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                  data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({
-                                      ...current,
-                                      cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                    }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Material</p>
-                                <Input
-                                  value={line.material ?? ''}
-                                  data-gate-key={`${issuePrefix}.material`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
-                                  }}
-                                  className="h-8 px-2 py-0 text-xs"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                )}
               </div>
             )}
               </>
             )}
+
 
             {activeBottomTab === 'documents' && (
               <>
@@ -4681,44 +4275,52 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       }
 
                       return (
-                        <div className="space-y-2">
-                          {items.map(item => {
-                            const meta = item.meta
-                            const generatedSummary = meta.generatedAt
-                              ? `Generated ${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
-                              : 'Not generated yet'
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                              >
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-foreground">{item.label}</p>
-                                  <p className="text-xs text-muted-foreground">{generatedSummary}</p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {meta.outOfDate && (
-                                    <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
-                                      Out of date
-                                    </Badge>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={item.onDownload}
-                                    disabled={!item.canDownload}
-                                    className="gap-2"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    Download
-                                  </Button>
-                                </div>
-                              </div>
-                            )
-                          })}
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Document</th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Generated</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map(item => {
+                                const meta = item.meta
+                                const generatedSummary = meta.generatedAt
+                                  ? `${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
+                                  : '—'
+                                return (
+                                  <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                    <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        {item.label}
+                                        {meta.outOfDate && (
+                                          <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                            Out of date
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{generatedSummary}</td>
+                                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={item.onDownload}
+                                        disabled={!item.canDownload}
+                                        className="h-7 gap-1.5 text-xs"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Download
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )
                     })()}
@@ -4823,105 +4425,117 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   }
 
                   return (
-                    <div className="space-y-3">
-                      {rows.map(row => {
-                        const key = `${stage}::${row.id}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-                        const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-                        const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
-                        const icon = existing ? (
-                          <Check className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-                        ) : row.required ? (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-amber-600" />
-                        ) : (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                        )
+                    <div>
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="w-[28px] px-2 py-2"></th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">Document</th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">File</th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[120px]"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(row => {
+                              const key = `${stage}::${row.id}`
+                              const existing = row.doc
+                              const isUploading = Boolean(uploadingDoc[key])
+                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
 
-                        return (
-                          <div
-                            key={key}
-                            data-gate-key={gateKey ?? undefined}
-                            className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              {icon}
-                              <div className="min-w-0">
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {row.label}
-                                </span>
-                                {existing ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setInlinePreviewDocument(existing)}
-                                    className="block truncate text-xs text-primary hover:underline"
-                                    title={existing.fileName}
-                                  >
-                                    {existing.fileName}
-                                  </button>
-                                ) : (
-                                  <span className="block text-xs text-muted-foreground">
-                                    Not uploaded yet
-                                  </span>
-                                )}
-                                {gateMessage && (
-                                  <p className="mt-1 text-xs text-rose-600">{gateMessage}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {existing && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="h-8 w-8 p-0"
-                                  title="Preview"
+                              return (
+                                <tr
+                                  key={key}
+                                  data-gate-key={gateKey ?? undefined}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                                 >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {existing && (
-                                <Button
-                                  asChild
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  title="Open in new tab"
-                                >
-                                  <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              )}
-                              <label
-                                className={`inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-                                  canUpload
-                                    ? 'hover:bg-slate-100 cursor-pointer'
-                                    : 'opacity-50 cursor-not-allowed'
-                                }`}
-                              >
-                                <Upload className="h-3.5 w-3.5" />
-                                {existing ? 'Replace' : 'Upload'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  disabled={isUploading || !canUpload}
-                                  onChange={e => void handleDocumentUpload(e, stage, row.id)}
-                                />
-                                {isUploading && (
-                                  <span className="text-xs text-muted-foreground ml-1">…</span>
-                                )}
-                              </label>
-                            </div>
-                          </div>
-                        )
-                      })}
+                                  <td className="px-2 py-2 text-center">
+                                    {existing ? (
+                                      <Check className="h-4 w-4 text-emerald-600 inline-block" />
+                                    ) : row.required ? (
+                                      <XCircle className="h-4 w-4 text-amber-600 inline-block" />
+                                    ) : (
+                                      <XCircle className="h-4 w-4 text-slate-400 inline-block" />
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 font-medium text-foreground whitespace-nowrap">
+                                    {row.label}
+                                    {gateMessage && (
+                                      <p className="text-xs text-rose-600 font-normal">{gateMessage}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 whitespace-nowrap max-w-[240px]">
+                                    {existing ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setInlinePreviewDocument(existing)}
+                                        className="text-xs text-primary hover:underline truncate block max-w-full"
+                                        title={existing.fileName}
+                                      >
+                                        {existing.fileName}
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Not uploaded yet</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      {existing && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => setPreviewDocument(existing)}
+                                          className="h-7 w-7 p-0"
+                                          title="Preview"
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                      {existing && (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0"
+                                          title="Open in new tab"
+                                        >
+                                          <a href={existing.viewUrl} target="_blank" rel="noreferrer">
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                          </a>
+                                        </Button>
+                                      )}
+                                      <label
+                                        className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                          canUpload
+                                            ? 'hover:bg-slate-100 cursor-pointer'
+                                            : 'opacity-50 cursor-not-allowed'
+                                        }`}
+                                      >
+                                        <Upload className="h-3 w-3" />
+                                        {existing ? 'Replace' : 'Upload'}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          disabled={isUploading || !canUpload}
+                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
+                                        />
+                                        {isUploading && (
+                                          <span className="text-xs text-muted-foreground ml-1">…</span>
+                                        )}
+                                      </label>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
                       {inlinePreviewDocument && inlineStageMeta && (
-                        <div className="rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
+                        <div className="mt-4 rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
                           <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
@@ -5015,169 +4629,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               )}
                 </div>
 
-                {false && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-auto text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Stage</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Document Type</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">File</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Uploaded</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Status</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allRows: Array<{
-                        stage: string
-                        stageLabel: string
-                        documentType: string
-                        label: string
-                        doc: PurchaseOrderDocumentSummary | undefined
-                      }> = []
-
-                      documentStages.forEach(stage => {
-                        const stageDocs = documents.filter(doc => doc.stage === stage)
-                        const requiredDocs =
-                          stage === 'SHIPPED' ? [] : getStageDocuments(stage, order?.lines ?? [])
-                        const requiredIds = new Set(requiredDocs.map(doc => doc.id))
-                        const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                        const otherDocs = stageDocs.filter(
-                          doc => !requiredIds.has(doc.documentType)
-                        )
-                        const meta = DOCUMENT_STAGE_META[stage]
-
-                        requiredDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.id,
-                            label: doc.label,
-                            doc: docsByType.get(doc.id),
-                          })
-                        })
-                        otherDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.documentType,
-                            label: getDocumentLabel(stage, doc.documentType),
-                            doc,
-                          })
-                        })
-                      })
-
-                      if (allRows.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                              No documents configured for this order.
-                            </td>
-                          </tr>
-                        )
-                      }
-
-                      return allRows.map(row => {
-                        const key = `${row.stage}::${row.documentType}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-
-                        return (
-                          <tr key={key} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {row.stageLabel}
-                            </td>
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                              {row.label}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap max-w-[200px]">
-                              {existing ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="text-primary hover:underline truncate block max-w-full"
-                                  title={existing.fileName}
-                                >
-                                  {existing.fileName}
-                                </button>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {existing ? formatDateOnly(existing.uploadedAt) : '—'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  existing
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : ''
-                                }
-                              >
-                                {existing ? 'UPLOADED' : 'PENDING'}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {existing && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setPreviewDocument(existing)}
-                                    className="h-7 w-7 p-0"
-                                    title="Preview"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                                {existing && (
-                                  <Button
-                                    asChild
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0"
-                                    title="Open in new tab"
-                                  >
-                                    <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                    </a>
-                                  </Button>
-                                )}
-                                {(row.stage !== 'SHIPPED' || existing) && (
-                                  <label
-                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted cursor-pointer"
-                                    title={existing ? 'Replace' : 'Upload'}
-                                  >
-                                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <input
-                                      type="file"
-                                      className="hidden"
-                                      disabled={isUploading}
-                                      onChange={e =>
-                                        void handleDocumentUpload(
-                                          e,
-                                          row.stage as PurchaseOrderDocumentStage,
-                                          row.documentType
-                                        )
-                                      }
-                                    />
-                                  </label>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            )}
               </>
             )}
 
