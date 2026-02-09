@@ -48,7 +48,7 @@ LMB exports Audit Data as a single CSV covering a date range (e.g. `audit-data-T
 
 1. In LMB:
    - Download the **Audit Data CSV** for the desired date range.
-2. In Plutus → **Inventory → Audit Data**:
+2. In Plutus → **Cost Management → Audit Data**:
    - Upload the CSV (or ZIP containing a CSV).
    - Plutus parses the file and splits rows by `Invoice`.
    - Matches each Invoice to a known LMB settlement (via QBO journal entry lookup).
@@ -88,6 +88,24 @@ This is the "posting unit": **one LMB `Invoice` group** from Audit Data.
    - **P&L Reclass JE**: move P&L amounts from parent accounts → Brand sub-accounts (brand-level P&L)
 7. Mark the settlement **Processed**:
    - Store `(marketplace, invoiceId, processingHash)` + QBO JE IDs for idempotency and traceability.
+
+## Optional: Autopost (safe automation)
+
+Plutus includes an **Auto-process** action on the Settlements page plus a headless runner (`pnpm -C apps/plutus autopost:check`) suitable for cron/PM2.
+
+Design rule: **never guess** which audit invoice belongs to a settlement.
+- Matching is deterministic by settlement marketplace + settlement period (from LMB DocNumber).
+- If there is no unique match (missing period, none found, ambiguous), the settlement is **skipped** and requires manual selection in the UI.
+
+## Ongoing: Reconciliation (compare-only in v1)
+
+Plutus includes a Reconciliation page (`/reconciliation`) to compare an Amazon Date Range Transaction Report against stored LMB Audit Data, surfaced as:
+- matched orders
+- discrepancies
+- Amazon-only
+- LMB-only
+
+This is a reporting tool in v1; posting reconciliation adjustments to QBO is still a future step.
 
 ## Decision Tree (v1 defaults)
 

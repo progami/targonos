@@ -128,13 +128,14 @@ className="hover:bg-slate-50 dark:hover:bg-slate-700"
 ```
 Settlements          (top-level link)
 Transactions         (top-level link)
-Analytics            (top-level link)
+Benchmarking         (top-level link)
 Accounts & Taxes ▾   (dropdown)
   ├── Setup Wizard
   └── Chart of Accounts
-Inventory ▾          (dropdown)
+Cost Management ▾    (dropdown)
   ├── Audit Data      ← NEW: bulk audit data upload
   └── Bills
+  └── Reconciliation  ← NEW: Amazon vs LMB compare
 Settings             (top-level link)
 ```
 
@@ -142,7 +143,7 @@ Settings             (top-level link)
 
 **Purpose:** Single place to upload LMB Audit Data CSVs. One CSV covers multiple settlements — Plutus splits by Invoice and matches to known settlements automatically.
 
-**Location in nav:** Inventory → Audit Data
+**Location in nav:** Cost Management → Audit Data
 
 ### Upload Flow
 1. User drags/clicks to upload a CSV (or ZIP containing a CSV)
@@ -164,7 +165,7 @@ Settings             (top-level link)
 - Upload zone: dashed border, teal accent on hover/drag, file icon
 - Success state: green checkmark with matched settlement count
 - Warning state: amber for unmatched invoices (settlement not yet posted by LMB)
-- The Settlements page should show an "Audit Data" indicator column so the user knows which settlements have data ready for processing
+- The Settlements page should show an "Audit Data" indicator column (including ambiguous/none states) so the user knows which settlements have data ready for processing
 
 ## LMB Patterns Reference
 
@@ -173,7 +174,7 @@ Settings             (top-level link)
 - Split action button per row
 - Status badges ("Posted" in teal pill)
 - Country flags next to marketplace
-- Audit data availability indicator per row
+- Audit data availability indicator per row (including ambiguous/none states)
 
 ### Account Taxes
 - Tree table with expand/collapse

@@ -10,6 +10,7 @@ import {
   createEmptyLedgerSnapshot,
   replayInventoryLedger,
 } from '../lib/inventory/ledger';
+import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 
 function test(name: string, fn: () => void) {
   try {
@@ -88,6 +89,19 @@ test('selectAuditInvoiceForSettlement falls back to unique overlap match', () =>
   assert.deepEqual(match, { kind: 'match', matchType: 'overlap', invoiceId: 'A' });
 });
 
+test('parseAmazonTransactionCsv parses required totals', () => {
+  const csv = ['Order Id,Total,Type', '123-123,10.50,Order'].join('\n');
+  const parsed = parseAmazonTransactionCsv(csv);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0]?.orderId, '123-123');
+  assert.equal(parsed.rows[0]?.total, 10.5);
+});
+
+test('parseAmazonTransactionCsv throws on invalid totals', () => {
+  const csv = ['Order Id,Total', '123-123,abc'].join('\n');
+  assert.throws(() => parseAmazonTransactionCsv(csv));
+});
+
 test('ledger blocks missing cost basis', () => {
   const snapshot = createEmptyLedgerSnapshot();
   const { saleCost, blocks } = computeSaleCostFromAverage(snapshot, { orderId: 'O', sku: 'SKU', units: 1 });
@@ -134,4 +148,3 @@ test('ledger computes proportional manufacturing COGS', () => {
 });
 
 process.stdout.write('All tests passed.\n');
-
