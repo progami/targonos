@@ -1,10 +1,9 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   ChevronLeft,
   RefreshCw,
@@ -35,8 +34,6 @@ type InventoryLine = {
   account: string;
   accountId: string;
   component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
-  mappedSku: string | null;
-  mappedQuantity: number | null;
 };
 
 type BillData = {
@@ -52,18 +49,19 @@ type BillData = {
   mapping: {
     id: string;
     poNumber: string;
+    brandId: string;
     syncedAt: string | null;
   } | null;
 };
 
-type SkuOption = {
-  sku: string;
-  productName: string | null;
+type BrandOption = {
+  id: string;
+  name: string;
 };
 
 type BillsResponse = {
   bills: BillData[];
-  skus: SkuOption[];
+  brands: BrandOption[];
   pagination: {
     page: number;
     pageSize: number;
@@ -76,14 +74,9 @@ type ConnectionStatus = { connected: boolean };
 
 type MappingStatus = 'unmapped' | 'mapped' | 'synced';
 
-type LineEditState = {
-  sku: string;
-  quantity: string;
-};
-
 type BillEditState = {
   poNumber: string;
-  lines: Record<string, LineEditState>;
+  brandId: string;
 };
 
 function getStatus(bill: BillData): MappingStatus {
@@ -91,13 +84,6 @@ function getStatus(bill: BillData): MappingStatus {
   if (bill.mapping.syncedAt) return 'synced';
   return 'mapped';
 }
-
-const COMPONENT_LABELS: Record<string, string> = {
-  manufacturing: 'Manufacturing',
-  freight: 'Freight',
-  duty: 'Duty',
-  mfgAccessories: 'Mfg Accessories',
-};
 
 function StatusBadge({ status }: { status: MappingStatus }) {
   const config: Record<MappingStatus, { style: string; label: string }> = {
@@ -152,19 +138,15 @@ async function saveBillMapping(bill: BillData, editState: BillEditState): Promis
     body: JSON.stringify({
       qboBillId: bill.id,
       poNumber: editState.poNumber,
+      brandId: editState.brandId,
       billDate: bill.date,
       vendorName: bill.vendor,
       totalAmount: bill.amount,
-      lines: bill.inventoryLines.map((line) => {
-        const lineEdit = editState.lines[line.lineId];
-        return {
-          qboLineId: line.lineId,
-          component: line.component,
-          sku: lineEdit?.sku ? lineEdit.sku : null,
-          quantity: lineEdit?.quantity ? parseInt(lineEdit.quantity, 10) : null,
-          amountCents: Math.round(line.amount * 100),
-        };
-      }),
+      lines: bill.inventoryLines.map((line) => ({
+        qboLineId: line.lineId,
+        component: line.component,
+        amountCents: Math.round(line.amount * 100),
+      })),
     }),
   });
   if (!res.ok) {
@@ -189,31 +171,18 @@ async function syncBillToQbo(qboBillId: string): Promise<unknown> {
 
 function BillRow({
   bill,
-  skus,
-  isExpanded,
-  onToggle,
+  brands,
 }: {
   bill: BillData;
-  skus: SkuOption[];
-  isExpanded: boolean;
-  onToggle: () => void;
+  brands: BrandOption[];
 }) {
   const queryClient = useQueryClient();
   const status = getStatus(bill);
 
-  const [editState, setEditState] = useState<BillEditState>(() => {
-    const lines: Record<string, LineEditState> = {};
-    for (const line of bill.inventoryLines) {
-      lines[line.lineId] = {
-        sku: line.mappedSku ? line.mappedSku : '',
-        quantity: line.mappedQuantity ? String(line.mappedQuantity) : '',
-      };
-    }
-    return {
-      poNumber: bill.mapping?.poNumber ? bill.mapping.poNumber : '',
-      lines,
-    };
-  });
+  const [editState, setEditState] = useState<BillEditState>(() => ({
+    poNumber: bill.mapping?.poNumber ?? '',
+    brandId: bill.mapping?.brandId ?? '',
+  }));
 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -236,209 +205,84 @@ function BillRow({
     onError: (err: Error) => setSyncError(err.message),
   });
 
-  const hasValidMapping = editState.poNumber.trim() !== '' &&
-    bill.inventoryLines.every((line) => {
-      if (line.component === 'manufacturing') {
-        const lineEdit = editState.lines[line.lineId];
-        return lineEdit?.sku && lineEdit?.quantity && parseInt(lineEdit.quantity, 10) > 0;
-      }
-      return true;
-    });
-
+  const hasValidMapping = editState.poNumber.trim() !== '' && editState.brandId !== '';
   const isMapped = status === 'mapped' || status === 'synced';
 
   return (
-    <Fragment>
-      <TableRow className="table-row-hover cursor-row" onClick={onToggle}>
-        <TableCell className="w-10">
-          {isExpanded
-            ? <ChevronDown className="h-4 w-4 text-slate-400" />
-            : <ChevronRight className="h-4 w-4 text-slate-400" />}
-        </TableCell>
-        <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
-        <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
-        <TableCell className="text-sm">
-          {bill.mapping?.poNumber
-            ? <span className="font-mono text-xs">{bill.mapping.poNumber}</span>
-            : <span className="text-slate-400 italic text-xs">(not set)</span>}
-        </TableCell>
-        <TableCell>
-          <StatusBadge status={status} />
-        </TableCell>
-        <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
-          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)}
-        </TableCell>
-      </TableRow>
+    <TableRow className="table-row-hover">
+      <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
+      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
+      <TableCell>
+        <Input
+          value={editState.poNumber}
+          onChange={(e) => setEditState((prev) => ({ ...prev, poNumber: e.target.value }))}
+          placeholder="e.g. PO-2026-001"
+          className="h-8 w-40 font-mono text-xs"
+        />
+      </TableCell>
+      <TableCell>
+        <select
+          value={editState.brandId}
+          onChange={(e) => setEditState((prev) => ({ ...prev, brandId: e.target.value }))}
+          className="h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+        >
+          <option value="">Select brand</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+      </TableCell>
+      <TableCell>
+        <StatusBadge status={status} />
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
+        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            onClick={() => saveMutation.mutate()}
+            disabled={!hasValidMapping || saveMutation.isPending}
+            className="gap-1 h-7 text-xs px-2"
+          >
+            <Save className="h-3 w-3" />
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </Button>
 
-      {isExpanded && (
-        <TableRow>
-          <TableCell colSpan={6} className="bg-slate-50/50 dark:bg-white/[0.02] p-0">
-            <div className="expand-content px-4 py-4 ml-6">
-              {/* PO Number input */}
-              <div className="flex items-center gap-3 mb-4">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                  PO Number
-                </label>
-                <Input
-                  value={editState.poNumber}
-                  onChange={(e) => setEditState((prev) => ({ ...prev, poNumber: e.target.value }))}
-                  placeholder="e.g. PO-2026-001"
-                  className="h-8 w-48 font-mono text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => syncMutation.mutate()}
+            disabled={!isMapped || syncMutation.isPending}
+            className="gap-1 h-7 text-xs px-2"
+          >
+            <Upload className="h-3 w-3" />
+            {syncMutation.isPending ? 'Syncing...' : 'Sync'}
+          </Button>
 
-              {/* Line items table */}
-              <table className="w-full text-sm mb-4">
-                <thead>
-                  <tr className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                    <th className="text-left pb-2 pr-4">Component</th>
-                    <th className="text-left pb-2 pr-4">Account</th>
-                    <th className="text-left pb-2 pr-4">SKU</th>
-                    <th className="text-left pb-2 pr-4">Qty</th>
-                    <th className="text-right pb-2">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                  {bill.inventoryLines.map((line) => {
-                    const lineEdit = editState.lines[line.lineId];
-                    return (
-                      <tr key={line.lineId}>
-                        <td className="py-2 pr-4">
-                          <span className={cn(
-                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-                            line.component === 'manufacturing'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-                          )}>
-                            {COMPONENT_LABELS[line.component]}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-xs text-slate-500 dark:text-slate-400 font-mono">
-                          {line.account}
-                        </td>
-                        <td className="py-2 pr-4">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              list={`skus-${bill.id}-${line.lineId}`}
-                              value={lineEdit?.sku ?? ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setEditState((prev) => ({
-                                  ...prev,
-                                  lines: {
-                                    ...prev.lines,
-                                    [line.lineId]: {
-                                      ...(prev.lines[line.lineId] ?? { sku: '', quantity: '' }),
-                                      sku: value,
-                                    },
-                                  },
-                                }));
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              placeholder={line.component === 'manufacturing' ? 'Required' : 'Optional'}
-                              className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-xs font-mono dark:border-white/10 dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
-                            />
-                            <datalist id={`skus-${bill.id}-${line.lineId}`}>
-                              {skus.map((s) => (
-                                <option key={s.sku} value={s.sku}>
-                                  {s.productName ? s.productName : s.sku}
-                                </option>
-                              ))}
-                            </datalist>
-                          </div>
-                        </td>
-                        <td className="py-2 pr-4">
-                          {line.component === 'manufacturing' ? (
-                            <Input
-                              type="number"
-                              min={1}
-                              value={lineEdit?.quantity ?? ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setEditState((prev) => ({
-                                  ...prev,
-                                  lines: {
-                                    ...prev.lines,
-                                    [line.lineId]: {
-                                      ...(prev.lines[line.lineId] ?? { sku: '', quantity: '' }),
-                                      quantity: value,
-                                    },
-                                  },
-                                }));
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              placeholder="Units"
-                              className="h-7 w-20 text-xs"
-                            />
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right tabular-nums font-medium text-slate-700 dark:text-slate-300">
-                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(line.amount)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {saveMutation.isSuccess && (
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          )}
+          {syncMutation.isSuccess && (
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          )}
+        </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    saveMutation.mutate();
-                  }}
-                  disabled={!hasValidMapping || saveMutation.isPending}
-                  className="gap-1.5"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {saveMutation.isPending ? 'Saving...' : 'Save Mapping'}
-                </Button>
+        {saveError && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{saveError}</p>
+        )}
+        {syncError && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{syncError}</p>
+        )}
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    syncMutation.mutate();
-                  }}
-                  disabled={!isMapped || syncMutation.isPending}
-                  className="gap-1.5"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  {syncMutation.isPending ? 'Syncing...' : 'Sync to QBO'}
-                </Button>
-
-                {saveMutation.isSuccess && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Saved</span>
-                )}
-                {syncMutation.isSuccess && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Synced</span>
-                )}
-              </div>
-
-              {saveError && (
-                <p className="mt-2 text-xs text-red-600 dark:text-red-400">{saveError}</p>
-              )}
-              {syncError && (
-                <p className="mt-2 text-xs text-red-600 dark:text-red-400">{syncError}</p>
-              )}
-
-              {bill.mapping?.syncedAt && (
-                <p className="mt-2 text-xs text-slate-400">
-                  Last synced: {new Date(bill.mapping.syncedAt).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
-    </Fragment>
+        {bill.mapping?.syncedAt && (
+          <p className="mt-1 text-xs text-slate-400">
+            Synced: {new Date(bill.mapping.syncedAt).toLocaleString()}
+          </p>
+        )}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -452,8 +296,6 @@ export default function BillsPage() {
   const setStartDate = useBillsStore((s) => s.setStartDate);
   const setEndDate = useBillsStore((s) => s.setEndDate);
   const clearDates = useBillsStore((s) => s.clearDates);
-
-  const [expandedBills, setExpandedBills] = useState<Set<string>>(new Set());
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -477,8 +319,8 @@ export default function BillsPage() {
     return billsQuery.data ? billsQuery.data.bills : [];
   }, [billsQuery.data]);
 
-  const skus = useMemo(() => {
-    return billsQuery.data ? billsQuery.data.skus : [];
+  const brands = useMemo(() => {
+    return billsQuery.data ? billsQuery.data.brands : [];
   }, [billsQuery.data]);
 
   const counts = useMemo(() => {
@@ -490,18 +332,6 @@ export default function BillsPage() {
   }, [bills]);
 
   const totalPages = billsQuery.data ? billsQuery.data.pagination.totalPages : 1;
-
-  const toggleBillExpand = (billId: string) => {
-    setExpandedBills((prev) => {
-      const next = new Set(prev);
-      if (next.has(billId)) {
-        next.delete(billId);
-      } else {
-        next.add(billId);
-      }
-      return next;
-    });
-  };
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Bills" />;
@@ -540,24 +370,23 @@ export default function BillsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-600 dark:bg-brand-teal-950/50 dark:text-brand-teal-400">
                     1
                   </div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">PO Memo Rule</h2>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Assign Brand & PO</h2>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                  Every Manufacturing/Freight/Duty bill for a PO must use the exact memo format.
+                  Each inventory bill needs a brand and PO number assigned in the Bill Editor.
                 </p>
-                <pre className="code-block">{`PO: PO-2026-001`}</pre>
-                <ul className="mt-3 text-sm text-slate-600 dark:text-slate-400 space-y-2">
+                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span>Start with <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono dark:bg-white/10">PO: </code> (including the space)</span>
+                    <span>Select the brand from the dropdown</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span>No extra text in memo</span>
+                    <span>Enter the PO number (e.g. <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono dark:bg-white/10">PO-2026-001</code>)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span>Same memo across manufacturing + freight + duty bills</span>
+                    <span>Click <strong>Save</strong> to store the mapping</span>
                   </li>
                 </ul>
               </Card>
@@ -567,16 +396,14 @@ export default function BillsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-600 dark:bg-brand-teal-950/50 dark:text-brand-teal-400">
                     2
                   </div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Manufacturing Line Description
-                  </h2>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Sync to QBO</h2>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                  Manufacturing lines must be parseable into SKU + quantity.
+                  After saving, click <strong>Sync</strong> to push the PO number to the bill memo in QuickBooks.
                 </p>
-                <pre className="code-block">{`CS-007 x 500 units\nCS 007 x 500\nCS-010 500 units`}</pre>
+                <pre className="code-block">{`Memo: PO: PO-2026-001`}</pre>
                 <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-                  Plutus uses these lines to calculate unit costs from bills.
+                  Plutus uses PO numbers to group manufacturing, freight, and duty bills for cost allocation.
                 </p>
               </Card>
             </div>
@@ -663,18 +490,19 @@ export default function BillsPage() {
                   <Table className="table-striped">
                     <TableHeader>
                       <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
-                        <TableHead className="w-10" />
                         <TableHead>Date</TableHead>
                         <TableHead>Vendor</TableHead>
                         <TableHead>PO Number</TableHead>
+                        <TableHead>Brand</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {bills.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="p-0">
+                          <TableCell colSpan={7} className="p-0">
                             <EmptyState
                               title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No inventory bills found'}
                               description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with inventory accounts were found. Try adjusting your date range.'}
@@ -686,9 +514,7 @@ export default function BillsPage() {
                           <BillRow
                             key={bill.id}
                             bill={bill}
-                            skus={skus}
-                            isExpanded={expandedBills.has(bill.id)}
-                            onToggle={() => toggleBillExpand(bill.id)}
+                            brands={brands}
                           />
                         ))
                       )}
