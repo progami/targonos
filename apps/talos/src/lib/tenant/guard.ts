@@ -1,4 +1,5 @@
 import { Session } from 'next-auth'
+import { headers } from 'next/headers'
 import { getCurrentTenantCode } from './server'
 import { TenantCode } from './constants'
 
@@ -20,8 +21,17 @@ export class TenantAccessError extends Error {
 /**
  * Validate that the user's region matches the current tenant.
  * Throws TenantAccessError if there's a mismatch.
+ *
+ * When the client explicitly sends an x-tenant header (e.g. for cross-region
+ * purchase orders), the middleware sets x-tenant-override=1. In that case
+ * the region check is skipped — the user intentionally chose the tenant.
  */
 export async function requireTenantAccess(session: Session): Promise<void> {
+  const headersList = await headers()
+  if (headersList.get('x-tenant-override') === '1') {
+    return
+  }
+
   const currentTenant = await getCurrentTenantCode()
   const userRegion = session.user?.region
 

@@ -141,6 +141,9 @@ export function parseQboBillsToInventoryEvents(
 
     if (candidateLines.length === 0) continue;
 
+    // Skip bills that don't follow the "PO: <number>" memo convention
+    const trimmedMemo = memo.trim();
+    if (!trimmedMemo.startsWith('PO: ')) continue;
     const poNumber = parsePoNumber(memo);
 
     for (const { line, component } of candidateLines) {

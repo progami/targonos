@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ExternalLink } from 'lucide-react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
@@ -100,6 +101,21 @@ type AuditDataResponse = {
   invoices: InvoiceSummary[];
 };
 
+type JeLinePreview = {
+  accountId: string;
+  accountName: string;
+  postingType: 'Debit' | 'Credit';
+  amountCents: number;
+  description: string;
+};
+
+type JePreview = {
+  txnDate: string;
+  docNumber: string;
+  privateNote: string;
+  lines: JeLinePreview[];
+};
+
 type SettlementProcessingPreview = {
   marketplace: string;
   settlementJournalEntryId: string;
@@ -112,8 +128,10 @@ type SettlementProcessingPreview = {
   blocks: Array<{ code: string; message: string; details?: Record<string, string | number> }>;
   sales: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
   returns: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
-  cogsJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
-  pnlJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
+  cogsByBrandComponentCents: Record<string, Record<string, number>>;
+  pnlByBucketBrandCents: Record<string, Record<string, number>>;
+  cogsJournalEntry: JePreview;
+  pnlJournalEntry: JePreview;
 };
 
 type ConnectionStatus = { connected: boolean };
@@ -156,14 +174,14 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus: Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus: Rolled back</Badge>;
-  return <Badge variant="destructive">Plutus: Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -516,6 +534,9 @@ function ProcessSettlementDialog({
                       {preview.blocks.map((b, idx) => (
                         <li key={idx}>
                           <span className="font-mono">{b.code}</span>: {b.message}
+                          {b.details && 'error' in b.details && (
+                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -580,6 +601,38 @@ export default function SettlementDetailPage() {
     }
     return total;
   }, [settlement]);
+
+  // Eager-load preview for Pending settlements
+  const { data: auditData, isLoading: isLoadingAudit } = useQuery({
+    queryKey: ['plutus-audit-data'],
+    queryFn: fetchAuditData,
+    enabled: settlement?.plutusStatus === 'Pending',
+    staleTime: 60 * 1000,
+  });
+
+  const recommendedInvoice = useMemo(() => {
+    if (!auditData?.invoices || !settlement) return null;
+    const { periodStart, periodEnd } = settlement;
+    for (const inv of auditData.invoices) {
+      if (periodStart !== null && periodEnd !== null) {
+        const dates = extractDatesFromInvoiceId(inv.invoiceId);
+        if (dates && dateRangesOverlap(periodStart, periodEnd, dates.start, dates.end)) {
+          return inv.invoiceId;
+        }
+        if (dateRangesOverlap(periodStart, periodEnd, inv.minDate, inv.maxDate)) {
+          return inv.invoiceId;
+        }
+      }
+    }
+    return auditData.invoices[0]?.invoiceId ?? null;
+  }, [auditData?.invoices, settlement]);
+
+  const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
+    queryKey: ['plutus-settlement-preview', settlementId, recommendedInvoice],
+    queryFn: () => fetchPreview(settlementId, recommendedInvoice!),
+    enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlement Details" />;
@@ -674,19 +727,19 @@ export default function SettlementDetailPage() {
           actions={
             settlement ? (
               <div className="flex flex-col items-start gap-3 sm:items-end">
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill status={settlement.lmbStatus} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 group"
+                  >
+                    <StatusPill status={settlement.lmbStatus} />
+                    <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                  </a>
                   <PlutusPill status={settlement.plutusStatus} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`, '_blank')}
-                  >
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    Open in QBO
-                  </Button>
                   {settlement.plutusStatus === 'Pending' && (
                     <ProcessSettlementDialog
                       settlementId={settlementId}
@@ -718,6 +771,9 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <TabsList>
                   <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
+                  {settlement?.plutusStatus === 'Pending' && (
+                    <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
+                  )}
                   <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
               </div>
@@ -783,6 +839,204 @@ export default function SettlementDetailPage() {
                   </div>
                 )}
               </TabsContent>
+
+              {settlement?.plutusStatus === 'Pending' && (
+                <TabsContent value="plutus-preview" className="p-4">
+                  {(isLoadingAudit || isPreviewLoading) && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-5 w-56" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  )}
+
+                  {!isLoadingAudit && !auditData?.invoices?.length && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data uploaded</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          Upload the LMB Audit Data CSV on the{' '}
+                          <Link href="/audit-data" className="text-brand-teal-600 hover:underline dark:text-brand-cyan">
+                            Audit Data
+                          </Link>{' '}
+                          page first.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">No matching invoice found</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          Use the Process Settlement dialog to select an invoice manually.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {previewError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                      {previewError instanceof Error ? previewError.message : String(previewError)}
+                    </div>
+                  )}
+
+                  {previewData && previewData.cogsJournalEntry && (
+                    <div className="space-y-6">
+                      {/* Header */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Invoice {previewData.invoiceId}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            {previewData.minDate} &rarr; {previewData.maxDate}
+                          </div>
+                        </div>
+                        <Badge variant={previewData.blocks.length === 0 ? 'success' : 'destructive'}>
+                          {previewData.blocks.length === 0 ? 'Ready to Process' : 'Blocked'}
+                        </Badge>
+                      </div>
+
+                      {/* Summary cards */}
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Sales</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.sales.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Returns</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.returns.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">COGS Lines</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.cogsJournalEntry.lines.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">P&amp;L Lines</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.pnlJournalEntry.lines.length}</div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Blocks */}
+                      {previewData.blocks.length > 0 && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">
+                              {previewData.blocks.length} blocking issue{previewData.blocks.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+                            {previewData.blocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* COGS Journal Entry */}
+                      {previewData.cogsJournalEntry.lines.length > 0 && (
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                            COGS Journal Entry
+                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {previewData.cogsJournalEntry.docNumber}
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Debit</TableHead>
+                                  <TableHead className="text-right">Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.cogsJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.accountName}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* P&L Reclass Journal Entry */}
+                      {previewData.pnlJournalEntry.lines.length > 0 && (
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                            P&amp;L Reclass Journal Entry
+                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {previewData.pnlJournalEntry.docNumber}
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Debit</TableHead>
+                                  <TableHead className="text-right">Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.pnlJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.accountName}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
 
               <TabsContent value="history" className="p-4">
                 {settlement && (

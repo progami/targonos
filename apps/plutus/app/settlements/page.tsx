@@ -93,15 +93,15 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">Posted</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
+  return <Badge variant="secondary">LMB {status}</Badge>;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Rolled back</Badge>;
-  if (status === 'Blocked') return <Badge variant="destructive">Blocked</Badge>;
-  return <Badge variant="destructive">Pending</Badge>;
+  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
+  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
+  if (status === 'Blocked') return <Badge variant="destructive">Plutus Blocked</Badge>;
+  return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
@@ -458,7 +458,16 @@ export default function SettlementsPage() {
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
                           </TableCell>
                           <TableCell className="align-top">
-                            <StatusPill status={s.lmbStatus} />
+                            <a
+                              href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 group"
+                            >
+                              <StatusPill status={s.lmbStatus} />
+                              <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                            </a>
                           </TableCell>
                           <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-2">
