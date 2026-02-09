@@ -6,9 +6,16 @@ import db from '@/lib/db';
 
 const logger = createLogger({ name: 'plutus-bills' });
 
-type InventoryComponent = 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
+type BillComponent =
+  | 'manufacturing'
+  | 'freight'
+  | 'duty'
+  | 'mfgAccessories'
+  | 'warehousing3pl'
+  | 'warehouseAmazonFc'
+  | 'warehouseAwd';
 
-function classifyComponent(account: QboAccount): InventoryComponent | null {
+function classifyByInventoryName(account: QboAccount): BillComponent | null {
   if (account.AccountType !== 'Other Current Asset') return null;
   if (account.AccountSubType !== 'Inventory') return null;
 
@@ -22,6 +29,49 @@ function classifyComponent(account: QboAccount): InventoryComponent | null {
   if (name.startsWith('Duty')) return 'duty';
   if (name.startsWith('Mfg Accessories')) return 'mfgAccessories';
   return null;
+}
+
+function buildAccountComponentMap(
+  accounts: QboAccount[],
+  configAccountIds: { warehousing3pl?: string | null; warehousingAmazonFc?: string | null; warehousingAwd?: string | null },
+): Map<string, BillComponent> {
+  const map = new Map<string, BillComponent>();
+
+  // Map warehousing parent accounts and their children
+  const warehouseEntries: Array<{ id: string | null | undefined; component: BillComponent }> = [
+    { id: configAccountIds.warehousing3pl, component: 'warehousing3pl' },
+    { id: configAccountIds.warehousingAmazonFc, component: 'warehouseAmazonFc' },
+    { id: configAccountIds.warehousingAwd, component: 'warehouseAwd' },
+  ];
+
+  const parentIds = new Set<string>();
+  for (const entry of warehouseEntries) {
+    if (entry.id) {
+      map.set(entry.id, entry.component);
+      parentIds.add(entry.id);
+    }
+  }
+
+  // Also match child accounts (e.g. "3PL:US-PDS" is a child of "3PL")
+  for (const account of accounts) {
+    if (account.ParentRef && parentIds.has(account.ParentRef.value)) {
+      const parentComponent = map.get(account.ParentRef.value);
+      if (parentComponent) {
+        map.set(account.Id, parentComponent);
+      }
+    }
+  }
+
+  // Map inventory accounts by name matching
+  for (const account of accounts) {
+    if (map.has(account.Id)) continue;
+    const component = classifyByInventoryName(account);
+    if (component) {
+      map.set(account.Id, component);
+    }
+  }
+
+  return map;
 }
 
 export async function GET(req: NextRequest) {
@@ -58,7 +108,13 @@ export async function GET(req: NextRequest) {
     }
     await saveServerQboConnection(activeConnection);
 
-    const accountsById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
+    // Load SetupConfig for warehousing account IDs
+    const config = await db.setupConfig.findFirst();
+    const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
+      warehousing3pl: config?.warehousing3pl,
+      warehousingAmazonFc: config?.warehousingAmazonFc,
+      warehousingAwd: config?.warehousingAwd,
+    });
 
     // Fetch all QBO bill IDs from this page to look up mappings
     const qboBillIds = billsResult.bills.map((b) => b.Id);
@@ -70,24 +126,22 @@ export async function GET(req: NextRequest) {
 
     // Build response
     const bills = billsResult.bills.map((bill) => {
-      const inventoryLines: Array<{
+      const trackedLines: Array<{
         lineId: string;
         amount: number;
         description: string;
         account: string;
         accountId: string;
-        component: InventoryComponent;
+        component: BillComponent;
       }> = [];
 
       for (const line of bill.Line ?? []) {
         if (!line.AccountBasedExpenseLineDetail) continue;
         const accountId = line.AccountBasedExpenseLineDetail.AccountRef.value;
-        const account = accountsById.get(accountId);
-        if (!account) continue;
-        const component = classifyComponent(account);
+        const component = accountComponentMap.get(accountId);
         if (!component) continue;
 
-        inventoryLines.push({
+        trackedLines.push({
           lineId: line.Id,
           amount: line.Amount,
           description: line.Description ? line.Description : '',
@@ -97,7 +151,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      if (inventoryLines.length === 0) return null;
+      if (trackedLines.length === 0) return null;
 
       const mapping = mappingsByBillId.get(bill.Id);
 
@@ -110,7 +164,7 @@ export async function GET(req: NextRequest) {
         memo: bill.PrivateNote ? bill.PrivateNote : '',
         vendor: bill.VendorRef ? bill.VendorRef.name : 'Unknown',
         vendorId: bill.VendorRef ? bill.VendorRef.value : undefined,
-        inventoryLines,
+        inventoryLines: trackedLines,
         mapping: mapping
           ? {
               id: mapping.id,
@@ -129,7 +183,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const inventoryBills = bills.filter((b) => b !== null);
+    const trackedBills = bills.filter((b) => b !== null);
 
     // Fetch brands and SKUs for dropdowns
     const brands = await db.brand.findMany({
@@ -143,7 +197,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      bills: inventoryBills,
+      bills: trackedBills,
       brands,
       skus,
       pagination: {

@@ -43,7 +43,7 @@ type InventoryLine = {
   description: string;
   account: string;
   accountId: string;
-  component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
+  component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories' | 'warehousing3pl' | 'warehouseAmazonFc' | 'warehouseAwd';
 };
 
 type MappingLine = {
@@ -111,13 +111,29 @@ const COMPONENT_LABELS: Record<string, string> = {
   freight: 'Freight',
   duty: 'Duty',
   mfgAccessories: 'Mfg Accessories',
+  warehousing3pl: '3PL',
+  warehouseAmazonFc: 'Amazon FC',
+  warehouseAwd: 'AWD',
 };
 
-const COMPONENT_OPTIONS = [
-  { value: 'manufacturing', label: 'Manufacturing' },
-  { value: 'freight', label: 'Freight' },
-  { value: 'duty', label: 'Duty' },
-  { value: 'mfgAccessories', label: 'Mfg Accessories' },
+const COMPONENT_GROUPS = [
+  {
+    label: 'Inventory',
+    options: [
+      { value: 'manufacturing', label: 'Manufacturing' },
+      { value: 'freight', label: 'Freight' },
+      { value: 'duty', label: 'Duty' },
+      { value: 'mfgAccessories', label: 'Mfg Accessories' },
+    ],
+  },
+  {
+    label: 'Warehousing',
+    options: [
+      { value: 'warehousing3pl', label: '3PL' },
+      { value: 'warehouseAmazonFc', label: 'Amazon FC' },
+      { value: 'warehouseAwd', label: 'AWD' },
+    ],
+  },
 ];
 
 const formatCurrency = (amount: number) =>
@@ -542,7 +558,7 @@ function CreateBillModal({
         <DialogHeader>
           <DialogTitle>Create New Bill</DialogTitle>
           <DialogDescription>
-            Create an inventory bill in QuickBooks and save the cost mapping.
+            Create a bill in QuickBooks and save the cost mapping.
           </DialogDescription>
         </DialogHeader>
 
@@ -627,8 +643,12 @@ function CreateBillModal({
                             onChange={(e) => updateLineField(line.id, 'component', e.target.value)}
                             className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
                           >
-                            {COMPONENT_OPTIONS.map((c) => (
-                              <option key={c.value} value={c.value}>{c.label}</option>
+                            {COMPONENT_GROUPS.map((group) => (
+                              <optgroup key={group.label} label={group.label}>
+                                {group.options.map((c) => (
+                                  <option key={c.value} value={c.value}>{c.label}</option>
+                                ))}
+                              </optgroup>
                             ))}
                           </select>
                         </TableCell>
@@ -797,7 +817,7 @@ export default function BillsPage() {
             <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
               <div className="flex flex-wrap gap-2 text-sm">
                 <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400">
-                  Inventory Bills: {counts.all}
+                  Tracked Bills: {counts.all}
                 </span>
                 <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="h-3 w-3" />
@@ -859,8 +879,8 @@ export default function BillsPage() {
                     <TableRow>
                       <TableCell colSpan={6} className="p-0">
                         <EmptyState
-                          title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No inventory bills found'}
-                          description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with inventory accounts were found. Try adjusting your date range.'}
+                          title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No tracked bills found'}
+                          description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with tracked accounts were found. Try adjusting your date range.'}
                         />
                       </TableCell>
                     </TableRow>
