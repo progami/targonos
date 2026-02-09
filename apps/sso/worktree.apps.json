@@ -6,6 +6,8 @@
     "atlas": "/atlas",
     "website": "https://worktree.website.targonglobal.com",
     "xplan": "/xplan/1-strategies",
-    "plutus": "/plutus"
+    "plutus": "/plutus",
+    "hermes": "/hermes",
+    "argus": "/argus"
   }
 }

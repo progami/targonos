@@ -6,6 +6,7 @@ export {
   Prisma,
   EmploymentType,
   EmployeeStatus,
+  ExitReason,
   ResourceCategory,
   PolicyCategory,
   PolicyStatus,

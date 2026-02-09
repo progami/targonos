@@ -41,6 +41,11 @@ model Employee {
   joinDate         DateTime
   status           EmployeeStatus  @default(ACTIVE)
 
+  // Offboarding fields
+  exitReason       ExitReason?
+  lastWorkingDay   DateTime?
+  exitNotes        String?
+
   // Reporting hierarchy (self-referential)
   reportsToId      String?
   manager          Employee?      @relation("EmployeeHierarchy", fields: [reportsToId], references: [id])
@@ -368,6 +373,7 @@ model Task {
   id               String      @id @default(cuid())
   title            String
   description      String?
+  actionUrl        String?
   status           TaskStatus  @default(OPEN)
   category         TaskCategory @default(GENERAL)
 
@@ -609,6 +615,16 @@ enum EmployeeStatus {
   ON_LEAVE
   TERMINATED
   RESIGNED
+}
+
+enum ExitReason {
+  RESIGNATION
+  TERMINATION
+  LAYOFF
+  MUTUAL_AGREEMENT
+  CONTRACT_END
+  RETIREMENT
+  OTHER
 }
 
 enum ResourceCategory {
