@@ -29,17 +29,6 @@ type ReconciliationResult = {
   rows: ReconciliationRow[];
 };
 
-/**
- * Map a marketplace selector value (US / UK) to the possible market values
- * that appear in the LMB audit data `market` column.
- */
-function marketFilters(marketplace: string): string[] {
-  if (marketplace === 'US') {
-    return ['Amazon.com', 'amazon.com', 'US'];
-  }
-  return ['Amazon.co.uk', 'amazon.co.uk', 'UK'];
-}
-
 export async function POST(req: Request) {
   const formData = await req.formData();
   const file = formData.get('file');
@@ -71,7 +60,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'File is empty' }, { status: 400 });
   }
 
-  const parsed = parseAmazonTransactionCsv(csvText);
+  let parsed: ReturnType<typeof parseAmazonTransactionCsv>;
+  try {
+    parsed = parseAmazonTransactionCsv(csvText);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 400 },
+    );
+  }
   if (parsed.rows.length === 0) {
     return NextResponse.json({ error: 'No transaction rows found in file' }, { status: 400 });
   }
@@ -113,13 +110,26 @@ export async function POST(req: Request) {
   }
 
   // Load LMB audit data for the matching month and marketplace
-  const marketValues = marketFilters(marketplace);
+  const lmbMarketWhere =
+    marketplace === 'US'
+      ? {
+          OR: [
+            { market: { equals: 'US', mode: 'insensitive' as const } },
+            { market: { contains: 'amazon.com', mode: 'insensitive' as const } },
+          ],
+        }
+      : {
+          OR: [
+            { market: { equals: 'UK', mode: 'insensitive' as const } },
+            { market: { contains: 'amazon.co.uk', mode: 'insensitive' as const } },
+          ],
+        };
 
   // The date in AuditDataRow is stored as YYYY-MM-DD string
   // We filter rows that start with the month prefix
   const lmbRows = await db.auditDataRow.findMany({
     where: {
-      market: { in: marketValues },
+      ...lmbMarketWhere,
       date: { startsWith: monthPrefix },
     },
     select: {
@@ -290,4 +300,3 @@ function extractDatePrefix(dateTime: string): string | null {
 
   return null;
 }
-

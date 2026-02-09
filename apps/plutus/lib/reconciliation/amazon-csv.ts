@@ -83,6 +83,25 @@ function findColumn(normalizedHeaders: string[], ...candidates: string[]): numbe
   return -1;
 }
 
+function parseRequiredNumber(raw: string | undefined, field: string, rowNumber: number): number {
+  if (raw === undefined) {
+    throw new Error(`Missing ${field} on row ${rowNumber}`);
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed === '' || trimmed === '--') {
+    throw new Error(`Missing ${field} on row ${rowNumber}`);
+  }
+
+  const cleaned = trimmed.replace(/[,$\s]/g, '');
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid ${field} on row ${rowNumber}: ${trimmed}`);
+  }
+
+  return n;
+}
+
 function parseNumber(raw: string | undefined): number {
   if (raw === undefined || raw.trim() === '' || raw.trim() === '--') return 0;
   const cleaned = raw.replace(/[,$\s]/g, '');
@@ -154,6 +173,7 @@ export function parseAmazonTransactionCsv(content: string): ParsedAmazonCsv {
 
     const quantityRaw = quantityIdx !== -1 ? cols[quantityIdx]?.trim() ?? '' : '';
     const quantity = quantityRaw === '' ? 0 : Number(quantityRaw);
+    const total = parseRequiredNumber(totalIdx !== -1 ? cols[totalIdx] : undefined, 'total', i + 1);
 
     rows.push({
       dateTime: dateTimeIdx !== -1 ? (cols[dateTimeIdx]?.trim() ?? '') : '',
@@ -181,10 +201,9 @@ export function parseAmazonTransactionCsv(content: string): ParsedAmazonCsv {
       fbaFees: parseNumber(fbaFeesIdx !== -1 ? cols[fbaFeesIdx] : undefined),
       otherTransactionFees: parseNumber(otherTransactionFeesIdx !== -1 ? cols[otherTransactionFeesIdx] : undefined),
       other: parseNumber(otherIdx !== -1 ? cols[otherIdx] : undefined),
-      total: parseNumber(totalIdx !== -1 ? cols[totalIdx] : undefined),
+      total,
     });
   }
 
   return { headers: rawHeaders, rows };
 }
-

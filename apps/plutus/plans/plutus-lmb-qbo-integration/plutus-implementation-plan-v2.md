@@ -46,7 +46,7 @@ Therefore:
 
 ---
 
-## Current Status (2026-01-23)
+## Current Status (2026-02-09)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -55,9 +55,9 @@ Therefore:
 | Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API. User completes LMB setup manually for BOTH connections (US + UK). |
 | Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in the Bills tooling (Bill Guide + Compliance Scanner). |
 | Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Bill Guide + Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
-| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). |
-| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation deferred. |
-| Phase 7 (Testing) | 🚧 IN PROGRESS | CI checks for changed workspaces (lint/type-check/build). |
+| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). Audit invoices are matched to settlements deterministically by marketplace + settlement period (no guessing). |
+| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation tooling restored (compare Amazon Transaction Report vs stored Audit Data); inventory adjustment posting is still deferred. |
+| Phase 7 (Testing) | ✅ BASIC COVERAGE | Minimal unit coverage exists (matching + inventory ledger + reconciliation CSV parsing). CI checks for changed workspaces (lint/type-check/build). |
 | Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
 
 **Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.

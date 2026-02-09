@@ -49,7 +49,7 @@ If QBO is not connected, **Plutus still loads Setup in “offline mode”** so u
 
 - **Allowed (offline):** Brands + SKUs
 - **Blocked until connected:** Account mapping + sub-account creation
-- **Dashboards blocked:** Settlements, Bills, Chart of Accounts (show NotConnectedScreen)
+- **Dashboards blocked:** Settlements, Audit Data, Bills, Reconciliation, Chart of Accounts (show NotConnectedScreen)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
