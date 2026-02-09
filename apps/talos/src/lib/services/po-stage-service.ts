@@ -3374,6 +3374,12 @@ export async function generatePurchaseOrderShippingMarks(params: {
       .v { color: #000; font-size: 15px; font-weight: 600; text-align: right; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
       .label-footer { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; text-align: center; font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: 0.06em; color: #000; }
+      .handling { margin-top: 24px; border: 2px solid #000; padding: 16px; background: white; }
+      .handling-title { font-weight: 900; font-size: 16px; text-transform: uppercase; text-align: center; margin-bottom: 12px; letter-spacing: 0.04em; }
+      .handling-icons { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
+      .handling-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .handling-icon svg { width: 64px; height: 64px; }
+      .handling-icon span { font-size: 11px; font-weight: 700; text-transform: uppercase; text-align: center; }
       @media print {
         @page { size: A4; margin: 10mm; }
         body { background: white; padding: 0; }
@@ -3390,6 +3396,53 @@ export async function generatePurchaseOrderShippingMarks(params: {
     </div>
     <div class="labels">
       ${labels.join('')}
+    </div>
+    <div class="handling">
+      <div class="handling-title">Handling Instructions / 操作说明</div>
+      <div class="handling-icons">
+        <div class="handling-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="4" width="48" height="56" rx="2" />
+            <line x1="32" y1="48" x2="32" y2="16" />
+            <polyline points="20,28 32,16 44,28" />
+            <line x1="20" y1="52" x2="44" y2="52" />
+          </svg>
+          <span>This Side Up<br/>此面朝上</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="4" width="48" height="56" rx="2" />
+            <path d="M24,46 L24,26 Q24,20 30,20 L30,20 Q36,20 36,26 L36,36" />
+            <line x1="24" y1="46" x2="40" y2="46" />
+            <line x1="30" y1="20" x2="30" y2="14" />
+            <path d="M36,36 L40,40 L36,44" />
+          </svg>
+          <span>Fragile<br/>易碎品</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="4" width="48" height="56" rx="2" />
+            <path d="M32,18 L32,40 M28,18 Q32,12 36,18" />
+            <path d="M22,44 Q27,38 32,44 Q37,38 42,44" />
+            <line x1="26" y1="34" x2="24" y2="38" />
+            <line x1="38" y1="34" x2="40" y2="38" />
+          </svg>
+          <span>Keep Dry<br/>防潮</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="4" width="48" height="56" rx="2" />
+            <rect x="18" y="28" width="28" height="18" rx="1" />
+            <rect x="22" y="18" width="20" height="10" rx="1" />
+            <line x1="18" y1="28" x2="22" y2="28" />
+            <line x1="42" y1="28" x2="46" y2="28" />
+            <line x1="28" y1="14" x2="36" y2="14" />
+            <line x1="32" y1="10" x2="32" y2="14" />
+            <line x1="26" y1="10" x2="38" y2="10" />
+          </svg>
+          <span>Do Not Stack<br/>禁止堆放</span>
+        </div>
+      </div>
     </div>
   </body>
 </html>`
