@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import type { ActionId } from '@/lib/contracts/action-ids'
 import type { WorkItemDTO, WorkItemEntityData } from '@/lib/contracts/work-items'
@@ -289,13 +290,13 @@ export function InboxActionPane({ item, onAction, currentIndex, totalCount }: In
         </div>
 
         {/* See full details link */}
-        <a
+        <Link
           href={item.href}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ExternalLink className="w-4 h-4" strokeWidth={2} />
           See full details
-        </a>
+        </Link>
       </div>
 
       {/* Action button - sticky at bottom */}
