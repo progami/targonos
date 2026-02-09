@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
-import { invoiceMarketsMatchMarketplace, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { invoiceMarketsMatchMarketplace, selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -239,16 +239,6 @@ function extractDatesFromInvoiceId(invoiceId: string): { start: string; end: str
   return { start: matches[0], end: matches[matches.length - 1] };
 }
 
-/**
- * Check if two date ranges overlap (all strings in YYYY-MM-DD format).
- */
-function dateRangesOverlap(
-  aStart: string, aEnd: string,
-  bStart: string, bEnd: string,
-): boolean {
-  return aStart <= bEnd && bStart <= aEnd;
-}
-
 function SignedAmount({
   amount,
   postingType,
@@ -302,38 +292,44 @@ function ProcessSettlementDialog({
 
   const invoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
 
-  // Compute recommendation for each invoice
+  const invoiceRecommendation = useMemo(() => {
+    if (periodStart === null || periodEnd === null) {
+      return { kind: 'missing_period' } as const;
+    }
+
+    return selectAuditInvoiceForSettlement({
+      settlementMarketplace: marketplaceId,
+      settlementPeriodStart: periodStart,
+      settlementPeriodEnd: periodEnd,
+      invoices,
+    });
+  }, [invoices, marketplaceId, periodEnd, periodStart]);
+
+  // Compute meta for each invoice
   const invoicesWithMeta = useMemo(() => {
     return invoices.map((inv) => {
       const invoiceDates = extractDatesFromInvoiceId(inv.invoiceId);
       const marketMatch = invoiceMarketsMatchMarketplace(inv.markets, marketplaceId);
-      let recommended = false;
       let dateLabel: string | null = null;
 
       if (invoiceDates && marketMatch) {
         dateLabel = `${invoiceDates.start} to ${invoiceDates.end}`;
-        if (periodStart !== null && periodEnd !== null) {
-          recommended = dateRangesOverlap(periodStart, periodEnd, invoiceDates.start, invoiceDates.end);
-        }
       }
 
-      // Also check overlap using the actual audit data date range
-      if (!recommended && marketMatch && periodStart !== null && periodEnd !== null) {
-        recommended = dateRangesOverlap(periodStart, periodEnd, inv.minDate, inv.maxDate);
-      }
+      const recommended = invoiceRecommendation.kind === 'match' && inv.invoiceId === invoiceRecommendation.invoiceId;
+      const candidate =
+        invoiceRecommendation.kind === 'ambiguous' && invoiceRecommendation.candidateInvoiceIds.includes(inv.invoiceId);
 
-      return { ...inv, marketMatch, recommended, dateLabel };
+      return { ...inv, marketMatch, recommended, candidate, dateLabel };
     });
-  }, [invoices, marketplaceId, periodStart, periodEnd]);
+  }, [invoiceRecommendation, invoices, marketplaceId]);
 
   // Auto-select recommended invoice when dialog opens and no invoice is selected
   useEffect(() => {
     if (selectedInvoice !== '') return;
-    const rec = invoicesWithMeta.find((i) => i.recommended);
-    if (rec) {
-      setSelectedInvoice(rec.invoiceId);
-    }
-  }, [invoicesWithMeta, selectedInvoice]);
+    if (invoiceRecommendation.kind !== 'match') return;
+    setSelectedInvoice(invoiceRecommendation.invoiceId);
+  }, [invoiceRecommendation, selectedInvoice]);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -423,6 +419,17 @@ function ProcessSettlementDialog({
 
         {!isLoadingAuditData && invoices.length > 0 && (
           <div className="space-y-4">
+            {invoiceRecommendation.kind === 'ambiguous' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                Multiple audit invoices match this settlement period. Select the correct invoice manually.
+              </div>
+            )}
+            {invoiceRecommendation.kind === 'none' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                No audit invoice matches this settlement period. Upload the correct Audit Data file or choose an invoice manually.
+              </div>
+            )}
+
             {/* Invoice selector */}
             <div>
               <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Invoice</div>
@@ -445,6 +452,11 @@ function ProcessSettlementDialog({
                         {inv.recommended && (
                           <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
                             Recommended
+                          </span>
+                        )}
+                        {inv.candidate && !inv.recommended && (
+                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+                            Candidate
                           </span>
                         )}
                         {!inv.marketMatch && (
@@ -622,22 +634,14 @@ export default function SettlementDetailPage() {
 
   const recommendedInvoice = useMemo(() => {
     if (!auditData?.invoices || !settlement) return null;
-    const { periodStart, periodEnd } = settlement;
-    for (const inv of auditData.invoices) {
-      if (!invoiceMarketsMatchMarketplace(inv.markets, settlement.marketplace.id)) {
-        continue;
-      }
-      if (periodStart !== null && periodEnd !== null) {
-        const dates = extractDatesFromInvoiceId(inv.invoiceId);
-        if (dates && dateRangesOverlap(periodStart, periodEnd, dates.start, dates.end)) {
-          return inv.invoiceId;
-        }
-        if (dateRangesOverlap(periodStart, periodEnd, inv.minDate, inv.maxDate)) {
-          return inv.invoiceId;
-        }
-      }
-    }
-    return null;
+    const match = selectAuditInvoiceForSettlement({
+      settlementMarketplace: settlement.marketplace.id,
+      settlementPeriodStart: settlement.periodStart,
+      settlementPeriodEnd: settlement.periodEnd,
+      invoices: auditData.invoices,
+    });
+
+    return match.kind === 'match' ? match.invoiceId : null;
   }, [auditData?.invoices, settlement]);
 
   const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
