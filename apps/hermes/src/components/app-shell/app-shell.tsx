@@ -2,8 +2,9 @@ import * as React from "react";
 
 import { AppHeader } from "@/components/app-shell/app-header";
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
+import { isHermesDryRun } from "@/server/env/flags";
 
-const isDryRun = process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true";
+const isDryRun = isHermesDryRun();
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
