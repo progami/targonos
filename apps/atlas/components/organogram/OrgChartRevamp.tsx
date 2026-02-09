@@ -1189,12 +1189,45 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
 
     if (!target) return
 
-    const nextScale = 0.95
-    setScale(nextScale)
-    setPan({
-      x: canvasSize.w / 2 - target.x * nextScale,
-      y: canvasSize.h / 2 - target.y * nextScale,
-    })
+    // Calculate content bounds to determine optimal initial zoom
+    const padding = 64
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    for (const n of nodes) {
+      const nodeW = NODE_W
+      const nodeH = n.isHeader ? HEADER_H : NODE_H
+      const left = n.x - nodeW / 2
+      const right = n.x + nodeW / 2
+      const top = n.y
+      const bottom = n.y + nodeH
+      if (left < minX) minX = left
+      if (right > maxX) maxX = right
+      if (top < minY) minY = top
+      if (bottom > maxY) maxY = bottom
+    }
+
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+
+    if (contentW > 0 && contentH > 0) {
+      const scaleX = (canvasSize.w - padding * 2) / contentW
+      const scaleY = (canvasSize.h - padding * 2) / contentH
+      const nextScale = Math.max(0.5, Math.min(1.5, Math.min(scaleX, scaleY)))
+
+      const scaledW = contentW * nextScale
+      const scaledH = contentH * nextScale
+      const extraX = (canvasSize.w - scaledW) / 2
+      const extraY = (canvasSize.h - scaledH) / 2
+
+      setScale(nextScale)
+      setPan({
+        x: extraX - minX * nextScale,
+        y: extraY - minY * nextScale,
+      })
+    }
     initialViewAppliedRef.current = true
   }, [canvasSize.h, canvasSize.w, currentEmployeeId, nodes, viewMode])
 
