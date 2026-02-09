@@ -198,6 +198,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       bills: trackedBills,
+      realmId: connection.realmId,
       brands,
       skus,
       pagination: {

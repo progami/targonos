@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
+  ExternalLink,
   Plus,
   RefreshCw,
   Save,
@@ -79,6 +80,7 @@ type VendorOption = { id: string; name: string };
 
 type BillsResponse = {
   bills: BillData[];
+  realmId: string;
   brands: BrandOption[];
   skus: SkuOption[];
   pagination: { page: number; pageSize: number; totalCount: number; totalPages: number };
@@ -774,6 +776,7 @@ export default function BillsPage() {
   });
 
   const bills = useMemo(() => billsQuery.data?.bills ?? [], [billsQuery.data]);
+  const realmId = billsQuery.data?.realmId ?? '';
   const brands = useMemo(() => billsQuery.data?.brands ?? [], [billsQuery.data]);
   const skus = useMemo(() => billsQuery.data?.skus ?? [], [billsQuery.data]);
 
@@ -872,12 +875,13 @@ export default function BillsPage() {
                     <TableHead>Brand</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bills.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="p-0">
+                      <TableCell colSpan={7} className="p-0">
                         <EmptyState
                           title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No tracked bills found'}
                           description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with tracked accounts were found. Try adjusting your date range.'}
@@ -905,6 +909,20 @@ export default function BillsPage() {
                           <TableCell><StatusBadge status={status} /></TableCell>
                           <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
                             {formatCurrency(bill.amount)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {realmId && (
+                              <a
+                                href={`https://app.qbo.intuit.com/app/bill?txnId=${bill.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center justify-center h-7 w-7 rounded text-slate-400 hover:text-brand-teal-500 hover:bg-brand-teal-50 dark:hover:bg-brand-teal-900/20 transition-colors"
+                                title="Open in QuickBooks"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
