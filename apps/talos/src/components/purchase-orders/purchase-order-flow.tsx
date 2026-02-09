@@ -4275,44 +4275,52 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       }
 
                       return (
-                        <div className="space-y-2">
-                          {items.map(item => {
-                            const meta = item.meta
-                            const generatedSummary = meta.generatedAt
-                              ? `Generated ${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
-                              : 'Not generated yet'
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                              >
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-foreground">{item.label}</p>
-                                  <p className="text-xs text-muted-foreground">{generatedSummary}</p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {meta.outOfDate && (
-                                    <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
-                                      Out of date
-                                    </Badge>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={item.onDownload}
-                                    disabled={!item.canDownload}
-                                    className="gap-2"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    Download
-                                  </Button>
-                                </div>
-                              </div>
-                            )
-                          })}
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Document</th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Generated</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map(item => {
+                                const meta = item.meta
+                                const generatedSummary = meta.generatedAt
+                                  ? `${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
+                                  : '—'
+                                return (
+                                  <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                    <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        {item.label}
+                                        {meta.outOfDate && (
+                                          <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                            Out of date
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{generatedSummary}</td>
+                                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={item.onDownload}
+                                        disabled={!item.canDownload}
+                                        className="h-7 gap-1.5 text-xs"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Download
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )
                     })()}
@@ -4417,105 +4425,117 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   }
 
                   return (
-                    <div className="space-y-3">
-                      {rows.map(row => {
-                        const key = `${stage}::${row.id}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-                        const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-                        const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
-                        const icon = existing ? (
-                          <Check className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-                        ) : row.required ? (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-amber-600" />
-                        ) : (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                        )
+                    <div>
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="w-[28px] px-2 py-2"></th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">Document</th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">File</th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[120px]"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(row => {
+                              const key = `${stage}::${row.id}`
+                              const existing = row.doc
+                              const isUploading = Boolean(uploadingDoc[key])
+                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
 
-                        return (
-                          <div
-                            key={key}
-                            data-gate-key={gateKey ?? undefined}
-                            className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              {icon}
-                              <div className="min-w-0">
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {row.label}
-                                </span>
-                                {existing ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setInlinePreviewDocument(existing)}
-                                    className="block truncate text-xs text-primary hover:underline"
-                                    title={existing.fileName}
-                                  >
-                                    {existing.fileName}
-                                  </button>
-                                ) : (
-                                  <span className="block text-xs text-muted-foreground">
-                                    Not uploaded yet
-                                  </span>
-                                )}
-                                {gateMessage && (
-                                  <p className="mt-1 text-xs text-rose-600">{gateMessage}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {existing && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="h-8 w-8 p-0"
-                                  title="Preview"
+                              return (
+                                <tr
+                                  key={key}
+                                  data-gate-key={gateKey ?? undefined}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                                 >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {existing && (
-                                <Button
-                                  asChild
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  title="Open in new tab"
-                                >
-                                  <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              )}
-                              <label
-                                className={`inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-                                  canUpload
-                                    ? 'hover:bg-slate-100 cursor-pointer'
-                                    : 'opacity-50 cursor-not-allowed'
-                                }`}
-                              >
-                                <Upload className="h-3.5 w-3.5" />
-                                {existing ? 'Replace' : 'Upload'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  disabled={isUploading || !canUpload}
-                                  onChange={e => void handleDocumentUpload(e, stage, row.id)}
-                                />
-                                {isUploading && (
-                                  <span className="text-xs text-muted-foreground ml-1">…</span>
-                                )}
-                              </label>
-                            </div>
-                          </div>
-                        )
-                      })}
+                                  <td className="px-2 py-2 text-center">
+                                    {existing ? (
+                                      <Check className="h-4 w-4 text-emerald-600 inline-block" />
+                                    ) : row.required ? (
+                                      <XCircle className="h-4 w-4 text-amber-600 inline-block" />
+                                    ) : (
+                                      <XCircle className="h-4 w-4 text-slate-400 inline-block" />
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 font-medium text-foreground whitespace-nowrap">
+                                    {row.label}
+                                    {gateMessage && (
+                                      <p className="text-xs text-rose-600 font-normal">{gateMessage}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 whitespace-nowrap max-w-[240px]">
+                                    {existing ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setInlinePreviewDocument(existing)}
+                                        className="text-xs text-primary hover:underline truncate block max-w-full"
+                                        title={existing.fileName}
+                                      >
+                                        {existing.fileName}
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Not uploaded yet</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      {existing && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => setPreviewDocument(existing)}
+                                          className="h-7 w-7 p-0"
+                                          title="Preview"
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                      {existing && (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0"
+                                          title="Open in new tab"
+                                        >
+                                          <a href={existing.viewUrl} target="_blank" rel="noreferrer">
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                          </a>
+                                        </Button>
+                                      )}
+                                      <label
+                                        className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                          canUpload
+                                            ? 'hover:bg-slate-100 cursor-pointer'
+                                            : 'opacity-50 cursor-not-allowed'
+                                        }`}
+                                      >
+                                        <Upload className="h-3 w-3" />
+                                        {existing ? 'Replace' : 'Upload'}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          disabled={isUploading || !canUpload}
+                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
+                                        />
+                                        {isUploading && (
+                                          <span className="text-xs text-muted-foreground ml-1">…</span>
+                                        )}
+                                      </label>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
                       {inlinePreviewDocument && inlineStageMeta && (
-                        <div className="rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
+                        <div className="mt-4 rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
                           <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
@@ -4609,169 +4629,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               )}
                 </div>
 
-                {false && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-auto text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Stage</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Document Type</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">File</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Uploaded</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Status</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allRows: Array<{
-                        stage: string
-                        stageLabel: string
-                        documentType: string
-                        label: string
-                        doc: PurchaseOrderDocumentSummary | undefined
-                      }> = []
-
-                      documentStages.forEach(stage => {
-                        const stageDocs = documents.filter(doc => doc.stage === stage)
-                        const requiredDocs =
-                          stage === 'SHIPPED' ? [] : getStageDocuments(stage, order?.lines ?? [])
-                        const requiredIds = new Set(requiredDocs.map(doc => doc.id))
-                        const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                        const otherDocs = stageDocs.filter(
-                          doc => !requiredIds.has(doc.documentType)
-                        )
-                        const meta = DOCUMENT_STAGE_META[stage]
-
-                        requiredDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.id,
-                            label: doc.label,
-                            doc: docsByType.get(doc.id),
-                          })
-                        })
-                        otherDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.documentType,
-                            label: getDocumentLabel(stage, doc.documentType),
-                            doc,
-                          })
-                        })
-                      })
-
-                      if (allRows.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                              No documents configured for this order.
-                            </td>
-                          </tr>
-                        )
-                      }
-
-                      return allRows.map(row => {
-                        const key = `${row.stage}::${row.documentType}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-
-                        return (
-                          <tr key={key} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {row.stageLabel}
-                            </td>
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                              {row.label}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap max-w-[200px]">
-                              {existing ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="text-primary hover:underline truncate block max-w-full"
-                                  title={existing.fileName}
-                                >
-                                  {existing.fileName}
-                                </button>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {existing ? formatDateOnly(existing.uploadedAt) : '—'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  existing
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : ''
-                                }
-                              >
-                                {existing ? 'UPLOADED' : 'PENDING'}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {existing && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setPreviewDocument(existing)}
-                                    className="h-7 w-7 p-0"
-                                    title="Preview"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                                {existing && (
-                                  <Button
-                                    asChild
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0"
-                                    title="Open in new tab"
-                                  >
-                                    <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                    </a>
-                                  </Button>
-                                )}
-                                {(row.stage !== 'SHIPPED' || existing) && (
-                                  <label
-                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted cursor-pointer"
-                                    title={existing ? 'Replace' : 'Upload'}
-                                  >
-                                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <input
-                                      type="file"
-                                      className="hidden"
-                                      disabled={isUploading}
-                                      onChange={e =>
-                                        void handleDocumentUpload(
-                                          e,
-                                          row.stage as PurchaseOrderDocumentStage,
-                                          row.documentType
-                                        )
-                                      }
-                                    />
-                                  </label>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            )}
               </>
             )}
 
