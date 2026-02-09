@@ -3319,7 +3319,7 @@ export async function generatePurchaseOrderShippingMarks(params: {
     },
   })
 
-  const labels = activeLines.flatMap(line => {
+  const labels = activeLines.map(line => {
     const cartonRange = resolveLineCartonRange(line)
     const cartonTriplet = resolveDimensionTripletCm({
       side1Cm: line.cartonSide1Cm,
@@ -3338,25 +3338,20 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
     const shippingMark = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
 
-    const perCarton: string[] = []
-    for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
-      perCarton.push(`
-        <div class="label">
-          <div class="label-header">${escapeHtml(piNumber)}</div>
-          <div class="label-row"><span class="k">Carton</span><span class="v">${index} of ${cartonRange.total}</span></div>
-          <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
-          <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
-          <div class="label-row"><span class="k">Units</span><span class="v">${line.unitsPerCarton} pcs</span></div>
-          <div class="label-row"><span class="k">N/W</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">G/W</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Dims</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
-          <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
-          <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
-        </div>
-      `)
-    }
-
-    return perCarton
+    return `
+      <div class="label">
+        <div class="label-header">${escapeHtml(piNumber)}</div>
+        <div class="label-row"><span class="k">Cartons</span><span class="v">${cartonRange.start}–${cartonRange.end} of ${cartonRange.total}</span></div>
+        <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
+        <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
+        <div class="label-row"><span class="k">Units/Carton</span><span class="v">${line.unitsPerCarton} pcs</span></div>
+        <div class="label-row"><span class="k">N/W</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">G/W</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">Dims</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+        <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
+        <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
+      </div>
+    `
   })
 
   return `<!doctype html>
