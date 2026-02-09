@@ -124,7 +124,7 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    label: 'Inventory',
+    label: 'Cost Management',
     icon: Boxes,
     items: [
       { href: '/audit-data', label: 'Audit Data' },
