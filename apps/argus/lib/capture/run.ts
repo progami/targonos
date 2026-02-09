@@ -68,7 +68,7 @@ export async function captureTarget(browser: Browser, target: WatchTarget): Prom
 
       const url = buildAsinUrl(config, target.asin);
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('script[type="application/ld+json"]', { timeout: 45_000 });
+      await page.waitForSelector('script[type="application/ld+json"]', { state: 'attached', timeout: 45_000 });
 
       const snap = await getPageSnapshot(page);
       const screenshot = await page.screenshot({ fullPage: true });
