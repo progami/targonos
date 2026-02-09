@@ -534,6 +534,9 @@ function ProcessSettlementDialog({
                       {preview.blocks.map((b, idx) => (
                         <li key={idx}>
                           <span className="font-mono">{b.code}</span>: {b.message}
+                          {b.details && 'error' in b.details && (
+                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -938,6 +941,9 @@ export default function SettlementDetailPage() {
                             {previewData.blocks.map((b, idx) => (
                               <li key={idx}>
                                 <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
                               </li>
                             ))}
                           </ul>
