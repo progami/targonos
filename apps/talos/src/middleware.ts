@@ -141,6 +141,9 @@ export async function middleware(request: NextRequest) {
   if (isValidTenantCode(effectiveTenant)) {
     response.headers.set('x-tenant', effectiveTenant)
   }
+  if (isValidTenantCode(requestTenantOverride)) {
+    response.headers.set('x-tenant-override', '1')
+  }
 
   return response
 }
