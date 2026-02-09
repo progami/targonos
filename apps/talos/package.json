@@ -51,7 +51,6 @@
     "db:migrate:replace-batch-with-lot-ref": "tsx scripts/migrations/replace-batch-with-lot-ref.ts",
     "db:migrate:po-product-assignments": "tsx scripts/migrations/add-po-product-assignments.ts",
     "db:migrate:supply-chain-reference-convention": "tsx scripts/migrations/supply-chain-reference-convention.ts",
-    "db:migrate:erd-v9-views": "tsx scripts/migrations/ensure-erd-v9-views.ts",
     "db:migrate:erd-v10-views": "tsx scripts/migrations/ensure-erd-v10-views.ts",
     "db:migrate:po-line-packaging-snapshots": "tsx scripts/migrations/backfill-po-line-packaging-snapshots.ts",
     "db:migrate:sku-description-42": "tsx scripts/migrations/truncate-sku-description-42.ts",
