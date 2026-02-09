@@ -6,13 +6,23 @@ import db from '@/lib/db';
 
 const logger = createLogger({ name: 'plutus-bills-create' });
 
-type InventoryComponent = 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
+type BillComponent =
+  | 'manufacturing'
+  | 'freight'
+  | 'duty'
+  | 'mfgAccessories'
+  | 'warehousing3pl'
+  | 'warehouseAmazonFc'
+  | 'warehouseAwd';
 
-const COMPONENT_ACCOUNT_KEYS: Record<InventoryComponent, string> = {
+const COMPONENT_ACCOUNT_KEYS: Record<BillComponent, string> = {
   manufacturing: 'invManufacturing',
   freight: 'invFreight',
   duty: 'invDuty',
   mfgAccessories: 'invMfgAccessories',
+  warehousing3pl: 'warehousing3pl',
+  warehouseAmazonFc: 'warehousingAmazonFc',
+  warehouseAwd: 'warehousingAwd',
 };
 
 const VALID_COMPONENTS = new Set<string>(Object.keys(COMPONENT_ACCOUNT_KEYS));
@@ -67,7 +77,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Each line must have a positive amount' }, { status: 400 });
       }
 
-      const accountKey = COMPONENT_ACCOUNT_KEYS[line.component as InventoryComponent];
+      const accountKey = COMPONENT_ACCOUNT_KEYS[line.component as BillComponent];
       const accountId = (config as Record<string, unknown>)[accountKey] as string | null;
       if (!accountId) {
         return NextResponse.json(
