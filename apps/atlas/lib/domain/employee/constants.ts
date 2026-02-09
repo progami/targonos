@@ -58,3 +58,29 @@ export const EMPLOYEE_REGION_LABELS = Object.fromEntries(
   EMPLOYEE_REGION_OPTIONS.map((o) => [o.value, o.label])
 ) as Record<EmployeeRegion, string>
 
+export const EXIT_REASON_VALUES = [
+  'RESIGNATION',
+  'TERMINATION',
+  'LAYOFF',
+  'MUTUAL_AGREEMENT',
+  'CONTRACT_END',
+  'RETIREMENT',
+  'OTHER',
+] as const
+
+export type ExitReason = (typeof EXIT_REASON_VALUES)[number]
+
+export const EXIT_REASON_OPTIONS: ReadonlyArray<SelectOption & { value: ExitReason }> = [
+  { value: 'RESIGNATION', label: 'Resignation' },
+  { value: 'TERMINATION', label: 'Termination' },
+  { value: 'LAYOFF', label: 'Layoff' },
+  { value: 'MUTUAL_AGREEMENT', label: 'Mutual Agreement' },
+  { value: 'CONTRACT_END', label: 'Contract End' },
+  { value: 'RETIREMENT', label: 'Retirement' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+export const EXIT_REASON_LABELS = Object.fromEntries(
+  EXIT_REASON_OPTIONS.map((o) => [o.value, o.label])
+) as Record<ExitReason, string>
+

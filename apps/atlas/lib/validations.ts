@@ -6,7 +6,7 @@ import {
   VIOLATION_REASON_VALUES,
   VIOLATION_TYPE_VALUES,
 } from '@/lib/domain/disciplinary/constants'
-import { EMPLOYEE_REGION_VALUES, EMPLOYEE_STATUS_VALUES, EMPLOYMENT_TYPE_VALUES } from '@/lib/domain/employee/constants'
+import { EMPLOYEE_REGION_VALUES, EMPLOYEE_STATUS_VALUES, EMPLOYMENT_TYPE_VALUES, EXIT_REASON_VALUES } from '@/lib/domain/employee/constants'
 import { LEAVE_STATUS_VALUES, LEAVE_TYPE_VALUES } from '@/lib/domain/leave/constants'
 import { POLICY_CATEGORY_VALUES, POLICY_REGION_VALUES, POLICY_STATUS_VALUES } from '@/lib/domain/policy/constants'
 import { REVIEW_STATUS_VALUES, REVIEW_TYPE_VALUES } from '@/lib/domain/performance/constants'
@@ -20,6 +20,7 @@ export const DEFAULT_PAGINATION_LIMIT = 50
 export const EmploymentTypeEnum = z.enum(EMPLOYMENT_TYPE_VALUES)
 export const EmployeeStatusEnum = z.enum(EMPLOYEE_STATUS_VALUES)
 export const EmployeeRegionEnum = z.enum(EMPLOYEE_REGION_VALUES)
+export const ExitReasonEnum = z.enum(EXIT_REASON_VALUES)
 
 // Leave schemas - simplified for small team (15-20 people)
 export const LeaveTypeEnum = z.enum(LEAVE_TYPE_VALUES)
@@ -91,6 +92,12 @@ export const UpdateEmployeeSchema = z.object({
   currency: z.string().max(10).trim().optional(),
   // Region for leave policy
   region: EmployeeRegionEnum.optional(),
+  // Offboarding
+  exitReason: ExitReasonEnum.optional().nullable(),
+  lastWorkingDay: z.string().refine((val) => !isNaN(Date.parse(val)), {
+    message: 'Invalid date format',
+  }).optional().nullable(),
+  exitNotes: z.string().max(2000).trim().optional().nullable(),
 })
 
 // Policy schemas
