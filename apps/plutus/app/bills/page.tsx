@@ -1,15 +1,16 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  RefreshCw,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
+  RefreshCw,
+  Save,
+  Upload,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -27,9 +28,18 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ComplianceStatus = 'compliant' | 'partial' | 'non-compliant';
+type InventoryLine = {
+  lineId: string;
+  amount: number;
+  description: string;
+  account: string;
+  accountId: string;
+  component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
+  mappedSku: string | null;
+  mappedQuantity: number | null;
+};
 
-type Bill = {
+type BillData = {
   id: string;
   syncToken: string;
   date: string;
@@ -38,21 +48,22 @@ type Bill = {
   memo: string;
   vendor: string;
   vendorId?: string;
-  account: string;
-  accountId?: string;
-  lineItems: Array<{
+  inventoryLines: InventoryLine[];
+  mapping: {
     id: string;
-    amount: number;
-    description?: string;
-    account?: string;
-    accountId?: string;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
+    poNumber: string;
+    syncedAt: string | null;
+  } | null;
+};
+
+type SkuOption = {
+  sku: string;
+  productName: string | null;
 };
 
 type BillsResponse = {
-  bills: Bill[];
+  bills: BillData[];
+  skus: SkuOption[];
   pagination: {
     page: number;
     pageSize: number;
@@ -63,56 +74,54 @@ type BillsResponse = {
 
 type ConnectionStatus = { connected: boolean };
 
-function getMemoCompliance(memo: string | undefined): ComplianceStatus {
-  if (!memo || memo.trim() === '') return 'non-compliant';
-  return memo.trim().startsWith('PO: ') ? 'compliant' : 'partial';
+type MappingStatus = 'unmapped' | 'mapped' | 'synced';
+
+type LineEditState = {
+  sku: string;
+  quantity: string;
+};
+
+type BillEditState = {
+  poNumber: string;
+  lines: Record<string, LineEditState>;
+};
+
+function getStatus(bill: BillData): MappingStatus {
+  if (!bill.mapping) return 'unmapped';
+  if (bill.mapping.syncedAt) return 'synced';
+  return 'mapped';
 }
 
-function getManufacturingLineCompliance(lineDescription: string | undefined): ComplianceStatus {
-  if (!lineDescription || lineDescription.trim() === '') return 'non-compliant';
+const COMPONENT_LABELS: Record<string, string> = {
+  manufacturing: 'Manufacturing',
+  freight: 'Freight',
+  duty: 'Duty',
+  mfgAccessories: 'Mfg Accessories',
+};
 
-  const text = lineDescription.trim();
-  const match = text.match(/^[A-Za-z0-9\- ]+\s*(x|×|\s)\s*\d+\s*(units)?\s*$/i);
-  return match ? 'compliant' : 'partial';
-}
+function StatusBadge({ status }: { status: MappingStatus }) {
+  const config: Record<MappingStatus, { style: string; label: string }> = {
+    unmapped: {
+      style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+      label: 'Unmapped',
+    },
+    mapped: {
+      style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+      label: 'Mapped',
+    },
+    synced: {
+      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+      label: 'Synced',
+    },
+  };
 
-function isManufacturingInventoryLine(accountName: string | undefined): boolean {
-  if (!accountName) return false;
-
-  let leaf = accountName;
-  if (accountName.includes(':')) {
-    const parts = accountName.split(':');
-    leaf = parts[parts.length - 1];
-  }
-
-  let normalized = leaf.trim().toLowerCase();
-  if (normalized.startsWith('inv ')) {
-    normalized = normalized.slice('inv '.length).trimStart();
-  }
-
-  return normalized.startsWith('manufacturing');
-}
-
-function getBillCompliance(bill: Bill): ComplianceStatus {
-  const memoStatus = getMemoCompliance(bill.memo);
-
-  if (memoStatus === 'non-compliant') {
-    return 'non-compliant';
-  }
-
-  const manufacturingLines = bill.lineItems.filter((line) => isManufacturingInventoryLine(line.account));
-
-  if (manufacturingLines.length === 0) {
-    return memoStatus;
-  }
-
-  const lineStatuses = manufacturingLines.map((line) =>
-    getManufacturingLineCompliance(line.description),
+  const { style, label } = config[status];
+  return (
+    <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
+      {status === 'synced' && <CheckCircle2 className="h-3 w-3" />}
+      {label}
+    </span>
   );
-
-  if (lineStatuses.every((s) => s === 'compliant') && memoStatus === 'compliant') return 'compliant';
-  if (lineStatuses.some((s) => s === 'non-compliant')) return 'non-compliant';
-  return 'partial';
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -128,7 +137,7 @@ async function fetchBills(page: number, startDate?: string, endDate?: string): P
   if (startDate !== undefined) params.set('startDate', startDate);
   if (endDate !== undefined) params.set('endDate', endDate);
 
-  const res = await fetch(`${basePath}/api/qbo/bills?${params.toString()}`);
+  const res = await fetch(`${basePath}/api/plutus/bills?${params.toString()}`);
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error);
@@ -136,32 +145,300 @@ async function fetchBills(page: number, startDate?: string, endDate?: string): P
   return res.json();
 }
 
-function StatusPill({ status }: { status: ComplianceStatus }) {
-  const config: Record<ComplianceStatus, { icon: typeof CheckCircle2; style: string; label: string }> = {
-    compliant: {
-      icon: CheckCircle2,
-      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
-      label: 'OK',
-    },
-    partial: {
-      icon: AlertTriangle,
-      style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-      label: 'Check',
-    },
-    'non-compliant': {
-      icon: XCircle,
-      style: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-      label: 'Missing',
-    },
-  };
+async function saveBillMapping(bill: BillData, editState: BillEditState): Promise<unknown> {
+  const res = await fetch(`${basePath}/api/plutus/bills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      qboBillId: bill.id,
+      poNumber: editState.poNumber,
+      billDate: bill.date,
+      vendorName: bill.vendor,
+      totalAmount: bill.amount,
+      lines: bill.inventoryLines.map((line) => {
+        const lineEdit = editState.lines[line.lineId];
+        return {
+          qboLineId: line.lineId,
+          component: line.component,
+          sku: lineEdit?.sku ? lineEdit.sku : null,
+          quantity: lineEdit?.quantity ? parseInt(lineEdit.quantity, 10) : null,
+          amountCents: Math.round(line.amount * 100),
+        };
+      }),
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
 
-  const { icon: Icon, style, label } = config[status];
+async function syncBillToQbo(qboBillId: string): Promise<unknown> {
+  const res = await fetch(`${basePath}/api/plutus/bills/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qboBillId }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
+
+function BillRow({
+  bill,
+  skus,
+  isExpanded,
+  onToggle,
+}: {
+  bill: BillData;
+  skus: SkuOption[];
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const status = getStatus(bill);
+
+  const [editState, setEditState] = useState<BillEditState>(() => {
+    const lines: Record<string, LineEditState> = {};
+    for (const line of bill.inventoryLines) {
+      lines[line.lineId] = {
+        sku: line.mappedSku ? line.mappedSku : '',
+        quantity: line.mappedQuantity ? String(line.mappedQuantity) : '',
+      };
+    }
+    return {
+      poNumber: bill.mapping?.poNumber ? bill.mapping.poNumber : '',
+      lines,
+    };
+  });
+
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: () => saveBillMapping(bill, editState),
+    onSuccess: () => {
+      setSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-bills'] });
+    },
+    onError: (err: Error) => setSaveError(err.message),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => syncBillToQbo(bill.id),
+    onSuccess: () => {
+      setSyncError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-bills'] });
+    },
+    onError: (err: Error) => setSyncError(err.message),
+  });
+
+  const hasValidMapping = editState.poNumber.trim() !== '' &&
+    bill.inventoryLines.every((line) => {
+      if (line.component === 'manufacturing') {
+        const lineEdit = editState.lines[line.lineId];
+        return lineEdit?.sku && lineEdit?.quantity && parseInt(lineEdit.quantity, 10) > 0;
+      }
+      return true;
+    });
+
+  const isMapped = status === 'mapped' || status === 'synced';
 
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
-      <Icon className="h-3 w-3" />
-      {label}
-    </span>
+    <Fragment>
+      <TableRow className="table-row-hover cursor-row" onClick={onToggle}>
+        <TableCell className="w-10">
+          {isExpanded
+            ? <ChevronDown className="h-4 w-4 text-slate-400" />
+            : <ChevronRight className="h-4 w-4 text-slate-400" />}
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
+        <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
+        <TableCell className="text-sm">
+          {bill.mapping?.poNumber
+            ? <span className="font-mono text-xs">{bill.mapping.poNumber}</span>
+            : <span className="text-slate-400 italic text-xs">(not set)</span>}
+        </TableCell>
+        <TableCell>
+          <StatusBadge status={status} />
+        </TableCell>
+        <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
+          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)}
+        </TableCell>
+      </TableRow>
+
+      {isExpanded && (
+        <TableRow>
+          <TableCell colSpan={6} className="bg-slate-50/50 dark:bg-white/[0.02] p-0">
+            <div className="expand-content px-4 py-4 ml-6">
+              {/* PO Number input */}
+              <div className="flex items-center gap-3 mb-4">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                  PO Number
+                </label>
+                <Input
+                  value={editState.poNumber}
+                  onChange={(e) => setEditState((prev) => ({ ...prev, poNumber: e.target.value }))}
+                  placeholder="e.g. PO-2026-001"
+                  className="h-8 w-48 font-mono text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+
+              {/* Line items table */}
+              <table className="w-full text-sm mb-4">
+                <thead>
+                  <tr className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    <th className="text-left pb-2 pr-4">Component</th>
+                    <th className="text-left pb-2 pr-4">Account</th>
+                    <th className="text-left pb-2 pr-4">SKU</th>
+                    <th className="text-left pb-2 pr-4">Qty</th>
+                    <th className="text-right pb-2">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                  {bill.inventoryLines.map((line) => {
+                    const lineEdit = editState.lines[line.lineId];
+                    return (
+                      <tr key={line.lineId}>
+                        <td className="py-2 pr-4">
+                          <span className={cn(
+                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                            line.component === 'manufacturing'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+                          )}>
+                            {COMPONENT_LABELS[line.component]}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-xs text-slate-500 dark:text-slate-400 font-mono">
+                          {line.account}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              list={`skus-${bill.id}-${line.lineId}`}
+                              value={lineEdit?.sku ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEditState((prev) => ({
+                                  ...prev,
+                                  lines: {
+                                    ...prev.lines,
+                                    [line.lineId]: {
+                                      ...(prev.lines[line.lineId] ?? { sku: '', quantity: '' }),
+                                      sku: value,
+                                    },
+                                  },
+                                }));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder={line.component === 'manufacturing' ? 'Required' : 'Optional'}
+                              className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-xs font-mono dark:border-white/10 dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                            />
+                            <datalist id={`skus-${bill.id}-${line.lineId}`}>
+                              {skus.map((s) => (
+                                <option key={s.sku} value={s.sku}>
+                                  {s.productName ? s.productName : s.sku}
+                                </option>
+                              ))}
+                            </datalist>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4">
+                          {line.component === 'manufacturing' ? (
+                            <Input
+                              type="number"
+                              min={1}
+                              value={lineEdit?.quantity ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEditState((prev) => ({
+                                  ...prev,
+                                  lines: {
+                                    ...prev.lines,
+                                    [line.lineId]: {
+                                      ...(prev.lines[line.lineId] ?? { sku: '', quantity: '' }),
+                                      quantity: value,
+                                    },
+                                  },
+                                }));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Units"
+                              className="h-7 w-20 text-xs"
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right tabular-nums font-medium text-slate-700 dark:text-slate-300">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(line.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveMutation.mutate();
+                  }}
+                  disabled={!hasValidMapping || saveMutation.isPending}
+                  className="gap-1.5"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saveMutation.isPending ? 'Saving...' : 'Save Mapping'}
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    syncMutation.mutate();
+                  }}
+                  disabled={!isMapped || syncMutation.isPending}
+                  className="gap-1.5"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {syncMutation.isPending ? 'Syncing...' : 'Sync to QBO'}
+                </Button>
+
+                {saveMutation.isSuccess && (
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Saved</span>
+                )}
+                {syncMutation.isSuccess && (
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Synced</span>
+                )}
+              </div>
+
+              {saveError && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">{saveError}</p>
+              )}
+              {syncError && (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">{syncError}</p>
+              )}
+
+              {bill.mapping?.syncedAt && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Last synced: {new Date(bill.mapping.syncedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
   );
 }
 
@@ -184,15 +461,15 @@ export default function BillsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const scannerEnabled = tab === 'scanner' && connection !== undefined && connection.connected === true;
+  const editorEnabled = tab === 'editor' && connection !== undefined && connection.connected === true;
   const billsQuery = useQuery({
-    queryKey: ['qbo-bills', page, startDate, endDate],
+    queryKey: ['plutus-bills', page, startDate, endDate],
     queryFn: () => {
       const normalizedStartDate = startDate === '' ? undefined : startDate;
       const normalizedEndDate = endDate === '' ? undefined : endDate;
       return fetchBills(page, normalizedStartDate, normalizedEndDate);
     },
-    enabled: scannerEnabled,
+    enabled: editorEnabled,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -200,23 +477,18 @@ export default function BillsPage() {
     return billsQuery.data ? billsQuery.data.bills : [];
   }, [billsQuery.data]);
 
-  const rows = useMemo(() => {
-    return bills.map((bill) => ({
-      bill,
-      compliance: getBillCompliance(bill),
-      memoStatus: getMemoCompliance(bill.memo),
-    }));
-  }, [bills]);
+  const skus = useMemo(() => {
+    return billsQuery.data ? billsQuery.data.skus : [];
+  }, [billsQuery.data]);
 
   const counts = useMemo(() => {
-    const all = rows.length;
-    const compliant = rows.filter((r) => r.compliance === 'compliant').length;
-    const partial = rows.filter((r) => r.compliance === 'partial').length;
-    const nonCompliant = rows.filter((r) => r.compliance === 'non-compliant').length;
-    return { all, compliant, partial, nonCompliant };
-  }, [rows]);
+    const all = bills.length;
+    const mapped = bills.filter((b) => getStatus(b) === 'mapped').length;
+    const synced = bills.filter((b) => getStatus(b) === 'synced').length;
+    const unmapped = bills.filter((b) => getStatus(b) === 'unmapped').length;
+    return { all, mapped, synced, unmapped };
+  }, [bills]);
 
-  const complianceScore = counts.all > 0 ? Math.round((counts.compliant / counts.all) * 100) : null;
   const totalPages = billsQuery.data ? billsQuery.data.pagination.totalPages : 1;
 
   const toggleBillExpand = (billId: string) => {
@@ -252,10 +524,13 @@ export default function BillsPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader title="Bills" variant="accent" />
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'guide' | 'scanner')} className="mt-6">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'guide' | 'editor')} className="mt-6">
           <TabsList>
             <TabsTrigger value="guide">Bill Guide</TabsTrigger>
-            <TabsTrigger value="scanner">Compliance Scanner</TabsTrigger>
+            <TabsTrigger value="editor">
+              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+              Bill Editor
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="guide">
@@ -307,30 +582,27 @@ export default function BillsPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="scanner">
+          <TabsContent value="editor">
             <div className="space-y-4">
-              {/* Compliance Score + Filters */}
+              {/* Filters + Summary */}
               <Card className="p-5 border-slate-200/70 dark:border-white/10">
-                {complianceScore !== null && (
-                  <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
-                    <div className={cn(
-                      'flex h-14 w-14 items-center justify-center rounded-xl text-xl font-bold',
-                      complianceScore >= 80
-                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                        : complianceScore >= 50
-                          ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
-                          : 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400',
-                    )}>
-                      {complianceScore}%
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Compliance Score</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {counts.compliant} of {counts.all} bills fully compliant
-                      </div>
-                    </div>
+                <div className="flex items-center gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400">
+                      Inventory Bills: {counts.all}
+                    </span>
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Synced: {counts.synced}
+                    </span>
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
+                      Mapped: {counts.mapped}
+                    </span>
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/60 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400">
+                      Unmapped: {counts.unmapped}
+                    </span>
                   </div>
-                )}
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-3 items-end">
                   <div>
@@ -372,27 +644,9 @@ export default function BillsPage() {
                       className="gap-1.5"
                     >
                       <RefreshCw className={cn('h-3.5 w-3.5', billsQuery.isFetching && 'animate-spin')} />
-                      {billsQuery.isFetching ? 'Scanning…' : 'Scan'}
+                      {billsQuery.isFetching ? 'Loading...' : 'Refresh'}
                     </Button>
                   </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400">
-                    Total: {counts.all}
-                  </span>
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-                    <CheckCircle2 className="h-3 w-3" />
-                    OK: {counts.compliant}
-                  </span>
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
-                    <AlertTriangle className="h-3 w-3" />
-                    Check: {counts.partial}
-                  </span>
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100/60 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-                    <XCircle className="h-3 w-3" />
-                    Missing: {counts.nonCompliant}
-                  </span>
                 </div>
               </Card>
 
@@ -412,86 +666,30 @@ export default function BillsPage() {
                         <TableHead className="w-10" />
                         <TableHead>Date</TableHead>
                         <TableHead>Vendor</TableHead>
-                        <TableHead>Memo</TableHead>
+                        <TableHead>PO Number</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.length === 0 ? (
+                      {bills.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="p-0">
                             <EmptyState
-                              title={isCheckingConnection || billsQuery.isFetching ? 'Loading…' : 'No bills found'}
-                              description={isCheckingConnection || billsQuery.isFetching ? undefined : 'Try adjusting your date range or scan again.'}
+                              title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No inventory bills found'}
+                              description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with inventory accounts were found. Try adjusting your date range.'}
                             />
                           </TableCell>
                         </TableRow>
                       ) : (
-                        rows.map(({ bill, compliance }) => (
-                          <Fragment key={bill.id}>
-                            <TableRow
-                              className="table-row-hover cursor-row"
-                              onClick={() => toggleBillExpand(bill.id)}
-                            >
-                              <TableCell className="w-10">
-                                {bill.lineItems.length > 0 && (
-                                  expandedBills.has(bill.id)
-                                    ? <ChevronDown className="h-4 w-4 text-slate-400" />
-                                    : <ChevronRight className="h-4 w-4 text-slate-400" />
-                                )}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
-                              <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
-                              <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400 max-w-[200px] truncate">
-                                {bill.memo === '' ? <span className="text-slate-400 italic">(empty)</span> : bill.memo}
-                              </TableCell>
-                              <TableCell>
-                                <StatusPill status={compliance} />
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
-                                {new Intl.NumberFormat('en-US', {
-                                  style: 'currency',
-                                  currency: 'USD',
-                                }).format(bill.amount)}
-                              </TableCell>
-                            </TableRow>
-                            {expandedBills.has(bill.id) && bill.lineItems.length > 0 && (
-                              <TableRow>
-                                <TableCell colSpan={6} className="bg-slate-50/50 dark:bg-white/[0.02] p-0">
-                                  <div className="expand-content px-4 py-3 ml-10">
-                                    <table className="w-full text-sm">
-                                      <thead>
-                                        <tr className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                                          <th className="text-left pb-2 pr-4">Description</th>
-                                          <th className="text-left pb-2 pr-4">Account</th>
-                                          <th className="text-right pb-2">Amount</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                        {bill.lineItems.map((line) => (
-                                          <tr key={line.id}>
-                                            <td className="py-2 pr-4 text-slate-600 dark:text-slate-400">
-                                              {line.description ? line.description : '—'}
-                                            </td>
-                                            <td className="py-2 pr-4 text-slate-500 dark:text-slate-400 text-xs font-mono">
-                                              {line.account ? line.account : '—'}
-                                            </td>
-                                            <td className="py-2 text-right tabular-nums font-medium text-slate-700 dark:text-slate-300">
-                                              {new Intl.NumberFormat('en-US', {
-                                                style: 'currency',
-                                                currency: 'USD',
-                                              }).format(line.amount)}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </Fragment>
+                        bills.map((bill) => (
+                          <BillRow
+                            key={bill.id}
+                            bill={bill}
+                            skus={skus}
+                            isExpanded={expandedBills.has(bill.id)}
+                            onToggle={() => toggleBillExpand(bill.id)}
+                          />
                         ))
                       )}
                     </TableBody>

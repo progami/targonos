@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-type BillsTab = 'guide' | 'scanner';
+type BillsTab = 'guide' | 'editor';
 
 type BillsState = {
   tab: BillsTab;
@@ -46,4 +46,3 @@ export const useBillsStore = create<BillsState>()(
     },
   ),
 );
-
