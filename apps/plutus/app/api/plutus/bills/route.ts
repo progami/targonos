@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchBills, fetchAccounts, QboAuthError, type QboAccount } from '@/lib/qbo/api';
+import { fetchBills, fetchAccounts, updateBill, QboAuthError, type QboAccount } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
@@ -227,6 +227,23 @@ export async function POST(req: NextRequest) {
         quantity: typeof line.quantity === 'number' && line.quantity > 0 ? line.quantity : null,
       })),
     });
+
+    // Sync PO number to QBO bill memo
+    let syncedAt: Date | null = null;
+    const connection = await getQboConnection();
+    if (connection) {
+      const { updatedConnection } = await updateBill(connection, qboBillId, {
+        privateNote: `PO: ${poNumber}`,
+      });
+      if (updatedConnection) {
+        await saveServerQboConnection(updatedConnection);
+      }
+      syncedAt = new Date();
+      await db.billMapping.update({
+        where: { id: mapping.id },
+        data: { syncedAt },
+      });
+    }
 
     const result = await db.billMapping.findUnique({
       where: { id: mapping.id },
