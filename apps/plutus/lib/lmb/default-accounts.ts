@@ -37,6 +37,7 @@ export const LMB_PARENT_ACCOUNTS = [
   'Mfg Accessories',
   'Inventory Shrinkage',
   'Inventory Variance',
+  'Product Expenses',
   'Warehousing',
 
   // Warehousing Sub-accounts (Plutus)
@@ -75,6 +76,7 @@ export const LMB_BRAND_ACCOUNT_PREFIXES = [
   'Duty -',
   'Mfg Accessories -',
   'Inventory Shrinkage -',
+  'Product Expenses -',
 
   // Other Income sub-accounts
   'Amazon FBA Inventory Reimbursement -',

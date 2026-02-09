@@ -58,6 +58,7 @@ model SetupConfig {
   cogsLandFreight     String?
   cogsStorage3pl      String?
   cogsShrinkage       String?
+  productExpenses     String?
 
   // Warehousing buckets (COGS)
   warehousing3pl      String?

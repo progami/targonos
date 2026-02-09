@@ -15,6 +15,7 @@ const AccountMappingsSchema = z.object({
     cogsDuty: z.string().optional(),
     cogsMfgAccessories: z.string().optional(),
     cogsShrinkage: z.string().optional(),
+    productExpenses: z.string().optional(),
     warehousing3pl: z.string().optional(),
     warehousingAmazonFc: z.string().optional(),
     warehousingAwd: z.string().optional(),
