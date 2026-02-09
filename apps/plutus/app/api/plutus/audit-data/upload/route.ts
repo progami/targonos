@@ -107,6 +107,7 @@ export async function POST(req: Request) {
     minDate: string;
     maxDate: string;
     skuCount: number;
+    markets: string[];
   }> = [];
 
   for (const invoiceId of invoiceIds) {
@@ -114,11 +115,13 @@ export async function POST(req: Request) {
     let minDate = invoiceRows[0]!.date;
     let maxDate = invoiceRows[0]!.date;
     const skuSet = new Set<string>();
+    const marketSet = new Set<string>();
 
     for (const r of invoiceRows) {
       if (r.date < minDate) minDate = r.date;
       if (r.date > maxDate) maxDate = r.date;
       if (r.sku.trim() !== '') skuSet.add(r.sku.trim());
+      if (r.market.trim() !== '') marketSet.add(r.market.trim());
     }
 
     invoiceSummaries.push({
@@ -127,6 +130,7 @@ export async function POST(req: Request) {
       minDate,
       maxDate,
       skuCount: skuSet.size,
+      markets: Array.from(marketSet.values()).sort(),
     });
   }
 
