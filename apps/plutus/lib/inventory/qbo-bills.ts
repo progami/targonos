@@ -26,6 +26,14 @@ export type BillEvent =
       component: Exclude<InventoryComponent, 'manufacturing'>;
       costCents: number;
       sku?: string;
+    }
+  | {
+      kind: 'brand_cost';
+      date: string;
+      poNumber: string;
+      brandId: string;
+      component: InventoryComponent;
+      costCents: number;
     };
 
 export type ParsedBills = {
@@ -195,12 +203,11 @@ export function parseQboBillsToInventoryEvents(
 export type BillMappingWithLines = {
   qboBillId: string;
   poNumber: string;
+  brandId: string;
   billDate: string;
   lines: Array<{
     qboLineId: string;
     component: string;
-    sku: string | null;
-    quantity: number | null;
     amountCents: number;
   }>;
 };
@@ -215,33 +222,19 @@ export function buildInventoryEventsFromMappings(
     for (const line of mapping.lines) {
       const component = line.component as InventoryComponent;
 
-      if (component === 'manufacturing') {
-        if (!line.sku || !line.quantity) continue;
-        addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
-        events.push({
-          kind: 'manufacturing',
-          date: mapping.billDate,
-          poNumber: mapping.poNumber,
-          sku: line.sku,
-          units: line.quantity,
-          costCents: line.amountCents,
-        });
-      } else {
-        events.push({
-          kind: 'cost',
-          date: mapping.billDate,
-          poNumber: mapping.poNumber,
-          component: component as Exclude<InventoryComponent, 'manufacturing'>,
-          costCents: line.amountCents,
-          sku: line.sku ? line.sku : undefined,
-        });
-      }
+      events.push({
+        kind: 'brand_cost',
+        date: mapping.billDate,
+        poNumber: mapping.poNumber,
+        brandId: mapping.brandId,
+        component,
+        costCents: line.amountCents,
+      });
     }
   }
 
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
-    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
     return 0;
   });
 
