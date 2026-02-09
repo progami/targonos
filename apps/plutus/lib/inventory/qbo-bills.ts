@@ -209,6 +209,8 @@ export type BillMappingWithLines = {
     qboLineId: string;
     component: string;
     amountCents: number;
+    sku: string | null;
+    quantity: number | null;
   }>;
 };
 
@@ -222,19 +224,44 @@ export function buildInventoryEventsFromMappings(
     for (const line of mapping.lines) {
       const component = line.component as InventoryComponent;
 
-      events.push({
-        kind: 'brand_cost',
-        date: mapping.billDate,
-        poNumber: mapping.poNumber,
-        brandId: mapping.brandId,
-        component,
-        costCents: line.amountCents,
-      });
+      if (component === 'manufacturing' && line.sku && line.quantity && line.quantity > 0) {
+        // Per-SKU manufacturing event
+        addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
+        events.push({
+          kind: 'manufacturing',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          sku: line.sku,
+          units: line.quantity,
+          costCents: line.amountCents,
+        });
+      } else if (component !== 'manufacturing' && line.sku) {
+        // Per-SKU cost event (freight/duty/accessories)
+        events.push({
+          kind: 'cost',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          component,
+          costCents: line.amountCents,
+          sku: line.sku,
+        });
+      } else {
+        // No SKU assigned — fallback to brand-level (no-op in ledger)
+        events.push({
+          kind: 'brand_cost',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          brandId: mapping.brandId,
+          component,
+          costCents: line.amountCents,
+        });
+      }
     }
   }
 
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
     return 0;
   });
 

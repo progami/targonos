@@ -117,6 +117,13 @@ export async function GET(req: NextRequest) {
               poNumber: mapping.poNumber,
               brandId: mapping.brandId,
               syncedAt: mapping.syncedAt,
+              lines: mapping.lines.map((l) => ({
+                qboLineId: l.qboLineId,
+                component: l.component,
+                amountCents: l.amountCents,
+                sku: l.sku,
+                quantity: l.quantity,
+              })),
             }
           : null,
       };
@@ -124,15 +131,21 @@ export async function GET(req: NextRequest) {
 
     const inventoryBills = bills.filter((b) => b !== null);
 
-    // Fetch brands for dropdown
+    // Fetch brands and SKUs for dropdowns
     const brands = await db.brand.findMany({
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
 
+    const skus = await db.sku.findMany({
+      select: { id: true, sku: true, productName: true, brandId: true },
+      orderBy: { sku: 'asc' },
+    });
+
     return NextResponse.json({
       bills: inventoryBills,
       brands,
+      skus,
       pagination: {
         page,
         pageSize,
@@ -205,11 +218,13 @@ export async function POST(req: NextRequest) {
     });
 
     await db.billLineMapping.createMany({
-      data: lines.map((line: { qboLineId: string; component: string; amountCents: number }) => ({
+      data: lines.map((line: { qboLineId: string; component: string; amountCents: number; sku?: string; quantity?: number }) => ({
         billMappingId: mapping.id,
         qboLineId: line.qboLineId,
         component: line.component,
         amountCents: typeof line.amountCents === 'number' ? line.amountCents : 0,
+        sku: typeof line.sku === 'string' && line.sku !== '' ? line.sku : null,
+        quantity: typeof line.quantity === 'number' && line.quantity > 0 ? line.quantity : null,
       })),
     });
 
