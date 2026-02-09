@@ -23,12 +23,13 @@ export async function GET() {
 
   // Get per-invoice row counts and date ranges
   const invoiceSummaries = await db.$queryRaw<
-    Array<{ invoiceId: string; rowCount: bigint; minDate: string; maxDate: string }>
+    Array<{ invoiceId: string; rowCount: bigint; minDate: string; maxDate: string; markets: string[] }>
   >`
     SELECT "invoiceId",
            COUNT(*)::bigint AS "rowCount",
            MIN("date") AS "minDate",
-           MAX("date") AS "maxDate"
+           MAX("date") AS "maxDate",
+           ARRAY_AGG(DISTINCT "market") AS markets
     FROM plutus."AuditDataRow"
     GROUP BY "invoiceId"
     ORDER BY "invoiceId"
@@ -45,6 +46,7 @@ export async function GET() {
       rowCount: Number(s.rowCount),
       minDate: s.minDate,
       maxDate: s.maxDate,
+      markets: s.markets,
     })),
   });
 }

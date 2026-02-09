@@ -82,7 +82,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 | Talos | `@targon/talos` | `/talos` | Uses `apps/talos/server.js`, Redis, and S3 presigned uploads |
 | xplan | `@targon/xplan` | `/xplan` | Prisma schema `xplan`; vitest tests |
 | Atlas | `@targon/atlas` | `/atlas` | Prisma schema `atlas`; Playwright tests |
-| Plutus | `@targon/plutus` | `/plutus` | Finance workspace (FCC rebrand); scaffold-only |
+| Plutus | `@targon/plutus` | `/plutus` | LMB + QBO finance workspace (settlements, bills, analytics) |
 | Website | `@targon/website` | `/` | Separate hostname (`targonglobal.com`) |
 
 ## Authentication model (Portal as the source of truth)
@@ -96,7 +96,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 ## Data/services
 
 - PostgreSQL runs locally (Homebrew `postgresql@14`), exposed on `localhost:5432` and optionally via `db.targonglobal.com` through the tunnel.
-- Schemas are per-app (and per-environment): `auth`, `talos`, `xplan`, `atlas` (dev schemas may be prefixed `dev_*` depending on env).
+- Schemas are per-app (and per-environment): `auth`, `talos`, `xplan`, `atlas`, `plutus` (dev schemas may be prefixed `dev_*` depending on env).
 - Prisma clients are generated into `packages/prisma-*` and imported by apps (e.g., `@targon/prisma-talos`).
 - Redis runs locally (Homebrew `redis`) and is used by Talos.
 

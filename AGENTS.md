@@ -11,7 +11,7 @@ All apps share `portal_db` on localhost:5432 with separate schemas per app. Conn
 | xplan | dev_xplan |
 | kairos | chronos |
 | sso | auth |
-| plutus | (no DB - uses QuickBooks API) |
+| plutus | plutus |
 
 Talos also has main schemas: `main_talos_us`, `main_talos_uk`.
 Atlas also has main schema: `atlas`.

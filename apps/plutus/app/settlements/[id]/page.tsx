@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
+import { invoiceMarketsMatchMarketplace, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -93,6 +94,7 @@ type InvoiceSummary = {
   rowCount: number;
   minDate: string;
   maxDate: string;
+  markets: string[];
 };
 
 type AuditDataResponse = {
@@ -275,11 +277,13 @@ function ProcessSettlementDialog({
   settlementId,
   periodStart,
   periodEnd,
+  marketplaceId,
   onProcessed,
 }: {
   settlementId: string;
   periodStart: string | null;
   periodEnd: string | null;
+  marketplaceId: MarketplaceId;
   onProcessed: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -302,10 +306,11 @@ function ProcessSettlementDialog({
   const invoicesWithMeta = useMemo(() => {
     return invoices.map((inv) => {
       const invoiceDates = extractDatesFromInvoiceId(inv.invoiceId);
+      const marketMatch = invoiceMarketsMatchMarketplace(inv.markets, marketplaceId);
       let recommended = false;
       let dateLabel: string | null = null;
 
-      if (invoiceDates) {
+      if (invoiceDates && marketMatch) {
         dateLabel = `${invoiceDates.start} to ${invoiceDates.end}`;
         if (periodStart !== null && periodEnd !== null) {
           recommended = dateRangesOverlap(periodStart, periodEnd, invoiceDates.start, invoiceDates.end);
@@ -313,13 +318,13 @@ function ProcessSettlementDialog({
       }
 
       // Also check overlap using the actual audit data date range
-      if (!recommended && periodStart !== null && periodEnd !== null) {
+      if (!recommended && marketMatch && periodStart !== null && periodEnd !== null) {
         recommended = dateRangesOverlap(periodStart, periodEnd, inv.minDate, inv.maxDate);
       }
 
-      return { ...inv, recommended, dateLabel };
+      return { ...inv, marketMatch, recommended, dateLabel };
     });
-  }, [invoices, periodStart, periodEnd]);
+  }, [invoices, marketplaceId, periodStart, periodEnd]);
 
   // Auto-select recommended invoice when dialog opens and no invoice is selected
   useEffect(() => {
@@ -440,6 +445,11 @@ function ProcessSettlementDialog({
                         {inv.recommended && (
                           <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
                             Recommended
+                          </span>
+                        )}
+                        {!inv.marketMatch && (
+                          <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                            Other marketplace
                           </span>
                         )}
                       </div>
@@ -614,6 +624,9 @@ export default function SettlementDetailPage() {
     if (!auditData?.invoices || !settlement) return null;
     const { periodStart, periodEnd } = settlement;
     for (const inv of auditData.invoices) {
+      if (!invoiceMarketsMatchMarketplace(inv.markets, settlement.marketplace.id)) {
+        continue;
+      }
       if (periodStart !== null && periodEnd !== null) {
         const dates = extractDatesFromInvoiceId(inv.invoiceId);
         if (dates && dateRangesOverlap(periodStart, periodEnd, dates.start, dates.end)) {
@@ -624,7 +637,7 @@ export default function SettlementDetailPage() {
         }
       }
     }
-    return auditData.invoices[0]?.invoiceId ?? null;
+    return null;
   }, [auditData?.invoices, settlement]);
 
   const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
@@ -745,6 +758,7 @@ export default function SettlementDetailPage() {
                       settlementId={settlementId}
                       periodStart={settlement.periodStart}
                       periodEnd={settlement.periodEnd}
+                      marketplaceId={settlement.marketplace.id}
                       onProcessed={() => void handleProcessed()}
                     />
                   )}
