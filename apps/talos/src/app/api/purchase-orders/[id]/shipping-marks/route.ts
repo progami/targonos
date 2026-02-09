@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-export const GET = withAuthAndParams(async (_request, params, session) => {
+export const POST = withAuthAndParams(async (_request, params, session) => {
   const id =
     typeof params?.id === 'string'
       ? params.id
@@ -20,8 +20,8 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     return ApiResponses.badRequest('Purchase order ID is required')
   }
 
-  const canView = await hasPermission(session.user.id, 'po.view')
-  if (!canView) {
+  const canGenerate = await hasPermission(session.user.id, 'po.edit')
+  if (!canGenerate) {
     return ApiResponses.forbidden('Insufficient permissions')
   }
 
@@ -43,4 +43,3 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     return ApiResponses.handleError(error)
   }
 })
-
