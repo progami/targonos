@@ -3342,16 +3342,16 @@ export async function generatePurchaseOrderShippingMarks(params: {
     for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
       perCarton.push(`
         <div class="label">
-          <div class="label-header">${escapeHtml(piNumber)} / TARGON/唛头格式</div>
-          <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartonRange.total} Ctns</span></div>
+          <div class="label-header">${escapeHtml(piNumber)}</div>
+          <div class="label-row"><span class="k">Carton</span><span class="v">${index} of ${cartonRange.total}</span></div>
           <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
           <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
-          <div class="label-row"><span class="k"># of Units</span><span class="v">${line.unitsPerCarton} sets</span></div>
-          <div class="label-row"><span class="k">Net Weight</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Gross Weight</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Dimensions</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+          <div class="label-row"><span class="k">Units</span><span class="v">${line.unitsPerCarton} pcs</span></div>
+          <div class="label-row"><span class="k">N/W</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
+          <div class="label-row"><span class="k">G/W</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
+          <div class="label-row"><span class="k">Dims</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
           <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
-          <div class="label-footer">${escapeHtml(origin)}</div>
+          <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
         </div>
       `)
     }
@@ -3366,24 +3366,25 @@ export async function generatePurchaseOrderShippingMarks(params: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shipping Marks</title>
     <style>
-      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 16px; background: #f6f7fb; }
-      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      body { font-family: Arial, Helvetica, sans-serif; padding: 20px; background: #f6f7fb; color: #000; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
       .print-btn { background: #0ea5a4; color: white; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
       .meta { color: #475569; font-size: 12px; }
-      .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-      .label { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 12px 10px 12px; break-inside: avoid; }
-      .label-header { font-weight: 700; font-size: 12px; margin-bottom: 8px; }
-      .label-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; border-bottom: 1px dashed #e2e8f0; }
+      .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .label { background: white; border: 2px solid #000; padding: 16px; break-inside: avoid; }
+      .label-header { font-weight: 900; font-size: 18px; text-align: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #000; text-transform: uppercase; letter-spacing: 0.03em; }
+      .label-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid #ccc; }
       .label-row:last-of-type { border-bottom: none; }
-      .k { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-      .v { color: #0f172a; font-size: 12px; font-weight: 600; text-align: right; }
+      .k { color: #000; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+      .v { color: #000; font-size: 15px; font-weight: 600; text-align: right; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
-      .label-footer { margin-top: 8px; text-align: center; font-weight: 800; color: #0f172a; }
+      .label-footer { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; text-align: center; font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: 0.06em; color: #000; }
       @media print {
+        @page { size: A4; margin: 10mm; }
         body { background: white; padding: 0; }
         .toolbar { display: none; }
-        .labels { gap: 8px; }
-        .label { border-radius: 8px; }
+        .labels { gap: 10mm; }
+        .label { border: 2pt solid #000; page-break-inside: avoid; }
       }
     </style>
   </head>
