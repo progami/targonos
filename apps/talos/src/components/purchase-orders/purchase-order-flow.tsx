@@ -783,9 +783,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
   const tenantOverride = props.tenantCode
-  const tenantFetchHeaders: HeadersInit = tenantOverride
-    ? { 'x-tenant': tenantOverride }
-    : {}
+  const tenantFetchHeaders = useMemo<HeadersInit>(
+    () => tenantOverride ? { 'x-tenant': tenantOverride } : {},
+    [tenantOverride]
+  )
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
