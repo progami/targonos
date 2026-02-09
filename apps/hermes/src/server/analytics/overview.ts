@@ -81,6 +81,7 @@ export async function getAnalyticsOverview(params: {
   const pool = getPgPool();
 
   const to = new Date();
+  const toDay = startOfUtcDay(to);
 
   let rangeDays: number;
   let from: Date;
@@ -99,16 +100,16 @@ export async function getAnalyticsOverview(params: {
     const earliest = (earliestRow.rows[0] as any)?.earliest;
     if (earliest) {
       from = startOfUtcDay(new Date(earliest));
-      rangeDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+      rangeDays = Math.max(1, Math.floor((toDay.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1);
     } else {
       // No dispatches sent yet — fall back to 30 days
       rangeDays = 30;
-      from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+      from = startOfUtcDay(addUtcDays(toDay, -(rangeDays - 1)));
     }
   } else {
     rangeDays = Math.max(1, Math.min(params.rangeDays, 3650));
     // Inclusive day range (e.g. 30d => today + previous 29 days)
-    from = startOfUtcDay(addUtcDays(to, -(rangeDays - 1)));
+    from = startOfUtcDay(addUtcDays(toDay, -(rangeDays - 1)));
   }
 
   const connectionId = params.connectionId;
