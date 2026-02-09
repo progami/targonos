@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '../../../../lib/prisma'
 import { UpdateEmployeeSchema } from '@/lib/validations'
 import { withRateLimit, validateBody, safeErrorResponse } from '@/lib/api-helpers'
-import { EmploymentType, EmployeeStatus } from '@/lib/atlas-prisma-types'
+import { EmploymentType, EmployeeStatus, ExitReason } from '@/lib/atlas-prisma-types'
 import { checkAndNotifyMissingFields } from '@/lib/notification-service'
 import { getCurrentEmployeeId } from '@/lib/current-user'
 import { canReassignEmployee, canViewEmployeeDirectory, filterAllowedFields, isHROrAbove, isSuperAdmin } from '@/lib/permissions'
@@ -102,6 +102,9 @@ export async function GET(req: Request, context: EmployeeRouteContext) {
           currency: true,
           permissionLevel: true,
           isSuperAdmin: true,
+          exitReason: true,
+          lastWorkingDay: true,
+          exitNotes: true,
         } : {}),
       },
     })
@@ -208,6 +211,11 @@ export async function PATCH(req: Request, context: EmployeeRouteContext) {
     if (data.status !== undefined) updates.status = data.status as EmployeeStatus
     if (data.region !== undefined) updates.region = data.region
     if (data.joinDate !== undefined) updates.joinDate = new Date(data.joinDate as string)
+
+    // Offboarding fields
+    if (data.exitReason !== undefined) updates.exitReason = data.exitReason as ExitReason
+    if (data.lastWorkingDay !== undefined) updates.lastWorkingDay = data.lastWorkingDay ? new Date(data.lastWorkingDay as string) : null
+    if (data.exitNotes !== undefined) updates.exitNotes = data.exitNotes
 
     // Hierarchy - use manager relation instead of reportsToId directly
     if (data.reportsToId !== undefined) {
@@ -347,6 +355,19 @@ export async function DELETE(req: Request, context: EmployeeRouteContext) {
       return NextResponse.json({ error: 'Cannot remove your own account' }, { status: 400 })
     }
 
+    // Parse optional offboarding metadata from request body
+    let exitReason: ExitReason | null = null
+    let lastWorkingDay: Date | null = null
+    let exitNotes: string | null = null
+    try {
+      const body = await req.json()
+      if (body.exitReason) exitReason = body.exitReason as ExitReason
+      if (body.lastWorkingDay) lastWorkingDay = new Date(body.lastWorkingDay)
+      if (body.exitNotes) exitNotes = body.exitNotes
+    } catch {
+      // Body is optional for DELETE
+    }
+
     // "Remove" means offboard: keep history, hide from all ACTIVE-only views.
     // Also repair reporting lines + department ownership so org structures don't end up orphaned.
     await prisma.$transaction(async (tx) => {
@@ -362,7 +383,13 @@ export async function DELETE(req: Request, context: EmployeeRouteContext) {
 
       await tx.employee.update({
         where: { id: base.id },
-        data: { status: 'RESIGNED' as EmployeeStatus, reportsToId: null },
+        data: {
+          status: 'RESIGNED' as EmployeeStatus,
+          reportsToId: null,
+          ...(exitReason ? { exitReason } : {}),
+          ...(lastWorkingDay ? { lastWorkingDay } : {}),
+          ...(exitNotes ? { exitNotes } : {}),
+        },
       })
     })
 
