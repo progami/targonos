@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   RefreshCw,
   Save,
-  Upload,
   Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -90,7 +89,7 @@ type BillsResponse = {
 
 type ConnectionStatus = { connected: boolean };
 
-type MappingStatus = 'unmapped' | 'mapped' | 'synced';
+type MappingStatus = 'unmapped' | 'saved';
 
 type LineEditState = {
   sku: string;
@@ -112,8 +111,7 @@ const COMPONENT_LABELS: Record<string, string> = {
 
 function getStatus(bill: BillData): MappingStatus {
   if (!bill.mapping) return 'unmapped';
-  if (bill.mapping.syncedAt) return 'synced';
-  return 'mapped';
+  return 'saved';
 }
 
 function StatusBadge({ status }: { status: MappingStatus }) {
@@ -122,20 +120,16 @@ function StatusBadge({ status }: { status: MappingStatus }) {
       style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
       label: 'Unmapped',
     },
-    mapped: {
-      style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-      label: 'Mapped',
-    },
-    synced: {
+    saved: {
       style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
-      label: 'Synced',
+      label: 'Saved',
     },
   };
 
   const { style, label } = config[status];
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
-      {status === 'synced' && <CheckCircle2 className="h-3 w-3" />}
+      {status === 'saved' && <CheckCircle2 className="h-3 w-3" />}
       {label}
     </span>
   );
@@ -192,19 +186,6 @@ async function saveBillMapping(bill: BillData, editState: BillEditState): Promis
   return res.json();
 }
 
-async function syncBillToQbo(qboBillId: string): Promise<unknown> {
-  const res = await fetch(`${basePath}/api/plutus/bills/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ qboBillId }),
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
-  }
-  return res.json();
-}
-
 function initLineEditState(bill: BillData): Record<string, LineEditState> {
   const lines: Record<string, LineEditState> = {};
   for (const line of bill.inventoryLines) {
@@ -237,7 +218,6 @@ function BillRow({
   }));
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => saveBillMapping(bill, editState),
@@ -248,25 +228,14 @@ function BillRow({
     onError: (err: Error) => setSaveError(err.message),
   });
 
-  const syncMutation = useMutation({
-    mutationFn: () => syncBillToQbo(bill.id),
-    onSuccess: () => {
-      setSyncError(null);
-      queryClient.invalidateQueries({ queryKey: ['plutus-bills'] });
-    },
-    onError: (err: Error) => setSyncError(err.message),
-  });
-
   const filteredSkus = useMemo(() => {
     if (editState.brandId === '') return [];
     return skus.filter((s) => s.brandId === editState.brandId);
   }, [skus, editState.brandId]);
 
   const hasValidMapping = editState.poNumber.trim() !== '' && editState.brandId !== '';
-  const isMapped = status === 'mapped' || status === 'synced';
 
   const handleBrandChange = (newBrandId: string) => {
-    // Clear all line SKU selections when brand changes
     const clearedLines: Record<string, LineEditState> = {};
     for (const [lineId, lineState] of Object.entries(editState.lines)) {
       clearedLines[lineId] = { ...lineState, sku: '', quantity: '' };
@@ -335,21 +304,7 @@ function BillRow({
               {saveMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => syncMutation.mutate()}
-              disabled={!isMapped || syncMutation.isPending}
-              className="gap-1 h-7 text-xs px-2"
-            >
-              <Upload className="h-3 w-3" />
-              {syncMutation.isPending ? 'Syncing...' : 'Sync'}
-            </Button>
-
             {saveMutation.isSuccess && (
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-            )}
-            {syncMutation.isSuccess && (
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             )}
           </div>
@@ -357,85 +312,59 @@ function BillRow({
           {saveError && (
             <p className="mt-1 text-xs text-red-600 dark:text-red-400">{saveError}</p>
           )}
-          {syncError && (
-            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{syncError}</p>
-          )}
-
-          {bill.mapping?.syncedAt && (
-            <p className="mt-1 text-xs text-slate-400">
-              Synced: {new Date(bill.mapping.syncedAt).toLocaleString()}
-            </p>
-          )}
         </TableCell>
       </TableRow>
 
-      {expanded && (
-        <TableRow>
-          <TableCell colSpan={8} className="p-0 bg-slate-50/50 dark:bg-slate-800/30">
-            <div className="px-6 py-3">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-slate-500 dark:text-slate-400">
-                    <th className="pb-2 font-medium">Account</th>
-                    <th className="pb-2 font-medium">Component</th>
-                    <th className="pb-2 font-medium text-right">Amount</th>
-                    <th className="pb-2 font-medium">SKU</th>
-                    <th className="pb-2 font-medium">Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                  {bill.inventoryLines.map((line) => {
-                    const lineState = editState.lines[line.lineId];
-                    const isManufacturing = line.component === 'manufacturing';
-                    return (
-                      <tr key={line.lineId}>
-                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">{line.account}</td>
-                        <td className="py-2 pr-3">
-                          <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                            {COMPONENT_LABELS[line.component] ?? line.component}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums font-medium text-slate-900 dark:text-white">
-                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(line.amount)}
-                        </td>
-                        <td className="py-2 pr-3">
-                          <select
-                            value={lineState?.sku ?? ''}
-                            onChange={(e) => updateLine(line.lineId, 'sku', e.target.value)}
-                            disabled={editState.brandId === ''}
-                            className="h-7 w-44 rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
-                          >
-                            <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
-                            {filteredSkus.map((s) => (
-                              <option key={s.id} value={s.sku}>
-                                {s.sku}{s.productName ? ` - ${s.productName}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2">
-                          {isManufacturing ? (
-                            <Input
-                              type="number"
-                              min="1"
-                              value={lineState?.quantity ?? ''}
-                              onChange={(e) => updateLine(line.lineId, 'quantity', e.target.value)}
-                              placeholder="Units"
-                              className="h-7 w-20 text-xs"
-                            />
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
+      {expanded && bill.inventoryLines.map((line) => {
+        const lineState = editState.lines[line.lineId];
+        const isManufacturing = line.component === 'manufacturing';
+        return (
+          <TableRow key={line.lineId} className="bg-slate-50/50 dark:bg-slate-800/30">
+            <TableCell />
+            <TableCell colSpan={2} className="text-xs text-slate-600 dark:text-slate-400">
+              {line.account}
+            </TableCell>
+            <TableCell>
+              <select
+                value={lineState?.sku ?? ''}
+                onChange={(e) => updateLine(line.lineId, 'sku', e.target.value)}
+                disabled={editState.brandId === ''}
+                className="h-7 w-40 rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+              >
+                <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
+                {filteredSkus.map((s) => (
+                  <option key={s.id} value={s.sku}>
+                    {s.sku}{s.productName ? ` - ${s.productName}` : ''}
+                  </option>
+                ))}
+              </select>
+            </TableCell>
+            <TableCell>
+              {isManufacturing ? (
+                <Input
+                  type="number"
+                  min="1"
+                  value={lineState?.quantity ?? ''}
+                  onChange={(e) => updateLine(line.lineId, 'quantity', e.target.value)}
+                  placeholder="Units"
+                  className="h-7 w-20 text-xs"
+                />
+              ) : (
+                <span className="text-xs text-slate-400">-</span>
+              )}
+            </TableCell>
+            <TableCell>
+              <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                {COMPONENT_LABELS[line.component] ?? line.component}
+              </span>
+            </TableCell>
+            <TableCell className="text-right tabular-nums text-xs font-medium text-slate-700 dark:text-slate-300">
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(line.amount)}
+            </TableCell>
+            <TableCell />
+          </TableRow>
+        );
+      })}
     </Fragment>
   );
 }
@@ -483,10 +412,9 @@ export default function BillsPage() {
 
   const counts = useMemo(() => {
     const all = bills.length;
-    const mapped = bills.filter((b) => getStatus(b) === 'mapped').length;
-    const synced = bills.filter((b) => getStatus(b) === 'synced').length;
+    const saved = bills.filter((b) => getStatus(b) === 'saved').length;
     const unmapped = bills.filter((b) => getStatus(b) === 'unmapped').length;
-    return { all, mapped, synced, unmapped };
+    return { all, saved, unmapped };
   }, [bills]);
 
   const totalPages = billsQuery.data ? billsQuery.data.pagination.totalPages : 1;
@@ -548,7 +476,7 @@ export default function BillsPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span>Click <strong>Save</strong> to store the mapping</span>
+                    <span>Click <strong>Save</strong> to store the mapping and sync to QBO</span>
                   </li>
                 </ul>
               </Card>
@@ -558,10 +486,10 @@ export default function BillsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-600 dark:bg-brand-teal-950/50 dark:text-brand-teal-400">
                     2
                   </div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Sync to QBO</h2>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">What happens on Save</h2>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                  After saving, click <strong>Sync</strong> to push the PO number to the bill memo in QuickBooks.
+                  Saving stores the mapping in Plutus and pushes the PO number to the bill memo in QuickBooks.
                 </p>
                 <pre className="code-block">{`Memo: PO: PO-2026-001`}</pre>
                 <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
@@ -582,10 +510,7 @@ export default function BillsPage() {
                     </span>
                     <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                       <CheckCircle2 className="h-3 w-3" />
-                      Synced: {counts.synced}
-                    </span>
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
-                      Mapped: {counts.mapped}
+                      Saved: {counts.saved}
                     </span>
                     <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/60 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400">
                       Unmapped: {counts.unmapped}
