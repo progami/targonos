@@ -10,39 +10,74 @@ export type AsinExtracted = {
   imageUrls: string[];
 };
 
+function findProductJsonLd(html: string): Record<string, unknown> | null {
+  const $ = load(html);
+  const scripts = $('script[type="application/ld+json"]');
+
+  for (const script of scripts.toArray()) {
+    const text = $(script).html();
+    if (!text) continue;
+
+    const parsed = JSON.parse(text.trim());
+
+    if (parsed['@type'] === 'Product') return parsed;
+
+    if (Array.isArray(parsed)) {
+      const product = parsed.find((item: Record<string, unknown>) => item['@type'] === 'Product');
+      if (product) return product;
+    }
+
+    if (parsed['@graph'] && Array.isArray(parsed['@graph'])) {
+      const product = parsed['@graph'].find((item: Record<string, unknown>) => item['@type'] === 'Product');
+      if (product) return product;
+    }
+  }
+
+  return null;
+}
+
 export function extractAsinFields(html: string): { raw: Record<string, unknown>; normalized: AsinExtracted } {
   const $ = load(html);
+  const jsonLd = findProductJsonLd(html);
 
-  const titleText = $('#productTitle').text().trim();
+  // --- JSON-LD fields ---
+  const titleText = typeof jsonLd?.name === 'string' ? (jsonLd.name as string).trim() : '';
 
-  const priceText =
-    $('#corePriceDisplay_desktop_feature_div span.a-offscreen').first().text().trim() ||
-    $('#priceblock_ourprice').first().text().trim() ||
-    $('#priceblock_dealprice').first().text().trim() ||
-    $('#priceblock_saleprice').first().text().trim();
+  const offers = jsonLd?.offers;
+  let priceText = '';
+  if (offers && typeof offers === 'object' && !Array.isArray(offers)) {
+    priceText = String((offers as Record<string, unknown>).price ?? '');
+  } else if (Array.isArray(offers) && offers.length > 0) {
+    priceText = String((offers[0] as Record<string, unknown>).price ?? '');
+  }
 
-  const ratingText =
-    $('span[data-hook="rating-out-of-text"]').first().text().trim() || $('#acrPopover').attr('title')?.trim() || '';
+  const aggregateRating = jsonLd?.aggregateRating as Record<string, unknown> | undefined;
+  const ratingText = aggregateRating ? String(aggregateRating.ratingValue ?? '') : '';
+  const reviewCountText = aggregateRating
+    ? String(aggregateRating.reviewCount ?? aggregateRating.ratingCount ?? '')
+    : '';
 
-  const reviewCountText =
-    $('#acrCustomerReviewText').first().text().trim() || $('span[data-hook="total-review-count"]').first().text().trim();
+  const jsonLdImage = jsonLd?.image;
+  const imageUrls: string[] = [];
+  if (typeof jsonLdImage === 'string' && jsonLdImage.trim()) {
+    imageUrls.push(jsonLdImage.trim());
+  } else if (Array.isArray(jsonLdImage)) {
+    for (const img of jsonLdImage) {
+      if (typeof img === 'string' && img.trim()) {
+        imageUrls.push(img.trim());
+      }
+    }
+  }
 
+  // --- CSS selector fields (bullets only — no JSON-LD equivalent) ---
   const bullets = $('#feature-bullets ul li span.a-list-item')
     .toArray()
     .map((el) => $(el).text().trim())
     .filter((text) => text.length > 0);
 
-  const imageUrls: string[] = [];
-  const landing = $('#landingImage').attr('src');
-  if (landing && landing.trim()) {
-    imageUrls.push(landing.trim());
-  }
-  for (const img of $('#altImages img').toArray()) {
-    const src = $(img).attr('src');
-    if (src && src.trim()) imageUrls.push(src.trim());
-  }
-
+  // --- Build raw and normalized ---
   const raw: Record<string, unknown> = {
+    jsonLd: jsonLd ?? undefined,
     titleText: titleText || undefined,
     priceText: priceText || undefined,
     ratingText: ratingText || undefined,
@@ -66,4 +101,3 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
 
   return { raw, normalized };
 }
-

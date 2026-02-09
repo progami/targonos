@@ -6,26 +6,37 @@ import { stableStringify } from '../lib/capture/stable-json';
 import { sha256Hex } from '../lib/capture/hash';
 
 describe('extractAsinFields', () => {
-  test('parses core fields deterministically', () => {
+  test('parses core fields from JSON-LD Product', () => {
     const html = `
       <html>
-        <span id="productTitle">  My Product  </span>
-        <div id="corePriceDisplay_desktop_feature_div">
-          <span class="a-offscreen">$19.99</span>
-        </div>
-        <span data-hook="rating-out-of-text">4.5 out of 5 stars</span>
-        <span id="acrCustomerReviewText">1,234 ratings</span>
-        <div id="feature-bullets">
-          <ul>
-            <li><span class="a-list-item">Bullet 1</span></li>
-            <li><span class="a-list-item">Bullet 2</span></li>
-          </ul>
-        </div>
-        <img id="landingImage" src="https://example.com/landing.jpg" />
-        <div id="altImages">
-          <img src="https://example.com/alt.jpg" />
-          <img src="https://example.com/landing.jpg" />
-        </div>
+        <head>
+          <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "Product",
+              "name": "  My Product  ",
+              "image": ["https://example.com/landing.jpg", "https://example.com/alt.jpg"],
+              "offers": {
+                "@type": "Offer",
+                "price": "19.99",
+                "priceCurrency": "USD"
+              },
+              "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.5",
+                "reviewCount": "1234"
+              }
+            }
+          </script>
+        </head>
+        <body>
+          <div id="feature-bullets">
+            <ul>
+              <li><span class="a-list-item">Bullet 1</span></li>
+              <li><span class="a-list-item">Bullet 2</span></li>
+            </ul>
+          </div>
+        </body>
       </html>
     `;
 
@@ -36,6 +47,72 @@ describe('extractAsinFields', () => {
     expect(normalized.reviewCount).toBe(1234);
     expect(normalized.bullets).toEqual(['Bullet 1', 'Bullet 2']);
     expect(normalized.imageUrls).toEqual(['https://example.com/alt.jpg', 'https://example.com/landing.jpg']);
+  });
+
+  test('handles JSON-LD with offers array', () => {
+    const html = `
+      <html>
+        <script type="application/ld+json">
+          {
+            "@type": "Product",
+            "name": "Array Offers Product",
+            "offers": [
+              { "@type": "Offer", "price": "29.99" },
+              { "@type": "Offer", "price": "24.99" }
+            ]
+          }
+        </script>
+      </html>
+    `;
+
+    const { normalized } = extractAsinFields(html);
+    expect(normalized.title).toBe('Array Offers Product');
+    expect(normalized.price).toBe(29.99);
+  });
+
+  test('handles JSON-LD wrapped in @graph', () => {
+    const html = `
+      <html>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@graph": [
+              { "@type": "WebPage", "name": "Page" },
+              { "@type": "Product", "name": "Graph Product", "offers": { "price": "9.99" } }
+            ]
+          }
+        </script>
+      </html>
+    `;
+
+    const { normalized } = extractAsinFields(html);
+    expect(normalized.title).toBe('Graph Product');
+    expect(normalized.price).toBe(9.99);
+  });
+
+  test('returns empty fields when no JSON-LD Product is present', () => {
+    const html = `<html><body><span id="productTitle">Fallback Title</span></body></html>`;
+    const { normalized } = extractAsinFields(html);
+    expect(normalized.title).toBeUndefined();
+    expect(normalized.price).toBeUndefined();
+    expect(normalized.rating).toBeUndefined();
+    expect(normalized.reviewCount).toBeUndefined();
+    expect(normalized.bullets).toEqual([]);
+    expect(normalized.imageUrls).toEqual([]);
+  });
+
+  test('stores jsonLd in raw output for debugging', () => {
+    const html = `
+      <html>
+        <script type="application/ld+json">
+          { "@type": "Product", "name": "Debug Product" }
+        </script>
+      </html>
+    `;
+
+    const { raw } = extractAsinFields(html);
+    expect(raw.jsonLd).toBeDefined();
+    expect((raw.jsonLd as Record<string, unknown>)['@type']).toBe('Product');
   });
 });
 
