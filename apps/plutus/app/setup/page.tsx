@@ -173,6 +173,11 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
     suggestions.cogsShrinkage = shrinkage.id;
   }
 
+  const productExpenses = findAccountByExactName(accounts, { name: 'Product Expenses', type: 'Cost of Goods Sold' });
+  if (productExpenses) {
+    suggestions.productExpenses = productExpenses.id;
+  }
+
   const amazonSales = findAccountByExactName(accounts, { name: 'Amazon Sales', type: 'Income' });
   if (amazonSales) {
     suggestions.amazonSales = amazonSales.id;
@@ -263,6 +268,7 @@ const COGS_ACCOUNTS = [
   { key: 'cogsDuty', label: 'Duty', type: 'Cost of Goods Sold' },
   { key: 'cogsMfgAccessories', label: 'Mfg Accessories', type: 'Cost of Goods Sold' },
   { key: 'cogsShrinkage', label: 'Shrinkage', type: 'Cost of Goods Sold' },
+  { key: 'productExpenses', label: 'Product Expenses', type: 'Cost of Goods Sold' },
 ];
 
 const WAREHOUSING_ACCOUNTS = [

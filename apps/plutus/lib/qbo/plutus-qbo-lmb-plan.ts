@@ -95,6 +95,7 @@ export type AccountMappings = {
   cogsDuty: string;
   cogsMfgAccessories: string;
   cogsShrinkage: string;
+  productExpenses: string;
 
   // Warehousing buckets (COGS)
   warehousing3pl: string;
@@ -147,6 +148,7 @@ export async function ensurePlutusQboLmbPlanAccounts(
     cogsDuty: requireAccountById(accounts, mappings.cogsDuty, 'COGS Duty'),
     cogsMfgAccessories: requireAccountById(accounts, mappings.cogsMfgAccessories, 'COGS Mfg Accessories'),
     cogsShrinkage: requireAccountById(accounts, mappings.cogsShrinkage, 'COGS Shrinkage'),
+    productExpenses: requireAccountById(accounts, mappings.productExpenses, 'Product Expenses'),
 
     // Warehousing buckets
     warehousing3pl: requireAccountById(accounts, mappings.warehousing3pl, 'Warehousing 3PL'),
@@ -181,6 +183,7 @@ export async function ensurePlutusQboLmbPlanAccounts(
     { label: 'Duty', parent: parents.cogsDuty },
     { label: 'Mfg Accessories', parent: parents.cogsMfgAccessories },
     { label: 'Inventory Shrinkage', parent: parents.cogsShrinkage },
+    { label: 'Product Expenses', parent: parents.productExpenses },
 
     // Warehousing buckets (brand leaf accounts are just the brand name)
     { label: 'Warehousing:3PL', parent: parents.warehousing3pl },
