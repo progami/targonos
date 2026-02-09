@@ -77,8 +77,6 @@ export async function GET(req: NextRequest) {
         account: string;
         accountId: string;
         component: InventoryComponent;
-        mappedSku: string | null;
-        mappedQuantity: number | null;
       }> = [];
 
       for (const line of bill.Line ?? []) {
@@ -89,9 +87,6 @@ export async function GET(req: NextRequest) {
         const component = classifyComponent(account);
         if (!component) continue;
 
-        const mapping = mappingsByBillId.get(bill.Id);
-        const lineMapping = mapping?.lines.find((lm) => lm.qboLineId === line.Id);
-
         inventoryLines.push({
           lineId: line.Id,
           amount: line.Amount,
@@ -99,8 +94,6 @@ export async function GET(req: NextRequest) {
           account: line.AccountBasedExpenseLineDetail.AccountRef.name,
           accountId,
           component,
-          mappedSku: lineMapping ? lineMapping.sku : null,
-          mappedQuantity: lineMapping ? lineMapping.quantity : null,
         });
       }
 
@@ -122,6 +115,7 @@ export async function GET(req: NextRequest) {
           ? {
               id: mapping.id,
               poNumber: mapping.poNumber,
+              brandId: mapping.brandId,
               syncedAt: mapping.syncedAt,
             }
           : null,
@@ -130,15 +124,15 @@ export async function GET(req: NextRequest) {
 
     const inventoryBills = bills.filter((b) => b !== null);
 
-    // Fetch available SKUs for dropdown
-    const skus = await db.sku.findMany({
-      select: { sku: true, productName: true },
-      orderBy: { sku: 'asc' },
+    // Fetch brands for dropdown
+    const brands = await db.brand.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     });
 
     return NextResponse.json({
       bills: inventoryBills,
-      skus: skus.map((s) => ({ sku: s.sku, productName: s.productName })),
+      brands,
       pagination: {
         page,
         pageSize,
@@ -161,10 +155,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { qboBillId, poNumber, billDate, vendorName, totalAmount, lines } = body;
+    const { qboBillId, poNumber, brandId, billDate, vendorName, totalAmount, lines } = body;
 
-    if (typeof qboBillId !== 'string' || typeof poNumber !== 'string') {
-      return NextResponse.json({ error: 'qboBillId and poNumber are required' }, { status: 400 });
+    if (typeof qboBillId !== 'string' || typeof poNumber !== 'string' || typeof brandId !== 'string') {
+      return NextResponse.json({ error: 'qboBillId, poNumber, and brandId are required' }, { status: 400 });
+    }
+
+    // Validate brandId exists
+    const brand = await db.brand.findUnique({ where: { id: brandId } });
+    if (!brand) {
+      return NextResponse.json({ error: 'Invalid brandId' }, { status: 400 });
     }
 
     if (!Array.isArray(lines) || lines.length === 0) {
@@ -176,14 +176,6 @@ export async function POST(req: NextRequest) {
       if (typeof line.qboLineId !== 'string' || typeof line.component !== 'string') {
         return NextResponse.json({ error: 'Each line must have qboLineId and component' }, { status: 400 });
       }
-      if (line.component === 'manufacturing') {
-        if (typeof line.sku !== 'string' || !line.sku) {
-          return NextResponse.json({ error: 'Manufacturing lines must have a sku' }, { status: 400 });
-        }
-        if (typeof line.quantity !== 'number' || line.quantity <= 0) {
-          return NextResponse.json({ error: 'Manufacturing lines must have a positive quantity' }, { status: 400 });
-        }
-      }
     }
 
     // Upsert BillMapping
@@ -192,12 +184,14 @@ export async function POST(req: NextRequest) {
       create: {
         qboBillId,
         poNumber,
+        brandId,
         billDate: billDate ? String(billDate) : '',
         vendorName: vendorName ? String(vendorName) : '',
         totalAmount: typeof totalAmount === 'number' ? totalAmount : 0,
       },
       update: {
         poNumber,
+        brandId,
         billDate: billDate ? String(billDate) : undefined,
         vendorName: vendorName ? String(vendorName) : undefined,
         totalAmount: typeof totalAmount === 'number' ? totalAmount : undefined,
@@ -211,12 +205,10 @@ export async function POST(req: NextRequest) {
     });
 
     await db.billLineMapping.createMany({
-      data: lines.map((line: { qboLineId: string; component: string; sku?: string; quantity?: number; amountCents: number }) => ({
+      data: lines.map((line: { qboLineId: string; component: string; amountCents: number }) => ({
         billMappingId: mapping.id,
         qboLineId: line.qboLineId,
         component: line.component,
-        sku: line.sku ? line.sku : null,
-        quantity: line.quantity ? line.quantity : null,
         amountCents: typeof line.amountCents === 'number' ? line.amountCents : 0,
       })),
     });

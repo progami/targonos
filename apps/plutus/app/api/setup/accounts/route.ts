@@ -26,6 +26,7 @@ const AccountMappingsSchema = z.object({
     amazonStorageFees: z.string().optional(),
     amazonAdvertisingCosts: z.string().optional(),
     amazonPromotions: z.string().optional(),
+    productExpenses: z.string().optional(),
   }),
   accountsCreated: z.boolean().optional(),
 });

@@ -23,25 +23,16 @@ export async function POST(req: NextRequest) {
     // Load mapping from DB
     const mapping = await db.billMapping.findUnique({
       where: { qboBillId },
-      include: { lines: true },
+      include: { brand: true },
     });
 
     if (!mapping) {
       return NextResponse.json({ error: 'No mapping found for this bill. Save the mapping first.' }, { status: 404 });
     }
 
-    // Build line descriptions for manufacturing lines
-    const lineDescriptions = mapping.lines
-      .filter((line) => line.component === 'manufacturing' && line.sku && line.quantity)
-      .map((line) => ({
-        lineId: line.qboLineId,
-        description: `${line.sku} x ${line.quantity} units`,
-      }));
-
-    // Push to QBO
+    // Push PO number to QBO memo
     const { updatedConnection } = await updateBill(connection, qboBillId, {
       privateNote: `PO: ${mapping.poNumber}`,
-      lineDescriptions,
     });
 
     if (updatedConnection) {
