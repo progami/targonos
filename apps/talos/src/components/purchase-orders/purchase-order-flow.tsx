@@ -1690,6 +1690,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           method: 'PUT',
           headers: { 'Content-Type': file.type },
           body: file,
+          tenantOverride,
         })
 
         if (!uploadResponse.ok) {
@@ -1991,7 +1992,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         setSplitGroupLoading(true)
         const response = await fetch(
           withBasePath(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`),
-          { credentials: 'include' }
+          { credentials: 'include', headers: tenantFetchHeaders }
         )
         if (!response.ok) {
           setSplitGroupOrders([])
@@ -2054,7 +2055,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return () => {
       cancelled = true
     }
-  }, [order?.splitGroupId])
+  }, [order?.splitGroupId, tenantFetchHeaders])
 
   useEffect(() => {
     if (!order) return
