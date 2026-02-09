@@ -88,7 +88,7 @@ function buildScheduleFromEnv(): ScheduleConfig {
     endHour,
     spreadEnabled,
     spreadMaxMinutes,
-    timezone: process.env.HERMES_DEFAULT_TIMEZONE || undefined,
+    timezone: process.env.HERMES_DEFAULT_TIMEZONE,
   };
 }
 
