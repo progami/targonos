@@ -288,13 +288,15 @@ model BillMapping {
   @@index([brandId])
 }
 
-/// BillLineMapping tracks a QBO bill line's component and amount for brand-level cost allocation.
+/// BillLineMapping tracks a QBO bill line's component, SKU assignment, and amount for cost allocation.
 model BillLineMapping {
   id            String  @id @default(cuid())
   billMappingId String
   qboLineId     String
   component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
   amountCents   Int
+  sku           String?
+  quantity      Int?
 
   billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
 

@@ -1,14 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ChevronLeft,
   RefreshCw,
   Save,
-  Upload,
   Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,14 @@ type InventoryLine = {
   component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
 };
 
+type MappingLine = {
+  qboLineId: string;
+  component: string;
+  amountCents: number;
+  sku: string | null;
+  quantity: number | null;
+};
+
 type BillData = {
   id: string;
   syncToken: string;
@@ -51,6 +59,7 @@ type BillData = {
     poNumber: string;
     brandId: string;
     syncedAt: string | null;
+    lines: MappingLine[];
   } | null;
 };
 
@@ -59,9 +68,17 @@ type BrandOption = {
   name: string;
 };
 
+type SkuOption = {
+  id: string;
+  sku: string;
+  productName: string | null;
+  brandId: string;
+};
+
 type BillsResponse = {
   bills: BillData[];
   brands: BrandOption[];
+  skus: SkuOption[];
   pagination: {
     page: number;
     pageSize: number;
@@ -72,17 +89,29 @@ type BillsResponse = {
 
 type ConnectionStatus = { connected: boolean };
 
-type MappingStatus = 'unmapped' | 'mapped' | 'synced';
+type MappingStatus = 'unmapped' | 'saved';
+
+type LineEditState = {
+  sku: string;
+  quantity: string;
+};
 
 type BillEditState = {
   poNumber: string;
   brandId: string;
+  lines: Record<string, LineEditState>;
+};
+
+const COMPONENT_LABELS: Record<string, string> = {
+  manufacturing: 'Manufacturing',
+  freight: 'Freight',
+  duty: 'Duty',
+  mfgAccessories: 'Mfg Accessories',
 };
 
 function getStatus(bill: BillData): MappingStatus {
   if (!bill.mapping) return 'unmapped';
-  if (bill.mapping.syncedAt) return 'synced';
-  return 'mapped';
+  return 'saved';
 }
 
 function StatusBadge({ status }: { status: MappingStatus }) {
@@ -91,20 +120,16 @@ function StatusBadge({ status }: { status: MappingStatus }) {
       style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
       label: 'Unmapped',
     },
-    mapped: {
-      style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-      label: 'Mapped',
-    },
-    synced: {
+    saved: {
       style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
-      label: 'Synced',
+      label: 'Saved',
     },
   };
 
   const { style, label } = config[status];
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
-      {status === 'synced' && <CheckCircle2 className="h-3 w-3" />}
+      {status === 'saved' && <CheckCircle2 className="h-3 w-3" />}
       {label}
     </span>
   );
@@ -142,11 +167,16 @@ async function saveBillMapping(bill: BillData, editState: BillEditState): Promis
       billDate: bill.date,
       vendorName: bill.vendor,
       totalAmount: bill.amount,
-      lines: bill.inventoryLines.map((line) => ({
-        qboLineId: line.lineId,
-        component: line.component,
-        amountCents: Math.round(line.amount * 100),
-      })),
+      lines: bill.inventoryLines.map((line) => {
+        const lineState = editState.lines[line.lineId];
+        return {
+          qboLineId: line.lineId,
+          component: line.component,
+          amountCents: Math.round(line.amount * 100),
+          sku: lineState?.sku !== '' ? lineState?.sku : undefined,
+          quantity: lineState?.quantity !== '' ? Number(lineState?.quantity) : undefined,
+        };
+      }),
     }),
   });
   if (!res.ok) {
@@ -156,36 +186,38 @@ async function saveBillMapping(bill: BillData, editState: BillEditState): Promis
   return res.json();
 }
 
-async function syncBillToQbo(qboBillId: string): Promise<unknown> {
-  const res = await fetch(`${basePath}/api/plutus/bills/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ qboBillId }),
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
+function initLineEditState(bill: BillData): Record<string, LineEditState> {
+  const lines: Record<string, LineEditState> = {};
+  for (const line of bill.inventoryLines) {
+    const mappingLine = bill.mapping?.lines.find((ml) => ml.qboLineId === line.lineId);
+    lines[line.lineId] = {
+      sku: mappingLine?.sku ?? '',
+      quantity: mappingLine?.quantity != null ? String(mappingLine.quantity) : '',
+    };
   }
-  return res.json();
+  return lines;
 }
 
 function BillRow({
   bill,
   brands,
+  skus,
 }: {
   bill: BillData;
   brands: BrandOption[];
+  skus: SkuOption[];
 }) {
   const queryClient = useQueryClient();
   const status = getStatus(bill);
+  const [expanded, setExpanded] = useState(false);
 
   const [editState, setEditState] = useState<BillEditState>(() => ({
     poNumber: bill.mapping?.poNumber ?? '',
     brandId: bill.mapping?.brandId ?? '',
+    lines: initLineEditState(bill),
   }));
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => saveBillMapping(bill, editState),
@@ -196,93 +228,144 @@ function BillRow({
     onError: (err: Error) => setSaveError(err.message),
   });
 
-  const syncMutation = useMutation({
-    mutationFn: () => syncBillToQbo(bill.id),
-    onSuccess: () => {
-      setSyncError(null);
-      queryClient.invalidateQueries({ queryKey: ['plutus-bills'] });
-    },
-    onError: (err: Error) => setSyncError(err.message),
-  });
+  const filteredSkus = useMemo(() => {
+    if (editState.brandId === '') return [];
+    return skus.filter((s) => s.brandId === editState.brandId);
+  }, [skus, editState.brandId]);
 
   const hasValidMapping = editState.poNumber.trim() !== '' && editState.brandId !== '';
-  const isMapped = status === 'mapped' || status === 'synced';
+
+  const handleBrandChange = (newBrandId: string) => {
+    const clearedLines: Record<string, LineEditState> = {};
+    for (const [lineId, lineState] of Object.entries(editState.lines)) {
+      clearedLines[lineId] = { ...lineState, sku: '', quantity: '' };
+    }
+    setEditState((prev) => ({ ...prev, brandId: newBrandId, lines: clearedLines }));
+  };
+
+  const updateLine = (lineId: string, field: keyof LineEditState, value: string) => {
+    setEditState((prev) => ({
+      ...prev,
+      lines: {
+        ...prev.lines,
+        [lineId]: { ...prev.lines[lineId]!, [field]: value },
+      },
+    }));
+  };
 
   return (
-    <TableRow className="table-row-hover">
-      <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
-      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
-      <TableCell>
-        <Input
-          value={editState.poNumber}
-          onChange={(e) => setEditState((prev) => ({ ...prev, poNumber: e.target.value }))}
-          placeholder="e.g. PO-2026-001"
-          className="h-8 w-40 font-mono text-xs"
-        />
-      </TableCell>
-      <TableCell>
-        <select
-          value={editState.brandId}
-          onChange={(e) => setEditState((prev) => ({ ...prev, brandId: e.target.value }))}
-          className="h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
-        >
-          <option value="">Select brand</option>
-          {brands.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      </TableCell>
-      <TableCell>
-        <StatusBadge status={status} />
-      </TableCell>
-      <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
-        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)}
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            onClick={() => saveMutation.mutate()}
-            disabled={!hasValidMapping || saveMutation.isPending}
-            className="gap-1 h-7 text-xs px-2"
+    <Fragment>
+      <TableRow className="table-row-hover">
+        <TableCell className="w-8">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-white/5 transition-colors"
           >
-            <Save className="h-3 w-3" />
-            {saveMutation.isPending ? 'Saving...' : 'Save'}
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => syncMutation.mutate()}
-            disabled={!isMapped || syncMutation.isPending}
-            className="gap-1 h-7 text-xs px-2"
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        </TableCell>
+        <TableCell className="whitespace-nowrap text-sm">{bill.date}</TableCell>
+        <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{bill.vendor}</TableCell>
+        <TableCell>
+          <Input
+            value={editState.poNumber}
+            onChange={(e) => setEditState((prev) => ({ ...prev, poNumber: e.target.value }))}
+            placeholder="e.g. PO-2026-001"
+            className="h-8 w-40 font-mono text-xs"
+          />
+        </TableCell>
+        <TableCell>
+          <select
+            value={editState.brandId}
+            onChange={(e) => handleBrandChange(e.target.value)}
+            className="h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
           >
-            <Upload className="h-3 w-3" />
-            {syncMutation.isPending ? 'Syncing...' : 'Sync'}
-          </Button>
+            <option value="">Select brand</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </TableCell>
+        <TableCell>
+          <StatusBadge status={status} />
+        </TableCell>
+        <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
+          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(bill.amount)}
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              onClick={() => saveMutation.mutate()}
+              disabled={!hasValidMapping || saveMutation.isPending}
+              className="gap-1 h-7 text-xs px-2"
+            >
+              <Save className="h-3 w-3" />
+              {saveMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
 
-          {saveMutation.isSuccess && (
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            {saveMutation.isSuccess && (
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            )}
+          </div>
+
+          {saveError && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{saveError}</p>
           )}
-          {syncMutation.isSuccess && (
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-          )}
-        </div>
+        </TableCell>
+      </TableRow>
 
-        {saveError && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{saveError}</p>
-        )}
-        {syncError && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{syncError}</p>
-        )}
-
-        {bill.mapping?.syncedAt && (
-          <p className="mt-1 text-xs text-slate-400">
-            Synced: {new Date(bill.mapping.syncedAt).toLocaleString()}
-          </p>
-        )}
-      </TableCell>
-    </TableRow>
+      {expanded && bill.inventoryLines.map((line) => {
+        const lineState = editState.lines[line.lineId];
+        const isManufacturing = line.component === 'manufacturing';
+        return (
+          <TableRow key={line.lineId} className="bg-slate-50/50 dark:bg-slate-800/30">
+            <TableCell />
+            <TableCell colSpan={2} className="text-xs text-slate-600 dark:text-slate-400">
+              {line.account}
+            </TableCell>
+            <TableCell>
+              <select
+                value={lineState?.sku ?? ''}
+                onChange={(e) => updateLine(line.lineId, 'sku', e.target.value)}
+                disabled={editState.brandId === ''}
+                className="h-7 w-40 rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+              >
+                <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
+                {filteredSkus.map((s) => (
+                  <option key={s.id} value={s.sku}>
+                    {s.sku}{s.productName ? ` - ${s.productName}` : ''}
+                  </option>
+                ))}
+              </select>
+            </TableCell>
+            <TableCell>
+              {isManufacturing ? (
+                <Input
+                  type="number"
+                  min="1"
+                  value={lineState?.quantity ?? ''}
+                  onChange={(e) => updateLine(line.lineId, 'quantity', e.target.value)}
+                  placeholder="Units"
+                  className="h-7 w-20 text-xs"
+                />
+              ) : (
+                <span className="text-xs text-slate-400">-</span>
+              )}
+            </TableCell>
+            <TableCell>
+              <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                {COMPONENT_LABELS[line.component] ?? line.component}
+              </span>
+            </TableCell>
+            <TableCell className="text-right tabular-nums text-xs font-medium text-slate-700 dark:text-slate-300">
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(line.amount)}
+            </TableCell>
+            <TableCell />
+          </TableRow>
+        );
+      })}
+    </Fragment>
   );
 }
 
@@ -323,12 +406,15 @@ export default function BillsPage() {
     return billsQuery.data ? billsQuery.data.brands : [];
   }, [billsQuery.data]);
 
+  const skus = useMemo(() => {
+    return billsQuery.data ? billsQuery.data.skus : [];
+  }, [billsQuery.data]);
+
   const counts = useMemo(() => {
     const all = bills.length;
-    const mapped = bills.filter((b) => getStatus(b) === 'mapped').length;
-    const synced = bills.filter((b) => getStatus(b) === 'synced').length;
+    const saved = bills.filter((b) => getStatus(b) === 'saved').length;
     const unmapped = bills.filter((b) => getStatus(b) === 'unmapped').length;
-    return { all, mapped, synced, unmapped };
+    return { all, saved, unmapped };
   }, [bills]);
 
   const totalPages = billsQuery.data ? billsQuery.data.pagination.totalPages : 1;
@@ -370,10 +456,10 @@ export default function BillsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-600 dark:bg-brand-teal-950/50 dark:text-brand-teal-400">
                     1
                   </div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Assign Brand & PO</h2>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Assign Brand, PO & SKUs</h2>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                  Each inventory bill needs a brand and PO number assigned in the Bill Editor.
+                  Each inventory bill needs a brand, PO number, and per-line SKU assignments.
                 </p>
                 <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
                   <li className="flex items-start gap-2">
@@ -386,7 +472,11 @@ export default function BillsPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span>Click <strong>Save</strong> to store the mapping</span>
+                    <span>Expand the row to assign SKUs and quantities to each line</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                    <span>Click <strong>Save</strong> to store the mapping and sync to QBO</span>
                   </li>
                 </ul>
               </Card>
@@ -396,10 +486,10 @@ export default function BillsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-600 dark:bg-brand-teal-950/50 dark:text-brand-teal-400">
                     2
                   </div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Sync to QBO</h2>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">What happens on Save</h2>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                  After saving, click <strong>Sync</strong> to push the PO number to the bill memo in QuickBooks.
+                  Saving stores the mapping in Plutus and pushes the PO number to the bill memo in QuickBooks.
                 </p>
                 <pre className="code-block">{`Memo: PO: PO-2026-001`}</pre>
                 <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
@@ -420,10 +510,7 @@ export default function BillsPage() {
                     </span>
                     <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                       <CheckCircle2 className="h-3 w-3" />
-                      Synced: {counts.synced}
-                    </span>
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
-                      Mapped: {counts.mapped}
+                      Saved: {counts.saved}
                     </span>
                     <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/60 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400">
                       Unmapped: {counts.unmapped}
@@ -490,6 +577,7 @@ export default function BillsPage() {
                   <Table className="table-striped">
                     <TableHeader>
                       <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
+                        <TableHead className="w-8" />
                         <TableHead>Date</TableHead>
                         <TableHead>Vendor</TableHead>
                         <TableHead>PO Number</TableHead>
@@ -502,7 +590,7 @@ export default function BillsPage() {
                     <TableBody>
                       {bills.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="p-0">
+                          <TableCell colSpan={8} className="p-0">
                             <EmptyState
                               title={isCheckingConnection || billsQuery.isFetching ? 'Loading...' : 'No inventory bills found'}
                               description={isCheckingConnection || billsQuery.isFetching ? undefined : 'No bills with inventory accounts were found. Try adjusting your date range.'}
@@ -515,6 +603,7 @@ export default function BillsPage() {
                             key={bill.id}
                             bill={bill}
                             brands={brands}
+                            skus={skus}
                           />
                         ))
                       )}
