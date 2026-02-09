@@ -137,15 +137,23 @@ export async function middleware(request: NextRequest) {
   const effectiveTenant = isValidTenantCode(requestTenantOverride)
     ? requestTenantOverride
     : tenantCookie
-  const response = NextResponse.next()
+  const requestHeaders = new Headers(request.headers)
   if (isValidTenantCode(effectiveTenant)) {
-    response.headers.set('x-tenant', effectiveTenant)
+    requestHeaders.set('x-tenant', effectiveTenant)
+  } else {
+    requestHeaders.delete('x-tenant')
   }
   if (isValidTenantCode(requestTenantOverride)) {
-    response.headers.set('x-tenant-override', '1')
+    requestHeaders.set('x-tenant-override', '1')
+  } else {
+    requestHeaders.delete('x-tenant-override')
   }
 
-  return response
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 }
 
 export const config = {

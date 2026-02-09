@@ -1017,12 +1017,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
       try {
         setLoading(true)
-        const fetchHeaders: HeadersInit = tenantOverride
-          ? { 'x-tenant': tenantOverride }
-          : {}
         const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}`), {
           credentials: 'include',
-          headers: fetchHeaders,
+          headers: tenantFetchHeaders,
         })
         if (!response.ok) {
           throw new Error('Failed to load purchase order')
@@ -1044,7 +1041,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       return
     }
     setLoading(false)
-  }, [tenantOverride, isCreate, orderId, router, session, status])
+  }, [tenantOverride, tenantFetchHeaders, isCreate, orderId, router, session, status])
 
   useEffect(() => {
     if (!order) return
@@ -1805,7 +1802,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setSkusLoading(false)
     }
-  }, [skus.length, skusLoading])
+  }, [skus.length, skusLoading, tenantFetchHeaders])
 
   useEffect(() => {
     if (!session) return
@@ -1837,7 +1834,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setSuppliersLoading(false)
     }
-  }, [suppliers.length, suppliersLoading])
+  }, [suppliers.length, suppliersLoading, tenantFetchHeaders])
 
   useEffect(() => {
     if (!orderInfoEditing) return
@@ -2751,6 +2748,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`), {
+        method: 'POST',
         headers: tenantFetchHeaders,
       })
       if (!response.ok) {
@@ -3873,12 +3871,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
                               )
                             }
-                            const cartonTriplet = resolveDimensionTripletCm({
-                              side1Cm: line.cartonSide1Cm ?? null,
-                              side2Cm: line.cartonSide2Cm ?? null,
-                              side3Cm: line.cartonSide3Cm ?? null,
-                              legacy: line.cartonDimensionsCm ?? null,
-                            })
 
                             return (
                             <tr
