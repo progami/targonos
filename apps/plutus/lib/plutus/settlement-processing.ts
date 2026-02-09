@@ -2,7 +2,7 @@ import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
 import { createJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
 import { parseLmbAuditCsv, type LmbAuditRow } from '@/lib/lmb/audit-csv';
 import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
-import { parseQboBillsToInventoryEvents, type InventoryAccountMappings } from '@/lib/inventory/qbo-bills';
+import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings } from '@/lib/inventory/qbo-bills';
 import {
   replayInventoryLedger,
   type SaleCost,
@@ -236,25 +236,34 @@ export async function computeSettlementPreview(input: {
     blocks.push({ code: 'BILL_PARSE_ERROR', message: 'Failed to fetch bills from QBO' });
   }
 
+  // Check for Plutus DB bill mappings first — if any exist, use them instead of QBO parsing
   let parsedBills;
-  try {
-    if (
-      inventoryMappings.invManufacturing === '' ||
-      inventoryMappings.invFreight === '' ||
-      inventoryMappings.invDuty === '' ||
-      inventoryMappings.invMfgAccessories === ''
-    ) {
+  const plutusMappings = await db.billMapping.findMany({
+    include: { lines: true },
+  });
+
+  if (plutusMappings.length > 0) {
+    parsedBills = buildInventoryEventsFromMappings(plutusMappings);
+  } else {
+    try {
+      if (
+        inventoryMappings.invManufacturing === '' ||
+        inventoryMappings.invFreight === '' ||
+        inventoryMappings.invDuty === '' ||
+        inventoryMappings.invMfgAccessories === ''
+      ) {
+        parsedBills = { events: [], poUnitsBySku: new Map() };
+      } else {
+        parsedBills = parseQboBillsToInventoryEvents(allBills, accountsById, inventoryMappings);
+      }
+    } catch (error) {
+      blocks.push({
+        code: 'BILL_PARSE_ERROR',
+        message: 'Failed to parse bills into inventory events',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
       parsedBills = { events: [], poUnitsBySku: new Map() };
-    } else {
-      parsedBills = parseQboBillsToInventoryEvents(allBills, accountsById, inventoryMappings);
     }
-  } catch (error) {
-    blocks.push({
-      code: 'BILL_PARSE_ERROR',
-      message: 'Failed to parse bills into inventory events',
-      details: { error: error instanceof Error ? error.message : String(error) },
-    });
-    parsedBills = { events: [], poUnitsBySku: new Map() };
   }
 
   // Build brand resolver for P&L allocation
