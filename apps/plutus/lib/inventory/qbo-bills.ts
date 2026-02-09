@@ -192,6 +192,62 @@ export function parseQboBillsToInventoryEvents(
   return { events, poUnitsBySku };
 }
 
+export type BillMappingWithLines = {
+  qboBillId: string;
+  poNumber: string;
+  billDate: string;
+  lines: Array<{
+    qboLineId: string;
+    component: string;
+    sku: string | null;
+    quantity: number | null;
+    amountCents: number;
+  }>;
+};
+
+export function buildInventoryEventsFromMappings(
+  mappings: BillMappingWithLines[],
+): ParsedBills {
+  const events: BillEvent[] = [];
+  const poUnitsBySku = new Map<string, Map<string, number>>();
+
+  for (const mapping of mappings) {
+    for (const line of mapping.lines) {
+      const component = line.component as InventoryComponent;
+
+      if (component === 'manufacturing') {
+        if (!line.sku || !line.quantity) continue;
+        addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
+        events.push({
+          kind: 'manufacturing',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          sku: line.sku,
+          units: line.quantity,
+          costCents: line.amountCents,
+        });
+      } else {
+        events.push({
+          kind: 'cost',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          component: component as Exclude<InventoryComponent, 'manufacturing'>,
+          costCents: line.amountCents,
+          sku: line.sku ? line.sku : undefined,
+        });
+      }
+    }
+  }
+
+  events.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
+    return 0;
+  });
+
+  return { events, poUnitsBySku };
+}
+
 export function allocatePoCostAcrossSkus(
   totalCents: number,
   poNumber: string,

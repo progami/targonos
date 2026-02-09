@@ -264,3 +264,38 @@ model NotificationPreference {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
+
+/// BillMapping links a QBO bill to a PO batch and stores enrichment metadata managed in Plutus.
+model BillMapping {
+  id          String    @id @default(cuid())
+  qboBillId   String    @unique
+  poNumber    String
+  billDate    String
+  vendorName  String
+  totalAmount Float
+  syncedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lines BillLineMapping[]
+
+  @@index([poNumber])
+}
+
+/// BillLineMapping maps a single QBO bill line to a SKU and quantity for inventory event generation.
+model BillLineMapping {
+  id            String  @id @default(cuid())
+  billMappingId String
+  qboLineId     String
+  component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
+  sku           String?
+  quantity      Int?
+  amountCents   Int
+
+  billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([billMappingId, qboLineId])
+}
