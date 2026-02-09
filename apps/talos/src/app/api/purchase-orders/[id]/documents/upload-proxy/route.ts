@@ -6,11 +6,14 @@ import { getS3Service } from '@/services/s3.service'
 import { scanFileContent, validateFile } from '@/lib/security/file-upload'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
+import { Readable, Transform } from 'node:stream'
 
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
 
 const MAX_DOCUMENT_SIZE_MB = 1024
+const MAX_SNIFF_BYTES = 16 * 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'RFQ',
@@ -63,6 +66,13 @@ function parseDocumentType(value: unknown): string | null {
   if (!trimmed) return null
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(trimmed)) return null
   return trimmed
+}
+
+class UploadValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UploadValidationError'
+  }
 }
 
 export const PUT = withAuthAndParams(async (request, params, session) => {
@@ -118,15 +128,22 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
     }
     fileSize = parsedFileSize
 
-    const bytes = await request.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-
-    if (buffer.length !== parsedFileSize) {
-      return NextResponse.json({ error: 'Uploaded file is incomplete' }, { status: 400 })
+    const contentLengthRaw = request.headers.get('content-length')
+    if (contentLengthRaw) {
+      const parsedContentLength = Number(contentLengthRaw)
+      if (!Number.isFinite(parsedContentLength) || parsedContentLength <= 0) {
+        return NextResponse.json({ error: 'Invalid Content-Length header' }, { status: 400 })
+      }
+      if (parsedContentLength !== parsedFileSize) {
+        return NextResponse.json(
+          { error: `File size mismatch (expected ${parsedFileSize}, got ${parsedContentLength})` },
+          { status: 400 }
+        )
+      }
     }
 
     const validation = await validateFile(
-      { name: fileNameRaw, size: buffer.length, type: fileTypeRaw },
+      { name: fileNameRaw, size: parsedFileSize, type: fileTypeRaw },
       'purchase-order-document',
       { maxSizeMB: MAX_DOCUMENT_SIZE_MB }
     )
@@ -134,8 +151,25 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const scanResult = await scanFileContent(buffer, fileTypeRaw)
+    const body = request.body
+    if (!body) {
+      return NextResponse.json({ error: 'Upload body is required' }, { status: 400 })
+    }
+
+    const reader = body.getReader()
+    const sniffChunks: Uint8Array[] = []
+    let sniffBytes = 0
+    while (sniffBytes < MAX_SNIFF_BYTES) {
+      const { value, done } = await reader.read()
+      if (done) break
+      sniffChunks.push(value)
+      sniffBytes += value.byteLength
+    }
+
+    const sniffBuffer = Buffer.concat(sniffChunks.map(chunk => Buffer.from(chunk)))
+    const scanResult = await scanFileContent(sniffBuffer, fileTypeRaw)
     if (!scanResult.valid) {
+      await reader.cancel()
       return NextResponse.json({ error: scanResult.error }, { status: 400 })
     }
 
@@ -175,8 +209,32 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: 'Invalid upload key' }, { status: 400 })
     }
 
+    const stream = Readable.from((async function* () {
+      for (const chunk of sniffChunks) {
+        yield Buffer.from(chunk)
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        yield Buffer.from(value)
+      }
+    })())
+
+    let uploadedBytes = 0
+    const sizeGuard = new Transform({
+      transform(chunk, _encoding, callback) {
+        uploadedBytes += chunk.length
+        if (uploadedBytes > parsedFileSize) {
+          callback(new UploadValidationError('Uploaded file exceeds expected size'))
+          return
+        }
+        callback(null, chunk)
+      },
+    })
+
     const s3Service = getS3Service()
-    await s3Service.uploadFile(buffer, s3KeyRaw, {
+    await s3Service.uploadFile(stream.pipe(sizeGuard), s3KeyRaw, {
       contentType: fileTypeRaw,
       metadata: {
         purchaseOrderId: id,
@@ -188,8 +246,16 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
       },
     })
 
+    if (uploadedBytes !== parsedFileSize) {
+      return NextResponse.json({ error: 'Uploaded file is incomplete' }, { status: 400 })
+    }
+
     return new NextResponse(null, { status: 200 })
   } catch (_error) {
+    if (_error instanceof UploadValidationError) {
+      return NextResponse.json({ error: _error.message }, { status: 400 })
+    }
+
     apiLogger.error('Failed to proxy purchase order document upload', {
       purchaseOrderId,
       stage,
