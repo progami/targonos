@@ -1,5 +1,7 @@
 # Claude Code Instructions
 
+**ACTUALLY READ EVERY FILE THAT IS RELATED TO A QUERY BEFORE ANSWERING IT - NEVER ASSUME**
+
 ## Database
 
 All apps share `portal_db` on localhost:5432 with separate schemas per app. Connection strings are in each app's `.env.local` file.
