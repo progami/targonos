@@ -522,14 +522,18 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   ] as const
 
   console.log(`\n[${tenant}] Ensuring ERD v10.1 views exist`)
-  for (const statement of statements) {
-    if (options.dryRun) {
+  if (options.dryRun) {
+    for (const statement of statements) {
       console.log(`[${tenant}] DRY RUN: ${statement}`)
-      continue
     }
-
-    await prisma.$executeRawUnsafe(statement)
+    return
   }
+
+  await prisma.$transaction(async tx => {
+    for (const statement of statements) {
+      await tx.$executeRawUnsafe(statement)
+    }
+  })
 }
 
 async function main() {
@@ -550,4 +554,3 @@ main().catch(error => {
   console.error(error)
   process.exit(1)
 })
-
