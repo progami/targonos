@@ -46,6 +46,7 @@ import {
 } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
+import { getCSRFToken } from '@/lib/utils/csrf'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
@@ -835,6 +836,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [documents, setDocuments] = useState<PurchaseOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
+  const [uploadingDocProgress, setUploadingDocProgress] = useState<Record<string, number | null>>({})
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
 
@@ -1618,6 +1620,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
       const key = `${stage}::${documentType}`
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
+      setUploadingDocProgress(prev => ({ ...prev, [key]: null }))
 
       try {
         const presignedResponse = await fetchWithCSRF(
@@ -1663,27 +1666,56 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           return
         }
 
-        const uploadResponse = await fetchWithCSRF(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-          tenantOverride,
-        })
-
-        if (!uploadResponse.ok) {
-          const uploadPayload = await uploadResponse.json().catch(() => null)
-          const errorMessage = typeof uploadPayload?.error === 'string' ? uploadPayload.error : null
-          const detailsMessage =
-            typeof uploadPayload?.details === 'string' ? uploadPayload.details : null
-          if (errorMessage && detailsMessage) {
-            toast.error(`${errorMessage}: ${detailsMessage}`)
-          } else if (errorMessage) {
-            toast.error(errorMessage)
-          } else {
-            toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+        await new Promise<void>((resolve, reject) => {
+          const resolvedUrl = withBasePath(uploadUrl)
+          const csrfToken = getCSRFToken()
+          if (!csrfToken) {
+            reject(new Error('Missing CSRF token'))
+            return
           }
-          return
-        }
+
+          const xhr = new XMLHttpRequest()
+          xhr.open('PUT', resolvedUrl)
+          xhr.withCredentials = true
+          xhr.timeout = 7 * 60 * 1000
+
+          xhr.setRequestHeader('x-csrf-token', csrfToken)
+          if (tenantOverride) {
+            xhr.setRequestHeader('x-tenant', tenantOverride)
+          }
+          if (file.type) {
+            xhr.setRequestHeader('Content-Type', file.type)
+          }
+
+          xhr.upload.onprogress = event => {
+            if (!event.lengthComputable) return
+            const progress = Math.min(
+              100,
+              Math.max(0, Math.round((event.loaded / event.total) * 100))
+            )
+            setUploadingDocProgress(prev => ({ ...prev, [key]: progress }))
+          }
+
+          xhr.onerror = () => {
+            reject(new Error('Failed to upload document'))
+          }
+          xhr.ontimeout = () => {
+            reject(new Error('Upload timed out'))
+          }
+          xhr.onabort = () => {
+            reject(new Error('Upload cancelled'))
+          }
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadingDocProgress(prev => ({ ...prev, [key]: 100 }))
+              resolve()
+              return
+            }
+            reject(new Error(`Failed to upload document (HTTP ${xhr.status})`))
+          }
+
+          xhr.send(file)
+        })
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
@@ -1719,6 +1751,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         toast.error(err instanceof Error ? err.message : 'Failed to upload document')
       } finally {
         setUploadingDoc(prev => ({ ...prev, [key]: false }))
+        setUploadingDocProgress(prev => {
+          const next = { ...prev }
+          delete next[key]
+          return next
+        })
         input.value = ''
       }
     },
@@ -4430,14 +4467,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </thead>
                           <tbody>
                             {rows.map(row => {
-								const key = `${stage}::${row.id}`
-								const existing = row.doc
-								const isUploading = Boolean(uploadingDoc[key])
-								const uploadDisabled = isUploading || !canUpload
-								const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-								const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
+                              const key = `${stage}::${row.id}`
+                              const existing = row.doc
+                              const isUploading = Boolean(uploadingDoc[key])
+                              const uploadDisabled = isUploading || !canUpload
+                              const uploadProgress = Object.prototype.hasOwnProperty.call(uploadingDocProgress, key)
+                                ? uploadingDocProgress[key]
+                                : null
+                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
 
-								return (
+                              return (
                                 <tr
                                   key={key}
                                   data-gate-key={gateKey ?? undefined}
@@ -4499,33 +4539,39 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           </a>
                                         </Button>
                                       )}
-										<label
-											className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-												isUploading
-													? 'opacity-70 cursor-wait'
-													: canUpload
-														? 'hover:bg-slate-100 cursor-pointer'
-														: 'opacity-50 cursor-not-allowed'
-											}`}
-											aria-busy={isUploading}
-											aria-disabled={uploadDisabled}
-										>
-											{isUploading ? (
-												<Loader2 className="h-3 w-3 animate-spin" />
-											) : (
-												<Upload className="h-3 w-3" />
-											)}
-											{isUploading ? 'Uploading…' : existing ? 'Replace' : 'Upload'}
-											<input
-												type="file"
-												className="hidden"
-												disabled={uploadDisabled}
-												onChange={e => void handleDocumentUpload(e, stage, row.id)}
-											/>
-										</label>
-									</div>
-								</td>
-							</tr>
+                                      <label
+                                        className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                          isUploading
+                                            ? 'opacity-70 cursor-wait'
+                                            : canUpload
+                                              ? 'hover:bg-slate-100 cursor-pointer'
+                                              : 'opacity-50 cursor-not-allowed'
+                                        }`}
+                                        aria-busy={isUploading}
+                                        aria-disabled={uploadDisabled}
+                                      >
+                                        {isUploading ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Upload className="h-3 w-3" />
+                                        )}
+                                        {isUploading
+                                          ? uploadProgress !== null
+                                            ? `Uploading ${uploadProgress}%`
+                                            : 'Uploading…'
+                                          : existing
+                                            ? 'Replace'
+                                            : 'Upload'}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          disabled={uploadDisabled}
+                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
+                                        />
+                                      </label>
+                                    </div>
+                                  </td>
+                                </tr>
                               )
                             })}
                           </tbody>
