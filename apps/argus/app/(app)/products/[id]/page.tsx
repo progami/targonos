@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { getS3 } from '@/lib/s3';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RunNowButton } from '@/components/RunNowButton';
 import { AlertRulesClient } from '@/components/AlertRulesClient';
-import { ArrowLeft, Clock, Globe, Activity, Bell } from 'lucide-react';
+import { ArrowLeft, Clock, Globe, Activity, Bell, ImageIcon } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,29 @@ export default async function ProductDetailPage({
     enabled: r.enabled,
     thresholds: r.thresholds,
   }));
+
+  const imagesEnabled = target.owner === 'OURS';
+  let activeImagesPreview:
+    | { versionNumber: number; images: Array<{ position: number; url: string }> }
+    | null = null;
+
+  if (imagesEnabled && target.activeImageVersionId) {
+    const version = await prisma.listingImageVersion.findFirst({
+      where: { id: target.activeImageVersionId, targetId: target.id },
+      include: { slots: { take: 3, orderBy: [{ position: 'asc' }], include: { blob: true } } },
+    });
+
+    if (version) {
+      const s3 = getS3();
+      const images = await Promise.all(
+        version.slots.map(async (slot) => {
+          const url = await s3.getPresignedUrl(slot.blob.s3Key, 'get', { expiresIn: 3600 });
+          return { position: slot.position, url };
+        }),
+      );
+      activeImagesPreview = { versionNumber: version.versionNumber, images };
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -137,6 +161,60 @@ export default async function ProductDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Listing Images */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold">Listing Images</CardTitle>
+              {activeImagesPreview && (
+                <Badge variant="success" className="text-2xs">v{activeImagesPreview.versionNumber}</Badge>
+              )}
+            </div>
+            {imagesEnabled ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/products/${target.id}/images`}>Manage images</Link>
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" disabled>
+                Manage images
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!imagesEnabled ? (
+            <p className="text-sm text-muted-foreground">
+              Image version history is available for <strong>OURS</strong> listings only.
+            </p>
+          ) : activeImagesPreview && activeImagesPreview.images.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2 sm:max-w-md">
+              {activeImagesPreview.images.map((img) => (
+                <a
+                  key={`${img.position}-${img.url}`}
+                  href={img.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group overflow-hidden rounded-md border bg-muted"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt={`Slot ${img.position}`} className="h-24 w-full object-cover transition-transform group-hover:scale-[1.02]" />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
+              <ImageIcon className="mb-2 h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No image versions yet.</p>
+              <Button asChild size="sm" className="mt-3">
+                <Link href={`/products/${target.id}/images`}>Create first version</Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Capture Timeline */}
       <Card>
