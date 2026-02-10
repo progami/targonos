@@ -178,6 +178,8 @@ export function ListingImageVersionsClient(props: {
   const [queuingCapture, setQueuingCapture] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [rightPanel, setRightPanel] = useState<'history' | 'live'>('history');
+
   const [modalOpen, setModalOpen] = useState(false);
   const [draftLabel, setDraftLabel] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
@@ -780,7 +782,47 @@ export function ListingImageVersionsClient(props: {
       </Card>
 
       <div className="lg:col-span-8 space-y-6">
-        <Card>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="inline-flex rounded-full border bg-muted/40 p-1">
+            <button
+              type="button"
+              onClick={() => setRightPanel('history')}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                rightPanel === 'history'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              History
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanel('live')}
+              className={cn(
+                'ml-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                rightPanel === 'live'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Live capture
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {rightPanel === 'live'
+              ? live
+                ? `Captured ${formatRelativeTime(live.capturedAt)}.`
+                : 'No capture yet.'
+              : selectedItem
+                ? `Selected v${selectedItem.versionNumber}.`
+                : 'Select a version on the left.'}
+          </p>
+        </div>
+
+        {rightPanel === 'live' ? (
+          <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
@@ -901,9 +943,11 @@ export function ListingImageVersionsClient(props: {
               })}
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        ) : null}
 
-        <Card>
+        {rightPanel === 'history' ? (
+          <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -985,7 +1029,8 @@ export function ListingImageVersionsClient(props: {
               </div>
             )}
           </CardContent>
-        </Card>
+          </Card>
+        ) : null}
       </div>
 
       <Dialog open={modalOpen} onOpenChange={(open) => (open ? setModalOpen(true) : closeNewVersionModal())}>
