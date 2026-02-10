@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Search } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -61,6 +61,24 @@ type TransactionsResponse = {
     totalPages: number;
   };
 };
+
+function qboTransactionUrl(row: TransactionRow): string {
+  const baseUrl = 'https://app.qbo.intuit.com/app';
+
+  switch (row.type) {
+    case 'JournalEntry':
+      return `${baseUrl}/journal?txnId=${encodeURIComponent(row.id)}`;
+    case 'Bill':
+      return `${baseUrl}/bill?txnId=${encodeURIComponent(row.id)}`;
+    case 'Purchase':
+      // Purchases in QBO are expenses; this deep link opens the transaction in the QBO UI.
+      return `${baseUrl}/expense?txnId=${encodeURIComponent(row.id)}`;
+    default: {
+      const exhaustiveCheck: never = row.type;
+      throw new Error(`Unsupported transaction type: ${exhaustiveCheck}`);
+    }
+  }
+}
 
 function formatMoney(amount: number, currency: string): string {
   const formatted = new Intl.NumberFormat('en-US', {
@@ -393,7 +411,25 @@ export default function TransactionsPage() {
                                 <TypeBadge type={row.type} />
                               </TableCell>
                               <TableCell className="align-top">
-                                <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
+                                <div className="flex items-start gap-2">
+                                  <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
+                                  <Button
+                                    asChild
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 -mt-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                                  >
+                                    <a
+                                      href={qboTransactionUrl(row)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      aria-label="Open in QuickBooks"
+                                      title="Open in QuickBooks"
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                </div>
                               </TableCell>
                               <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
                                 {row.entityName.trim() === '' ? '—' : row.entityName}
