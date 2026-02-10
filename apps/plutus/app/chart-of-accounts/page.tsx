@@ -41,6 +41,7 @@ if (basePath === undefined) {
 
 interface ConnectionStatus {
   connected: boolean;
+  error?: string;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -280,7 +281,7 @@ export default function ChartOfAccountsPage() {
   const activeFiltersCount = (selectedTypes.size > 0 ? 1 : 0) + (selectedDetailTypes.size > 0 ? 1 : 0) + (selectedCurrencies.size > 0 ? 1 : 0);
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Chart of Accounts" />;
+    return <NotConnectedScreen title="Chart of Accounts" error={connectionStatus.error} />;
   }
 
   return (
