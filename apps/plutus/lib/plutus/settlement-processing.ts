@@ -2,7 +2,7 @@ import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
 import { createJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
 import { parseLmbAuditCsv, type LmbAuditRow } from '@/lib/lmb/audit-csv';
 import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
-import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings } from '@/lib/inventory/qbo-bills';
+import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
 import {
   replayInventoryLedger,
   type LedgerBlock,
@@ -346,66 +346,106 @@ export async function computeSettlementPreview(input: {
     invMfgAccessories,
   };
 
-  // Check for Plutus DB bill mappings first — if any exist, use them instead of QBO parsing
-  let parsedBills;
+  // Bill sources:
+  // - QBO bills parsing (best-effort, relies on memo/description conventions)
+  // - Plutus bill mappings (authoritative for mapped bills)
+  //
+  // Important: we must NOT ignore QBO bills just because *some* mappings exist, otherwise a single mapped
+  // warehousing/expense bill can accidentally wipe out inventory cost basis from all other QBO bills.
+  function mergeParsedBills(a: ParsedBills, b: ParsedBills): ParsedBills {
+    const poUnitsBySku = new Map<string, Map<string, number>>();
+
+    function mergePoUnits(source: Map<string, Map<string, number>>) {
+      for (const [poNumber, skuUnits] of source.entries()) {
+        const existing = poUnitsBySku.get(poNumber);
+        if (!existing) {
+          poUnitsBySku.set(poNumber, new Map(skuUnits));
+          continue;
+        }
+
+        for (const [sku, units] of skuUnits.entries()) {
+          const current = existing.get(sku);
+          existing.set(sku, (current === undefined ? 0 : current) + units);
+        }
+      }
+    }
+
+    mergePoUnits(a.poUnitsBySku);
+    mergePoUnits(b.poUnitsBySku);
+
+    const events = [...a.events, ...b.events];
+    events.sort((x, y) => {
+      if (x.date !== y.date) return x.date.localeCompare(y.date);
+      if (x.kind !== y.kind) return x.kind === 'manufacturing' ? -1 : 1;
+      return 0;
+    });
+
+    return { events, poUnitsBySku };
+  }
+
   const plutusMappings = await db.billMapping.findMany({
     include: { lines: true },
   });
 
+  const mappedBillIds = new Set(plutusMappings.map((m) => m.qboBillId));
+
+  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
   if (plutusMappings.length > 0) {
     try {
-      parsedBills = buildInventoryEventsFromMappings(plutusMappings);
+      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
     } catch (error) {
       blocks.push({
         code: 'BILLS_PARSE_ERROR',
         message: 'Failed to build inventory events from bill mappings',
         details: { error: error instanceof Error ? error.message : String(error) },
       });
-      parsedBills = { events: [], poUnitsBySku: new Map() };
-    }
-  } else {
-    // QBO Bills -> Inventory events (only inventory-account lines are used)
-    let allBills: QboBill[] = [];
-
-    try {
-      let startPosition = 1;
-      const pageSize = 100;
-
-      while (true) {
-        const page = await fetchBills(billsConnection, { maxResults: pageSize, startPosition });
-        if (page.updatedConnection) {
-          billsConnection = page.updatedConnection;
-        }
-
-        allBills = allBills.concat(page.bills);
-
-        if (allBills.length >= page.totalCount) break;
-        if (page.bills.length === 0) break;
-
-        startPosition += page.bills.length;
-      }
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_FETCH_ERROR',
-        message: 'Failed to fetch bills from QBO',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      parsedBills = { events: [], poUnitsBySku: new Map() };
-    }
-
-    try {
-      if (!parsedBills) {
-        parsedBills = parseQboBillsToInventoryEvents(allBills, accountsById, inventoryMappings);
-      }
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_PARSE_ERROR',
-        message: 'Failed to parse bills into inventory events',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      parsedBills = { events: [], poUnitsBySku: new Map() };
+      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
     }
   }
+
+  // QBO Bills -> Inventory events (only inventory-account lines are used)
+  let parsedBillsFromQbo: ParsedBills = { events: [], poUnitsBySku: new Map() };
+  let allBills: QboBill[] = [];
+
+  try {
+    let startPosition = 1;
+    const pageSize = 100;
+
+    while (true) {
+      const page = await fetchBills(billsConnection, { endDate: maxDate, maxResults: pageSize, startPosition });
+      if (page.updatedConnection) {
+        billsConnection = page.updatedConnection;
+      }
+
+      allBills = allBills.concat(page.bills);
+
+      if (allBills.length >= page.totalCount) break;
+      if (page.bills.length === 0) break;
+
+      startPosition += page.bills.length;
+    }
+  } catch (error) {
+    blocks.push({
+      code: 'BILLS_FETCH_ERROR',
+      message: 'Failed to fetch bills from QBO',
+      details: { error: error instanceof Error ? error.message : String(error) },
+    });
+    allBills = [];
+  }
+
+  try {
+    const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
+    parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
+  } catch (error) {
+    blocks.push({
+      code: 'BILLS_PARSE_ERROR',
+      message: 'Failed to parse bills into inventory events',
+      details: { error: error instanceof Error ? error.message : String(error) },
+    });
+    parsedBillsFromQbo = { events: [], poUnitsBySku: new Map() };
+  }
+
+  const parsedBills = mergeParsedBills(parsedBillsFromQbo, parsedBillsFromMappings);
 
   // Build brand resolver for P&L allocation
   const brandResolver = {
