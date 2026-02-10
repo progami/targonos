@@ -1,4 +1,4 @@
-import { ValidationError } from '@/lib/api'
+import { ValidationError } from '@/lib/api/responses'
 
 const PO_REFERENCE_REGEX = /^PO-(\d+)-([A-Z0-9]+)$/
 const LEGACY_PO_REFERENCE_REGEX = /^INV-(\d+)[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$/
