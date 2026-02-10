@@ -17,8 +17,10 @@ async function syncMarketplace(marketplace: Marketplace) {
     let createdCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
+    let disabledCount = 0;
 
     const now = new Date();
+    const activeAsins = new Set<string>();
 
     for (const sku of skus) {
       if (!sku.asin) {
@@ -31,6 +33,8 @@ async function syncMarketplace(marketplace: Marketplace) {
         skippedCount += 1;
         continue;
       }
+
+      activeAsins.add(asin);
 
       const existing = await prisma.watchTarget.findUnique({
         where: { marketplace_type_asin: { marketplace, type: 'ASIN', asin } },
@@ -72,7 +76,20 @@ async function syncMarketplace(marketplace: Marketplace) {
       updatedCount += 1;
     }
 
-    return { createdCount, updatedCount, skippedCount };
+    const stale = await prisma.watchTarget.updateMany({
+      where: {
+        marketplace,
+        type: 'ASIN',
+        owner: 'OURS',
+        source: 'TALOS',
+        enabled: true,
+        asin: { not: null, notIn: Array.from(activeAsins) },
+      },
+      data: { enabled: false },
+    });
+    disabledCount = stale.count;
+
+    return { createdCount, updatedCount, skippedCount, disabledCount };
   } finally {
     await talos.$disconnect();
   }
@@ -92,7 +109,7 @@ export async function runTalosSync() {
     const uk = await syncMarketplace('UK');
 
     const createdCount = us.createdCount + uk.createdCount;
-    const updatedCount = us.updatedCount + uk.updatedCount;
+    const updatedCount = us.updatedCount + uk.updatedCount + us.disabledCount + uk.disabledCount;
     const skippedCount = us.skippedCount + uk.skippedCount;
 
     return await prisma.importRun.update({
@@ -125,4 +142,3 @@ export async function shouldRunTalosSync(minHoursBetweenRuns: number): Promise<b
   const ageMs = Date.now() - last.finishedAt.getTime();
   return ageMs >= minHoursBetweenRuns * 60 * 60 * 1000;
 }
-
