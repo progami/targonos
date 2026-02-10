@@ -6,6 +6,7 @@ import { computeSettlementPreview } from '@/lib/plutus/settlement-processing';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
+import type { MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { unzipSync, strFromU8 } from 'fflate';
 
 export const runtime = 'nodejs';
@@ -16,6 +17,28 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 function toUint8Array(buf: ArrayBuffer): Uint8Array {
   return new Uint8Array(buf);
+}
+
+function buildMarketWhere(marketplace: MarketplaceId) {
+  if (marketplace === 'amazon.com') {
+    return {
+      OR: [
+        { market: { equals: 'US', mode: 'insensitive' as const } },
+        { market: { contains: 'amazon.com', mode: 'insensitive' as const } },
+      ],
+    };
+  }
+  if (marketplace === 'amazon.co.uk') {
+    return {
+      OR: [
+        { market: { equals: 'UK', mode: 'insensitive' as const } },
+        { market: { contains: 'amazon.co.uk', mode: 'insensitive' as const } },
+      ],
+    };
+  }
+
+  const exhaustive: never = marketplace;
+  throw new Error(`Unsupported marketplace: ${exhaustive}`);
 }
 
 async function readAuditCsvText(file: File): Promise<{ csvText: string; sourceFilename: string }> {
@@ -44,14 +67,20 @@ async function readAuditCsvText(file: File): Promise<{ csvText: string; sourceFi
   throw new Error('Unsupported file type. Upload a .zip or .csv');
 }
 
-async function loadAuditRowsFromDb(invoiceId: string): Promise<{ rows: LmbAuditRow[]; sourceFilename: string }> {
+async function loadAuditRowsFromDb(input: {
+  invoiceId: string;
+  marketplace: MarketplaceId;
+}): Promise<{ rows: LmbAuditRow[]; sourceFilename: string }> {
   const dbRows = await db.auditDataRow.findMany({
-    where: { invoiceId },
+    where: {
+      invoiceId: input.invoiceId,
+      ...buildMarketWhere(input.marketplace),
+    },
     include: { upload: { select: { filename: true } } },
   });
 
   if (dbRows.length === 0) {
-    throw new Error(`No stored audit data found for invoice ${invoiceId}`);
+    throw new Error(`No stored audit data found for invoice ${input.invoiceId} (${input.marketplace})`);
   }
 
   const rows: LmbAuditRow[] = dbRows.map((r) => ({
@@ -87,11 +116,18 @@ export async function POST(req: NextRequest, context: RouteContext) {
       // JSON path: read stored audit data from DB
       const body = await req.json();
       const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId.trim() : '';
+      const marketplace = typeof body.marketplace === 'string' ? body.marketplace.trim() : '';
       if (invoiceId === '') {
         return NextResponse.json({ error: 'Missing invoiceId' }, { status: 400 });
       }
+      if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
+        return NextResponse.json({ error: 'Missing marketplace' }, { status: 400 });
+      }
 
-      const { rows, sourceFilename } = await loadAuditRowsFromDb(invoiceId);
+      const { rows, sourceFilename } = await loadAuditRowsFromDb({
+        invoiceId,
+        marketplace: marketplace as MarketplaceId,
+      });
 
       computed = await computeSettlementPreview({
         connection,

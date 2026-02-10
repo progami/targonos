@@ -34,6 +34,7 @@ test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
   const invoices: AuditInvoiceSummary[] = [
     {
       invoiceId: 'INV-US',
+      marketplace: 'amazon.com',
       markets: ['Amazon.com'],
       minDate: '2026-02-01',
       maxDate: '2026-02-14',
@@ -41,6 +42,7 @@ test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
     },
     {
       invoiceId: 'INV-UK',
+      marketplace: 'amazon.co.uk',
       markets: ['Amazon.co.uk'],
       minDate: '2026-02-01',
       maxDate: '2026-02-14',
@@ -60,8 +62,8 @@ test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
 
 test('selectAuditInvoiceForSettlement returns ambiguous when multiple contained match', () => {
   const invoices: AuditInvoiceSummary[] = [
-    { invoiceId: 'A', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-05', rowCount: 1 },
-    { invoiceId: 'B', markets: ['Amazon.com'], minDate: '2026-02-06', maxDate: '2026-02-10', rowCount: 1 },
+    { invoiceId: 'A', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-05', rowCount: 1 },
+    { invoiceId: 'B', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-06', maxDate: '2026-02-10', rowCount: 1 },
   ];
 
   const match = selectAuditInvoiceForSettlement({
@@ -76,7 +78,7 @@ test('selectAuditInvoiceForSettlement returns ambiguous when multiple contained 
 
 test('selectAuditInvoiceForSettlement falls back to unique overlap match', () => {
   const invoices: AuditInvoiceSummary[] = [
-    { invoiceId: 'A', markets: ['Amazon.com'], minDate: '2026-02-10', maxDate: '2026-02-20', rowCount: 1 },
+    { invoiceId: 'A', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-10', maxDate: '2026-02-20', rowCount: 1 },
   ];
 
   const match = selectAuditInvoiceForSettlement({
