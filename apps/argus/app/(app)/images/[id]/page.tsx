@@ -12,7 +12,6 @@ export default async function ImageManagerDetailPage({ params }: { params: Promi
     where: { id },
     select: {
       id: true,
-      type: true,
       owner: true,
       label: true,
       asin: true,
@@ -23,7 +22,7 @@ export default async function ImageManagerDetailPage({ params }: { params: Promi
     },
   });
 
-  if (!target || target.type !== 'ASIN') {
+  if (!target || target.owner !== 'OURS') {
     notFound();
   }
 
@@ -73,4 +72,3 @@ export default async function ImageManagerDetailPage({ params }: { params: Promi
     </div>
   );
 }
-

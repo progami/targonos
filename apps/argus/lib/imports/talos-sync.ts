@@ -6,6 +6,10 @@ function labelForSku(input: { skuCode: string; description: string }): string {
   return `${input.skuCode} — ${input.description}`;
 }
 
+function defaultAsinThresholds() {
+  return { titleChanged: true, priceDeltaPct: 5, priceDeltaAbs: 1, imagesChanged: true };
+}
+
 async function syncMarketplace(marketplace: Marketplace) {
   const talos = getTalosClient(marketplace);
   try {
@@ -37,23 +41,24 @@ async function syncMarketplace(marketplace: Marketplace) {
       activeAsins.add(asin);
 
       const existing = await prisma.watchTarget.findUnique({
-        where: { marketplace_type_asin: { marketplace, type: 'ASIN', asin } },
+        where: { marketplace_asin: { marketplace, asin } },
       });
 
       if (!existing) {
-        await prisma.watchTarget.create({
+        const created = await prisma.watchTarget.create({
           data: {
-            type: 'ASIN',
             marketplace,
             owner: 'OURS',
             source: 'TALOS',
             label: labelForSku({ skuCode: sku.skuCode, description: sku.description }),
             asin,
-            trackedAsins: [],
             cadenceMinutes: 360,
             enabled: true,
             nextRunAt: now,
           },
+        });
+        await prisma.alertRule.create({
+          data: { targetId: created.id, enabled: false, thresholds: defaultAsinThresholds() },
         });
         createdCount += 1;
         continue;
@@ -61,6 +66,11 @@ async function syncMarketplace(marketplace: Marketplace) {
 
       const nextLabel = labelForSku({ skuCode: sku.skuCode, description: sku.description });
       if (existing.label === nextLabel && existing.source === 'TALOS' && existing.owner === 'OURS') {
+        await prisma.alertRule.upsert({
+          where: { targetId: existing.id },
+          create: { targetId: existing.id, enabled: false, thresholds: defaultAsinThresholds() },
+          update: {},
+        });
         skippedCount += 1;
         continue;
       }
@@ -73,17 +83,21 @@ async function syncMarketplace(marketplace: Marketplace) {
           owner: 'OURS',
         },
       });
+      await prisma.alertRule.upsert({
+        where: { targetId: existing.id },
+        create: { targetId: existing.id, enabled: false, thresholds: defaultAsinThresholds() },
+        update: {},
+      });
       updatedCount += 1;
     }
 
     const stale = await prisma.watchTarget.updateMany({
       where: {
         marketplace,
-        type: 'ASIN',
         owner: 'OURS',
         source: 'TALOS',
         enabled: true,
-        asin: { not: null, notIn: Array.from(activeAsins) },
+        asin: { notIn: Array.from(activeAsins) },
       },
       data: { enabled: false },
     });

@@ -20,7 +20,7 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
   const version = await prisma.listingImageVersion.findUnique({
     where: { id },
     include: {
-      target: { select: { id: true, type: true, owner: true, activeImageVersionId: true } },
+      target: { select: { id: true, owner: true, activeImageVersionId: true } },
       slots: { orderBy: [{ position: 'asc' }], include: { blob: true } },
     },
   });
@@ -28,7 +28,7 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
   if (!version) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  if (version.target.type !== 'ASIN' || version.target.owner !== 'OURS') {
+  if (version.target.owner !== 'OURS') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -63,4 +63,3 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
     images,
   });
 });
-
