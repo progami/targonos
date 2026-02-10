@@ -72,6 +72,7 @@ The plan below includes some legacy design notes from earlier iterations. As of 
   - `PNL_ALLOCATION_ERROR`: SKU-less fee buckets exist, but there are **no** `Amazon Sales - Principal` rows with SKU + `quantity > 0` to use as allocation weights (fees-only/refunds-only invoice, or wrong invoice selected).
   - `MISSING_COST_BASIS`: Sales exist for a SKU but the inventory ledger has **no on-hand units/cost basis** at that point in time. The UI aggregates this by SKU (with occurrence counts) to avoid thousands of duplicate rows.
   - `BILLS_FETCH_ERROR` / `BILLS_PARSE_ERROR`: Bills could not be retrieved/parsed, so inventory costing cannot proceed (avoid cascading cost-basis noise until bills are fixed).
+- Bills created in the Plutus **Bills** UI are posted directly to **brand sub-accounts** under the mapped parent accounts (inventory, warehousing, and product expenses). Plutus blocks bill creation until Setup has created the brand sub-accounts in QBO.
 - **Opening Snapshots are NOT implemented in v1**. Where this plan mentions an “Opening Snapshot” button/workflow, treat it as *planned/deferred*; current v1 requires entering historical bills (or starting settlement processing only after bill history exists).
 
 ---

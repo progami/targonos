@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createBill, QboAuthError } from '@/lib/qbo/api';
+import { createBill, fetchAccounts, QboAuthError, type QboAccount } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
@@ -13,7 +13,8 @@ type BillComponent =
   | 'mfgAccessories'
   | 'warehousing3pl'
   | 'warehouseAmazonFc'
-  | 'warehouseAwd';
+  | 'warehouseAwd'
+  | 'productExpenses';
 
 const COMPONENT_ACCOUNT_KEYS: Record<BillComponent, string> = {
   manufacturing: 'invManufacturing',
@@ -23,9 +24,54 @@ const COMPONENT_ACCOUNT_KEYS: Record<BillComponent, string> = {
   warehousing3pl: 'warehousing3pl',
   warehouseAmazonFc: 'warehousingAmazonFc',
   warehouseAwd: 'warehousingAwd',
+  productExpenses: 'productExpenses',
 };
 
 const VALID_COMPONENTS = new Set<string>(Object.keys(COMPONENT_ACCOUNT_KEYS));
+
+function findSubAccountByParentId(accounts: QboAccount[], parentAccountId: string, name: string): QboAccount | undefined {
+  return accounts.find((a) => a.ParentRef?.value === parentAccountId && a.Name === name);
+}
+
+function getBrandSubAccountName(component: BillComponent, brandName: string): string {
+  switch (component) {
+    case 'manufacturing':
+      return `Manufacturing - ${brandName}`;
+    case 'freight':
+      return `Freight - ${brandName}`;
+    case 'duty':
+      return `Duty - ${brandName}`;
+    case 'mfgAccessories':
+      return `Mfg Accessories - ${brandName}`;
+    case 'warehousing3pl':
+    case 'warehouseAmazonFc':
+    case 'warehouseAwd':
+      return brandName;
+    case 'productExpenses':
+      return `Product Expenses - ${brandName}`;
+  }
+}
+
+function getComponentDefaultDescription(component: BillComponent): string {
+  switch (component) {
+    case 'manufacturing':
+      return 'Manufacturing';
+    case 'freight':
+      return 'Freight';
+    case 'duty':
+      return 'Duty';
+    case 'mfgAccessories':
+      return 'Mfg Accessories';
+    case 'warehousing3pl':
+      return '3PL Warehousing';
+    case 'warehouseAmazonFc':
+      return 'Amazon FC Warehousing';
+    case 'warehouseAwd':
+      return 'AWD Warehousing';
+    case 'productExpenses':
+      return 'Product Expenses';
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -65,6 +111,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SetupConfig not found. Complete setup first.' }, { status: 400 });
     }
 
+    if (config.accountsCreated !== true) {
+      return NextResponse.json(
+        { error: 'Plutus QBO accounts are not created yet. Go to Setup and click Create Accounts.' },
+        { status: 400 },
+      );
+    }
+
+    let activeConnection = connection;
+    const accountsResult = await fetchAccounts(activeConnection);
+    if (accountsResult.updatedConnection) {
+      activeConnection = accountsResult.updatedConnection;
+    }
+
     // Validate and build QBO lines
     const qboLines: Array<{ amount: number; accountId: string; description: string }> = [];
     const mappingLines: Array<{ component: string; amountCents: number; sku: string | null; quantity: number | null }> = [];
@@ -78,16 +137,27 @@ export async function POST(req: NextRequest) {
       }
 
       const accountKey = COMPONENT_ACCOUNT_KEYS[line.component as BillComponent];
-      const accountId = (config as Record<string, unknown>)[accountKey] as string | null;
-      if (!accountId) {
+      const parentAccountId = (config as Record<string, unknown>)[accountKey] as string | null;
+      if (!parentAccountId) {
         return NextResponse.json(
           { error: `Account mapping for ${line.component} is not configured. Go to Settings to set up accounts.` },
           { status: 400 },
         );
       }
 
+      const brandSubAccountName = getBrandSubAccountName(line.component as BillComponent, brand.name);
+      const subAccount = findSubAccountByParentId(accountsResult.accounts, parentAccountId, brandSubAccountName);
+      if (!subAccount) {
+        return NextResponse.json(
+          {
+            error: `Missing QBO brand sub-account: "${brandSubAccountName}" (parentAccountId=${parentAccountId}). Run Setup → Create Accounts.`,
+          },
+          { status: 400 },
+        );
+      }
+
       // Build description
-      let description = '';
+      let description = getComponentDefaultDescription(line.component as BillComponent);
       const sku = typeof line.sku === 'string' && line.sku !== '' ? line.sku : null;
       const quantity = typeof line.quantity === 'number' && line.quantity > 0 ? line.quantity : null;
 
@@ -106,7 +176,7 @@ export async function POST(req: NextRequest) {
 
       qboLines.push({
         amount: line.amount,
-        accountId,
+        accountId: subAccount.Id,
         description,
       });
 
@@ -119,7 +189,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create bill in QBO
-    const { bill, updatedConnection } = await createBill(connection, {
+    const { bill, updatedConnection } = await createBill(activeConnection, {
       txnDate,
       vendorId,
       privateNote: `PO: ${poNumber}`,
@@ -127,7 +197,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (updatedConnection) {
-      await saveServerQboConnection(updatedConnection);
+      activeConnection = updatedConnection;
+    }
+    if (activeConnection !== connection) {
+      await saveServerQboConnection(activeConnection);
     }
 
     // Get vendor name from the created bill
