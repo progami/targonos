@@ -1674,10 +1674,36 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             return
           }
 
+          const startedAt = Date.now()
+          let lastProgressAt = startedAt
+          let lastLoaded = 0
+          let settled = false
+          let abortError: Error | null = null
+
+          const settle = (action: () => void) => {
+            if (settled) return
+            settled = true
+            action()
+          }
+
           const xhr = new XMLHttpRequest()
           xhr.open('PUT', resolvedUrl)
           xhr.withCredentials = true
-          xhr.timeout = 7 * 60 * 1000
+          xhr.timeout = 30 * 60 * 1000
+
+          const stallTimeoutMs = 2 * 60 * 1000
+          const stallIntervalMs = 10 * 1000
+          const stallInterval = window.setInterval(() => {
+            if (settled) return
+            if (Date.now() - lastProgressAt < stallTimeoutMs) return
+
+            abortError = new Error('Upload stalled. Please retry.')
+            xhr.abort()
+          }, stallIntervalMs)
+
+          const cleanup = () => {
+            window.clearInterval(stallInterval)
+          }
 
           xhr.setRequestHeader('x-csrf-token', csrfToken)
           if (tenantOverride) {
@@ -1687,8 +1713,19 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             xhr.setRequestHeader('Content-Type', file.type)
           }
 
+          xhr.upload.onloadstart = () => {
+            lastProgressAt = Date.now()
+            lastLoaded = 0
+          }
+
           xhr.upload.onprogress = event => {
             if (!event.lengthComputable) return
+
+            if (event.loaded > lastLoaded) {
+              lastLoaded = event.loaded
+              lastProgressAt = Date.now()
+            }
+
             const progress = Math.min(
               100,
               Math.max(0, Math.round((event.loaded / event.total) * 100))
@@ -1697,21 +1734,54 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           }
 
           xhr.onerror = () => {
-            reject(new Error('Failed to upload document'))
+            cleanup()
+            settle(() => reject(new Error('Failed to upload document')))
           }
           xhr.ontimeout = () => {
-            reject(new Error('Upload timed out'))
+            cleanup()
+            settle(() => reject(new Error('Upload timed out')))
           }
           xhr.onabort = () => {
-            reject(new Error('Upload cancelled'))
+            cleanup()
+            settle(() => reject(abortError ?? new Error('Upload cancelled')))
           }
           xhr.onload = () => {
+            cleanup()
             if (xhr.status >= 200 && xhr.status < 300) {
               setUploadingDocProgress(prev => ({ ...prev, [key]: 100 }))
-              resolve()
+              settle(() => resolve())
               return
             }
-            reject(new Error(`Failed to upload document (HTTP ${xhr.status})`))
+
+            const responseText = typeof xhr.responseText === 'string' ? xhr.responseText.trim() : ''
+            const responseContentType = xhr.getResponseHeader('content-type') ?? ''
+            if (responseText && responseContentType.includes('application/json')) {
+              try {
+                const parsed = JSON.parse(responseText) as unknown
+                const error =
+                  parsed && typeof parsed === 'object' && 'error' in parsed
+                    ? (parsed as Record<string, unknown>).error
+                    : null
+                const details =
+                  parsed && typeof parsed === 'object' && 'details' in parsed
+                    ? (parsed as Record<string, unknown>).details
+                    : null
+
+                const errorMessage = typeof error === 'string' ? error.trim() : null
+                const detailsMessage = typeof details === 'string' ? details.trim() : null
+                if (errorMessage && detailsMessage) {
+                  settle(() => reject(new Error(`${errorMessage}: ${detailsMessage}`)))
+                  return
+                }
+                if (errorMessage) {
+                  settle(() => reject(new Error(errorMessage)))
+                  return
+                }
+              } catch {
+                // Fall through to a generic HTTP error below.
+              }
+            }
+            settle(() => reject(new Error(`Failed to upload document (HTTP ${xhr.status})`)))
           }
 
           xhr.send(file)
@@ -4572,7 +4642,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         </Button>
                                       )}
                                       <label
-                                        className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                        className={`inline-flex flex-col items-start rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
                                           isUploading
                                             ? 'opacity-70 cursor-wait'
                                             : canUpload
@@ -4582,18 +4652,32 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         aria-busy={isUploading}
                                         aria-disabled={uploadDisabled}
                                       >
-                                        {isUploading ? (
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                          <Upload className="h-3 w-3" />
+                                        <span className="inline-flex items-center gap-1.5">
+                                          {isUploading ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Upload className="h-3 w-3" />
+                                          )}
+                                          {isUploading
+                                            ? uploadProgress !== null
+                                              ? `Uploading ${uploadProgress}%`
+                                              : 'Uploading…'
+                                            : existing
+                                              ? 'Replace'
+                                              : 'Upload'}
+                                        </span>
+                                        {isUploading && (
+                                          <span className="mt-1 h-1 w-full rounded bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
+                                            {uploadProgress !== null ? (
+                                              <span
+                                                className="block h-full bg-emerald-500 transition-[width] duration-300"
+                                                style={{ width: `${uploadProgress}%` }}
+                                              />
+                                            ) : (
+                                              <span className="block h-full w-1/3 bg-emerald-500 animate-pulse" />
+                                            )}
+                                          </span>
                                         )}
-                                        {isUploading
-                                          ? uploadProgress !== null
-                                            ? `Uploading ${uploadProgress}%`
-                                            : 'Uploading…'
-                                          : existing
-                                            ? 'Replace'
-                                            : 'Upload'}
                                         <input
                                           type="file"
                                           className="hidden"
