@@ -544,8 +544,6 @@ export function WarehouseRatesPanel({
           <StorageTab
             templates={RATE_TEMPLATES.storage}
             renderRateRow={renderRateRow}
-            warehouseId={warehouseId}
-            warehouseName={warehouseName}
           />
         )}
         {activeTab === 'outbound' && (
@@ -567,10 +565,7 @@ interface TabProps {
   ) => React.ReactNode
 }
 
-interface StorageTabProps extends TabProps {
-  warehouseId: string
-  warehouseName: string
-}
+type StorageTabProps = TabProps
 
 function InboundTab({ templates, renderRateRow }: TabProps) {
   // Filter by costName since all are now 'Inbound' category
@@ -641,7 +636,7 @@ function InboundTab({ templates, renderRateRow }: TabProps) {
   )
 }
 
-function StorageTab({ templates, renderRateRow, warehouseName }: StorageTabProps) {
+function StorageTab({ templates, renderRateRow }: StorageTabProps) {
   return (
     <div className="space-y-6">
       <div>

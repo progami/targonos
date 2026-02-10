@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig, Session } from 'next-auth'
+import type { JWT } from 'next-auth/jwt'
 import Credentials from 'next-auth/providers/credentials'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
 import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
@@ -13,6 +14,16 @@ const userCache = new Map<string, {
 }>()
 
 const CACHE_TTL_MS = 1 * 60 * 1000 // 1 minute - reduced to ensure role changes propagate quickly
+
+type AuthzClaims = {
+  authz?: unknown
+  roles?: unknown
+  globalRoles?: unknown
+  authzVersion?: unknown
+}
+
+type SessionWithAuthz = Session & AuthzClaims
+type TokenWithAuthz = JWT & AuthzClaims
 
 function getCachedUser(email: string, tenant: TenantCode) {
   const key = `${email}:${tenant}`
@@ -106,10 +117,13 @@ const baseAuthOptions: NextAuthConfig = {
       return token
     },
     async session({ session, token }) {
-      ;(session as any).authz = (token as any).authz
-      ;(session as any).roles = (token as any).roles
-      ;(session as any).globalRoles = (token as any).globalRoles
-      ;(session as any).authzVersion = (token as any).authzVersion
+      const sessionWithAuthz = session as SessionWithAuthz
+      const tokenWithAuthz = token as TokenWithAuthz
+
+      sessionWithAuthz.authz = tokenWithAuthz.authz
+      sessionWithAuthz.roles = tokenWithAuthz.roles
+      sessionWithAuthz.globalRoles = tokenWithAuthz.globalRoles
+      sessionWithAuthz.authzVersion = tokenWithAuthz.authzVersion
 
       // Always hydrate a stable user id (portal-issued) so API routes don't crash
       // when a Talos user record doesn't exist yet in the tenant schema.
