@@ -31,7 +31,7 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
   const run = await prisma.captureRun.findFirst({
     where: { targetId: target.id, normalizedExtracted: { not: Prisma.DbNull } },
     orderBy: [{ startedAt: 'desc' }],
-    select: { id: true, startedAt: true, normalizedExtracted: true },
+    select: { id: true, startedAt: true, finalUrl: true, normalizedExtracted: true },
   });
 
   if (!run) {
@@ -50,7 +50,7 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
   return NextResponse.json({
     runId: run.id,
     capturedAt: run.startedAt,
+    finalUrl: run.finalUrl,
     imageUrls,
   });
 });
-

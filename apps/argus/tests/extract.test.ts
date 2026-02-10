@@ -22,9 +22,16 @@ describe('extractAsinFields', () => {
               <li><span class="a-list-item">Bullet 2</span></li>
             </ul>
           </div>
-          <img id="landingImage" src="https://example.com/landing.jpg" />
+          <img
+            id="landingImage"
+            src="https://example.com/landing-thumb.jpg"
+            data-a-dynamic-image='{"https://example.com/landing-sm.jpg":[400,400],"https://example.com/landing-lg.jpg":[1200,1200]}'
+          />
           <div id="altImages">
-            <img src="https://example.com/alt.jpg" />
+            <img
+              src="https://example.com/alt-thumb.jpg"
+              data-old-hires="https://example.com/alt-hires.jpg"
+            />
           </div>
         </body>
       </html>
@@ -36,7 +43,10 @@ describe('extractAsinFields', () => {
     expect(normalized.rating).toBe(4.5);
     expect(normalized.reviewCount).toBe(1234);
     expect(normalized.bullets).toEqual(['Bullet 1', 'Bullet 2']);
-    expect(normalized.imageUrls).toEqual(['https://example.com/landing.jpg', 'https://example.com/alt.jpg']);
+    expect(normalized.imageUrls).toEqual([
+      'https://example.com/landing-lg.jpg',
+      'https://example.com/alt-hires.jpg',
+    ]);
   });
 
   test('handles fallback price selectors', () => {

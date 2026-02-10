@@ -10,6 +10,69 @@ export type AsinExtracted = {
   imageUrls: string[];
 };
 
+function decodeHtmlEntities(value: string): string {
+  // Amazon frequently encodes JSON in attributes with &quot;.
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#34;', '"')
+    .replaceAll('&amp;', '&');
+}
+
+function normalizeUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed;
+}
+
+function pickBestDynamicImageUrl(input: string): string | null {
+  const decoded = decodeHtmlEntities(input.trim());
+  if (!decoded.startsWith('{')) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+  let bestUrl: string | null = null;
+  let bestScore = 0;
+  for (const [url, dims] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(dims) || dims.length < 2) continue;
+    const w = dims[0];
+    const h = dims[1];
+    if (typeof w !== 'number' || typeof h !== 'number') continue;
+    const score = w * h;
+    if (score <= bestScore) continue;
+    bestScore = score;
+    bestUrl = url;
+  }
+
+  return normalizeUrl(bestUrl ?? undefined);
+}
+
+function bestImageUrlFromImg($img: ReturnType<ReturnType<typeof load>>): string | null {
+  const oldHires = normalizeUrl($img.attr('data-old-hires'));
+  if (oldHires) return oldHires;
+
+  const dynamic = normalizeUrl($img.attr('data-a-dynamic-image'));
+  if (dynamic) {
+    const best = pickBestDynamicImageUrl(dynamic);
+    if (best) return best;
+  }
+
+  const src = normalizeUrl($img.attr('src'));
+  if (src) return src;
+
+  const dataSrc = normalizeUrl($img.attr('data-src'));
+  if (dataSrc) return dataSrc;
+
+  return null;
+}
+
 function dedupePreserveOrder(urls: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -44,13 +107,15 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
     .filter((text) => text.length > 0);
 
   const imageUrls: string[] = [];
-  const landing = $('#landingImage').attr('src');
-  if (landing && landing.trim()) {
-    imageUrls.push(landing.trim());
+
+  const landingUrl = bestImageUrlFromImg($('#landingImage').first());
+  if (landingUrl) {
+    imageUrls.push(landingUrl);
   }
+
   for (const img of $('#altImages img').toArray()) {
-    const src = $(img).attr('src');
-    if (src && src.trim()) imageUrls.push(src.trim());
+    const url = bestImageUrlFromImg($(img));
+    if (url) imageUrls.push(url);
   }
 
   const raw: Record<string, unknown> = {
