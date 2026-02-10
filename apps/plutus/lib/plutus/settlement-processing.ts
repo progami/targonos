@@ -5,10 +5,11 @@ import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
 import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings } from '@/lib/inventory/qbo-bills';
 import {
   replayInventoryLedger,
+  type LedgerBlock,
   type SaleCost,
 } from '@/lib/inventory/ledger';
 import { fromCents } from '@/lib/inventory/money';
-import { computePnlAllocation } from '@/lib/pnl-allocation';
+import { computePnlAllocation, PnlAllocationNoWeightsError } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
@@ -45,6 +46,99 @@ export type {
   SettlementProcessingPreview,
   SettlementProcessingResult,
 } from './settlement-types';
+
+function buildEmptyPreview(input: {
+  marketplace: string;
+  settlementJournalEntryId: string;
+  settlementDocNumber: string;
+  settlementPostedDate: string;
+  invoiceId: string;
+  processingHash: string;
+  minDate: string;
+  maxDate: string;
+  blocks: ProcessingBlock[];
+}): SettlementProcessingPreview {
+  const hashPrefix = input.processingHash.slice(0, 10);
+
+  const cogsPreview: JournalEntryPreview = {
+    txnDate: input.settlementPostedDate,
+    docNumber: `PLUTUS-COGS-${input.invoiceId}`,
+    privateNote: `Plutus COGS | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
+    lines: [],
+  };
+
+  const pnlPreview: JournalEntryPreview = {
+    txnDate: input.settlementPostedDate,
+    docNumber: `PLUTUS-PNL-${input.invoiceId}`,
+    privateNote: `Plutus P&L Reclass | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
+    lines: [],
+  };
+
+  return {
+    marketplace: input.marketplace,
+    settlementJournalEntryId: input.settlementJournalEntryId,
+    settlementDocNumber: input.settlementDocNumber,
+    settlementPostedDate: input.settlementPostedDate,
+    invoiceId: input.invoiceId,
+    processingHash: input.processingHash,
+    minDate: input.minDate,
+    maxDate: input.maxDate,
+    blocks: input.blocks,
+    sales: [],
+    returns: [],
+    cogsByBrandComponentCents: {},
+    pnlByBucketBrandCents: {},
+    cogsJournalEntry: cogsPreview,
+    pnlJournalEntry: pnlPreview,
+  };
+}
+
+function summarizeLedgerBlocks(blocks: LedgerBlock[]): LedgerBlock[] {
+  const missingCostBasisBySku = new Map<string, number>();
+  const result: LedgerBlock[] = [];
+
+  for (const block of blocks) {
+    if (block.code !== 'MISSING_COST_BASIS') {
+      result.push(block);
+      continue;
+    }
+
+    const details = block.details;
+    const skuValue = details ? details.sku : undefined;
+    const sku = typeof skuValue === 'string' ? skuValue : '';
+    if (sku === '') {
+      result.push(block);
+      continue;
+    }
+
+    const current = missingCostBasisBySku.get(sku);
+    missingCostBasisBySku.set(sku, (current === undefined ? 0 : current) + 1);
+  }
+
+  const entries = Array.from(missingCostBasisBySku.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0]);
+  });
+
+  const limit = 200;
+  if (entries.length > limit) {
+    result.push({
+      code: 'MISSING_COST_BASIS',
+      message: `Missing cost basis for ${entries.length} SKUs (showing top ${limit} by count)`,
+      details: { skuCount: entries.length, shown: limit },
+    });
+  }
+
+  for (const [sku, count] of entries.slice(0, limit)) {
+    result.push({
+      code: 'MISSING_COST_BASIS',
+      message: 'No on-hand inventory / cost basis for SKU',
+      details: { sku, occurrences: count },
+    });
+  }
+
+  return result;
+}
 
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
@@ -203,6 +297,25 @@ export async function computeSettlementPreview(input: {
     blocks.push({ code: 'MISSING_SKU_MAPPING', message: 'SKU not mapped to a brand', details: { sku } });
   }
 
+  const prereqCodes = new Set(['MISSING_SETUP', 'MISSING_ACCOUNT_MAPPING', 'MISSING_SKU_MAPPING']);
+  const hasPrereqBlock = blocks.some((b) => prereqCodes.has(b.code));
+  if (hasPrereqBlock) {
+    return {
+      preview: buildEmptyPreview({
+        marketplace,
+        settlementJournalEntryId: settlement.Id,
+        settlementDocNumber: settlement.DocNumber,
+        settlementPostedDate: settlement.TxnDate,
+        invoiceId,
+        processingHash,
+        minDate,
+        maxDate,
+        blocks,
+      }),
+      updatedConnection: settlementResult.updatedConnection,
+    };
+  }
+
   const accountsResult = await fetchAccounts(settlementResult.updatedConnection ? settlementResult.updatedConnection : input.connection, {
     includeInactive: true,
   });
@@ -210,37 +323,28 @@ export async function computeSettlementPreview(input: {
   const accountsById = new Map<string, QboAccount>();
   for (const account of accountsResult.accounts) accountsById.set(account.Id, account);
 
+  let billsConnection =
+    accountsResult.updatedConnection
+      ? accountsResult.updatedConnection
+      : settlementResult.updatedConnection
+        ? settlementResult.updatedConnection
+        : input.connection;
+
+  const invManufacturing = mapping.invManufacturing;
+  if (!invManufacturing) throw new Error('Missing invManufacturing mapping');
+  const invFreight = mapping.invFreight;
+  if (!invFreight) throw new Error('Missing invFreight mapping');
+  const invDuty = mapping.invDuty;
+  if (!invDuty) throw new Error('Missing invDuty mapping');
+  const invMfgAccessories = mapping.invMfgAccessories;
+  if (!invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
+
   const inventoryMappings: InventoryAccountMappings = {
-    invManufacturing: mapping.invManufacturing ? mapping.invManufacturing : '',
-    invFreight: mapping.invFreight ? mapping.invFreight : '',
-    invDuty: mapping.invDuty ? mapping.invDuty : '',
-    invMfgAccessories: mapping.invMfgAccessories ? mapping.invMfgAccessories : '',
+    invManufacturing,
+    invFreight,
+    invDuty,
+    invMfgAccessories,
   };
-
-  // QBO Bills -> Inventory events (only inventory-account lines are used)
-  let allBills: QboBill[] = [];
-  let billsConnection = accountsResult.updatedConnection ? accountsResult.updatedConnection : settlementResult.updatedConnection ? settlementResult.updatedConnection : input.connection;
-
-  try {
-    let startPosition = 1;
-    const pageSize = 100;
-
-    while (true) {
-      const page = await fetchBills(billsConnection, { maxResults: pageSize, startPosition });
-      if (page.updatedConnection) {
-        billsConnection = page.updatedConnection;
-      }
-
-      allBills = allBills.concat(page.bills);
-
-      if (allBills.length >= page.totalCount) break;
-      if (page.bills.length === 0) break;
-
-      startPosition += page.bills.length;
-    }
-  } catch (error) {
-    blocks.push({ code: 'BILL_PARSE_ERROR', message: 'Failed to fetch bills from QBO' });
-  }
 
   // Check for Plutus DB bill mappings first — if any exist, use them instead of QBO parsing
   let parsedBills;
@@ -251,20 +355,42 @@ export async function computeSettlementPreview(input: {
   if (plutusMappings.length > 0) {
     parsedBills = buildInventoryEventsFromMappings(plutusMappings);
   } else {
+    // QBO Bills -> Inventory events (only inventory-account lines are used)
+    let allBills: QboBill[] = [];
+
     try {
-      if (
-        inventoryMappings.invManufacturing === '' ||
-        inventoryMappings.invFreight === '' ||
-        inventoryMappings.invDuty === '' ||
-        inventoryMappings.invMfgAccessories === ''
-      ) {
-        parsedBills = { events: [], poUnitsBySku: new Map() };
-      } else {
+      let startPosition = 1;
+      const pageSize = 100;
+
+      while (true) {
+        const page = await fetchBills(billsConnection, { maxResults: pageSize, startPosition });
+        if (page.updatedConnection) {
+          billsConnection = page.updatedConnection;
+        }
+
+        allBills = allBills.concat(page.bills);
+
+        if (allBills.length >= page.totalCount) break;
+        if (page.bills.length === 0) break;
+
+        startPosition += page.bills.length;
+      }
+    } catch (error) {
+      blocks.push({
+        code: 'BILLS_FETCH_ERROR',
+        message: 'Failed to fetch bills from QBO',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      parsedBills = { events: [], poUnitsBySku: new Map() };
+    }
+
+    try {
+      if (!parsedBills) {
         parsedBills = parseQboBillsToInventoryEvents(allBills, accountsById, inventoryMappings);
       }
     } catch (error) {
       blocks.push({
-        code: 'BILL_PARSE_ERROR',
+        code: 'BILLS_PARSE_ERROR',
         message: 'Failed to parse bills into inventory events',
         details: { error: error instanceof Error ? error.message : String(error) },
       });
@@ -287,11 +413,24 @@ export async function computeSettlementPreview(input: {
     pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver);
   } catch (error) {
     blocks.push({
-      code: 'BILL_PARSE_ERROR',
-      message: 'Failed to compute P&L allocation',
+      code: 'PNL_ALLOCATION_ERROR',
+      message:
+        error instanceof PnlAllocationNoWeightsError
+          ? 'Cannot allocate SKU-less fee buckets because there are no qualifying sales units (fees-only or refunds-only invoice)'
+          : 'Failed to compute P&L allocation',
       details: { error: error instanceof Error ? error.message : String(error) },
     });
-    pnlAllocation = { invoiceId, allocationsByBucket: {} as never };
+    pnlAllocation = {
+      invoiceId,
+      allocationsByBucket: {
+        amazonSellerFees: {},
+        amazonFbaFees: {},
+        amazonStorageFees: {},
+        amazonAdvertisingCosts: {},
+        amazonPromotions: {},
+        amazonFbaInventoryReimbursement: {},
+      },
+    };
   }
 
   // Principal groups for unit movements
@@ -412,43 +551,62 @@ export async function computeSettlementPreview(input: {
     units: s.units,
   }));
 
-  const replay = replayInventoryLedger({
-    parsedBills,
-    knownSales,
-    knownReturns,
-    computeSales: ledgerComputeSales,
-  });
+  const billsErrorCodes = new Set(['BILLS_FETCH_ERROR', 'BILLS_PARSE_ERROR']);
+  const hasBillsError = blocks.some((b) => billsErrorCodes.has(b.code));
 
-  for (const block of replay.blocks) {
+  let ledgerBlocks: LedgerBlock[] = [];
+  let computedCosts: SaleCost[] = [];
+  if (!hasBillsError) {
+    const replay = replayInventoryLedger({
+      parsedBills,
+      knownSales,
+      knownReturns,
+      computeSales: ledgerComputeSales,
+    });
+    ledgerBlocks = replay.blocks;
+    computedCosts = replay.computedCosts;
+  }
+
+  const missingCostBasisSkus = new Set<string>();
+  for (const b of ledgerBlocks) {
+    if (b.code !== 'MISSING_COST_BASIS') continue;
+    const details = b.details;
+    const skuValue = details ? details.sku : undefined;
+    if (typeof skuValue === 'string' && skuValue !== '') {
+      missingCostBasisSkus.add(skuValue);
+    }
+  }
+
+  for (const block of summarizeLedgerBlocks(ledgerBlocks)) {
     blocks.push(block);
   }
 
   const computedCostByKey = new Map<string, SaleCost>();
-  for (const cost of replay.computedCosts) {
+  for (const cost of computedCosts) {
     const key = `${cost.orderId}::${cost.sku}`;
     computedCostByKey.set(key, cost);
   }
 
   const computedSales: ProcessingSale[] = [];
-  for (const sale of computeSales) {
-    const key = `${sale.orderId}::${sale.sku}`;
-    const cost = computedCostByKey.get(key);
-    if (!cost) {
-      blocks.push({
-        code: 'MISSING_COST_BASIS',
-        message: 'Missing computed cost basis for sale',
-        details: { orderId: sale.orderId, sku: sale.sku },
+  if (!hasBillsError) {
+    for (const sale of computeSales) {
+      const key = `${sale.orderId}::${sale.sku}`;
+      const cost = computedCostByKey.get(key);
+      if (!cost) {
+        if (!missingCostBasisSkus.has(sale.sku)) {
+          throw new Error(`Missing computed cost basis but no ledger block emitted: ${sale.orderId} ${sale.sku}`);
+        }
+        continue;
+      }
+      computedSales.push({
+        orderId: sale.orderId,
+        sku: sale.sku,
+        date: sale.date,
+        quantity: sale.units,
+        principalCents: sale.principalCents,
+        costByComponentCents: cost.costByComponentCents,
       });
-      continue;
     }
-    computedSales.push({
-      orderId: sale.orderId,
-      sku: sale.sku,
-      date: sale.date,
-      quantity: sale.units,
-      principalCents: sale.principalCents,
-      costByComponentCents: cost.costByComponentCents,
-    });
   }
 
   const salesCogsByBrand = sumCentsByBrandComponent(computedSales, skuToBrand);

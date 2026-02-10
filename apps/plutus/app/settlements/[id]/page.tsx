@@ -176,6 +176,13 @@ function formatMoney(amount: number, currency: string): string {
   return formatted;
 }
 
+function formatBlockDetails(details: Record<string, string | number> | undefined): string | null {
+  if (!details) return null;
+  const entries = Object.entries(details).filter(([key]) => key !== 'error');
+  if (entries.length === 0) return null;
+  return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
+}
+
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
   if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
   return <Badge variant="secondary">LMB {status}</Badge>;
@@ -563,21 +570,24 @@ function ProcessSettlementDialog({
                   </Card>
                 </div>
 
-                {preview.blocks.length > 0 && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
-                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                      {preview.blocks.map((b, idx) => (
-                        <li key={idx}>
-                          <span className="font-mono">{b.code}</span>: {b.message}
-                          {b.details && 'error' in b.details && (
-                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+	                {preview.blocks.length > 0 && (
+	                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+	                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
+	                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+	                      {preview.blocks.map((b, idx) => (
+	                        <li key={idx}>
+	                          <span className="font-mono">{b.code}</span>: {b.message}
+	                          {b.details && 'error' in b.details && (
+	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+	                          )}
+	                          {formatBlockDetails(b.details) && (
+	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+	                          )}
+	                        </li>
+	                      ))}
+	                    </ul>
+	                  </div>
+	                )}
 
                 {preview.blocks.length === 0 && (
                   <Button onClick={() => void handlePost()} disabled={isPosting}>
@@ -969,18 +979,21 @@ export default function SettlementDetailPage() {
                               {previewData.blocks.length} blocking issue{previewData.blocks.length === 1 ? '' : 's'}
                             </span>
                           </div>
-                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                            {previewData.blocks.map((b, idx) => (
-                              <li key={idx}>
-                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+	                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+	                            {previewData.blocks.map((b, idx) => (
+	                              <li key={idx}>
+	                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+	                                {b.details && 'error' in b.details && (
+	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+	                                )}
+	                                {formatBlockDetails(b.details) && (
+	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+	                                )}
+	                              </li>
+	                            ))}
+	                          </ul>
+	                        </div>
+	                      )}
 
                       {/* COGS Journal Entry */}
                       {previewData.cogsJournalEntry.lines.length > 0 && (
