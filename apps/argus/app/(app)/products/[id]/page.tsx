@@ -272,7 +272,7 @@ export default async function ProductDetailPage({
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="font-mono text-muted-foreground">images</span>
                                   <Link
-                                    href={`/products/${target.id}/images`}
+                                    href={`/images/${target.id}`}
                                     className="text-2xs font-medium text-primary hover:underline"
                                   >
                                     Open Images

@@ -28,7 +28,7 @@ export function ProductDetailTabs(props: {
 
         {props.imagesEnabled ? (
           <Link
-            href={`/products/${props.targetId}/images`}
+            href={`/images/${props.targetId}`}
             className={cn(
               'ml-1 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
               props.activeTab === 'images'
