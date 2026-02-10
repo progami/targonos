@@ -40,6 +40,7 @@ type UploadResult = {
   uploadedAt: string;
   invoiceSummaries: Array<{
     invoiceId: string;
+    marketplace: 'amazon.com' | 'amazon.co.uk';
     rowCount: number;
     minDate: string;
     maxDate: string;
@@ -226,10 +227,17 @@ export default function AuditDataPage() {
                           <TableHead className="text-emerald-700 dark:text-emerald-400 text-right">SKUs</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {uploadResult.invoiceSummaries.map((s) => (
-                          <TableRow key={s.invoiceId}>
-                            <TableCell className="font-mono text-sm">{s.invoiceId}</TableCell>
+                        <TableBody>
+                          {uploadResult.invoiceSummaries.map((s) => (
+                          <TableRow key={`${s.marketplace}:${s.invoiceId}`}>
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {s.marketplace === 'amazon.com' ? 'US' : 'UK'}
+                                </Badge>
+                                <span>{s.invoiceId}</span>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-sm">
                               {s.minDate} &ndash; {s.maxDate}
                             </TableCell>
