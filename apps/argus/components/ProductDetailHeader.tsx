@@ -18,16 +18,20 @@ export function ProductDetailHeader(props: {
   target: ProductDetailHeaderTarget;
   activeTab: ProductDetailTab;
   actions?: React.ReactNode;
+  backHref?: string;
+  backLabel?: string;
 }) {
   const imagesEnabled = props.target.owner === 'OURS';
+  const backHref = props.backHref ? props.backHref : '/products';
+  const backLabel = props.backLabel ? props.backLabel : 'Products';
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/products">
+          <Link href={backHref}>
             <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-            Products
+            {backLabel}
           </Link>
         </Button>
       </div>
@@ -67,4 +71,3 @@ export function ProductDetailHeader(props: {
     </div>
   );
 }
-

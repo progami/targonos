@@ -10,6 +10,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/products': 'Products',
   '/rankings': 'Rankings',
   '/bestsellers': 'Bestsellers',
+  '/images': 'Image Manager',
   '/alerts': 'Alerts',
   '/imports': 'Imports',
 };
