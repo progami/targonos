@@ -129,7 +129,12 @@ export class S3Service {
             }
             else if (file instanceof Readable) {
                 uploadBody = file;
-                fileSize = 0;
+                if (typeof options.contentLength === 'number' && Number.isFinite(options.contentLength) && options.contentLength > 0) {
+                    fileSize = options.contentLength;
+                }
+                else {
+                    fileSize = 0;
+                }
             }
             else {
                 throw new Error('Unsupported file type for upload');
@@ -153,6 +158,9 @@ export class S3Service {
                 CacheControl: options.cacheControl || this.getCacheControl(key),
                 ContentDisposition: options.contentDisposition || this.getContentDisposition(key),
             };
+            if (fileSize > 0) {
+                uploadParams.ContentLength = fileSize;
+            }
             if (options.tags) {
                 uploadParams.Tagging = Object.entries(options.tags)
                     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
@@ -160,6 +168,19 @@ export class S3Service {
             }
             const shouldUseMultipartUpload = fileSize === 0 || fileSize > 5 * 1024 * 1024;
             if (shouldUseMultipartUpload) {
+                if (file instanceof Readable && fileSize > 0) {
+                    const command = new PutObjectCommand(uploadParams);
+                    const result = await this.client.send(command);
+                    return {
+                        key,
+                        bucket: this.bucket,
+                        url: this.getPublicUrl(key),
+                        etag: result.ETag?.replace(/"/g, '') || '',
+                        size: fileSize,
+                        contentType: contentType,
+                        versionId: result.VersionId,
+                    };
+                }
                 const upload = new Upload({
                     client: this.client,
                     params: uploadParams,

@@ -236,6 +236,7 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
     const s3Service = getS3Service()
     await s3Service.uploadFile(stream.pipe(sizeGuard), s3KeyRaw, {
       contentType: fileTypeRaw,
+      contentLength: parsedFileSize,
       metadata: {
         purchaseOrderId: id,
         tenantCode,
