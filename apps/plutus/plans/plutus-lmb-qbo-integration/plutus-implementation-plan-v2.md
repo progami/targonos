@@ -46,7 +46,7 @@ Therefore:
 
 ---
 
-## Current Status (2026-02-09)
+## Current Status (2026-02-10)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -61,6 +61,18 @@ Therefore:
 | Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
 
 **Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.
+
+### Implementation Notes (v1 Reality)
+
+The plan below includes some legacy design notes from earlier iterations. As of **2026-02-10**, the implemented v1 behavior is:
+
+- **Audit invoice identity is `(marketplace, invoiceId)`** (invoiceId is the CSV `Invoice` column, not a PO number).
+- Inventory costing in v1 is computed via **ledger replay** from parsed QBO bills + settlement unit movements; **there is no `SkuCostHistory` / `SkuCost` table** in the current Prisma schema.
+- Settlement preview shows **blocking issues** that must be fixed before posting:
+  - `PNL_ALLOCATION_ERROR`: SKU-less fee buckets exist, but there are **no** `Amazon Sales - Principal` rows with SKU + `quantity > 0` to use as allocation weights (fees-only/refunds-only invoice, or wrong invoice selected).
+  - `MISSING_COST_BASIS`: Sales exist for a SKU but the inventory ledger has **no on-hand units/cost basis** at that point in time. The UI aggregates this by SKU (with occurrence counts) to avoid thousands of duplicate rows.
+  - `BILLS_FETCH_ERROR` / `BILLS_PARSE_ERROR`: Bills could not be retrieved/parsed, so inventory costing cannot proceed (avoid cascading cost-basis noise until bills are fixed).
+- **Opening Snapshots are NOT implemented in v1**. Where this plan mentions an “Opening Snapshot” button/workflow, treat it as *planned/deferred*; current v1 requires entering historical bills (or starting settlement processing only after bill history exists).
 
 ---
 
@@ -108,7 +120,7 @@ Settlement Report                    Manual Inventory Count
 
 **Historical Catch-Up:** New users starting from a specific date must either:
 1. Process all historical bills and settlements from the beginning, OR
-2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation)
+2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation) (planned/deferred; not implemented in v1)
 
 See Setup Wizard Step 8 and V1 Constraint #9.
 

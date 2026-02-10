@@ -13,7 +13,9 @@ export type ProcessingBlock =
         | 'ORDER_ALREADY_PROCESSED'
         | 'REFUND_UNMATCHED'
         | 'REFUND_PARTIAL'
-        | 'BILL_PARSE_ERROR';
+        | 'BILLS_FETCH_ERROR'
+        | 'BILLS_PARSE_ERROR'
+        | 'PNL_ALLOCATION_ERROR';
       message: string;
       details?: Record<string, string | number>;
     };
