@@ -158,7 +158,8 @@ export class S3Service {
                     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
                     .join('&');
             }
-            if (fileSize > 5 * 1024 * 1024) {
+            const shouldUseMultipartUpload = fileSize === 0 || fileSize > 5 * 1024 * 1024;
+            if (shouldUseMultipartUpload) {
                 const upload = new Upload({
                     client: this.client,
                     params: uploadParams,
