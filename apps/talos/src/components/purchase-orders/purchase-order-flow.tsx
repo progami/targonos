@@ -4430,13 +4430,14 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </thead>
                           <tbody>
                             {rows.map(row => {
-                              const key = `${stage}::${row.id}`
-                              const existing = row.doc
-                              const isUploading = Boolean(uploadingDoc[key])
-                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
+								const key = `${stage}::${row.id}`
+								const existing = row.doc
+								const isUploading = Boolean(uploadingDoc[key])
+								const uploadDisabled = isUploading || !canUpload
+								const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+								const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
 
-                              return (
+								return (
                                 <tr
                                   key={key}
                                   data-gate-key={gateKey ?? undefined}
@@ -4498,28 +4499,33 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           </a>
                                         </Button>
                                       )}
-                                      <label
-                                        className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-                                          canUpload
-                                            ? 'hover:bg-slate-100 cursor-pointer'
-                                            : 'opacity-50 cursor-not-allowed'
-                                        }`}
-                                      >
-                                        <Upload className="h-3 w-3" />
-                                        {existing ? 'Replace' : 'Upload'}
-                                        <input
-                                          type="file"
-                                          className="hidden"
-                                          disabled={isUploading || !canUpload}
-                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
-                                        />
-                                        {isUploading && (
-                                          <span className="text-xs text-muted-foreground ml-1">…</span>
-                                        )}
-                                      </label>
-                                    </div>
-                                  </td>
-                                </tr>
+										<label
+											className={`inline-flex items-center gap-1.5 rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+												isUploading
+													? 'opacity-70 cursor-wait'
+													: canUpload
+														? 'hover:bg-slate-100 cursor-pointer'
+														: 'opacity-50 cursor-not-allowed'
+											}`}
+											aria-busy={isUploading}
+											aria-disabled={uploadDisabled}
+										>
+											{isUploading ? (
+												<Loader2 className="h-3 w-3 animate-spin" />
+											) : (
+												<Upload className="h-3 w-3" />
+											)}
+											{isUploading ? 'Uploading…' : existing ? 'Replace' : 'Upload'}
+											<input
+												type="file"
+												className="hidden"
+												disabled={uploadDisabled}
+												onChange={e => void handleDocumentUpload(e, stage, row.id)}
+											/>
+										</label>
+									</div>
+								</td>
+							</tr>
                               )
                             })}
                           </tbody>
