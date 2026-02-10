@@ -25,6 +25,50 @@ function normalizeUrl(value: string | undefined): string | null {
   return trimmed;
 }
 
+function isVideoPlaceholderUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes('play-button');
+}
+
+function upgradeAmazonImageUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (!host.endsWith('media-amazon.com')) return url;
+  if (!parsed.pathname.includes('/images/I/')) return url;
+
+  const parts = parsed.pathname.split('/');
+  const file = parts[parts.length - 1];
+  if (!file) return url;
+
+  const firstDot = file.indexOf('.');
+  const lastDot = file.lastIndexOf('.');
+  if (firstDot <= 0 || lastDot <= firstDot) return url;
+
+  const imageId = file.slice(0, firstDot);
+  const extRaw = file.slice(lastDot + 1).toLowerCase();
+  const ext = extRaw === 'jpeg' ? 'jpg' : extRaw;
+  if (ext !== 'jpg' && ext !== 'png' && ext !== 'webp') return url;
+
+  parts[parts.length - 1] = `${imageId}._AC_SL1500_.${ext}`;
+  parsed.pathname = parts.join('/');
+  parsed.search = '';
+  parsed.hash = '';
+
+  return parsed.toString();
+}
+
+function normalizeListingImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (isVideoPlaceholderUrl(url)) return null;
+  return upgradeAmazonImageUrl(url);
+}
+
 function pickBestDynamicImageUrl(input: string): string | null {
   const decoded = decodeHtmlEntities(input.trim());
   if (!decoded.startsWith('{')) return null;
@@ -56,19 +100,19 @@ function pickBestDynamicImageUrl(input: string): string | null {
 
 function bestImageUrlFromImg($img: ReturnType<ReturnType<typeof load>>): string | null {
   const oldHires = normalizeUrl($img.attr('data-old-hires'));
-  if (oldHires) return oldHires;
+  if (oldHires) return normalizeListingImageUrl(oldHires);
 
   const dynamic = normalizeUrl($img.attr('data-a-dynamic-image'));
   if (dynamic) {
     const best = pickBestDynamicImageUrl(dynamic);
-    if (best) return best;
+    if (best) return normalizeListingImageUrl(best);
   }
 
   const src = normalizeUrl($img.attr('src'));
-  if (src) return src;
+  if (src) return normalizeListingImageUrl(src);
 
   const dataSrc = normalizeUrl($img.attr('data-src'));
-  if (dataSrc) return dataSrc;
+  if (dataSrc) return normalizeListingImageUrl(dataSrc);
 
   return null;
 }
@@ -129,7 +173,7 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
 
   const normalized: AsinExtracted = {
     bullets,
-    imageUrls: dedupePreserveOrder(imageUrls),
+    imageUrls: dedupePreserveOrder(imageUrls).slice(0, 9),
   };
 
   if (titleText) normalized.title = titleText;
