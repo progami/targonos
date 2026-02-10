@@ -15,7 +15,7 @@ export function ProductDetailTabs(props: {
     <div className="flex items-center justify-between gap-3">
       <div className="inline-flex rounded-full border bg-muted/40 p-1">
         <Link
-          href={`/products/${props.targetId}`}
+          href={`/monitoring/${props.targetId}`}
           className={cn(
             'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
             props.activeTab === 'monitoring'

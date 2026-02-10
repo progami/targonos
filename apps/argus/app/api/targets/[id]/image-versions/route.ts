@@ -82,12 +82,12 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
 
   const target = await prisma.watchTarget.findUnique({
     where: { id },
-    select: { id: true, type: true, owner: true, activeImageVersionId: true },
+    select: { id: true, owner: true, activeImageVersionId: true },
   });
   if (!target) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  if (target.type !== 'ASIN' || target.owner !== 'OURS') {
+  if (target.owner !== 'OURS') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -123,12 +123,12 @@ export const POST = withArgusAuth(async (request, session, context: { params: Pr
 
   const target = await prisma.watchTarget.findUnique({
     where: { id },
-    select: { id: true, type: true, owner: true },
+    select: { id: true, owner: true },
   });
   if (!target) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  if (target.type !== 'ASIN' || target.owner !== 'OURS') {
+  if (target.owner !== 'OURS') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

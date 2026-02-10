@@ -13,12 +13,6 @@ enum Marketplace {
   UK
 }
 
-enum WatchTargetType {
-  ASIN
-  SEARCH
-  BROWSE_BESTSELLERS
-}
-
 enum WatchTargetOwner {
   OURS
   COMPETITOR
@@ -39,10 +33,6 @@ enum CaptureJobStatus {
 
 enum ArtifactKind {
   ASIN_FULLPAGE
-  SEARCH_TOP
-  SEARCH_RESULT_CARD
-  BROWSE_TOP
-  BROWSE_RESULT_CARD
 }
 
 enum ImportRunStatus {
@@ -57,18 +47,12 @@ enum ImportSource {
 
 model WatchTarget {
   id             String            @id @default(cuid())
-  type           WatchTargetType
   marketplace    Marketplace
   owner          WatchTargetOwner
   source         WatchTargetSource @default(MANUAL)
   label          String
 
-  asin           String?
-  keyword        String?
-  trackedAsins   String[]          @default([])
-
-  sourceUrl      String?
-  browseNodeId   String?
+  asin           String
 
   cadenceMinutes Int               @default(360)
   enabled        Boolean           @default(true)
@@ -84,12 +68,10 @@ model WatchTarget {
   runs           CaptureRun[]
   alertRules     AlertRule[]
 
-  @@unique([marketplace, type, asin])
-  @@unique([marketplace, type, keyword])
-  @@unique([marketplace, type, sourceUrl])
-  @@index([type])
+  @@unique([marketplace, asin])
   @@index([marketplace])
   @@index([owner])
+  @@index([source])
   @@index([enabled])
   @@index([nextRunAt])
   @@index([activeImageVersionId])
@@ -109,6 +91,9 @@ model CaptureJob {
   finishedAt   DateTime?
   runId        String?
   run          CaptureRun?      @relation(fields: [runId], references: [id], onDelete: SetNull)
+  acknowledgedAt         DateTime?
+  acknowledgedByUserId   String?
+  acknowledgedByEmail    String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -131,6 +116,9 @@ model CaptureRun {
   changedFromRun       CaptureRun?  @relation("ChangedFrom", fields: [changedFromRunId], references: [id], onDelete: SetNull)
   changedToRuns        CaptureRun[] @relation("ChangedFrom")
   changeSummary        Json?
+  acknowledgedAt         DateTime?
+  acknowledgedByUserId   String?
+  acknowledgedByEmail    String?
   notes                String?
 
   artifacts            RunArtifact[]
@@ -162,7 +150,7 @@ model RunArtifact {
 
 model AlertRule {
   id         String      @id @default(cuid())
-  targetId   String
+  targetId   String      @unique
   target     WatchTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
   enabled    Boolean     @default(true)
   thresholds Json
@@ -170,8 +158,6 @@ model AlertRule {
   updatedAt  DateTime    @updatedAt
 
   events     AlertEvent[]
-
-  @@index([targetId])
 }
 
 model AlertEvent {
@@ -184,6 +170,9 @@ model AlertEvent {
   toEmails    String[]   @default([])
   subject     String
   bodyPreview String
+  acknowledgedAt         DateTime?
+  acknowledgedByUserId   String?
+  acknowledgedByEmail    String?
 
   @@unique([ruleId, runId])
   @@index([sentAt])

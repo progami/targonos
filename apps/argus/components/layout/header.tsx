@@ -6,12 +6,9 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Dashboard',
-  '/products': 'Products',
-  '/rankings': 'Rankings',
-  '/bestsellers': 'Bestsellers',
+  '/attention': 'Attention',
+  '/monitoring': 'Monitoring',
   '/images': 'Image Manager',
-  '/alerts': 'Alerts',
   '/imports': 'Imports',
 };
 
@@ -23,7 +20,7 @@ export function Header() {
   const stripped = pathname.replace(basePath, '') || '/';
   const segments = stripped.split('/').filter(Boolean);
 
-  let breadcrumb = 'Dashboard';
+  let breadcrumb = 'Attention';
   if (segments.length > 0) {
     const firstSegment = '/' + segments[0];
     breadcrumb = ROUTE_LABELS[firstSegment] ?? segments[0];

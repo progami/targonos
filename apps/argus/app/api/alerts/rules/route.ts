@@ -3,17 +3,8 @@ import { z } from 'zod';
 import { withArgusAuth } from '@/lib/api/auth';
 import { prisma } from '@/lib/prisma';
 
-function defaultThresholdsForType(type: string) {
-  if (type === 'ASIN') {
-    return { titleChanged: true, priceDeltaPct: 5, priceDeltaAbs: 1, ratingDelta: 0.2 };
-  }
-  if (type === 'SEARCH') {
-    return { enterExitTop10: true, positionDelta: 5 };
-  }
-  if (type === 'BROWSE_BESTSELLERS') {
-    return { enterExitTop100: true, positionDelta: 10 };
-  }
-  return {};
+function defaultAsinThresholds() {
+  return { titleChanged: true, priceDeltaPct: 5, priceDeltaAbs: 1, imagesChanged: true };
 }
 
 const CreateRuleSchema = z.object({
@@ -41,14 +32,18 @@ export const POST = withArgusAuth(async (request) => {
     return NextResponse.json({ error: 'Target not found' }, { status: 404 });
   }
 
-  const rule = await prisma.alertRule.create({
-    data: {
+  const rule = await prisma.alertRule.upsert({
+    where: { targetId: target.id },
+    create: {
       targetId: target.id,
       enabled: input.enabled ?? false,
-      thresholds: input.thresholds ?? defaultThresholdsForType(target.type),
+      thresholds: input.thresholds ?? defaultAsinThresholds(),
+    },
+    update: {
+      enabled: input.enabled,
+      thresholds: input.thresholds,
     },
   });
 
   return NextResponse.json({ rule }, { status: 201 });
 });
-
