@@ -94,6 +94,47 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     categoryMap.set(entry.costName, (categoryMap.get(entry.costName) ?? 0) + totalCost)
   }
 
+  const inventoryLots = await prisma.inventoryTransaction.findMany({
+    where: { purchaseOrderId: id },
+    select: { lotRef: true },
+    distinct: ['lotRef'],
+  })
+
+  const lotRefs = inventoryLots
+    .map(row => row.lotRef)
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+  if (lotRefs.length > 0) {
+    const storageLedgerRows = await prisma.storageLedger.findMany({
+      where: {
+        lotRef: { in: lotRefs },
+        isCostCalculated: true,
+      },
+      select: { totalStorageCost: true },
+    })
+
+    let storageLedgerTotal = 0
+    for (const row of storageLedgerRows) {
+      const value = Number(row.totalStorageCost)
+      if (!Number.isFinite(value) || value <= 0) continue
+      storageLedgerTotal += value
+    }
+
+    if (storageLedgerTotal > 0) {
+      totals.storage += storageLedgerTotal
+      totals.total += storageLedgerTotal
+
+      if (!breakdownByCategory.has(CostCategory.Storage)) {
+        breakdownByCategory.set(CostCategory.Storage, new Map<string, number>())
+      }
+
+      const categoryMap = breakdownByCategory.get(CostCategory.Storage)
+      if (categoryMap) {
+        categoryMap.set('Storage', (categoryMap.get('Storage') ?? 0) + storageLedgerTotal)
+      }
+    }
+  }
+
   const toBreakdown = (category: CostCategory): CostBreakdownRow[] => {
     const categoryMap = breakdownByCategory.get(category)
     if (!categoryMap) return []
@@ -118,4 +159,3 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     },
   })
 })
-
