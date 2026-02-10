@@ -222,9 +222,24 @@ export function buildInventoryEventsFromMappings(
 
   for (const mapping of mappings) {
     for (const line of mapping.lines) {
+      if (
+        line.component !== 'manufacturing' &&
+        line.component !== 'freight' &&
+        line.component !== 'duty' &&
+        line.component !== 'mfgAccessories'
+      ) {
+        continue;
+      }
+
       const component = line.component as InventoryComponent;
 
-      if (component === 'manufacturing' && line.sku && line.quantity && line.quantity > 0) {
+      if (component === 'manufacturing') {
+        if (!line.sku || !line.quantity || line.quantity <= 0) {
+          throw new Error(
+            `Manufacturing bill mapping line requires sku+quantity: billId=${mapping.qboBillId} lineId=${line.qboLineId}`,
+          );
+        }
+
         // Per-SKU manufacturing event
         addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
         events.push({
@@ -235,27 +250,18 @@ export function buildInventoryEventsFromMappings(
           units: line.quantity,
           costCents: line.amountCents,
         });
-      } else if (component !== 'manufacturing' && line.sku) {
-        // Per-SKU cost event (freight/duty/accessories)
-        events.push({
-          kind: 'cost',
-          date: mapping.billDate,
-          poNumber: mapping.poNumber,
-          component,
-          costCents: line.amountCents,
-          sku: line.sku,
-        });
-      } else {
-        // No SKU assigned — fallback to brand-level (no-op in ledger)
-        events.push({
-          kind: 'brand_cost',
-          date: mapping.billDate,
-          poNumber: mapping.poNumber,
-          brandId: mapping.brandId,
-          component,
-          costCents: line.amountCents,
-        });
+        continue;
       }
+
+      // Cost-only components (freight/duty/accessories)
+      events.push({
+        kind: 'cost',
+        date: mapping.billDate,
+        poNumber: mapping.poNumber,
+        component,
+        costCents: line.amountCents,
+        ...(line.sku ? { sku: line.sku } : {}),
+      });
     }
   }
 

@@ -353,7 +353,16 @@ export async function computeSettlementPreview(input: {
   });
 
   if (plutusMappings.length > 0) {
-    parsedBills = buildInventoryEventsFromMappings(plutusMappings);
+    try {
+      parsedBills = buildInventoryEventsFromMappings(plutusMappings);
+    } catch (error) {
+      blocks.push({
+        code: 'BILLS_PARSE_ERROR',
+        message: 'Failed to build inventory events from bill mappings',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      parsedBills = { events: [], poUnitsBySku: new Map() };
+    }
   } else {
     // QBO Bills -> Inventory events (only inventory-account lines are used)
     let allBills: QboBill[] = [];

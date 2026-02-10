@@ -91,6 +91,13 @@ export async function POST(req: NextRequest) {
       const sku = typeof line.sku === 'string' && line.sku !== '' ? line.sku : null;
       const quantity = typeof line.quantity === 'number' && line.quantity > 0 ? line.quantity : null;
 
+      if (line.component === 'manufacturing' && (!sku || !quantity)) {
+        return NextResponse.json(
+          { error: 'Manufacturing lines require sku and quantity' },
+          { status: 400 },
+        );
+      }
+
       if (sku && quantity) {
         description = `${sku} x ${quantity} units`;
       } else if (sku) {

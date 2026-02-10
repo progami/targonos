@@ -10,6 +10,7 @@ import {
   createEmptyLedgerSnapshot,
   replayInventoryLedger,
 } from '../lib/inventory/ledger';
+import { buildInventoryEventsFromMappings } from '../lib/inventory/qbo-bills';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 
 function test(name: string, fn: () => void) {
@@ -147,6 +148,39 @@ test('ledger computes proportional manufacturing COGS', () => {
   assert.equal(replay.blocks.length, 0);
   assert.equal(replay.computedCosts.length, 1);
   assert.equal(replay.computedCosts[0]?.costByComponentCents.manufacturing, 200);
+});
+
+test('bill mappings allocate non-sku costs by PO units', () => {
+  const parsed = buildInventoryEventsFromMappings([
+    {
+      qboBillId: 'B-1',
+      poNumber: 'PO-1',
+      brandId: 'brand',
+      billDate: '2026-02-01',
+      lines: [
+        { qboLineId: '1', component: 'manufacturing', amountCents: 1000, sku: 'SKU-A', quantity: 1 },
+        { qboLineId: '2', component: 'manufacturing', amountCents: 2000, sku: 'SKU-B', quantity: 2 },
+        { qboLineId: '3', component: 'freight', amountCents: 300, sku: null, quantity: null },
+        { qboLineId: '4', component: 'warehousing3pl', amountCents: 999, sku: null, quantity: null },
+      ],
+    },
+  ]);
+
+  const replay = replayInventoryLedger({
+    parsedBills: parsed,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [],
+  });
+
+  const stateA = replay.snapshot.bySku.get('SKU-A');
+  const stateB = replay.snapshot.bySku.get('SKU-B');
+  assert.equal(stateA?.units, 1);
+  assert.equal(stateB?.units, 2);
+
+  // Freight should be allocated by units (SKU-A:1, SKU-B:2) => 100/200 cents.
+  assert.equal(stateA?.valueByComponentCents.freight, 100);
+  assert.equal(stateB?.valueByComponentCents.freight, 200);
 });
 
 process.stdout.write('All tests passed.\n');
