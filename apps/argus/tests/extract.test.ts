@@ -36,7 +36,7 @@ describe('extractAsinFields', () => {
     expect(normalized.rating).toBe(4.5);
     expect(normalized.reviewCount).toBe(1234);
     expect(normalized.bullets).toEqual(['Bullet 1', 'Bullet 2']);
-    expect(normalized.imageUrls).toEqual(['https://example.com/alt.jpg', 'https://example.com/landing.jpg']);
+    expect(normalized.imageUrls).toEqual(['https://example.com/landing.jpg', 'https://example.com/alt.jpg']);
   });
 
   test('handles fallback price selectors', () => {

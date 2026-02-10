@@ -10,6 +10,17 @@ export type AsinExtracted = {
   imageUrls: string[];
 };
 
+function dedupePreserveOrder(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const url of urls) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
 export function extractAsinFields(html: string): { raw: Record<string, unknown>; normalized: AsinExtracted } {
   const $ = load(html);
 
@@ -53,7 +64,7 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
 
   const normalized: AsinExtracted = {
     bullets,
-    imageUrls: Array.from(new Set(imageUrls)).sort(),
+    imageUrls: dedupePreserveOrder(imageUrls),
   };
 
   if (titleText) normalized.title = titleText;

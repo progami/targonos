@@ -76,6 +76,10 @@ model WatchTarget {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
+  activeImageVersionId String?
+  activeImageVersion   ListingImageVersion?   @relation("TargetActiveImageVersion", fields: [activeImageVersionId], references: [id], onDelete: SetNull)
+  imageVersions        ListingImageVersion[]  @relation("TargetImageVersions")
+
   jobs           CaptureJob[]
   runs           CaptureRun[]
   alertRules     AlertRule[]
@@ -88,6 +92,7 @@ model WatchTarget {
   @@index([owner])
   @@index([enabled])
   @@index([nextRunAt])
+  @@index([activeImageVersionId])
 }
 
 model CaptureJob {
@@ -203,3 +208,47 @@ model ImportRun {
   @@index([source])
 }
 
+model ListingImageBlob {
+  sha256      String   @id
+  s3Key       String
+  contentType String
+  byteSize    Int
+  width       Int
+  height      Int
+  createdAt   DateTime @default(now())
+
+  slots       ListingImageVersionSlot[]
+}
+
+model ListingImageVersion {
+  id            String   @id @default(cuid())
+  targetId      String
+  target        WatchTarget @relation("TargetImageVersions", fields: [targetId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  label         String?
+  notes         String?
+  createdByUserId String
+  createdByEmail  String?
+  createdAt     DateTime @default(now())
+
+  slots         ListingImageVersionSlot[]
+  activeForTargets WatchTarget[] @relation("TargetActiveImageVersion")
+
+  @@unique([targetId, versionNumber])
+  @@index([targetId, createdAt])
+}
+
+model ListingImageVersionSlot {
+  id        String   @id @default(cuid())
+  versionId String
+  version   ListingImageVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  position  Int
+  fileName  String
+  blobSha256 String
+  blob      ListingImageBlob @relation(fields: [blobSha256], references: [sha256], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@unique([versionId, position])
+  @@index([versionId])
+  @@index([blobSha256])
+}

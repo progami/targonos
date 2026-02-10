@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev -p 3016",
     "clean": "rm -rf .next out dist",
-    "build": "prisma generate --schema prisma/schema.prisma && next build",
+    "build": "pnpm -C ../talos db:generate && prisma generate --schema prisma/schema.prisma && next build",
     "start": "next start",
     "lint": "eslint app components lib",
-    "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit",
+    "type-check": "pnpm -C ../talos db:generate && prisma generate --schema prisma/schema.prisma && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
@@ -38,6 +38,7 @@
     "@targon/logger": "workspace:*",
     "@targon/prisma-argus": "workspace:*",
     "@targon/prisma-talos": "workspace:*",
+    "archiver": "^7.0.1",
     "cheerio": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -56,6 +57,7 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/node": "^24.3.0",
     "@types/nodemailer": "^6.4.17",
     "@types/react": "19.1.10",
