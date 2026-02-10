@@ -2186,6 +2186,38 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return null
   }, [order])
 
+  const formatValidationToastMessage = (payload: unknown, fallback: string): string => {
+    if (!payload || typeof payload !== 'object') return fallback
+
+    const candidate = payload as { error?: unknown; details?: unknown }
+    const rawError = typeof candidate.error === 'string' ? candidate.error.trim() : ''
+    const details = candidate.details
+
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      return rawError.length > 0 ? rawError : fallback
+    }
+
+    const messages = Object.values(details as Record<string, unknown>)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map(value => value.trim())
+
+    const uniqueMessages = Array.from(new Set(messages))
+    if (uniqueMessages.length === 0) {
+      return rawError.length > 0 ? rawError : fallback
+    }
+
+    const preview = uniqueMessages.slice(0, 3)
+    const remaining = uniqueMessages.length - preview.length
+    const summary =
+      remaining > 0 ? `${preview.join('; ')} (and ${remaining} more)` : preview.join('; ')
+
+    if (rawError.length > 0 && rawError !== 'Validation failed') {
+      return `${rawError}: ${summary}`
+    }
+
+    return `Fix required: ${summary}`
+  }
+
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
 
@@ -2252,7 +2284,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           }
         }
 
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to transition order')
+        toast.error(formatValidationToastMessage(payload, 'Failed to transition order'))
         return false
       }
 
@@ -2319,7 +2351,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             jumpToGateKey(firstKey)
           }
         }
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to receive inventory')
+        toast.error(formatValidationToastMessage(payload, 'Failed to receive inventory'))
         return
       }
 
@@ -2765,7 +2797,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             jumpToGateKey(firstKey)
           }
         }
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate PDF')
+        toast.error(formatValidationToastMessage(payload, 'Failed to generate PDF'))
         return
       }
 
@@ -2801,7 +2833,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           }
         }
 
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate shipping marks')
+        toast.error(formatValidationToastMessage(payload, 'Failed to generate shipping marks'))
         return
       }
 
@@ -5377,7 +5409,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       {storageCostRows.length === 0 && manualStorageCosts.length === 0 && warehouseCostEditing !== 'storage' && (
                                         <tr>
                                           <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
-                                            No storage costs recorded.
+                                            Storage costs are calculated automatically after inventory is received (and storage rates are configured). Add a manual adjustment if needed.
                                           </td>
                                         </tr>
                                       )}
