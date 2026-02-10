@@ -137,7 +137,7 @@ type SettlementProcessingPreview = {
   pnlJournalEntry: JePreview;
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -676,7 +676,7 @@ export default function SettlementDetailPage() {
   });
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlement Details" />;
+    return <NotConnectedScreen title="Settlement Details" error={connection.error} />;
   }
 
   async function handleRollback() {

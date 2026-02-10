@@ -54,7 +54,7 @@ type SettlementsResponse = {
   };
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
 type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
 
@@ -338,7 +338,7 @@ export default function SettlementsPage() {
   });
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlements" />;
+    return <NotConnectedScreen title="Settlements" error={connection.error} />;
   }
 
   return (

@@ -55,7 +55,7 @@ type ReconciliationResult = {
   rows: ReconciliationRow[];
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
@@ -190,7 +190,7 @@ export default function ReconciliationPage() {
   );
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Reconciliation" />;
+    return <NotConnectedScreen title="Reconciliation" error={connection.error} />;
   }
 
   return (
@@ -461,4 +461,3 @@ export default function ReconciliationPage() {
     </main>
   );
 }
-
