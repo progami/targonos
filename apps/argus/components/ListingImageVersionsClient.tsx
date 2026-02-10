@@ -24,6 +24,7 @@ import {
   ExternalLink,
   ImageIcon,
   Loader2,
+  Play,
   Plus,
   RefreshCw,
   Trash2,
@@ -66,6 +67,7 @@ type VersionDetail = {
 type LiveImages = {
   runId: string;
   capturedAt: string;
+  finalUrl: string;
   imageUrls: string[];
 };
 
@@ -102,6 +104,14 @@ function aspectRatio(width: number, height: number): string {
   if (height === 0) return '';
   const ratio = width / height;
   return ratio.toFixed(2);
+}
+
+function listingUrlFor(marketplace: string, asin: string): string | null {
+  const trimmed = asin.trim();
+  if (!trimmed) return null;
+  if (marketplace === 'US') return `https://www.amazon.com/dp/${trimmed}`;
+  if (marketplace === 'UK') return `https://www.amazon.co.uk/dp/${trimmed}`;
+  return null;
 }
 
 async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
@@ -165,6 +175,7 @@ export function ListingImageVersionsClient(props: {
   const [loadingSelected, setLoadingSelected] = useState(false);
   const [loadingActive, setLoadingActive] = useState(false);
   const [loadingLive, setLoadingLive] = useState(false);
+  const [queuingCapture, setQueuingCapture] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -173,6 +184,7 @@ export function ListingImageVersionsClient(props: {
   const [draftSlots, setDraftSlots] = useState<DraftSlot[]>([]);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftBusyKey, setDraftBusyKey] = useState<string | null>(null);
+  const [draftPrefilling, setDraftPrefilling] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
 
   const addFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -196,6 +208,43 @@ export function ListingImageVersionsClient(props: {
       if (prev) return prev;
       return initialSelectedVersionId({ activeId: nextActive, versions: nextVersions });
     });
+  }
+
+  async function refreshLive() {
+    setError(null);
+    setLoadingLive(true);
+    try {
+      const res = await fetch(withAppBasePath(`/api/targets/${props.targetId}/live-images`));
+      if (!res.ok) {
+        if (res.status === 404) {
+          setLive(null);
+          return;
+        }
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Request failed (${res.status})`);
+      }
+      const json = await res.json();
+      setLive(json as LiveImages);
+    } finally {
+      setLoadingLive(false);
+    }
+  }
+
+  async function captureNow() {
+    setError(null);
+    setQueuingCapture(true);
+    try {
+      const res = await fetch(withAppBasePath(`/api/targets/${props.targetId}/run-now`), { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Request failed (${res.status})`);
+      }
+      window.setTimeout(() => {
+        refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      }, 10_000);
+    } finally {
+      setQueuingCapture(false);
+    }
   }
 
   useEffect(() => {
@@ -265,56 +314,56 @@ export function ListingImageVersionsClient(props: {
 
   useEffect(() => {
     if (!canEdit) return;
-    let cancelled = false;
-    setLoadingLive(true);
-    setError(null);
-    fetch(withAppBasePath(`/api/targets/${props.targetId}/live-images`))
-      .then(async (res) => {
-        if (!res.ok) {
-          if (res.status === 404) return null;
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error ?? `Request failed (${res.status})`);
-        }
-        return res.json();
-      })
-      .then((json) => {
-        if (cancelled) return;
-        setLive(json as LiveImages | null);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoadingLive(false));
-
-    return () => {
-      cancelled = true;
-    };
+    refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.targetId, canEdit]);
 
-  function openNewVersionModal() {
+  async function openNewVersionModal() {
     setDraftError(null);
     setDraftLabel('');
     setDraftNotes('');
 
-    const baseSlots: DraftSlot[] = [];
-    const base = activeDetails;
-    if (base) {
-      for (const img of base.images) {
-        baseSlots.push({
-          key: `slot-${img.position}-${img.sha256}`,
-          fileName: img.fileName,
-          sha256: img.sha256,
-          contentType: img.contentType,
-          byteSize: img.byteSize,
-          width: img.width,
-          height: img.height,
-          s3PreviewUrl: img.url,
-          localPreviewUrl: null,
-          file: null,
-        });
-      }
-    }
+    setDraftPrefilling(true);
 
-    setDraftSlots(baseSlots);
-    setModalOpen(true);
+    const baseSlots: DraftSlot[] = [];
+    try {
+      let base: VersionDetail | null = activeDetails;
+      if (!base && activeId) {
+        const res = await fetch(withAppBasePath(`/api/image-versions/${activeId}`));
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? `Request failed (${res.status})`);
+        }
+        base = (await res.json()) as VersionDetail;
+        setActiveDetails(base);
+      }
+
+      if (base) {
+        for (const img of base.images) {
+          baseSlots.push({
+            key: `slot-${img.position}-${img.sha256}`,
+            fileName: img.fileName,
+            sha256: img.sha256,
+            contentType: img.contentType,
+            byteSize: img.byteSize,
+            width: img.width,
+            height: img.height,
+            s3PreviewUrl: img.url,
+            localPreviewUrl: null,
+            file: null,
+          });
+        }
+      }
+
+      setDraftSlots(baseSlots);
+      setModalOpen(true);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : String(e));
+      setDraftSlots([]);
+      setModalOpen(true);
+    } finally {
+      setDraftPrefilling(false);
+    }
   }
 
   function closeNewVersionModal() {
@@ -601,6 +650,41 @@ export function ListingImageVersionsClient(props: {
   const selectedItem = versions.find((v) => v.id === selectedId) ?? null;
   const selectedIsActive = Boolean(selectedItem && selectedItem.isActive);
 
+  const activeByPosition = new Map<number, VersionDetail['images'][number]>();
+  if (activeDetails) {
+    for (const img of activeDetails.images) {
+      activeByPosition.set(img.position, img);
+    }
+  }
+
+  let openListingUrl: string | null = null;
+  if (live) {
+    openListingUrl = live.finalUrl;
+  } else if (props.asin) {
+    openListingUrl = listingUrlFor(props.marketplace, props.asin);
+  }
+
+  let maxSlot = 0;
+  for (const pos of activeByPosition.keys()) {
+    if (pos > maxSlot) maxSlot = pos;
+  }
+  if (live && live.imageUrls.length > maxSlot) {
+    maxSlot = live.imageUrls.length;
+  }
+  if (maxSlot < 1) maxSlot = 1;
+  if (maxSlot > 9) maxSlot = 9;
+
+  const selectedCompliance = selectedDetails
+    ? evaluateListingImageCompliance(
+        selectedDetails.images.map((img) => ({
+          position: img.position,
+          byteSize: img.byteSize,
+          width: img.width,
+          height: img.height,
+        })),
+      )
+    : null;
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
       <Card className="lg:col-span-4">
@@ -616,8 +700,12 @@ export function ListingImageVersionsClient(props: {
                 <RefreshCw className="mr-1 h-3.5 w-3.5" />
                 Refresh
               </Button>
-              <Button size="sm" onClick={openNewVersionModal} disabled={draftSaving}>
-                <Plus className="mr-1 h-4 w-4" />
+              <Button
+                size="sm"
+                onClick={() => openNewVersionModal().catch((e) => setDraftError(e instanceof Error ? e.message : String(e)))}
+                disabled={draftSaving || draftPrefilling}
+              >
+                {draftPrefilling ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
                 New
               </Button>
             </div>
@@ -630,14 +718,23 @@ export function ListingImageVersionsClient(props: {
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <ImageIcon className="mb-2 h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">No versions yet.</p>
-              <Button size="sm" className="mt-3" onClick={openNewVersionModal}>
-                <Plus className="mr-1 h-4 w-4" />
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => openNewVersionModal().catch((e) => setDraftError(e instanceof Error ? e.message : String(e)))}
+                disabled={draftSaving || draftPrefilling}
+              >
+                {draftPrefilling ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
                 Create first version
               </Button>
             </div>
           ) : (
-            <ScrollArea className="h-[520px] pr-2">
-              <div className="space-y-2">
+            <>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Select a version to preview, download, or set active. New versions become active automatically.
+              </p>
+              <ScrollArea className="h-[520px] pr-2">
+                <div className="space-y-2">
                 {versions.map((v) => {
                   const active = selectedId === v.id;
                   return (
@@ -675,8 +772,9 @@ export function ListingImageVersionsClient(props: {
                     </button>
                   );
                 })}
-              </div>
-            </ScrollArea>
+                </div>
+              </ScrollArea>
+            </>
           )}
         </CardContent>
       </Card>
@@ -684,13 +782,142 @@ export function ListingImageVersionsClient(props: {
       <div className="lg:col-span-8 space-y-6">
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <CardTitle className="text-sm font-semibold">Preview</CardTitle>
+                <CardTitle className="text-sm font-semibold">Active vs Live</CardTitle>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {props.targetLabel}
                   {props.asin ? ` · ${props.marketplace} ${props.asin}` : ` · ${props.marketplace}`}
                 </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {openListingUrl && (
+                  <a
+                    href={openListingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Open listing
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => captureNow().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+                  disabled={queuingCapture}
+                >
+                  {queuingCapture ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
+                  Capture now
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+                  disabled={loadingLive}
+                >
+                  {loadingLive ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="hidden sm:block" />
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active</p>
+                {activeDetails ? (
+                  <Badge variant="success" className="text-2xs">v{activeDetails.version.versionNumber}</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-2xs">none</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live</p>
+                {live ? (
+                  <Badge variant="outline" className="text-2xs">{formatRelativeTime(live.capturedAt)}</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-2xs">no capture</Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {Array.from({ length: maxSlot }).map((_, idx) => {
+                const position = idx + 1;
+                const activeImg = activeByPosition.get(position) ?? null;
+                const liveUrl = live && live.imageUrls[position - 1] ? live.imageUrls[position - 1]! : null;
+
+                return (
+                  <div
+                    key={position}
+                    className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-[72px,1fr,1fr] sm:items-start"
+                  >
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      #{position}
+                      {position === 1 ? <span className="ml-1 text-2xs font-normal">(main)</span> : null}
+                    </div>
+
+                    <div className="min-w-0">
+                      {activeImg ? (
+                        <a href={activeImg.url} target="_blank" rel="noreferrer" className="block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={activeImg.url} alt={activeImg.fileName} className="h-32 w-full rounded-md border object-cover" />
+                        </a>
+                      ) : (
+                        <div className="flex h-32 w-full items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                          No active image
+                        </div>
+                      )}
+
+                      {activeImg && (
+                        <p className="mt-1 truncate text-2xs text-muted-foreground">
+                          {activeImg.width}x{activeImg.height} ({aspectRatio(activeImg.width, activeImg.height)}) · {bytesToSize(activeImg.byteSize)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      {liveUrl ? (
+                        <a href={liveUrl} target="_blank" rel="noreferrer" className="block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={liveUrl} alt={`Live ${position}`} className="h-32 w-full rounded-md border object-cover" />
+                        </a>
+                      ) : (
+                        <div className="flex h-32 w-full items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                          No live image
+                        </div>
+                      )}
+                      {liveUrl && (
+                        <p className="mt-1 truncate text-2xs text-muted-foreground">
+                          Captured {live ? formatRelativeTime(live.capturedAt) : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-semibold">Selected Version</CardTitle>
+                {!selectedItem ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground">Select a version on the left.</p>
+                ) : (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    v{selectedItem.versionNumber}
+                    {selectedItem.label ? ` · ${selectedItem.label}` : ''}
+                    {selectedItem.createdByEmail ? ` · ${selectedItem.createdByEmail}` : ''}
+                    {` · ${formatRelativeTime(selectedItem.createdAt)}`}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -699,118 +926,64 @@ export function ListingImageVersionsClient(props: {
                   onClick={() => setActiveSelected().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
                   disabled={!selectedId || selectedIsActive}
                 >
-                  Set active
+                  Set as active
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={downloadSelectedZip}
-                  disabled={!selectedId}
-                >
+                <Button variant="outline" size="sm" onClick={downloadSelectedZip} disabled={!selectedId}>
                   <Download className="mr-1 h-3.5 w-3.5" />
-                  ZIP
+                  Download ZIP
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected Version</p>
-                    {selectedItem && (
-                      <Badge variant={selectedItem.isActive ? 'success' : 'neutral'} className="text-2xs">
-                        v{selectedItem.versionNumber}
-                      </Badge>
-                    )}
-                  </div>
-                  {loadingSelected && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Loading
-                    </div>
-                  )}
-                </div>
+            {loadingSelected && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading
+              </div>
+            )}
 
-                {!selectedId ? (
-                  <p className="text-sm text-muted-foreground">Select a version to preview.</p>
-                ) : !selectedDetails ? (
-                  <p className="text-sm text-muted-foreground">No data.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {selectedDetails.images.map((img) => (
-                      <div key={`${img.sha256}-${img.position}`} className="rounded-lg border overflow-hidden bg-card">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img.url} alt={img.fileName} className="h-28 w-full object-cover" />
-                        <div className="p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-2xs font-medium">#{img.position}</span>
-                            <span className="text-2xs text-muted-foreground">{bytesToSize(img.byteSize)}</span>
-                          </div>
-                          <p className="mt-0.5 truncate text-2xs text-muted-foreground">
-                            {img.width}x{img.height} ({aspectRatio(img.width, img.height)})
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+            {!selectedId ? (
+              <p className="text-sm text-muted-foreground">Select a version to preview, download, or revert.</p>
+            ) : !selectedDetails ? (
+              <p className="text-sm text-muted-foreground">No data.</p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Setting active only updates Argus. It does not push changes to Amazon.
+                </p>
+
+                {selectedCompliance && selectedCompliance.setWarnings.length > 0 && (
+                  <div className="rounded-md border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">
+                    {selectedCompliance.setWarnings.join(' ')}
                   </div>
                 )}
-              </div>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live on Amazon</p>
-                    {live && (
-                      <Badge variant="outline" className="text-2xs">
-                        {formatRelativeTime(live.capturedAt)}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {loadingLive && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Loading
-                      </div>
-                    )}
-                    {live && live.imageUrls.length > 0 && (
-                      <a
-                        href={live.imageUrls[0]}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-2xs text-muted-foreground hover:text-foreground"
-                      >
-                        Open
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {!live ? (
-                  <p className="text-sm text-muted-foreground">No live capture yet.</p>
-                ) : live.imageUrls.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No images found in latest capture.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {live.imageUrls.slice(0, 9).map((url, idx) => (
-                      <div key={`${idx}-${url}`} className="rounded-lg border overflow-hidden bg-card">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt={`Live ${idx + 1}`} className="h-28 w-full object-cover" />
-                        <div className="p-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-2xs font-medium">#{idx + 1}</span>
-                            <span className="text-2xs text-muted-foreground">live</span>
-                          </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {selectedDetails.images.map((img) => (
+                    <a
+                      key={`${img.sha256}-${img.position}`}
+                      href={img.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border overflow-hidden bg-card hover:bg-muted/20"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.url} alt={img.fileName} className="h-28 w-full object-cover" />
+                      <div className="p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-2xs font-medium">#{img.position}</span>
+                          <span className="text-2xs text-muted-foreground">{bytesToSize(img.byteSize)}</span>
                         </div>
+                        <p className="mt-0.5 truncate text-2xs text-muted-foreground">
+                          {img.width}x{img.height} ({aspectRatio(img.width, img.height)})
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </a>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
