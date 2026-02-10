@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   Building2,
   Edit,
@@ -41,7 +40,6 @@ interface Warehouse {
 }
 
 export default function WarehousesPanel() {
-  const router = useRouter()
   const pageState = usePageState(PAGE_KEY)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [loading, setLoading] = useState(true)
