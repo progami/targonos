@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
-import { invoiceMarketsMatchMarketplace, selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -91,6 +91,7 @@ type SettlementDetailResponse = {
 
 type InvoiceSummary = {
   invoiceId: string;
+  marketplace: MarketplaceId;
   rowCount: number;
   minDate: string;
   maxDate: string;
@@ -205,20 +206,24 @@ async function fetchAuditData(): Promise<AuditDataResponse> {
   return res.json();
 }
 
-async function fetchPreview(settlementId: string, invoiceId: string): Promise<SettlementProcessingPreview> {
+async function fetchPreview(
+  settlementId: string,
+  invoiceId: string,
+  marketplace: MarketplaceId,
+): Promise<SettlementProcessingPreview> {
   const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/preview`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify({ invoiceId, marketplace }),
   });
   return res.json();
 }
 
-async function postSettlement(settlementId: string, invoiceId: string) {
+async function postSettlement(settlementId: string, invoiceId: string, marketplace: MarketplaceId) {
   const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/process`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify({ invoiceId, marketplace }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -291,6 +296,10 @@ function ProcessSettlementDialog({
   });
 
   const invoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
+  const marketplaceInvoices = useMemo(
+    () => invoices.filter((inv) => inv.marketplace === marketplaceId),
+    [invoices, marketplaceId],
+  );
 
   const invoiceRecommendation = useMemo(() => {
     if (periodStart === null || periodEnd === null) {
@@ -307,12 +316,11 @@ function ProcessSettlementDialog({
 
   // Compute meta for each invoice
   const invoicesWithMeta = useMemo(() => {
-    return invoices.map((inv) => {
+    return marketplaceInvoices.map((inv) => {
       const invoiceDates = extractDatesFromInvoiceId(inv.invoiceId);
-      const marketMatch = invoiceMarketsMatchMarketplace(inv.markets, marketplaceId);
       let dateLabel: string | null = null;
 
-      if (invoiceDates && marketMatch) {
+      if (invoiceDates) {
         dateLabel = `${invoiceDates.start} to ${invoiceDates.end}`;
       }
 
@@ -320,9 +328,9 @@ function ProcessSettlementDialog({
       const candidate =
         invoiceRecommendation.kind === 'ambiguous' && invoiceRecommendation.candidateInvoiceIds.includes(inv.invoiceId);
 
-      return { ...inv, marketMatch, recommended, candidate, dateLabel };
+      return { ...inv, recommended, candidate, dateLabel };
     });
-  }, [invoiceRecommendation, invoices, marketplaceId]);
+  }, [invoiceRecommendation, marketplaceInvoices]);
 
   // Auto-select recommended invoice when dialog opens and no invoice is selected
   useEffect(() => {
@@ -349,7 +357,7 @@ function ProcessSettlementDialog({
     setIsPreviewLoading(true);
 
     try {
-      const result = await fetchPreview(settlementId, selectedInvoice);
+      const result = await fetchPreview(settlementId, selectedInvoice, marketplaceId);
       setPreview(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -365,7 +373,7 @@ function ProcessSettlementDialog({
     setError(null);
 
     try {
-      const result = await postSettlement(settlementId, selectedInvoice);
+      const result = await postSettlement(settlementId, selectedInvoice, marketplaceId);
       if (!result.ok) {
         setPreview(result.data);
         return;
@@ -417,7 +425,18 @@ function ProcessSettlementDialog({
           </div>
         )}
 
-        {!isLoadingAuditData && invoices.length > 0 && (
+        {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <div className="text-sm font-medium text-slate-900 dark:text-white">No invoices for this marketplace</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Audit data exists, but none of the uploaded invoices match {marketplaceId}. Upload the correct Audit Data file.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isLoadingAuditData && marketplaceInvoices.length > 0 && (
           <div className="space-y-4">
             {invoiceRecommendation.kind === 'ambiguous' && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
@@ -445,30 +464,25 @@ function ProcessSettlementDialog({
                   <SelectValue placeholder="Select an invoice..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {invoicesWithMeta.map((inv) => (
-                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
-                      <div className="flex items-center gap-2">
-                        <span>{inv.invoiceId}</span>
+	                  {invoicesWithMeta.map((inv) => (
+	                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+	                      <div className="flex items-center gap-2">
+	                        <span>{inv.invoiceId}</span>
                         {inv.recommended && (
                           <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
                             Recommended
                           </span>
                         )}
-                        {inv.candidate && !inv.recommended && (
-                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-                            Candidate
-                          </span>
-                        )}
-                        {!inv.marketMatch && (
-                          <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                            Other marketplace
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+	                        {inv.candidate && !inv.recommended && (
+	                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+	                            Candidate
+	                          </span>
+	                        )}
+	                      </div>
+	                    </SelectItem>
+	                  ))}
+	                </SelectContent>
+	              </Select>
 
               {/* Invoice metadata */}
               {selectedMeta && (
@@ -488,10 +502,10 @@ function ProcessSettlementDialog({
                 </div>
               )}
 
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {invoices.length} invoice{invoices.length === 1 ? '' : 's'} from uploaded audit data
-              </div>
-            </div>
+	              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+	                {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'} for this marketplace
+	              </div>
+	            </div>
 
             {/* Preview button */}
             <Button
@@ -646,7 +660,7 @@ export default function SettlementDetailPage() {
 
   const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
     queryKey: ['plutus-settlement-preview', settlementId, recommendedInvoice],
-    queryFn: () => fetchPreview(settlementId, recommendedInvoice!),
+    queryFn: () => fetchPreview(settlementId, recommendedInvoice!, settlement!.marketplace.id),
     enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
     staleTime: 5 * 60 * 1000,
   });

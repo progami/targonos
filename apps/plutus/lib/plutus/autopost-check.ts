@@ -37,40 +37,55 @@ export type AutopostResult = {
 
 type AuditInvoiceRowSummary = {
   invoiceId: string;
+  marketplaceId: string | null;
   rowCount: bigint;
   minDate: string;
   maxDate: string;
   markets: string[];
 };
 
+function invoiceKey(input: { marketplace: MarketplaceId; invoiceId: string }): string {
+  return `${input.marketplace}:${input.invoiceId}`;
+}
+
 async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
   const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
     SELECT "invoiceId",
+           CASE
+             WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
+             WHEN LOWER("market") = 'uk' OR LOWER("market") LIKE '%amazon.co.uk%' THEN 'amazon.co.uk'
+             ELSE NULL
+           END AS "marketplaceId",
            COUNT(*)::bigint AS "rowCount",
            MIN("date") AS "minDate",
            MAX("date") AS "maxDate",
            ARRAY_AGG(DISTINCT "market") AS "markets"
     FROM plutus."AuditDataRow"
-    GROUP BY "invoiceId"
-    ORDER BY "invoiceId"
+    GROUP BY "invoiceId", "marketplaceId"
+    ORDER BY "invoiceId", "marketplaceId"
   `;
 
-  return rows.map((r) => ({
-    invoiceId: r.invoiceId,
-    rowCount: Number(r.rowCount),
-    minDate: r.minDate,
-    maxDate: r.maxDate,
-    markets: r.markets,
-  }));
+  return rows.map((r) => {
+    if (r.marketplaceId !== 'amazon.com' && r.marketplaceId !== 'amazon.co.uk') {
+      throw new Error(`Unrecognized audit marketplace: ${r.marketplaceId === null ? 'null' : r.marketplaceId}`);
+    }
+    return {
+      invoiceId: r.invoiceId,
+      marketplace: r.marketplaceId as MarketplaceId,
+      rowCount: Number(r.rowCount),
+      minDate: r.minDate,
+      maxDate: r.maxDate,
+      markets: r.markets,
+    };
+  });
 }
 
-async function fetchProcessedInvoiceIds(): Promise<Set<string>> {
+async function fetchProcessedInvoiceKeys(): Promise<Set<string>> {
   const processed = await db.settlementProcessing.findMany({
-    distinct: ['invoiceId'],
-    select: { invoiceId: true },
+    select: { marketplace: true, invoiceId: true },
   });
 
-  return new Set(processed.map((p) => p.invoiceId));
+  return new Set(processed.map((p) => invoiceKey({ marketplace: p.marketplace as MarketplaceId, invoiceId: p.invoiceId })));
 }
 
 async function loadAuditRowsForInvoice(input: {
@@ -188,12 +203,12 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
 
   const unprocessedSettlements = journalEntries.filter((je) => !processedJeSet.has(je.Id));
 
-  const [allInvoices, processedInvoiceSet] = await Promise.all([
+  const [allInvoices, processedInvoiceKeys] = await Promise.all([
     fetchAuditInvoiceSummaries(),
-    fetchProcessedInvoiceIds(),
+    fetchProcessedInvoiceKeys(),
   ]);
 
-  const invoices = allInvoices.filter((inv) => !processedInvoiceSet.has(inv.invoiceId));
+  const invoices = allInvoices.filter((inv) => !processedInvoiceKeys.has(invoiceKey(inv)));
 
   const result: AutopostResult = { processed: [], skipped: [], errors: [] };
 
@@ -316,4 +331,3 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
 
   return result;
 }
-

@@ -2,6 +2,7 @@ export type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
 
 export type AuditInvoiceSummary = {
   invoiceId: string;
+  marketplace: MarketplaceId;
   markets: string[];
   minDate: string; // YYYY-MM-DD
   maxDate: string; // YYYY-MM-DD
@@ -58,9 +59,7 @@ export function selectAuditInvoiceForSettlement(input: {
     return { kind: 'missing_period' };
   }
 
-  const marketplaceInvoices = input.invoices.filter((inv) =>
-    invoiceMarketsMatchMarketplace(inv.markets, input.settlementMarketplace),
-  );
+  const marketplaceInvoices = input.invoices.filter((inv) => inv.marketplace === input.settlementMarketplace);
 
   const contained = marketplaceInvoices.filter((inv) => inv.minDate >= periodStart && inv.maxDate <= periodEnd);
   if (contained.length === 1) {
@@ -90,4 +89,3 @@ export function selectAuditInvoiceForSettlement(input: {
 
   return { kind: 'none' };
 }
-

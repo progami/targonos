@@ -10,6 +10,7 @@ import {
 import { fromCents } from '@/lib/inventory/money';
 import { computePnlAllocation } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
+import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 import {
   normalizeSku,
@@ -87,11 +88,16 @@ export async function computeSettlementPreview(input: {
     throw new Error(`Invoice not found in audit file: ${invoiceId}`);
   }
 
-  const processingHash = computeProcessingHash(invoiceRows);
+  const scopedInvoiceRows = invoiceRows.filter((r) => normalizeAuditMarketToMarketplaceId(r.market) === marketplace);
+  if (scopedInvoiceRows.length === 0) {
+    throw new Error(`No audit rows for marketplace ${marketplace} in invoice ${invoiceId}`);
+  }
 
-  let minDate = invoiceRows[0]?.date;
-  let maxDate = invoiceRows[0]?.date;
-  for (const row of invoiceRows) {
+  const processingHash = computeProcessingHash(scopedInvoiceRows);
+
+  let minDate = scopedInvoiceRows[0]?.date;
+  let maxDate = scopedInvoiceRows[0]?.date;
+  for (const row of scopedInvoiceRows) {
     if (minDate === undefined || row.date < minDate) minDate = row.date;
     if (maxDate === undefined || row.date > maxDate) maxDate = row.date;
   }
@@ -184,7 +190,7 @@ export async function computeSettlementPreview(input: {
 
   const missingSkus: string[] = [];
   const uniqueSkus = new Set<string>();
-  for (const row of invoiceRows) {
+  for (const row of scopedInvoiceRows) {
     const raw = row.sku.trim();
     if (raw === '') continue;
     uniqueSkus.add(normalizeSku(raw));
@@ -278,7 +284,7 @@ export async function computeSettlementPreview(input: {
 
   let pnlAllocation;
   try {
-    pnlAllocation = computePnlAllocation(invoiceRows, brandResolver);
+    pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver);
   } catch (error) {
     blocks.push({
       code: 'BILL_PARSE_ERROR',
@@ -289,8 +295,8 @@ export async function computeSettlementPreview(input: {
   }
 
   // Principal groups for unit movements
-  const saleGroups = buildPrincipalGroups(invoiceRows, isSalePrincipal);
-  const refundGroups = buildPrincipalGroups(invoiceRows, isRefundPrincipal);
+  const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
+  const refundGroups = buildPrincipalGroups(scopedInvoiceRows, isRefundPrincipal);
 
   // Check existing OrderSales
   const salePairs = Array.from(saleGroups.values()).map((s) => ({ orderId: s.orderId, sku: s.sku }));
