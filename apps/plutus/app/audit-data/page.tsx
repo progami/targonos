@@ -147,7 +147,11 @@ export default function AuditDataPage() {
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Audit Data" variant="accent" />
+        <PageHeader
+          title="Audit Data"
+          description="Upload Link My Books Audit Data (CSV/ZIP). Plutus uses it to compute per-SKU unit movements, COGS, and brand allocation for fees."
+          variant="accent"
+        />
 
         {/* Upload Zone */}
         <Card className="mt-6 border-slate-200/70 dark:border-white/10">

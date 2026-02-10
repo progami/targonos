@@ -198,7 +198,7 @@ export default function ReconciliationPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Reconciliation"
-          description="Compare an Amazon Date Range Transaction Report against stored LMB audit data"
+          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored LMB audit data"
           variant="accent"
         />
 
@@ -214,7 +214,7 @@ export default function ReconciliationPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Download your report</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Export the Date Range Transaction Report from Amazon Seller Central
+                    Export the Date Range Transaction Report from Amazon Seller Central (this is not required for settlement processing)
                   </p>
                 </div>
               </div>

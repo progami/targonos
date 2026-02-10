@@ -58,7 +58,7 @@ Therefore:
 | Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). Audit invoices are matched to settlements deterministically by marketplace + settlement period (no guessing). |
 | Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation tooling restored (compare Amazon Transaction Report vs stored Audit Data); inventory adjustment posting is still deferred. |
 | Phase 7 (Testing) | ✅ BASIC COVERAGE | Minimal unit coverage exists (matching + inventory ledger + reconciliation CSV parsing). CI checks for changed workspaces (lint/type-check/build). |
-| Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
+| Phase 8 (Go-Live) | ✅ DEPLOYED (Production) | Production deployment is live; remaining work is operational validation (process a full quarter, confirm brand P&L totals, confirm bill SOP compliance). |
 
 **Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.
 
