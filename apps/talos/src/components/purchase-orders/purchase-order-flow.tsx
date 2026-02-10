@@ -1534,7 +1534,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const inboundCostRows = costLedgerSummary?.breakdown?.inbound ?? []
   const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
-  const storageCostRows = costLedgerSummary?.breakdown?.storage ?? []
   const storageSubtotal = costLedgerSummary?.totals?.storage ?? 0
 
   const manualInboundCosts = manualWarehouseCosts.filter(c => c.category === 'Inbound')
@@ -5185,7 +5184,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       </div>
                     )}
 
-                    {/* ===== WAREHOUSE STAGE: UNIFIED COST LEDGER TABLE ===== */}
+                    {/* ===== WAREHOUSE STAGE: INBOUND COSTS TABLE ===== */}
                     {showWarehouseCostsStage && (
                       <div className="space-y-6">
                         <div className="space-y-3">
@@ -5194,34 +5193,19 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               Warehouse Costs
                             </h4>
                             {!isReadOnly && (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 px-2 text-xs"
-                                  onClick={() => {
-                                    setWarehouseCostEditing('inbound')
-                                    setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                  }}
-                                  disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
-                                >
-                                  + Inbound
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 px-2 text-xs"
-                                  onClick={() => {
-                                    setWarehouseCostEditing('storage')
-                                    setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                  }}
-                                  disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
-                                >
-                                  + Storage
-                                </Button>
-                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => {
+                                  setWarehouseCostEditing('inbound')
+                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                }}
+                                disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
+                              >
+                                + Add Cost
+                              </Button>
                             )}
                           </div>
 
@@ -5241,12 +5225,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {/* ── INBOUND ── */}
-                                  <tr className="bg-slate-100/60 dark:bg-slate-800/60">
-                                    <td colSpan={4} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Inbound
-                                    </td>
-                                  </tr>
                                   {inboundCostRows.map(row => (
                                     <tr key={`inbound-ledger-${row.costName}`} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                                       <td className="px-3 py-2 font-medium text-foreground">{row.costName}</td>
@@ -5281,10 +5259,47 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       </td>
                                     </tr>
                                   ))}
-                                  {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && warehouseCostEditing !== 'inbound' && (
+                                  {supplierAdjustment && !supplierAdjustmentEditing && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">
+                                        {supplierAdjustment.amount < 0 ? 'Supplier Credit' : 'Supplier Debit'}
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">{supplierAdjustment.notes ? supplierAdjustment.notes : '—'}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {supplierAdjustment.currency}{' '}
+                                        {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-1 py-2 text-center">
+                                        {!isReadOnly && (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setSupplierAdjustmentEditing(true)}
+                                            disabled={supplierAdjustmentLoading || supplierAdjustmentSaving}
+                                          >
+                                            <FileEdit className="h-3 w-3" />
+                                          </Button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {order.stageData.warehouse?.dutyAmount != null && order.stageData.warehouse.dutyAmount !== 0 && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">Customs & Duty</td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
+                                        {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && !supplierAdjustment && warehouseCostEditing !== 'inbound' && !supplierAdjustmentEditing && (order.stageData.warehouse?.dutyAmount == null || order.stageData.warehouse.dutyAmount === 0) && (
                                     <tr>
-                                      <td colSpan={4} className="px-3 py-2 text-sm text-muted-foreground">
-                                        No inbound costs recorded.
+                                      <td colSpan={4} className="px-3 py-3 text-sm text-muted-foreground">
+                                        No warehouse costs recorded.
                                       </td>
                                     </tr>
                                   )}
@@ -5354,183 +5369,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       </td>
                                     </tr>
                                   )}
-                                  <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">
-                                    <td colSpan={2} className="px-3 py-1.5 text-right text-xs font-medium text-muted-foreground">
-                                      Inbound Subtotal
-                                    </td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums text-xs font-semibold">
-                                      {(inboundSubtotal + manualInboundSubtotal) > 0
-                                        ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                        : '—'}
-                                    </td>
-                                    <td />
-                                  </tr>
-
-                                  {/* ── STORAGE ── */}
-                                  <tr className="bg-slate-100/60 dark:bg-slate-800/60">
-                                    <td colSpan={4} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Storage
-                                    </td>
-                                  </tr>
-                                  {storageCostRows.map(row => (
-                                    <tr key={`storage-ledger-${row.costName}`} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">{row.costName}</td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
-                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {tenantCurrency}{' '}
-                                        {row.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td />
-                                    </tr>
-                                  ))}
-                                  {manualStorageCosts.map(entry => (
-                                    <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">{entry.costName}</td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">{entry.notes ? entry.notes : '—'}</td>
-                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {entry.currency}{' '}
-                                        {entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td className="px-1 py-2 text-center">
-                                        {!isReadOnly && (
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                            onClick={() => void deleteWarehouseCost(entry.id)}
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {storageCostRows.length === 0 && manualStorageCosts.length === 0 && warehouseCostEditing !== 'storage' && (
-                                    <tr>
-                                      <td colSpan={4} className="px-3 py-2 text-sm text-muted-foreground">
-                                        No storage costs recorded.
-                                      </td>
-                                    </tr>
-                                  )}
-                                  {warehouseCostEditing === 'storage' && (
-                                    <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                                      <td className="px-3 py-2">
-                                        <Input
-                                          value={warehouseCostDraft.costName}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))}
-                                          disabled={warehouseCostSaving}
-                                          placeholder="Cost name"
-                                          className="h-8 text-sm"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <Input
-                                          value={warehouseCostDraft.notes}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))}
-                                          disabled={warehouseCostSaving}
-                                          placeholder="Notes (optional)"
-                                          className="h-8 text-sm"
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0"
-                                          step="0.01"
-                                          value={warehouseCostDraft.amount}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))}
-                                          disabled={warehouseCostSaving}
-                                          placeholder="0.00"
-                                          className="h-8 text-sm text-right"
-                                        />
-                                      </td>
-                                      <td className="px-1 py-2">
-                                        <div className="flex items-center gap-1">
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                                            onClick={() => {
-                                              setWarehouseCostEditing(null)
-                                              setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                            }}
-                                            disabled={warehouseCostSaving}
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-primary hover:text-primary"
-                                            onClick={() => void saveWarehouseCost('Storage')}
-                                            disabled={warehouseCostSaving || !warehouseCostDraft.costName.trim() || !warehouseCostDraft.amount.trim()}
-                                          >
-                                            {warehouseCostSaving ? (
-                                              <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                              <Check className="h-3 w-3" />
-                                            )}
-                                          </Button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  )}
-                                  <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/20">
-                                    <td colSpan={2} className="px-3 py-1.5 text-right text-xs font-medium text-muted-foreground">
-                                      Storage Subtotal
-                                    </td>
-                                    <td className="px-3 py-1.5 text-right tabular-nums text-xs font-semibold">
-                                      {(storageSubtotal + manualStorageSubtotal) > 0
-                                        ? `${tenantCurrency} ${(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                        : '—'}
-                                    </td>
-                                    <td />
-                                  </tr>
-
-                                  {/* ── SUPPLIER CREDIT/DEBIT ── */}
-                                  <tr className="bg-slate-100/60 dark:bg-slate-800/60">
-                                    <td colSpan={3} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Supplier Credit/Debit
-                                    </td>
-                                    <td className="px-1 py-1.5 text-right">
-                                      {!supplierAdjustmentEditing && !isReadOnly && (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-6 px-2 text-xs text-muted-foreground"
-                                          onClick={() => setSupplierAdjustmentEditing(true)}
-                                          disabled={supplierAdjustmentLoading || supplierAdjustmentSaving || !order.warehouseCode || !order.warehouseName}
-                                        >
-                                          {supplierAdjustment ? 'Edit' : 'Add'}
-                                        </Button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                  {supplierAdjustment && !supplierAdjustmentEditing && (
-                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">
-                                        {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
-                                      </td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">{supplierAdjustment.notes ? supplierAdjustment.notes : '—'}</td>
-                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {supplierAdjustment.currency}{' '}
-                                        {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td />
-                                    </tr>
-                                  )}
-                                  {!supplierAdjustment && !supplierAdjustmentEditing && (
-                                    <tr>
-                                      <td colSpan={4} className="px-3 py-2 text-sm text-muted-foreground">
-                                        No supplier adjustment recorded.
-                                      </td>
-                                    </tr>
-                                  )}
                                   {supplierAdjustmentEditing && (
                                     <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
                                       <td className="px-3 py-2">
@@ -5540,8 +5378,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           disabled={supplierAdjustmentSaving}
                                           className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                         >
-                                          <option value="credit">Credit</option>
-                                          <option value="debit">Debit</option>
+                                          <option value="credit">Supplier Credit</option>
+                                          <option value="debit">Supplier Debit</option>
                                         </select>
                                       </td>
                                       <td className="px-3 py-2">
@@ -5596,27 +5434,20 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       </td>
                                     </tr>
                                   )}
-
-                                  {/* ── CUSTOMS & DUTY ── */}
-                                  {order.stageData.warehouse?.dutyAmount != null && order.stageData.warehouse.dutyAmount !== 0 && (
-                                    <>
-                                      <tr className="bg-slate-100/60 dark:bg-slate-800/60">
-                                        <td colSpan={4} className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                          Customs & Duty
-                                        </td>
-                                      </tr>
-                                      <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                        <td className="px-3 py-2 font-medium text-foreground">Duty</td>
-                                        <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
-                                        <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                          {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
-                                          {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                        <td />
-                                      </tr>
-                                    </>
-                                  )}
                                 </tbody>
+                                <tfoot>
+                                  <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                                    <td colSpan={2} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                      Warehouse Subtotal
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0
+                                        ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : '—'}
+                                    </td>
+                                    <td />
+                                  </tr>
+                                </tfoot>
                               </table>
                             </div>
                           )}
@@ -5646,39 +5477,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     </td>
                                   </tr>
                                 )}
-                                {(inboundSubtotal + manualInboundSubtotal) > 0 && (
+                                {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0 && (
                                   <tr className="border-b border-slate-200 dark:border-slate-700">
-                                    <td className="px-3 py-2 text-muted-foreground">Inbound</td>
+                                    <td className="px-3 py-2 text-muted-foreground">Warehouse</td>
                                     <td className="px-3 py-2 text-right tabular-nums font-medium">
                                       {tenantCurrency}{' '}
-                                      {(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                )}
-                                {(storageSubtotal + manualStorageSubtotal) > 0 && (
-                                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                                    <td className="px-3 py-2 text-muted-foreground">Storage</td>
-                                    <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                      {tenantCurrency}{' '}
-                                      {(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                )}
-                                {supplierAdjustment && (
-                                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                                    <td className="px-3 py-2 text-muted-foreground">Adjustment</td>
-                                    <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                      {supplierAdjustment.currency}{' '}
-                                      {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                )}
-                                {order.stageData.warehouse?.dutyAmount != null && order.stageData.warehouse.dutyAmount !== 0 && (
-                                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                                    <td className="px-3 py-2 text-muted-foreground">Customs & Duty</td>
-                                    <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                      {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
-                                      {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>
                                   </tr>
                                 )}
