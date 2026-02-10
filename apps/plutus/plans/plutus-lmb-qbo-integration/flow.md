@@ -35,10 +35,13 @@ Goal: **brand-level P&L** where everything adds up to the total, with **inventor
 
 ## Ongoing: Bills (cost basis source)
 
-1. Human enters supplier bills in QBO using strict SOP:
-   - `Memo` links the PO: `PO: PO-YYYY-NNN`
-   - Manufacturing bill lines have parseable descriptions (SKU + qty).
-2. Plutus reads QBO Bills (not QBO balances) and builds **cost history** per SKU:
+Preferred v1 workflow: create or map bills in **Plutus → Bills** so the memo + line descriptions are consistent.
+
+1. Create (or map) supplier bills:
+   - Bill memo must link the PO: `PO: PO-YYYY-NNN`
+   - Manufacturing lines must include `SKU x <qty> units` so Plutus can establish on-hand units per PO/SKU.
+   - Freight/Duty/Accessories can be SKU-specific or PO-level (allocated across PO units).
+2. Plutus reads mapped QBO Bills and builds SKU cost basis via **ledger replay**:
    - Costing method: **moving average** (v1)
    - Late freight/duty uses “apply to remaining on-hand only” behavior (v1)
 
@@ -105,7 +108,7 @@ Plutus includes a Reconciliation page (`/reconciliation`) to compare an Amazon D
 - Amazon-only
 - LMB-only
 
-This is a reporting tool in v1; posting reconciliation adjustments to QBO is still a future step.
+This is optional reporting in v1. It requires exporting the Amazon Seller Central Date Range Transaction Report. Posting reconciliation adjustments to QBO is still a future step.
 
 ## Decision Tree (v1 defaults)
 

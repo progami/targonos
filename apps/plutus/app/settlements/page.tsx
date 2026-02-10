@@ -345,7 +345,11 @@ export default function SettlementsPage() {
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between">
-          <PageHeader title="Settlements" variant="accent" />
+          <PageHeader
+            title="Settlements"
+            description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
+            variant="accent"
+          />
           <Button
             variant="outline"
             onClick={() => autoprocessMutation.mutate()}
