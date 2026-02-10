@@ -21,10 +21,8 @@ import {
   ArrowDown,
   ArrowUp,
   Download,
-  ExternalLink,
   ImageIcon,
   Loader2,
-  Play,
   Plus,
   RefreshCw,
   Trash2,
@@ -64,13 +62,6 @@ type VersionDetail = {
   }>;
 };
 
-type LiveImages = {
-  runId: string;
-  capturedAt: string;
-  finalUrl: string;
-  imageUrls: string[];
-};
-
 type DraftSlot = {
   key: string;
   fileName: string;
@@ -104,14 +95,6 @@ function aspectRatio(width: number, height: number): string {
   if (height === 0) return '';
   const ratio = width / height;
   return ratio.toFixed(2);
-}
-
-function listingUrlFor(marketplace: string, asin: string): string | null {
-  const trimmed = asin.trim();
-  if (!trimmed) return null;
-  if (marketplace === 'US') return `https://www.amazon.com/dp/${trimmed}`;
-  if (marketplace === 'UK') return `https://www.amazon.co.uk/dp/${trimmed}`;
-  return null;
 }
 
 async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
@@ -170,15 +153,10 @@ export function ListingImageVersionsClient(props: {
 
   const [selectedDetails, setSelectedDetails] = useState<VersionDetail | null>(null);
   const [activeDetails, setActiveDetails] = useState<VersionDetail | null>(null);
-  const [live, setLive] = useState<LiveImages | null>(null);
 
   const [loadingSelected, setLoadingSelected] = useState(false);
   const [loadingActive, setLoadingActive] = useState(false);
-  const [loadingLive, setLoadingLive] = useState(false);
-  const [queuingCapture, setQueuingCapture] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [rightPanel, setRightPanel] = useState<'history' | 'live'>('history');
 
   const [modalOpen, setModalOpen] = useState(false);
   const [draftLabel, setDraftLabel] = useState('');
@@ -210,43 +188,6 @@ export function ListingImageVersionsClient(props: {
       if (prev) return prev;
       return initialSelectedVersionId({ activeId: nextActive, versions: nextVersions });
     });
-  }
-
-  async function refreshLive() {
-    setError(null);
-    setLoadingLive(true);
-    try {
-      const res = await fetch(withAppBasePath(`/api/targets/${props.targetId}/live-images`));
-      if (!res.ok) {
-        if (res.status === 404) {
-          setLive(null);
-          return;
-        }
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
-      }
-      const json = await res.json();
-      setLive(json as LiveImages);
-    } finally {
-      setLoadingLive(false);
-    }
-  }
-
-  async function captureNow() {
-    setError(null);
-    setQueuingCapture(true);
-    try {
-      const res = await fetch(withAppBasePath(`/api/targets/${props.targetId}/run-now`), { method: 'POST' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
-      }
-      window.setTimeout(() => {
-        refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)));
-      }, 10_000);
-    } finally {
-      setQueuingCapture(false);
-    }
   }
 
   useEffect(() => {
@@ -313,12 +254,6 @@ export function ListingImageVersionsClient(props: {
       cancelled = true;
     };
   }, [activeId, selectedId, selectedDetails]);
-
-  useEffect(() => {
-    if (!canEdit) return;
-    refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.targetId, canEdit]);
 
   async function openNewVersionModal() {
     setDraftError(null);
@@ -659,23 +594,6 @@ export function ListingImageVersionsClient(props: {
     }
   }
 
-  let openListingUrl: string | null = null;
-  if (live) {
-    openListingUrl = live.finalUrl;
-  } else if (props.asin) {
-    openListingUrl = listingUrlFor(props.marketplace, props.asin);
-  }
-
-  let maxSlot = 0;
-  for (const pos of activeByPosition.keys()) {
-    if (pos > maxSlot) maxSlot = pos;
-  }
-  if (live && live.imageUrls.length > maxSlot) {
-    maxSlot = live.imageUrls.length;
-  }
-  if (maxSlot < 1) maxSlot = 1;
-  if (maxSlot > 9) maxSlot = 9;
-
   const selectedCompliance = selectedDetails
     ? evaluateListingImageCompliance(
         selectedDetails.images.map((img) => ({
@@ -782,172 +700,7 @@ export function ListingImageVersionsClient(props: {
       </Card>
 
       <div className="lg:col-span-8 space-y-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-full border bg-muted/40 p-1">
-            <button
-              type="button"
-              onClick={() => setRightPanel('history')}
-              className={cn(
-                'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                rightPanel === 'history'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              History
-            </button>
-            <button
-              type="button"
-              onClick={() => setRightPanel('live')}
-              className={cn(
-                'ml-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                rightPanel === 'live'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              Live capture
-            </button>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            {rightPanel === 'live'
-              ? live
-                ? `Captured ${formatRelativeTime(live.capturedAt)}.`
-                : 'No capture yet.'
-              : selectedItem
-                ? `Selected v${selectedItem.versionNumber}.`
-                : 'Select a version on the left.'}
-          </p>
-        </div>
-
-        {rightPanel === 'live' ? (
-          <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <CardTitle className="text-sm font-semibold">Active vs Live</CardTitle>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {props.targetLabel}
-                  {props.asin ? ` · ${props.marketplace} ${props.asin}` : ` · ${props.marketplace}`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {openListingUrl && (
-                  <a
-                    href={openListingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Open listing
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => captureNow().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
-                  disabled={queuingCapture}
-                >
-                  {queuingCapture ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
-                  Capture now
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refreshLive().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
-                  disabled={loadingLive}
-                >
-                  {loadingLive ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-                  Refresh
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="hidden sm:block" />
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active</p>
-                {activeDetails ? (
-                  <Badge variant="success" className="text-2xs">v{activeDetails.version.versionNumber}</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-2xs">none</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live</p>
-                {live ? (
-                  <Badge variant="outline" className="text-2xs">{formatRelativeTime(live.capturedAt)}</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-2xs">no capture</Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {Array.from({ length: maxSlot }).map((_, idx) => {
-                const position = idx + 1;
-                const activeImg = activeByPosition.get(position) ?? null;
-                const liveUrl = live && live.imageUrls[position - 1] ? live.imageUrls[position - 1]! : null;
-
-                return (
-                  <div
-                    key={position}
-                    className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-[72px,1fr,1fr] sm:items-start"
-                  >
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      #{position}
-                      {position === 1 ? <span className="ml-1 text-2xs font-normal">(main)</span> : null}
-                    </div>
-
-                    <div className="min-w-0">
-                      {activeImg ? (
-                        <a href={activeImg.url} target="_blank" rel="noreferrer" className="block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={activeImg.url} alt={activeImg.fileName} className="h-32 w-full rounded-md border object-cover" />
-                        </a>
-                      ) : (
-                        <div className="flex h-32 w-full items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-                          No active image
-                        </div>
-                      )}
-
-                      {activeImg && (
-                        <p className="mt-1 truncate text-2xs text-muted-foreground">
-                          {activeImg.width}x{activeImg.height} ({aspectRatio(activeImg.width, activeImg.height)}) · {bytesToSize(activeImg.byteSize)}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      {liveUrl ? (
-                        <a href={liveUrl} target="_blank" rel="noreferrer" className="block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={liveUrl} alt={`Live ${position}`} className="h-32 w-full rounded-md border object-cover" />
-                        </a>
-                      ) : (
-                        <div className="flex h-32 w-full items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-                          No live image
-                        </div>
-                      )}
-                      {liveUrl && (
-                        <p className="mt-1 truncate text-2xs text-muted-foreground">
-                          Captured {live ? formatRelativeTime(live.capturedAt) : ''}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-          </Card>
-        ) : null}
-
-        {rightPanel === 'history' ? (
-          <Card>
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -1029,8 +782,7 @@ export function ListingImageVersionsClient(props: {
               </div>
             )}
           </CardContent>
-          </Card>
-        ) : null}
+        </Card>
       </div>
 
       <Dialog open={modalOpen} onOpenChange={(open) => (open ? setModalOpen(true) : closeNewVersionModal())}>

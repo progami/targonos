@@ -9,6 +9,7 @@ import {
   Trophy,
   Bell,
   Download,
+  Images,
   Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,12 @@ const NAV_SECTIONS = [
       { label: 'Products', href: '/products', icon: Package },
       { label: 'Rankings', href: '/rankings', icon: Search },
       { label: 'Bestsellers', href: '/bestsellers', icon: Trophy },
+    ],
+  },
+  {
+    title: 'ASSETS',
+    items: [
+      { label: 'Image Manager', href: '/images', icon: Images },
     ],
   },
   {
