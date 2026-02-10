@@ -634,6 +634,11 @@ if [[ -n "$migrate_cmd" ]]; then
           run_migrations="true"
         fi
         ;;
+      argus)
+        # Always run migrate deploy for Argus. It is quick when up-to-date and
+        # prevents schema drift if a previous deploy skipped migrations.
+        run_migrations="true"
+        ;;
     esac
   fi
 
