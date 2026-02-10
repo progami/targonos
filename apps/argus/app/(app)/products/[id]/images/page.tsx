@@ -1,10 +1,7 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { PageHeader } from '@/components/layout/page-header';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
 import { ListingImageVersionsClient, type ImageVersionListItem } from '@/components/ListingImageVersionsClient';
+import { ProductDetailHeader } from '@/components/ProductDetailHeader';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +17,9 @@ export default async function ProductImagesPage({ params }: { params: Promise<{ 
       label: true,
       asin: true,
       marketplace: true,
+      enabled: true,
       activeImageVersionId: true,
+      activeImageVersion: { select: { versionNumber: true } },
     },
   });
 
@@ -47,18 +46,17 @@ export default async function ProductImagesPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/products/${target.id}`}>
-            <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-            Back
-          </Link>
-        </Button>
-      </div>
-
-      <PageHeader
-        title="Listing Images"
-        subtitle="Upload, version, and download listing image sets."
+      <ProductDetailHeader
+        target={{
+          id: target.id,
+          label: target.label,
+          asin: target.asin,
+          marketplace: target.marketplace,
+          owner: target.owner,
+          enabled: target.enabled,
+          activeImageVersionNumber: target.activeImageVersion?.versionNumber ?? null,
+        }}
+        activeTab="images"
       />
 
       <ListingImageVersionsClient
@@ -73,4 +71,3 @@ export default async function ProductImagesPage({ params }: { params: Promise<{ 
     </div>
   );
 }
-

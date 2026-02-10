@@ -104,6 +104,30 @@ describe('extractAsinFields', () => {
     const { raw } = extractAsinFields(html);
     expect(raw.titleText).toBe('Debug Product');
   });
+
+  test('upgrades Amazon image URLs to high-res and filters video placeholders', () => {
+    const html = `
+      <html>
+        <body>
+          <span id="productTitle">Images Product</span>
+          <img
+            id="landingImage"
+            src="https://m.media-amazon.com/images/I/41fsFSi90sL._AC_US100_.jpg"
+          />
+          <div id="altImages">
+            <img src="https://m.media-amazon.com/images/I/91JRE11UrzL.SS125_PKplay-button-mb-image-grid-small_.jpg" />
+            <img src="https://m.media-amazon.com/images/I/51NOmHTSK1L._AC_US100_.jpg" />
+          </div>
+        </body>
+      </html>
+    `;
+
+    const { normalized } = extractAsinFields(html);
+    expect(normalized.imageUrls).toEqual([
+      'https://m.media-amazon.com/images/I/41fsFSi90sL._AC_SL1500_.jpg',
+      'https://m.media-amazon.com/images/I/51NOmHTSK1L._AC_SL1500_.jpg',
+    ]);
+  });
 });
 
 describe('extractSearchResults', () => {

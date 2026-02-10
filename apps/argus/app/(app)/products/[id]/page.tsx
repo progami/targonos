@@ -1,16 +1,103 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { getS3 } from '@/lib/s3';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { RunNowButton } from '@/components/RunNowButton';
 import { AlertRulesClient } from '@/components/AlertRulesClient';
-import { ArrowLeft, Clock, Globe, Activity, Bell, ImageIcon } from 'lucide-react';
+import { ProductDetailHeader } from '@/components/ProductDetailHeader';
+import { Clock, Globe, Activity, Bell } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
+
+function parseStableJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function stringifyCompact(value: unknown, maxChars: number): string {
+  const parsed = parseStableJson(value);
+
+  let text: string;
+  if (typeof parsed === 'string') {
+    text = parsed;
+  } else if (typeof parsed === 'number' || typeof parsed === 'boolean') {
+    text = String(parsed);
+  } else if (parsed === null || parsed === undefined) {
+    text = String(parsed);
+  } else if (Array.isArray(parsed)) {
+    if (parsed.length === 0) text = '[]';
+    else text = `[${parsed.length} items]`;
+  } else if (typeof parsed === 'object') {
+    text = '{...}';
+  } else {
+    text = String(parsed);
+  }
+
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 3) + '...';
+}
+
+function amazonImageId(url: string): string | null {
+  const marker = '/images/I/';
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  const rest = url.slice(idx + marker.length);
+  const dot = rest.indexOf('.');
+  if (dot <= 0) return null;
+  return rest.slice(0, dot);
+}
+
+function summarizeImageUrlChange(before: unknown, after: unknown): {
+  count: number;
+  mainChanged: boolean;
+  reordered: boolean;
+  addedCount: number;
+  removedCount: number;
+} | null {
+  const beforeParsed = parseStableJson(before);
+  const afterParsed = parseStableJson(after);
+
+  if (!Array.isArray(beforeParsed) || !Array.isArray(afterParsed)) return null;
+  if (!beforeParsed.every((v) => typeof v === 'string') || !afterParsed.every((v) => typeof v === 'string')) return null;
+
+  const beforeUrls = beforeParsed as string[];
+  const afterUrls = afterParsed as string[];
+
+  const beforeIds = beforeUrls.map((u) => amazonImageId(u) ?? u);
+  const afterIds = afterUrls.map((u) => amazonImageId(u) ?? u);
+
+  const beforeSet = new Set(beforeIds);
+  const afterSet = new Set(afterIds);
+
+  let addedCount = 0;
+  for (const id of afterSet) {
+    if (!beforeSet.has(id)) addedCount += 1;
+  }
+  let removedCount = 0;
+  for (const id of beforeSet) {
+    if (!afterSet.has(id)) removedCount += 1;
+  }
+
+  const reordered =
+    addedCount === 0 &&
+    removedCount === 0 &&
+    beforeIds.length === afterIds.length &&
+    beforeIds.join('|') !== afterIds.join('|');
+
+  return {
+    count: afterUrls.length,
+    mainChanged: beforeIds[0] !== afterIds[0],
+    reordered,
+    addedCount,
+    removedCount,
+  };
+}
 
 export default async function ProductDetailPage({
   params,
@@ -22,6 +109,7 @@ export default async function ProductDetailPage({
   const target = await prisma.watchTarget.findUnique({
     where: { id },
     include: {
+      activeImageVersion: { select: { versionNumber: true } },
       runs: {
         take: 30,
         orderBy: { startedAt: 'desc' },
@@ -37,90 +125,28 @@ export default async function ProductDetailPage({
 
   if (!target) notFound();
 
-  const typeRoute =
-    target.type === 'ASIN'
-      ? 'products'
-      : target.type === 'SEARCH'
-        ? 'rankings'
-        : 'bestsellers';
-
   const alertRules = target.alertRules.map((r) => ({
     id: r.id,
     enabled: r.enabled,
     thresholds: r.thresholds,
   }));
 
-  const imagesEnabled = target.owner === 'OURS';
-  let activeImagesPreview:
-    | { versionNumber: number; images: Array<{ position: number; url: string }> }
-    | null = null;
-
-  if (imagesEnabled && target.activeImageVersionId) {
-    const version = await prisma.listingImageVersion.findFirst({
-      where: { id: target.activeImageVersionId, targetId: target.id },
-      include: { slots: { take: 3, orderBy: [{ position: 'asc' }], include: { blob: true } } },
-    });
-
-    if (version) {
-      const s3 = getS3();
-      const images = await Promise.all(
-        version.slots.map(async (slot) => {
-          const url = await s3.getPresignedUrl(slot.blob.s3Key, 'get', { expiresIn: 3600 });
-          return { position: slot.position, url };
-        }),
-      );
-      activeImagesPreview = { versionNumber: version.versionNumber, images };
-    }
-  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/${typeRoute}`}>
-            <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-            Back
-          </Link>
-        </Button>
-      </div>
-
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{target.label}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Badge variant="info" className="text-2xs">
-              {target.type}
-            </Badge>
-            <Badge
-              variant={target.marketplace === 'US' ? 'info' : 'neutral'}
-              className="text-2xs"
-            >
-              {target.marketplace}
-            </Badge>
-            <Badge
-              variant={target.owner === 'OURS' ? 'success' : 'warning'}
-              className="text-2xs"
-            >
-              {target.owner}
-            </Badge>
-            <Badge variant={target.enabled ? 'success' : 'neutral'} className="text-2xs">
-              {target.enabled ? 'Active' : 'Paused'}
-            </Badge>
-            {target.asin && (
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                {target.asin}
-              </code>
-            )}
-            {target.keyword && (
-              <span className="text-xs text-muted-foreground">Keyword: {target.keyword}</span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <RunNowButton targetId={target.id} />
-        </div>
-      </div>
+      <ProductDetailHeader
+        target={{
+          id: target.id,
+          label: target.label,
+          asin: target.asin,
+          marketplace: target.marketplace,
+          owner: target.owner,
+          enabled: target.enabled,
+          activeImageVersionNumber: target.activeImageVersion?.versionNumber ?? null,
+        }}
+        activeTab="monitoring"
+        actions={<RunNowButton targetId={target.id} />}
+      />
 
       {/* Info Cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -161,60 +187,6 @@ export default async function ProductDetailPage({
           </CardContent>
         </Card>
       </div>
-
-      {/* Listing Images */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm font-semibold">Listing Images</CardTitle>
-              {activeImagesPreview && (
-                <Badge variant="success" className="text-2xs">v{activeImagesPreview.versionNumber}</Badge>
-              )}
-            </div>
-            {imagesEnabled ? (
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/products/${target.id}/images`}>Manage images</Link>
-              </Button>
-            ) : (
-              <Button size="sm" variant="outline" disabled>
-                Manage images
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {!imagesEnabled ? (
-            <p className="text-sm text-muted-foreground">
-              Image version history is available for <strong>OURS</strong> listings only.
-            </p>
-          ) : activeImagesPreview && activeImagesPreview.images.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2 sm:max-w-md">
-              {activeImagesPreview.images.map((img) => (
-                <a
-                  key={`${img.position}-${img.url}`}
-                  href={img.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group overflow-hidden rounded-md border bg-muted"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt={`Slot ${img.position}`} className="h-24 w-full object-cover transition-transform group-hover:scale-[1.02]" />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
-              <ImageIcon className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No image versions yet.</p>
-              <Button asChild size="sm" className="mt-3">
-                <Link href={`/products/${target.id}/images`}>Create first version</Link>
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Capture Timeline */}
       <Card>
@@ -292,16 +264,53 @@ export default async function ProductDetailPage({
                       {hasChanges && (
                         <div className="mt-1.5 space-y-1">
                           {summary!.slice(0, 5).map((change, ci) => (
-                            <div key={ci} className="flex items-center gap-2 text-xs">
-                              <span className="font-mono text-muted-foreground">
-                                {change.path}
-                              </span>
-                              <span className="text-danger-600 line-through">
-                                {String(change.before)}
-                              </span>
-                              <span className="text-foreground">&rarr;</span>
-                              <span className="text-success-600">{String(change.after)}</span>
-                            </div>
+                            change.path === 'imageUrls' ? (
+                              <div
+                                key={ci}
+                                className="flex flex-col gap-1 rounded-md border bg-muted/20 px-2 py-2 text-xs"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-mono text-muted-foreground">images</span>
+                                  <Link
+                                    href={`/products/${target.id}/images`}
+                                    className="text-2xs font-medium text-primary hover:underline"
+                                  >
+                                    Open Images
+                                  </Link>
+                                </div>
+                                {(() => {
+                                  const meta = summarizeImageUrlChange(change.before, change.after);
+                                  if (!meta) {
+                                    return (
+                                      <p className="text-2xs text-muted-foreground">
+                                        Updated.
+                                      </p>
+                                    );
+                                  }
+
+                                  return (
+                                    <div className="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
+                                      <span>{meta.count} slots</span>
+                                      {meta.mainChanged ? <Badge variant="warning" className="text-2xs">Main changed</Badge> : null}
+                                      {meta.reordered ? <Badge variant="outline" className="text-2xs">Reordered</Badge> : null}
+                                      {meta.addedCount > 0 ? <Badge variant="success" className="text-2xs">+{meta.addedCount}</Badge> : null}
+                                      {meta.removedCount > 0 ? <Badge variant="danger" className="text-2xs">-{meta.removedCount}</Badge> : null}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <div key={ci} className="flex items-center gap-2 text-xs">
+                                <span className="font-mono text-muted-foreground">{change.path}</span>
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
+                                  {stringifyCompact(change.before, 42)}
+                                </span>
+                                <span className="text-muted-foreground">&rarr;</span>
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-2xs text-foreground">
+                                  {stringifyCompact(change.after, 42)}
+                                </span>
+                              </div>
+                            )
                           ))}
                           {summary!.length > 5 && (
                             <p className="text-2xs text-muted-foreground">
