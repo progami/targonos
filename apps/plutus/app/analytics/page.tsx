@@ -22,6 +22,7 @@ if (basePath === undefined) {
 type ConnectionStatus = {
   connected: boolean;
   homeCurrency?: string;
+  error?: string;
 };
 
 type AnalyticsMonth = {
@@ -363,7 +364,7 @@ export default function AnalyticsPage() {
   }, [data]);
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Benchmarking" />;
+    return <NotConnectedScreen title="Benchmarking" error={connection.error} />;
   }
 
   return (

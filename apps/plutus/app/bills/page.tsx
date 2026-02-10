@@ -94,7 +94,7 @@ type BillsResponse = {
   pagination: { page: number; pageSize: number; totalCount: number; totalPages: number };
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 type MappingStatus = 'unmapped' | 'saved';
 
@@ -802,7 +802,7 @@ export default function BillsPage() {
   const totalPages = billsQuery.data?.pagination.totalPages ?? 1;
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Bills" />;
+    return <NotConnectedScreen title="Bills" error={connection.error} />;
   }
 
   const pageNumbers: number[] = [];

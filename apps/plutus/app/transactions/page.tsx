@@ -25,6 +25,7 @@ if (basePath === undefined) {
 type ConnectionStatus = {
   connected: boolean;
   homeCurrency?: string;
+  error?: string;
 };
 
 type TransactionLine = {
@@ -173,7 +174,7 @@ export default function TransactionsPage() {
   const rows = useMemo(() => (data ? data.transactions : []), [data]);
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Transactions" />;
+    return <NotConnectedScreen title="Transactions" error={connection.error} />;
   }
 
   return (

@@ -17,7 +17,7 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 type UploadRecord = {
   id: string;
@@ -141,7 +141,7 @@ export default function AuditDataPage() {
   );
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Audit Data" />;
+    return <NotConnectedScreen title="Audit Data" error={connection.error} />;
   }
 
   return (

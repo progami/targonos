@@ -32,9 +32,10 @@ function QboLogo({ className }: { className?: string }) {
 
 interface NotConnectedScreenProps {
   title: string;
+  error?: string;
 }
 
-export function NotConnectedScreen({ title }: NotConnectedScreenProps) {
+export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
   const handleConnect = () => {
     window.location.href = `${basePath}/api/qbo/connect`;
   };
@@ -63,6 +64,9 @@ export function NotConnectedScreen({ title }: NotConnectedScreenProps) {
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
             Connect your QuickBooks Online account to view and manage your {title.toLowerCase()}.
           </p>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            This connection is shared across Plutus users. If you are not a QuickBooks Company Admin, ask one to connect.
+          </p>
 
           <div className="mt-8">
             <Button
@@ -71,6 +75,12 @@ export function NotConnectedScreen({ title }: NotConnectedScreenProps) {
             >
               Connect to QuickBooks
             </Button>
+            {error && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-left text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+                <span className="mt-0.5 inline-block h-2 w-2 rounded-full bg-red-500/80" />
+                <span>{error}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
