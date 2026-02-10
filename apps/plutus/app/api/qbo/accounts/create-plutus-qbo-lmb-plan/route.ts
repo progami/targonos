@@ -3,6 +3,7 @@ import { createLogger } from '@targon/logger';
 import { QboAuthError } from '@/lib/qbo/api';
 import { ensurePlutusQboLmbPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-lmb-plan';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { invalidateCache } from '@/lib/qbo/cache';
 import { randomUUID } from 'crypto';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
       created: result.created.length,
       skipped: result.skipped.length,
     });
+
+    // Accounts are cached for 30 minutes; invalidate so follow-up pages see newly created sub-accounts immediately.
+    invalidateCache(`accounts:${connection.realmId}:`);
 
     const user = await getCurrentUser();
     await logAudit({
