@@ -1,6 +1,11 @@
 import { Readable } from 'stream';
 export interface S3UploadOptions {
     contentType?: string;
+    /**
+     * Content length in bytes. When provided for streaming uploads, the SDK can send a non-chunked
+     * request which avoids multipart permissions and improves compatibility with some proxies.
+     */
+    contentLength?: number;
     metadata?: Record<string, string>;
     tags?: Record<string, string>;
     cacheControl?: string;
