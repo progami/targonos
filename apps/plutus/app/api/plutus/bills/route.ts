@@ -13,7 +13,8 @@ type BillComponent =
   | 'mfgAccessories'
   | 'warehousing3pl'
   | 'warehouseAmazonFc'
-  | 'warehouseAwd';
+  | 'warehouseAwd'
+  | 'productExpenses';
 
 function classifyByInventoryName(account: QboAccount): BillComponent | null {
   if (account.AccountType !== 'Other Current Asset') return null;
@@ -33,33 +34,49 @@ function classifyByInventoryName(account: QboAccount): BillComponent | null {
 
 function buildAccountComponentMap(
   accounts: QboAccount[],
-  configAccountIds: { warehousing3pl?: string | null; warehousingAmazonFc?: string | null; warehousingAwd?: string | null },
+  configAccountIds: {
+    warehousing3pl?: string | null;
+    warehousingAmazonFc?: string | null;
+    warehousingAwd?: string | null;
+    productExpenses?: string | null;
+  },
 ): Map<string, BillComponent> {
   const map = new Map<string, BillComponent>();
 
-  // Map warehousing parent accounts and their children
-  const warehouseEntries: Array<{ id: string | null | undefined; component: BillComponent }> = [
-    { id: configAccountIds.warehousing3pl, component: 'warehousing3pl' },
-    { id: configAccountIds.warehousingAmazonFc, component: 'warehouseAmazonFc' },
-    { id: configAccountIds.warehousingAwd, component: 'warehouseAwd' },
-  ];
+  function mapParentAndDescendants(parentId: string, component: BillComponent) {
+    map.set(parentId, component);
+    const queue = [parentId];
+    const seen = new Set(queue);
 
-  const parentIds = new Set<string>();
-  for (const entry of warehouseEntries) {
-    if (entry.id) {
-      map.set(entry.id, entry.component);
-      parentIds.add(entry.id);
+    while (queue.length > 0) {
+      const currentId = queue.pop();
+      if (!currentId) break;
+
+      for (const account of accounts) {
+        if (!account.ParentRef) continue;
+        if (account.ParentRef.value !== currentId) continue;
+        if (seen.has(account.Id)) continue;
+
+        map.set(account.Id, component);
+        seen.add(account.Id);
+        queue.push(account.Id);
+      }
     }
   }
 
-  // Also match child accounts (e.g. "3PL:US-PDS" is a child of "3PL")
-  for (const account of accounts) {
-    if (account.ParentRef && parentIds.has(account.ParentRef.value)) {
-      const parentComponent = map.get(account.ParentRef.value);
-      if (parentComponent) {
-        map.set(account.Id, parentComponent);
-      }
-    }
+  const parentEntries: Array<{ id: string | null | undefined; component: BillComponent }> = [
+    // Warehousing buckets (brand sub-accounts)
+    { id: configAccountIds.warehousing3pl, component: 'warehousing3pl' },
+    { id: configAccountIds.warehousingAmazonFc, component: 'warehouseAmazonFc' },
+    { id: configAccountIds.warehousingAwd, component: 'warehouseAwd' },
+
+    // Brand-level product expenses
+    { id: configAccountIds.productExpenses, component: 'productExpenses' },
+  ];
+
+  for (const entry of parentEntries) {
+    if (!entry.id) continue;
+    mapParentAndDescendants(entry.id, entry.component);
   }
 
   // Map inventory accounts by name matching
@@ -114,6 +131,7 @@ export async function GET(req: NextRequest) {
       warehousing3pl: config?.warehousing3pl,
       warehousingAmazonFc: config?.warehousingAmazonFc,
       warehousingAwd: config?.warehousingAwd,
+      productExpenses: config?.productExpenses,
     });
 
     // Fetch all QBO bill IDs from this page to look up mappings

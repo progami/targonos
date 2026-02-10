@@ -187,7 +187,6 @@ export async function ensurePlutusQboLmbPlanAccounts(
     { label: 'Duty', parent: parents.cogsDuty },
     { label: 'Mfg Accessories', parent: parents.cogsMfgAccessories },
     { label: 'Inventory Shrinkage', parent: parents.cogsShrinkage },
-    { label: 'Product Expenses', parent: parents.productExpenses },
 
     // Warehousing buckets (brand leaf accounts are just the brand name)
     { label: 'Warehousing:3PL', parent: parents.warehousing3pl },
