@@ -246,6 +246,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    for (const line of lines) {
+      if (line.component !== 'manufacturing') continue;
+      if (typeof line.sku !== 'string' || line.sku === '' || typeof line.quantity !== 'number' || line.quantity <= 0) {
+        return NextResponse.json(
+          { error: 'Manufacturing lines require sku and quantity' },
+          { status: 400 },
+        );
+      }
+    }
+
     // Upsert BillMapping
     const mapping = await db.billMapping.upsert({
       where: { qboBillId },
