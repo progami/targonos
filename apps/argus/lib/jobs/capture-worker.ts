@@ -5,7 +5,7 @@ import { requireEnv } from '@/lib/env';
 import { loadEnvFromFiles } from './load-env';
 import { launchDefaultBrowser, captureTarget } from '@/lib/capture/run';
 import { sha256Hex, stableStringify } from '@/lib/capture/hash';
-import { diffObjects } from '@/lib/capture/diff';
+import { buildListingSignalExtracted, buildSignalChangeSummary, signalContentHash } from '@/lib/capture/signal';
 import { dispatchAlertsForRun } from '@/lib/alerts/dispatch';
 
 function sleep(ms: number) {
@@ -153,7 +153,7 @@ async function main() {
 
         for (const artifact of result.artifacts) {
           const sha = sha256Hex(artifact.buffer);
-          const key = `argus/${argusEnv}/${target.marketplace}/${target.type}/${target.id}/${year}/${month}/${day}/${run.id}/${artifact.kind}.png`;
+          const key = `argus/${argusEnv}/${target.marketplace}/asin/${target.id}/${year}/${month}/${day}/${run.id}/${artifact.kind}.png`;
           await s3.uploadFile(artifact.buffer, key, { contentType: 'image/png' });
           await prisma.runArtifact.create({
             data: {
@@ -183,22 +183,23 @@ async function main() {
       }
 
       const changedFromRunId = previous?.id ?? null;
-      const hasPrevious = previous && previous.normalizedExtracted !== null;
-      const changeSummary =
-        hasPrevious && previous.contentHash !== result.contentHash
-          ? diffObjects(previous.normalizedExtracted, result.normalizedExtracted).map((change) => ({
-              path: change.path,
-              before: stableStringify(change.before),
-              after: stableStringify(change.after),
-            }))
-          : undefined;
+
+      const previousSignal = previous?.normalizedExtracted ? buildListingSignalExtracted(previous.normalizedExtracted) : null;
+      const currentSignal = buildListingSignalExtracted(result.normalizedExtracted);
+
+      const previousHash = previousSignal ? signalContentHash(previousSignal) : null;
+      const currentHash = signalContentHash(currentSignal);
+
+      const hasPrevious = Boolean(previous && previous.normalizedExtracted !== null);
+      const changed = hasPrevious && previousHash !== null && previousHash !== currentHash;
+      const changeSummary = changed && previousSignal ? buildSignalChangeSummary(previousSignal, currentSignal) : undefined;
 
       const run = await prisma.captureRun.create({
         data: {
           targetId: target.id,
           startedAt: now,
           finalUrl: result.finalUrl,
-          contentHash: result.contentHash,
+          contentHash: currentHash,
           rawExtracted: result.rawExtracted as Prisma.InputJsonValue,
           normalizedExtracted: result.normalizedExtracted as Prisma.InputJsonValue,
           changedFromRunId,
@@ -210,7 +211,7 @@ async function main() {
 
       for (const artifact of result.artifacts) {
         const sha = sha256Hex(artifact.buffer);
-        const key = `argus/${argusEnv}/${target.marketplace}/${target.type}/${target.id}/${year}/${month}/${day}/${run.id}/${artifact.kind}.png`;
+        const key = `argus/${argusEnv}/${target.marketplace}/asin/${target.id}/${year}/${month}/${day}/${run.id}/${artifact.kind}.png`;
         await s3.uploadFile(artifact.buffer, key, { contentType: 'image/png' });
         await prisma.runArtifact.create({
           data: {

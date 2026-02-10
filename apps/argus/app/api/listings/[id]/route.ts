@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { withArgusAuth } from '@/lib/api/auth';
 import { prisma } from '@/lib/prisma';
-import { WatchTargetInputSchema } from '@/lib/targets/target-input';
-import { z } from 'zod';
 
 const paramsSchema = z.object({
   id: z.string().min(1),
+});
+
+const PatchSchema = z.object({
+  label: z.string().trim().min(1).optional(),
+  cadenceMinutes: z.number().int().positive().optional(),
+  enabled: z.boolean().optional(),
 });
 
 export const GET = withArgusAuth(async (_request, _session, context: { params: Promise<unknown> }) => {
@@ -16,20 +21,13 @@ export const GET = withArgusAuth(async (_request, _session, context: { params: P
       : rawParams;
 
   const { id } = paramsSchema.parse(safeParams);
-  const target = await prisma.watchTarget.findUnique({
+  const listing = await prisma.watchTarget.findUnique({
     where: { id },
-    include: {
-      alertRules: { orderBy: { createdAt: 'asc' } },
-      runs: { take: 50, orderBy: { startedAt: 'desc' }, include: { artifacts: true } },
-      jobs: { take: 50, orderBy: { scheduledAt: 'desc' } },
-    },
   });
-
-  if (!target) {
+  if (!listing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-
-  return NextResponse.json({ target });
+  return NextResponse.json({ listing });
 });
 
 export const PATCH = withArgusAuth(async (request, _session, context: { params: Promise<unknown> }) => {
@@ -41,26 +39,34 @@ export const PATCH = withArgusAuth(async (request, _session, context: { params: 
 
   const { id } = paramsSchema.parse(safeParams);
   const body = await request.json();
-  const input = WatchTargetInputSchema.parse(body);
+  const input = PatchSchema.parse(body);
+
+  const listing = await prisma.watchTarget.findUnique({ where: { id } });
+  if (!listing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const isTalosOurs = listing.owner === 'OURS' && listing.source === 'TALOS';
+  if (isTalosOurs) {
+    const attemptedLabelChange = input.label !== undefined && input.label !== listing.label;
+    const attemptedCadenceChange =
+      input.cadenceMinutes !== undefined && input.cadenceMinutes !== listing.cadenceMinutes;
+
+    if (attemptedLabelChange || attemptedCadenceChange) {
+      return NextResponse.json({ error: 'Talos-sourced listings cannot be edited' }, { status: 403 });
+    }
+  }
 
   const updated = await prisma.watchTarget.update({
     where: { id },
     data: {
-      type: input.type,
-      marketplace: input.marketplace,
-      owner: input.owner,
       label: input.label,
-      asin: input.asin,
-      keyword: input.keyword,
-      trackedAsins: input.trackedAsins,
-      sourceUrl: input.sourceUrl,
-      browseNodeId: input.browseNodeId,
       cadenceMinutes: input.cadenceMinutes,
       enabled: input.enabled,
     },
   });
 
-  return NextResponse.json({ target: updated });
+  return NextResponse.json({ listing: updated });
 });
 
 export const DELETE = withArgusAuth(async (_request, _session, context: { params: Promise<unknown> }) => {
@@ -71,6 +77,16 @@ export const DELETE = withArgusAuth(async (_request, _session, context: { params
       : rawParams;
 
   const { id } = paramsSchema.parse(safeParams);
+  const listing = await prisma.watchTarget.findUnique({ where: { id } });
+  if (!listing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  if (listing.owner !== 'COMPETITOR') {
+    return NextResponse.json({ error: 'Only competitor listings can be deleted' }, { status: 403 });
+  }
+
   await prisma.watchTarget.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 });
+

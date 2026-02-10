@@ -6,7 +6,6 @@ export type AsinExtracted = {
   price?: number;
   rating?: number;
   reviewCount?: number;
-  bullets: string[];
   imageUrls: string[];
 };
 
@@ -145,11 +144,6 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
   const reviewCountText =
     $('#acrCustomerReviewText').first().text().trim() || $('span[data-hook="total-review-count"]').first().text().trim();
 
-  const bullets = $('#feature-bullets ul li span.a-list-item')
-    .toArray()
-    .map((el) => $(el).text().trim())
-    .filter((text) => text.length > 0);
-
   const imageUrls: string[] = [];
 
   const landingUrl = bestImageUrlFromImg($('#landingImage').first());
@@ -167,12 +161,10 @@ export function extractAsinFields(html: string): { raw: Record<string, unknown>;
     priceText: priceText || undefined,
     ratingText: ratingText || undefined,
     reviewCountText: reviewCountText || undefined,
-    bullets,
     imageUrls,
   };
 
   const normalized: AsinExtracted = {
-    bullets,
     imageUrls: dedupePreserveOrder(imageUrls).slice(0, 9),
   };
 

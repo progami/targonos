@@ -33,15 +33,3 @@ export const PATCH = withArgusAuth(async (request, _session, context: { params: 
 
   return NextResponse.json({ rule: updated });
 });
-
-export const DELETE = withArgusAuth(async (_request, _session, context: { params: Promise<unknown> }) => {
-  const rawParams = await context.params;
-  const safeParams =
-    rawParams && typeof rawParams === 'object'
-      ? { ...(rawParams as Record<string, unknown>), then: undefined }
-      : rawParams;
-
-  const { id } = paramsSchema.parse(safeParams);
-  await prisma.alertRule.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
-});

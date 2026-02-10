@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { extractAsinFields } from '../lib/capture/extract-asin';
-import { extractSearchResults } from '../lib/capture/extract-search';
-import { extractBestsellers } from '../lib/capture/extract-bestsellers';
 import { stableStringify } from '../lib/capture/stable-json';
 import { sha256Hex } from '../lib/capture/hash';
 
@@ -16,12 +14,6 @@ describe('extractAsinFields', () => {
           </div>
           <span data-hook="rating-out-of-text">4.5 out of 5</span>
           <span id="acrCustomerReviewText">1,234 ratings</span>
-          <div id="feature-bullets">
-            <ul>
-              <li><span class="a-list-item">Bullet 1</span></li>
-              <li><span class="a-list-item">Bullet 2</span></li>
-            </ul>
-          </div>
           <img
             id="landingImage"
             src="https://example.com/landing-thumb.jpg"
@@ -42,7 +34,6 @@ describe('extractAsinFields', () => {
     expect(normalized.price).toBe(19.99);
     expect(normalized.rating).toBe(4.5);
     expect(normalized.reviewCount).toBe(1234);
-    expect(normalized.bullets).toEqual(['Bullet 1', 'Bullet 2']);
     expect(normalized.imageUrls).toEqual([
       'https://example.com/landing-lg.jpg',
       'https://example.com/alt-hires.jpg',
@@ -88,7 +79,6 @@ describe('extractAsinFields', () => {
     expect(normalized.price).toBeUndefined();
     expect(normalized.rating).toBeUndefined();
     expect(normalized.reviewCount).toBeUndefined();
-    expect(normalized.bullets).toEqual([]);
     expect(normalized.imageUrls).toEqual([]);
   });
 
@@ -126,44 +116,6 @@ describe('extractAsinFields', () => {
     expect(normalized.imageUrls).toEqual([
       'https://m.media-amazon.com/images/I/41fsFSi90sL._AC_SL1500_.jpg',
       'https://m.media-amazon.com/images/I/51NOmHTSK1L._AC_SL1500_.jpg',
-    ]);
-  });
-});
-
-describe('extractSearchResults', () => {
-  test('returns ordered ASINs and tracked positions', () => {
-    const html = `
-      <div id="search">
-        <div data-component-type="s-search-result" data-asin="b0001">Sponsored</div>
-        <div data-component-type="s-search-result" data-asin="B0002">Regular</div>
-        <div data-component-type="s-search-result" data-asin="">Ignore</div>
-      </div>
-    `;
-
-    const { normalized } = extractSearchResults(html, { trackedAsins: ['b0002', 'B0003'] });
-    expect(normalized.results).toEqual(['B0001', 'B0002']);
-    expect(normalized.tracked).toEqual([
-      { asin: 'B0002', found: true, position: 2, sponsored: false },
-      { asin: 'B0003', found: false },
-    ]);
-  });
-});
-
-describe('extractBestsellers', () => {
-  test('returns top ASIN list and tracked positions', () => {
-    const html = `
-      <div id="zg-ordered-list">
-        <div data-asin="B0001"></div>
-        <div data-asin="B0002"></div>
-        <div data-asin="B0001"></div>
-      </div>
-    `;
-
-    const { normalized } = extractBestsellers(html, { trackedAsins: ['B0002', 'B0003'] });
-    expect(normalized.topAsins).toEqual(['B0001', 'B0002']);
-    expect(normalized.tracked).toEqual([
-      { asin: 'B0002', found: true, position: 2 },
-      { asin: 'B0003', found: false },
     ]);
   });
 });

@@ -22,8 +22,8 @@ export function ProductDetailHeader(props: {
   backLabel?: string;
 }) {
   const imagesEnabled = props.target.owner === 'OURS';
-  const backHref = props.backHref ? props.backHref : '/products';
-  const backLabel = props.backLabel ? props.backLabel : 'Products';
+  const backHref = props.backHref ? props.backHref : '/monitoring';
+  const backLabel = props.backLabel ? props.backLabel : 'Monitoring';
 
   return (
     <div className="space-y-4">

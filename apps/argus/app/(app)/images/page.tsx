@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ImageManagerPage() {
   const targets = await prisma.watchTarget.findMany({
-    where: { type: 'ASIN', owner: 'OURS', enabled: true },
+    where: { owner: 'OURS', enabled: true },
     orderBy: [{ label: 'asc' }],
     include: {
       activeImageVersion: { select: { versionNumber: true } },
@@ -35,4 +35,3 @@ export default async function ImageManagerPage() {
     </div>
   );
 }
-
