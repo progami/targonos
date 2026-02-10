@@ -44,7 +44,15 @@ type InventoryLine = {
   description: string;
   account: string;
   accountId: string;
-  component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories' | 'warehousing3pl' | 'warehouseAmazonFc' | 'warehouseAwd';
+  component:
+    | 'manufacturing'
+    | 'freight'
+    | 'duty'
+    | 'mfgAccessories'
+    | 'warehousing3pl'
+    | 'warehouseAmazonFc'
+    | 'warehouseAwd'
+    | 'productExpenses';
 };
 
 type MappingLine = {
@@ -116,6 +124,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   warehousing3pl: '3PL',
   warehouseAmazonFc: 'Amazon FC',
   warehouseAwd: 'AWD',
+  productExpenses: 'Product Expenses',
 };
 
 const COMPONENT_GROUPS = [
@@ -135,6 +144,10 @@ const COMPONENT_GROUPS = [
       { value: 'warehouseAmazonFc', label: 'Amazon FC' },
       { value: 'warehouseAwd', label: 'AWD' },
     ],
+  },
+  {
+    label: 'Expenses',
+    options: [{ value: 'productExpenses', label: 'Product Expenses' }],
   },
 ];
 
