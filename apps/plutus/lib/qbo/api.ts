@@ -1,6 +1,7 @@
 import { getApiBaseUrl, refreshAccessToken } from './client';
 import { createLogger } from '@targon/logger';
 import { getCached, setCache, invalidateCache } from './cache';
+import { loadServerQboConnection, saveServerQboConnection } from './connection-store';
 
 const logger = createLogger({ name: 'qbo-api' });
 
@@ -414,6 +415,45 @@ export interface FetchBillsOptions {
   startPosition?: number;
 }
 
+const tokenRefreshPromisesByRealmId = new Map<string, Promise<QboConnection>>();
+
+async function refreshConnectionSingleFlight(connection: QboConnection): Promise<QboConnection> {
+  const existing = tokenRefreshPromisesByRealmId.get(connection.realmId);
+  if (existing) return existing;
+
+  const refreshPromise = (async () => {
+    const storedConnection = await loadServerQboConnection();
+    if (storedConnection && storedConnection.realmId === connection.realmId) {
+      const storedExpiresAt = new Date(storedConnection.expiresAt);
+      const now = new Date();
+      // Another request/process may have already refreshed and persisted the rotated refresh token.
+      if (storedExpiresAt.getTime() - now.getTime() >= 5 * 60 * 1000) {
+        return storedConnection;
+      }
+      connection = storedConnection;
+    }
+
+    const newTokens = await refreshAccessToken(connection.refreshToken);
+    const updatedConnection: QboConnection = {
+      ...connection,
+      accessToken: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,
+      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
+    };
+
+    // Refresh tokens are rotated on each refresh; persist immediately so we don't lose the new refresh token
+    // if a request fails before its caller writes the updated connection.
+    await saveServerQboConnection(updatedConnection);
+
+    return updatedConnection;
+  })().finally(() => {
+    tokenRefreshPromisesByRealmId.delete(connection.realmId);
+  });
+
+  tokenRefreshPromisesByRealmId.set(connection.realmId, refreshPromise);
+  return refreshPromise;
+}
+
 /**
  * Ensure we have a valid access token, refreshing if needed
  */
@@ -426,21 +466,14 @@ export async function getValidToken(
   // If token expires in less than 5 minutes, refresh it
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     logger.info('Access token expired or expiring soon, refreshing...');
-    let newTokens: Awaited<ReturnType<typeof refreshAccessToken>>;
     try {
-      newTokens = await refreshAccessToken(connection.refreshToken);
+      const updatedConnection = await refreshConnectionSingleFlight(connection);
+      return { accessToken: updatedConnection.accessToken, updatedConnection };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn('QBO token refresh failed', { error: message });
+      logger.warn('QBO token refresh failed', { realmId: connection.realmId, error: message });
       throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
     }
-    const updatedConnection: QboConnection = {
-      ...connection,
-      accessToken: newTokens.accessToken,
-      refreshToken: newTokens.refreshToken,
-      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
-    };
-    return { accessToken: newTokens.accessToken, updatedConnection };
   }
 
   return { accessToken: connection.accessToken };
