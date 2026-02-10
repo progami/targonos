@@ -82,10 +82,9 @@ export async function exchangeCodeForTokens(
 
 export async function refreshAccessToken(refreshToken: string): Promise<TokenExchangeResult> {
   const oauthClient = createOAuthClient();
-  oauthClient.setToken({ refresh_token: refreshToken });
 
   logger.info('Refreshing QBO access token');
-  const authResponse = await oauthClient.refresh();
+  const authResponse = await oauthClient.refreshUsingToken(refreshToken);
   const token = authResponse.getJson();
 
   return {
