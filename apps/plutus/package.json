@@ -32,6 +32,7 @@
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-table": "^8.21.3",
     "@targon/auth": "workspace:*",
+    "@targon/amazon-sp-api": "workspace:*",
     "@targon/config": "workspace:*",
     "@targon/logger": "workspace:*",
     "@targon/prisma-plutus": "workspace:*",
