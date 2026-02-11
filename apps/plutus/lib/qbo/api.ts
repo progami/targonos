@@ -836,6 +836,34 @@ export async function updateBill(
   return { bill: data.Bill, updatedConnection };
 }
 
+export async function updateBillWithPayload(
+  connection: QboConnection,
+  payload: Record<string, unknown>,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill with payload', { status: response.status, error: errorText });
+    throw new Error(`Failed to update bill with payload: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
 /**
  * Fetch a single JournalEntry by ID
  */
