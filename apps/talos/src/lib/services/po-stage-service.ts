@@ -510,21 +510,6 @@ function validateCommodityCodeFormat(params: { tenantCode: string; commodityCode
   return digits.length >= 6
 }
 
-function validateCustomsEntryNumberFormat(params: { tenantCode: string; customsEntryNumber: string }): boolean {
-  const normalized = params.customsEntryNumber.replace(/\s+/g, '').toUpperCase()
-
-  if (params.tenantCode === 'US') {
-    const digits = normalized.replace(/[^0-9]/g, '')
-    return digits.length === 11
-  }
-
-  if (params.tenantCode === 'UK') {
-    return /^[0-9]{2}[A-Z]{2}[A-Z0-9]{14}$/.test(normalized)
-  }
-
-  return normalized.length > 0
-}
-
 function toFinancialCategory(costCategory: CostCategory): FinancialLedgerCategory {
   if (costCategory === CostCategory.Inbound) return FinancialLedgerCategory.Inbound
   if (costCategory === CostCategory.Storage) return FinancialLedgerCategory.Storage
@@ -2421,7 +2406,7 @@ export async function transitionPurchaseOrderStage(
 export interface ReceivePurchaseOrderInventoryInput {
   warehouseCode: string
   receiveType: InboundReceiveType
-  customsEntryNumber: string
+  customsEntryNumber?: string | null
   customsClearedDate: Date | string
   receivedDate: Date | string
   dutyAmount?: number | null
@@ -2459,7 +2444,6 @@ export async function receivePurchaseOrderInventory(params: {
   }
 
   const tenant = await getCurrentTenant()
-  const tenantCode = tenant.code
 
   const issues: Record<string, string> = {}
 
@@ -2473,12 +2457,9 @@ export async function receivePurchaseOrderInventory(params: {
     recordGateIssue(issues, 'details.receiveType', 'Receive type is required')
   }
 
-  const customsEntryNumber = params.input.customsEntryNumber.trim()
-  if (!customsEntryNumber) {
-    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number is required')
-  } else if (!validateCustomsEntryNumberFormat({ tenantCode, customsEntryNumber })) {
-    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number format is invalid')
-  }
+  const customsEntryNumberText =
+    typeof params.input.customsEntryNumber === 'string' ? params.input.customsEntryNumber.trim() : ''
+  const customsEntryNumber = customsEntryNumberText.length > 0 ? customsEntryNumberText : null
 
   const customsClearedDate = resolveDateValue(params.input.customsClearedDate, 'Customs cleared date')
   if (!customsClearedDate) {

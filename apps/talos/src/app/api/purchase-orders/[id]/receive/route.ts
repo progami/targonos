@@ -52,7 +52,7 @@ const RequiredInboundReceiveType = z.preprocess(
 const ReceivePurchaseOrderSchema = z.object({
   warehouseCode: RequiredString('Warehouse is required'),
   receiveType: RequiredInboundReceiveType,
-  customsEntryNumber: RequiredString('Import entry number is required'),
+  customsEntryNumber: OptionalString.nullable().optional(),
   customsClearedDate: RequiredDateString('Customs cleared date is required'),
   receivedDate: RequiredDateString('Received date is required'),
   dutyAmount: OptionalNumber.nullable().optional(),
