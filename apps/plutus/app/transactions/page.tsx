@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 
@@ -111,6 +112,15 @@ type TransactionRow = {
 
 type BrandOption = { id: string; name: string };
 type SkuOption = { id: string; sku: string; productName: string | null; brandId: string };
+type VendorOption = { id: string; name: string };
+type BillCreateAccountOption = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  type: string;
+  subType: string | null;
+  component: BillComponent | null;
+};
 
 type TransactionsResponse = {
   transactions: TransactionRow[];
@@ -150,6 +160,25 @@ type BillEditState = {
   poNumber: string;
   brandId: string;
   lines: Record<string, LineEditState>;
+};
+
+type CreateBillLineState = {
+  id: string;
+  accountId: string;
+  description: string;
+  amount: string;
+  sku: string;
+  quantity: string;
+  mode: 'single' | 'split';
+  splits: SplitEntryState[];
+};
+
+type CreateBillState = {
+  txnDate: string;
+  vendorId: string;
+  poNumber: string;
+  brandId: string;
+  lines: CreateBillLineState[];
 };
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -298,6 +327,36 @@ function makeSplitEntry(sku: string = '', quantity: string = ''): SplitEntryStat
   return { id: nextSplitId(), sku, quantity };
 }
 
+let createLineIdCounter = 0;
+function nextCreateLineId() {
+  createLineIdCounter += 1;
+  return `create-line-${createLineIdCounter}`;
+}
+
+function makeCreateBillLineState(): CreateBillLineState {
+  return {
+    id: nextCreateLineId(),
+    accountId: '',
+    description: '',
+    amount: '',
+    sku: '',
+    quantity: '',
+    mode: 'single',
+    splits: [makeSplitEntry(), makeSplitEntry()],
+  };
+}
+
+function makeInitialCreateBillState(): CreateBillState {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    txnDate: today,
+    vendorId: '',
+    poNumber: '',
+    brandId: '',
+    lines: [makeCreateBillLineState()],
+  };
+}
+
 function initBillEditState(bill: BillRow): BillEditState {
   const lines: Record<string, LineEditState> = {};
   for (const trackedLine of bill.trackedLines) {
@@ -345,6 +404,75 @@ async function fetchTransactions(input: {
     const data = await res.json();
     throw new Error(data.error);
   }
+  return res.json();
+}
+
+async function fetchBillCreateContext(): Promise<{
+  vendors: VendorOption[];
+  accounts: BillCreateAccountOption[];
+}> {
+  const res = await fetch(`${basePath}/api/plutus/bills/create`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
+
+async function createBillFromTransactions(input: { state: CreateBillState }): Promise<unknown> {
+  const payloadLines = input.state.lines.map((line) => {
+    const amount = Number(line.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('Each line must have a positive amount');
+    }
+
+    if (line.mode === 'split') {
+      const splits = line.splits.map((split) => {
+        const quantity = parsePositiveInteger(split.quantity);
+        if (quantity === null) {
+          throw new Error('Split quantity must be a positive integer');
+        }
+        return {
+          sku: split.sku.trim(),
+          quantity,
+        };
+      });
+
+      return {
+        accountId: line.accountId,
+        amount,
+        description: line.description.trim() !== '' ? line.description.trim() : undefined,
+        splits,
+      };
+    }
+
+    const quantity = parsePositiveInteger(line.quantity);
+    return {
+      accountId: line.accountId,
+      amount,
+      description: line.description.trim() !== '' ? line.description.trim() : undefined,
+      sku: line.sku.trim() !== '' ? line.sku.trim() : undefined,
+      quantity: quantity !== null ? quantity : undefined,
+    };
+  });
+
+  const res = await fetch(`${basePath}/api/plutus/bills/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      txnDate: input.state.txnDate,
+      vendorId: input.state.vendorId,
+      poNumber: input.state.poNumber,
+      brandId: input.state.brandId,
+      lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
   return res.json();
 }
 
@@ -424,6 +552,462 @@ async function syncMappedBillsBulk(qboBillIds: string[]): Promise<{ successCount
   }
 
   return res.json();
+}
+
+function CreateBillModal({
+  brands,
+  skus,
+  open,
+  onOpenChange,
+}: {
+  brands: BrandOption[];
+  skus: SkuOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [createState, setCreateState] = useState<CreateBillState>(() => makeInitialCreateBillState());
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setCreateState(makeInitialCreateBillState());
+    setCreateError(null);
+  }, [open]);
+
+  const { data: createContext, isLoading: createContextLoading } = useQuery({
+    queryKey: ['plutus-bill-create-context'],
+    queryFn: fetchBillCreateContext,
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const accountById = useMemo(() => {
+    const map = new Map<string, BillCreateAccountOption>();
+    for (const account of createContext?.accounts ?? []) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [createContext]);
+
+  const filteredSkus = useMemo(() => {
+    if (createState.brandId === '') return [];
+    return skus.filter((sku) => sku.brandId === createState.brandId);
+  }, [createState.brandId, skus]);
+
+  const createMutation = useMutation({
+    mutationFn: () => createBillFromTransactions({ state: createState }),
+    onSuccess: () => {
+      setCreateError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      setCreateError(error.message);
+    },
+  });
+
+  const canSave = useMemo(() => {
+    if (
+      createState.txnDate.trim() === '' ||
+      createState.vendorId === '' ||
+      createState.poNumber.trim() === '' ||
+      createState.brandId === '' ||
+      createState.lines.length === 0
+    ) {
+      return false;
+    }
+
+    for (const line of createState.lines) {
+      const account = accountById.get(line.accountId);
+      if (!account) {
+        return false;
+      }
+
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return false;
+      }
+
+      if (account.component !== 'manufacturing') {
+        if (line.mode === 'split') {
+          return false;
+        }
+        continue;
+      }
+
+      if (line.mode === 'single') {
+        if (line.sku.trim() === '') return false;
+        if (parsePositiveInteger(line.quantity) === null) return false;
+        continue;
+      }
+
+      if (line.splits.length < 2) {
+        return false;
+      }
+
+      const seenSkus = new Set<string>();
+      for (const split of line.splits) {
+        const normalizedSku = normalizeSku(split.sku);
+        if (normalizedSku === '') return false;
+        if (seenSkus.has(normalizedSku)) return false;
+        seenSkus.add(normalizedSku);
+        if (parsePositiveInteger(split.quantity) === null) return false;
+      }
+    }
+
+    return true;
+  }, [accountById, createState]);
+
+  const updateLine = (lineId: string, patch: Partial<CreateBillLineState>) => {
+    setCreateState((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
+    }));
+  };
+
+  const addLine = () => {
+    setCreateState((prev) => ({
+      ...prev,
+      lines: [...prev.lines, makeCreateBillLineState()],
+    }));
+  };
+
+  const removeLine = (lineId: string) => {
+    setCreateState((prev) => {
+      if (prev.lines.length <= 1) return prev;
+      return {
+        ...prev,
+        lines: prev.lines.filter((line) => line.id !== lineId),
+      };
+    });
+  };
+
+  const updateSplit = (lineId: string, splitId: string, patch: Partial<SplitEntryState>) => {
+    const line = createState.lines.find((candidate) => candidate.id === lineId);
+    if (!line) return;
+    const splits = line.splits.map((split) => (split.id === splitId ? { ...split, ...patch } : split));
+    updateLine(lineId, { splits });
+  };
+
+  const addSplit = (lineId: string) => {
+    const line = createState.lines.find((candidate) => candidate.id === lineId);
+    if (!line) return;
+    updateLine(lineId, { splits: [...line.splits, makeSplitEntry()] });
+  };
+
+  const removeSplit = (lineId: string, splitId: string) => {
+    const line = createState.lines.find((candidate) => candidate.id === lineId);
+    if (!line || line.splits.length <= 2) return;
+    updateLine(lineId, { splits: line.splits.filter((split) => split.id !== splitId) });
+  };
+
+  const toggleSplitMode = (lineId: string) => {
+    const line = createState.lines.find((candidate) => candidate.id === lineId);
+    if (!line) return;
+
+    if (line.mode === 'single') {
+      updateLine(lineId, {
+        mode: 'split',
+        splits: [makeSplitEntry(line.sku, line.quantity), makeSplitEntry()],
+      });
+      return;
+    }
+
+    const firstSplit = line.splits[0];
+    updateLine(lineId, {
+      mode: 'single',
+      sku: firstSplit ? firstSplit.sku : '',
+      quantity: firstSplit ? firstSplit.quantity : '',
+      splits: [makeSplitEntry(), makeSplitEntry()],
+    });
+  };
+
+  const vendors = createContext?.vendors ?? [];
+  const accounts = createContext?.accounts ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create Bill</DialogTitle>
+          <DialogDescription>Create a new QBO bill with chart-of-accounts lines from Transactions.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Bill Date</label>
+              <Input
+                type="date"
+                value={createState.txnDate}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, txnDate: event.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Vendor</label>
+              <select
+                value={createState.vendorId}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+              >
+                <option value="">{createContextLoading ? 'Loading vendors…' : 'Select vendor'}</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
+              <Input
+                value={createState.poNumber}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, poNumber: event.target.value }))}
+                placeholder="e.g. PO-2026-001"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
+              <select
+                value={createState.brandId}
+                onChange={(event) => {
+                  const nextBrandId = event.target.value;
+                  setCreateState((prev) => ({
+                    ...prev,
+                    brandId: nextBrandId,
+                    lines: prev.lines.map((line) => ({
+                      ...line,
+                      sku: '',
+                      quantity: '',
+                      splits: [makeSplitEntry(), makeSplitEntry()],
+                    })),
+                  }));
+                }}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+              >
+                <option value="">Select brand</option>
+                {brands.map((brand) => (
+                  <option key={brand.id} value={brand.id}>{brand.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
+                  <TableHead className="text-xs">Account</TableHead>
+                  <TableHead className="text-xs">Description</TableHead>
+                  <TableHead className="text-xs w-24">Amount</TableHead>
+                  <TableHead className="text-xs">SKU / Split</TableHead>
+                  <TableHead className="text-xs w-24">Qty</TableHead>
+                  <TableHead className="text-xs w-28">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {createState.lines.map((line) => {
+                  const selectedAccount = accountById.get(line.accountId);
+                  const isManufacturing = selectedAccount?.component === 'manufacturing';
+                  const componentLabel = selectedAccount?.component ? COMPONENT_LABELS[selectedAccount.component] : null;
+
+                  return (
+                    <TableRow key={line.id}>
+                      <TableCell>
+                        <select
+                          value={line.accountId}
+                          onChange={(event) => {
+                            const nextAccountId = event.target.value;
+                            const nextAccount = accountById.get(nextAccountId);
+                            updateLine(line.id, {
+                              accountId: nextAccountId,
+                              description: nextAccount ? nextAccount.fullyQualifiedName : '',
+                              mode: 'single',
+                              sku: '',
+                              quantity: '',
+                              splits: [makeSplitEntry(), makeSplitEntry()],
+                            });
+                          }}
+                          className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                        >
+                          <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.fullyQualifiedName}
+                            </option>
+                          ))}
+                        </select>
+                        {componentLabel && (
+                          <p className="mt-1 text-[11px] text-brand-teal-600 dark:text-brand-teal-400">{componentLabel}</p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={line.description}
+                          onChange={(event) => updateLine(line.id, { description: event.target.value })}
+                          placeholder="Line description"
+                          className="h-8 text-xs"
+                          disabled={isManufacturing}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.amount}
+                          onChange={(event) => updateLine(line.id, { amount: event.target.value })}
+                          placeholder="0.00"
+                          className="h-8 text-xs"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {isManufacturing && line.mode === 'split' ? (
+                          <div className="space-y-1">
+                            {line.splits.map((split) => (
+                              <div key={split.id} className="flex items-center gap-2">
+                                <select
+                                  value={split.sku}
+                                  onChange={(event) => updateSplit(line.id, split.id, { sku: event.target.value })}
+                                  disabled={createState.brandId === ''}
+                                  className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+                                >
+                                  <option value="">{createState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
+                                  {filteredSkus.map((sku) => (
+                                    <option key={sku.id} value={sku.sku}>
+                                      {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={split.quantity}
+                                  onChange={(event) => updateSplit(line.id, split.id, { quantity: event.target.value })}
+                                  placeholder="Qty"
+                                  className="h-7 w-20 text-xs"
+                                />
+                                {line.splits.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSplit(line.id, split.id)}
+                                    className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : isManufacturing ? (
+                          <select
+                            value={line.sku}
+                            onChange={(event) => updateLine(line.id, { sku: event.target.value })}
+                            disabled={createState.brandId === ''}
+                            className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+                          >
+                            <option value="">{createState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
+                            {filteredSkus.map((sku) => (
+                              <option key={sku.id} value={sku.sku}>
+                                {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-slate-400">&mdash;</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isManufacturing ? (
+                          line.mode === 'split' ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
+                          ) : (
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.quantity}
+                              onChange={(event) => updateLine(line.id, { quantity: event.target.value })}
+                              placeholder="Units"
+                              className="h-7 w-20 text-xs"
+                            />
+                          )
+                        ) : (
+                          <span className="text-xs text-slate-400">&mdash;</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {isManufacturing && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleSplitMode(line.id)}
+                                className="h-7 px-2 text-xs"
+                              >
+                                {line.mode === 'split' ? 'Single' : 'Split'}
+                              </Button>
+                              {line.mode === 'split' && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addSplit(line.id)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeLine(line.id)}
+                            disabled={createState.lines.length <= 1}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between">
+            <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              Add Line
+            </Button>
+          </div>
+        </div>
+
+        {createError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={!canSave || createMutation.isPending || createContextLoading}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {createMutation.isPending ? 'Creating...' : 'Create Bill'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function EditBillModal({
@@ -810,6 +1394,7 @@ export default function TransactionsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editBill, setEditBill] = useState<BillRow | null>(null);
+  const [createBillOpen, setCreateBillOpen] = useState(false);
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -992,6 +1577,16 @@ export default function TransactionsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {tab === 'bill' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCreateBillOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      New Bill
+                    </Button>
+                  )}
                   {tab === 'bill' && (
                     <Button
                       variant="outline"
@@ -1380,6 +1975,13 @@ export default function TransactionsPage() {
             </CardContent>
           </Card>
         </div>
+
+        <CreateBillModal
+          brands={brands}
+          skus={skus}
+          open={createBillOpen}
+          onOpenChange={setCreateBillOpen}
+        />
 
         {editBill && (
           <EditBillModal
