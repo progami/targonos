@@ -178,11 +178,10 @@ async function fetchDueDispatches(limit: number): Promise<DispatchRow[]> {
     `
     SELECT id, connection_id, order_id, marketplace_id, type, state,
            scheduled_at::text, expires_at::text, sent_at::text, last_error
-      FROM hermes_dispatches
+     FROM hermes_dispatches
      WHERE state = 'queued'
        AND type = 'request_review'
        AND scheduled_at <= NOW()
-       AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY scheduled_at ASC
      LIMIT $1;
     `,

@@ -146,7 +146,6 @@ export function extractOrdersFromGetOrdersResponse(body: any, marketplaceId: str
         earliestDeliveryDate: o?.EarliestDeliveryDate ?? o?.earliestDeliveryDate ?? null,
         latestDeliveryDate: o?.LatestDeliveryDate ?? o?.latestDeliveryDate ?? null,
         latestShipDate: o?.LatestShipDate ?? o?.latestShipDate ?? null,
-        raw: o,
       } satisfies HermesOrder;
     })
     .filter(Boolean) as HermesOrder[];
@@ -182,7 +181,7 @@ export async function upsertOrders(params: {
             earliest_delivery_date = COALESCE(EXCLUDED.earliest_delivery_date, hermes_orders.earliest_delivery_date),
             latest_delivery_date = COALESCE(EXCLUDED.latest_delivery_date, hermes_orders.latest_delivery_date),
             latest_ship_date = COALESCE(EXCLUDED.latest_ship_date, hermes_orders.latest_ship_date),
-            raw = COALESCE(EXCLUDED.raw, hermes_orders.raw),
+            raw = EXCLUDED.raw,
             updated_at = NOW();
       `,
       [

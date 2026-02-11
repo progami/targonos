@@ -116,6 +116,49 @@ function parseRateLimitHeader(headers: Record<string, string>): number | null {
   return n;
 }
 
+function getErrorMessage(err: unknown): string {
+  if (!err) return "Unknown error";
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && "message" in err) {
+    const msg = (err as any).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  return String(err);
+}
+
+function getErrorCode(err: unknown): string | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  const direct = (err as any).code;
+  if (typeof direct === "string" && direct.trim()) return direct;
+  const cause = (err as any).cause;
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const code = (cause as any).code;
+    if (typeof code === "string" && code.trim()) return code;
+  }
+  return undefined;
+}
+
+function isTransientNetworkError(err: unknown): boolean {
+  const msg = getErrorMessage(err).toLowerCase();
+  if (msg.includes("fetch failed")) return true;
+
+  const code = getErrorCode(err);
+  if (!code) return false;
+  const c = code.toUpperCase();
+  return (
+    c === "ECONNRESET" ||
+    c === "ECONNREFUSED" ||
+    c === "EHOSTUNREACH" ||
+    c === "ENETUNREACH" ||
+    c === "EAI_AGAIN" ||
+    c === "ETIMEDOUT" ||
+    c === "UND_ERR_CONNECT_TIMEOUT" ||
+    c === "UND_ERR_HEADERS_TIMEOUT" ||
+    c === "UND_ERR_BODY_TIMEOUT" ||
+    c === "UND_ERR_SOCKET"
+  );
+}
+
 // --------- Process-global caches (safe for Next.js + worker reuse) ---------
 
 const g = globalThis as unknown as {
@@ -322,91 +365,102 @@ export class SpApiClient {
   }
 
   async request(opts: SpApiRequestOpts): Promise<SpApiResponse> {
-    // Safety net: block all POST requests in dry-run mode.
-    if (isDryRun() && opts.method === "POST") {
-      console.log(`[hermes:dry-run] BLOCKED ${opts.method} ${opts.path}`);
-      return {
-        status: 200,
-        body: { dryRun: true, blocked: `${opts.method} ${opts.path}` },
-        headers: {},
-      };
-    }
-
-    const opKey = opts.rateLimitKey ?? `${opts.method} ${opts.path.split("?")[0]}`;
-    const limiterKey = this.limiterKey(opKey);
-
-    const defaultCfg: TokenBucketConfig = opts.defaultRateLimit ?? {
-      ratePerSecond: 1,
-      burst: 1,
-    };
-
-    // Ensure limiter exists for this operation+seller.
-    spApiLimiter.ensure(limiterKey, defaultCfg);
-
-    // Wait for a token (optionally bounded).
-    if (typeof opts.maxLimiterWaitMs === "number") {
-      const acquired = await spApiLimiter.acquireOrReturnWaitMs(limiterKey, opts.maxLimiterWaitMs);
-      if (!acquired.ok) {
+    try {
+      // Safety net: block all POST requests in dry-run mode.
+      if (isDryRun() && opts.method === "POST") {
+        console.log(`[hermes:dry-run] BLOCKED ${opts.method} ${opts.path}`);
         return {
-          status: 429,
-          body: { error: "rate_limited", retryAfterMs: acquired.waitMs },
-          headers: { "retry-after": String(Math.ceil(acquired.waitMs / 1000)) },
+          status: 200,
+          body: { dryRun: true, blocked: `${opts.method} ${opts.path}` },
+          headers: {},
         };
       }
-    } else {
-      await spApiLimiter.acquire(limiterKey);
+
+      const opKey = opts.rateLimitKey ?? `${opts.method} ${opts.path.split("?")[0]}`;
+      const limiterKey = this.limiterKey(opKey);
+
+      const defaultCfg: TokenBucketConfig = opts.defaultRateLimit ?? {
+        ratePerSecond: 1,
+        burst: 1,
+      };
+
+      // Ensure limiter exists for this operation+seller.
+      spApiLimiter.ensure(limiterKey, defaultCfg);
+
+      // Wait for a token (optionally bounded).
+      if (typeof opts.maxLimiterWaitMs === "number") {
+        const acquired = await spApiLimiter.acquireOrReturnWaitMs(limiterKey, opts.maxLimiterWaitMs);
+        if (!acquired.ok) {
+          return {
+            status: 429,
+            body: { error: "rate_limited", retryAfterMs: acquired.waitMs },
+            headers: { "retry-after": String(Math.ceil(acquired.waitMs / 1000)) },
+          };
+        }
+      } else {
+        await spApiLimiter.acquire(limiterKey);
+      }
+
+      // LWA access token
+      const accessToken = await this.getLwaAccessToken();
+
+      const userAgent = this.config.userAgent ?? "targon-hermes/0.1";
+      const headers: Record<string, string> = {
+        "user-agent": userAgent,
+        "x-amz-access-token": accessToken,
+      };
+
+      // Only send JSON when a body exists.
+      let bodyStr: string | undefined;
+      if (opts.body !== undefined) {
+        bodyStr = JSON.stringify(opts.body);
+        headers["content-type"] = "application/json";
+      }
+
+      const signed = await this.signRequest({
+        method: opts.method,
+        path: opts.path,
+        query: opts.query,
+        headers,
+        body: bodyStr,
+      });
+
+      const res = await fetch(signed.url, {
+        method: opts.method,
+        headers: signed.headers,
+        body: bodyStr,
+      });
+
+      const raw = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        parsed = raw;
+      }
+
+      const outHeaders = normalizeHeaders(res.headers);
+
+      // Learn dynamic rate when available.
+      const rate = parseRateLimitHeader(outHeaders);
+      if (rate) {
+        spApiLimiter.updateRate(limiterKey, rate);
+      }
+
+      return {
+        status: res.status,
+        body: parsed,
+        headers: outHeaders,
+      };
+    } catch (err) {
+      if (isTransientNetworkError(err)) {
+        return {
+          status: 503,
+          body: { error: "network_error", message: getErrorMessage(err) },
+          headers: {},
+        };
+      }
+      throw err;
     }
-
-    // LWA access token
-    const accessToken = await this.getLwaAccessToken();
-
-    const userAgent = this.config.userAgent ?? "targon-hermes/0.1";
-    const headers: Record<string, string> = {
-      "user-agent": userAgent,
-      "x-amz-access-token": accessToken,
-    };
-
-    // Only send JSON when a body exists.
-    let bodyStr: string | undefined;
-    if (opts.body !== undefined) {
-      bodyStr = JSON.stringify(opts.body);
-      headers["content-type"] = "application/json";
-    }
-
-    const signed = await this.signRequest({
-      method: opts.method,
-      path: opts.path,
-      query: opts.query,
-      headers,
-      body: bodyStr,
-    });
-
-    const res = await fetch(signed.url, {
-      method: opts.method,
-      headers: signed.headers,
-      body: bodyStr,
-    });
-
-    const raw = await res.text();
-    let parsed: unknown = null;
-    try {
-      parsed = raw ? JSON.parse(raw) : null;
-    } catch {
-      parsed = raw;
-    }
-
-    const outHeaders = normalizeHeaders(res.headers);
-
-    // Learn dynamic rate when available.
-    const rate = parseRateLimitHeader(outHeaders);
-    if (rate) {
-      spApiLimiter.updateRate(limiterKey, rate);
-    }
-
-    return {
-      status: res.status,
-      body: parsed,
-      headers: outHeaders,
-    };
   }
 }

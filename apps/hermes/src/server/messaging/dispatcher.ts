@@ -322,11 +322,10 @@ export async function fetchDueBuyerMessages(limit: number): Promise<DispatchRow[
     `
     SELECT id, connection_id, order_id, marketplace_id, type, message_kind, state,
            scheduled_at::text, expires_at::text, sent_at::text, last_error, metadata
-      FROM hermes_dispatches
+     FROM hermes_dispatches
      WHERE state = 'queued'
        AND type = 'buyer_message'
        AND scheduled_at <= NOW()
-       AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY scheduled_at ASC
      LIMIT $1;
     `,
