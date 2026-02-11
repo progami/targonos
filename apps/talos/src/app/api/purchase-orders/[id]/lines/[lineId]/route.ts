@@ -3,6 +3,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
@@ -90,6 +91,14 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
   const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const line = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: lineId,
@@ -154,6 +163,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const line = await prisma.purchaseOrderLine.findFirst({
@@ -564,6 +582,15 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   // Only allow deleting lines in RFQ status

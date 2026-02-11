@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { ApiResponses, withAuthAndParams, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { FinancialLedgerSourceType, FinancialLedgerCategory, Prisma } from '@targon/prisma-talos'
 
@@ -72,6 +73,14 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
 
   const prisma = await getTenantPrisma()
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const entries = await prisma.financialLedgerEntry.findMany({
     where: {
       sourceType: FinancialLedgerSourceType.MANUAL,
@@ -109,11 +118,20 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, warehouseCode: true, warehouseName: true },
+    select: { id: true, status: true, warehouseCode: true, warehouseName: true },
   })
 
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const warehouseCode =
@@ -175,6 +193,14 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
   }
 
   const prisma = await getTenantPrisma()
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
 
   const entry = await prisma.financialLedgerEntry.findUnique({
     where: { id: costId },

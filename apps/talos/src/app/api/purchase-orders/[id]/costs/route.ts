@@ -1,5 +1,6 @@
 import { ApiResponses, withAuthAndParams } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { CostCategory } from '@targon/prisma-talos'
 
@@ -34,13 +35,22 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
 
   const prisma = await getTenantPrisma()
 
-  const orderExists = await prisma.purchaseOrder.findUnique({
+  const order = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, status: true },
   })
 
-  if (!orderExists) {
+  if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const entries = await prisma.costLedger.findMany({

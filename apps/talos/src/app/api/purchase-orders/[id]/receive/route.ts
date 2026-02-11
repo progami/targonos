@@ -2,6 +2,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { receivePurchaseOrderInventory, serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import type { ReceivePurchaseOrderInventoryInput, UserContext } from '@/lib/services/po-stage-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import type { NextRequest } from 'next/server'
@@ -74,6 +75,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return ApiResponses.validationError(parsed.error.flatten().fieldErrors)
   }
 
+  const prisma = await getTenantPrisma()
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const userContext: UserContext = {
     id: session.user.id,
     name: session.user.name ?? session.user.email ?? 'Unknown',
@@ -87,7 +97,6 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       user: userContext,
     })
 
-    const prisma = await getTenantPrisma()
     const supplier =
       updated.counterpartyName && updated.counterpartyName.trim().length > 0
         ? await prisma.supplier.findFirst({
