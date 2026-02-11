@@ -3,12 +3,9 @@ import { updateBill, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
+import { buildManufacturingLineDescriptionsFromMappings } from '@/lib/plutus/bills/qbo-sync';
 
 const logger = createLogger({ name: 'plutus-bills-sync' });
-
-function normalizeSku(raw: string): string {
-  return raw.trim().replace(/\s+/g, '-').toUpperCase();
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,14 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No mapping found for this bill. Save the mapping first.' }, { status: 404 });
     }
 
-    const lineDescriptions = mapping.lines
-      .filter((l) => l.component === 'manufacturing')
-      .map((l) => {
-        if (!l.sku || !l.quantity || l.quantity <= 0) {
-          throw new Error(`Manufacturing line mapping missing sku/quantity: billId=${qboBillId} lineId=${l.qboLineId}`);
-        }
-        return { lineId: l.qboLineId, description: `${normalizeSku(l.sku)} x ${l.quantity} units` };
-      });
+    const lineDescriptions = buildManufacturingLineDescriptionsFromMappings(qboBillId, mapping.lines);
 
     // Push PO number to QBO memo
     const { updatedConnection } = await updateBill(connection, qboBillId, {
