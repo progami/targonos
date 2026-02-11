@@ -1,15 +1,17 @@
 module.exports = {
   apps: [{
     name: 'talos-app',
-    script: 'server.js',
-    cwd: '/home/talos/talos-app/.next/standalone',
+    script: 'npm',
+    args: 'start',
+    cwd: '/home/talos/talos-app/apps/talos',
     instances: 1,
     exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
-      PORT: 3000,
+      PORT: 3001,
       BASE_PATH: '/talos',
-      HOSTNAME: '0.0.0.0'
+      NEXT_PUBLIC_BASE_PATH: '/talos',
+      HOST: '0.0.0.0'
     },
     error_file: '/home/talos/logs/error.log',
     out_file: '/home/talos/logs/out.log',
@@ -24,28 +26,21 @@ module.exports = {
     
     // Resource limits
     max_memory_restart: '1G',
-    
-    // Startup options
-    wait_ready: true,
-    listen_timeout: 10000,
-    kill_timeout: 5000,
-    
+
     // Pre-start hook to ensure directories exist
     pre_start: () => {
       const fs = require('fs');
-      const path = require('path');
-      
+
       // Ensure log directory exists
       const logDir = '/home/talos/logs';
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
       }
-      
-      // Check if standalone server exists
-      const serverPath = '/home/talos/talos-app/.next/standalone/server.js';
+
+      // Check if custom server exists
+      const serverPath = '/home/talos/talos-app/apps/talos/server.js';
       if (!fs.existsSync(serverPath)) {
-        console.error('ERROR: Standalone server not found at:', serverPath);
-        console.error('Please run "npm run build" with output: "standalone" in next.config.js');
+        console.error('ERROR: Custom server not found at:', serverPath);
         process.exit(1);
       }
     }
