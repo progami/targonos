@@ -34,6 +34,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  normalizePurchaseRegion,
+  normalizePurchaseSku,
+  parsePurchaseAllocationDescription,
+} from '@/lib/plutus/purchases/description';
 import { useTransactionsStore } from '@/lib/store/transactions';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +62,8 @@ type BillComponent =
   | 'warehouseAmazonFc'
   | 'warehouseAwd'
   | 'productExpenses';
+
+type BillReferenceType = 'PO' | 'CI' | 'GRN';
 
 type BillTrackedLine = {
   lineId: string;
@@ -122,6 +129,14 @@ type BillCreateAccountOption = {
   component: BillComponent | null;
 };
 
+type PurchaseAccountOption = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  type: string;
+  subType: string | null;
+};
+
 type TransactionsResponse = {
   transactions: TransactionRow[];
   pagination: {
@@ -132,6 +147,7 @@ type TransactionsResponse = {
   };
   brands?: BrandOption[];
   skus?: SkuOption[];
+  accounts?: PurchaseAccountOption[];
 };
 
 type BillRow = TransactionRow & {
@@ -141,11 +157,22 @@ type BillRow = TransactionRow & {
   mapping: BillMapping | null;
 };
 
+type PurchaseRow = TransactionRow & {
+  type: 'Purchase';
+};
+
 type MappingStatus = 'unmapped' | 'saved' | 'synced';
 
 type SplitEntryState = {
   id: string;
   sku: string;
+  quantity: string;
+};
+
+type PurchaseSplitEntryState = {
+  id: string;
+  sku: string;
+  region: string;
   quantity: string;
 };
 
@@ -166,6 +193,7 @@ type CreateBillLineState = {
   id: string;
   accountId: string;
   description: string;
+  reference: string;
   amount: string;
   sku: string;
   quantity: string;
@@ -176,9 +204,23 @@ type CreateBillLineState = {
 type CreateBillState = {
   txnDate: string;
   vendorId: string;
-  poNumber: string;
   brandId: string;
   lines: CreateBillLineState[];
+};
+
+type PurchaseLineEditState = {
+  qboLineId: string;
+  accountId: string;
+  amountCents: number;
+  mode: 'single' | 'split';
+  sku: string;
+  region: string;
+  quantity: string;
+  splits: PurchaseSplitEntryState[];
+};
+
+type PurchaseEditState = {
+  lines: Record<string, PurchaseLineEditState>;
 };
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -192,8 +234,19 @@ const COMPONENT_LABELS: Record<string, string> = {
   productExpenses: 'Product Expenses',
 };
 
+function referenceTypeForComponent(component: BillComponent | null | undefined): BillReferenceType | null {
+  if (component === 'manufacturing') return 'PO';
+  if (component === 'freight' || component === 'duty' || component === 'mfgAccessories') return 'CI';
+  if (component === 'warehousing3pl' || component === 'warehouseAmazonFc' || component === 'warehouseAwd') return 'GRN';
+  return null;
+}
+
 function isBillRow(row: TransactionRow): row is BillRow {
   return row.type === 'Bill';
+}
+
+function isPurchaseRow(row: TransactionRow): row is PurchaseRow {
+  return row.type === 'Purchase';
 }
 
 function normalizeSku(raw: string): string {
@@ -327,6 +380,25 @@ function makeSplitEntry(sku: string = '', quantity: string = ''): SplitEntryStat
   return { id: nextSplitId(), sku, quantity };
 }
 
+let purchaseSplitIdCounter = 0;
+function nextPurchaseSplitId() {
+  purchaseSplitIdCounter += 1;
+  return `purchase-split-${purchaseSplitIdCounter}`;
+}
+
+function makePurchaseSplitEntry(
+  sku: string = '',
+  region: string = '',
+  quantity: string = '',
+): PurchaseSplitEntryState {
+  return {
+    id: nextPurchaseSplitId(),
+    sku,
+    region,
+    quantity,
+  };
+}
+
 let createLineIdCounter = 0;
 function nextCreateLineId() {
   createLineIdCounter += 1;
@@ -338,6 +410,7 @@ function makeCreateBillLineState(): CreateBillLineState {
     id: nextCreateLineId(),
     accountId: '',
     description: '',
+    reference: '',
     amount: '',
     sku: '',
     quantity: '',
@@ -351,7 +424,6 @@ function makeInitialCreateBillState(): CreateBillState {
   return {
     txnDate: today,
     vendorId: '',
-    poNumber: '',
     brandId: '',
     lines: [makeCreateBillLineState()],
   };
@@ -376,6 +448,39 @@ function initBillEditState(bill: BillRow): BillEditState {
     brandId: bill.mapping?.brandId ? bill.mapping.brandId : '',
     lines,
   };
+}
+
+function initPurchaseEditState(purchase: PurchaseRow): PurchaseEditState {
+  const lines: Record<string, PurchaseLineEditState> = {};
+
+  for (const line of purchase.lines) {
+    if (!line.accountId) {
+      continue;
+    }
+
+    const amountCents = Math.round(line.amount * 100);
+    if (!Number.isInteger(amountCents) || amountCents <= 0) {
+      continue;
+    }
+
+    const parsedDescription = line.description ? parsePurchaseAllocationDescription(line.description) : null;
+    const sku = parsedDescription ? parsedDescription.sku : '';
+    const region = parsedDescription ? parsedDescription.region : '';
+    const quantity = parsedDescription ? String(parsedDescription.quantity) : '';
+
+    lines[line.id] = {
+      qboLineId: line.id,
+      accountId: line.accountId,
+      amountCents,
+      mode: 'single',
+      sku,
+      region,
+      quantity,
+      splits: [makePurchaseSplitEntry(sku, region, quantity), makePurchaseSplitEntry()],
+    };
+  }
+
+  return { lines };
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -442,6 +547,7 @@ async function createBillFromTransactions(input: { state: CreateBillState }): Pr
         accountId: line.accountId,
         amount,
         description: line.description.trim() !== '' ? line.description.trim() : undefined,
+        reference: line.reference.trim() !== '' ? line.reference.trim() : undefined,
         splits,
       };
     }
@@ -451,6 +557,7 @@ async function createBillFromTransactions(input: { state: CreateBillState }): Pr
       accountId: line.accountId,
       amount,
       description: line.description.trim() !== '' ? line.description.trim() : undefined,
+      reference: line.reference.trim() !== '' ? line.reference.trim() : undefined,
       sku: line.sku.trim() !== '' ? line.sku.trim() : undefined,
       quantity: quantity !== null ? quantity : undefined,
     };
@@ -462,7 +569,6 @@ async function createBillFromTransactions(input: { state: CreateBillState }): Pr
     body: JSON.stringify({
       txnDate: input.state.txnDate,
       vendorId: input.state.vendorId,
-      poNumber: input.state.poNumber,
       brandId: input.state.brandId,
       lines: payloadLines,
     }),
@@ -527,6 +633,80 @@ async function saveBillMapping(input: {
       billDate: input.bill.txnDate,
       vendorName: input.bill.entityName,
       totalAmount: input.bill.totalAmount,
+      lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
+  return res.json();
+}
+
+async function savePurchaseMapping(input: {
+  purchase: PurchaseRow;
+  editState: PurchaseEditState;
+}): Promise<unknown> {
+  const payloadLines = Object.values(input.editState.lines).map((line) => {
+    if (line.mode === 'split') {
+      const splits = line.splits.map((split) => {
+        const quantity = parsePositiveInteger(split.quantity);
+        if (quantity === null) {
+          throw new Error('Split quantity must be a positive integer');
+        }
+        const normalizedSku = normalizePurchaseSku(split.sku);
+        if (normalizedSku === '') {
+          throw new Error('Split SKU is required');
+        }
+        const normalizedRegion = normalizePurchaseRegion(split.region);
+        if (normalizedRegion === '') {
+          throw new Error('Split region is required');
+        }
+        return {
+          sku: normalizedSku,
+          region: normalizedRegion,
+          quantity,
+        };
+      });
+
+      return {
+        qboLineId: line.qboLineId,
+        accountId: line.accountId,
+        amountCents: line.amountCents,
+        splits,
+      };
+    }
+
+    const quantity = parsePositiveInteger(line.quantity);
+    if (quantity === null) {
+      throw new Error('Quantity must be a positive integer');
+    }
+    const normalizedSku = normalizePurchaseSku(line.sku);
+    if (normalizedSku === '') {
+      throw new Error('SKU is required');
+    }
+    const normalizedRegion = normalizePurchaseRegion(line.region);
+    if (normalizedRegion === '') {
+      throw new Error('Region is required');
+    }
+
+    return {
+      qboLineId: line.qboLineId,
+      accountId: line.accountId,
+      amountCents: line.amountCents,
+      sku: normalizedSku,
+      region: normalizedRegion,
+      quantity,
+    };
+  });
+
+  const res = await fetch(`${basePath}/api/plutus/purchases/map`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      qboPurchaseId: input.purchase.id,
       lines: payloadLines,
     }),
   });
@@ -611,17 +791,29 @@ function CreateBillModal({
     if (
       createState.txnDate.trim() === '' ||
       createState.vendorId === '' ||
-      createState.poNumber.trim() === '' ||
       createState.brandId === '' ||
       createState.lines.length === 0
     ) {
       return false;
     }
 
+    const manufacturingReferences = new Set<string>();
+
     for (const line of createState.lines) {
       const account = accountById.get(line.accountId);
       if (!account) {
         return false;
+      }
+
+      const referenceType = referenceTypeForComponent(account.component);
+      if (referenceType !== null) {
+        const referenceValue = line.reference.trim();
+        if (referenceValue === '') {
+          return false;
+        }
+        if (referenceType === 'PO') {
+          manufacturingReferences.add(referenceValue);
+        }
       }
 
       const amount = Number(line.amount);
@@ -654,6 +846,10 @@ function CreateBillModal({
         seenSkus.add(normalizedSku);
         if (parsePositiveInteger(split.quantity) === null) return false;
       }
+    }
+
+    if (manufacturingReferences.size > 1) {
+      return false;
     }
 
     return true;
@@ -735,7 +931,7 @@ function CreateBillModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Bill Date</label>
               <Input
@@ -756,15 +952,6 @@ function CreateBillModal({
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
-              <Input
-                value={createState.poNumber}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, poNumber: event.target.value }))}
-                placeholder="e.g. PO-2026-001"
-                className="font-mono text-sm"
-              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
@@ -799,6 +986,7 @@ function CreateBillModal({
                 <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
                   <TableHead className="text-xs">Account</TableHead>
                   <TableHead className="text-xs">Description</TableHead>
+                  <TableHead className="text-xs">Reference</TableHead>
                   <TableHead className="text-xs w-24">Amount</TableHead>
                   <TableHead className="text-xs">SKU / Split</TableHead>
                   <TableHead className="text-xs w-24">Qty</TableHead>
@@ -810,6 +998,7 @@ function CreateBillModal({
                   const selectedAccount = accountById.get(line.accountId);
                   const isManufacturing = selectedAccount?.component === 'manufacturing';
                   const componentLabel = selectedAccount?.component ? COMPONENT_LABELS[selectedAccount.component] : null;
+                  const referenceType = referenceTypeForComponent(selectedAccount?.component);
 
                   return (
                     <TableRow key={line.id}>
@@ -822,6 +1011,7 @@ function CreateBillModal({
                             updateLine(line.id, {
                               accountId: nextAccountId,
                               description: nextAccount ? nextAccount.fullyQualifiedName : '',
+                              reference: '',
                               mode: 'single',
                               sku: '',
                               quantity: '',
@@ -849,6 +1039,18 @@ function CreateBillModal({
                           className="h-8 text-xs"
                           disabled={isManufacturing}
                         />
+                      </TableCell>
+                      <TableCell>
+                        {referenceType ? (
+                          <Input
+                            value={line.reference}
+                            onChange={(event) => updateLine(line.id, { reference: event.target.value })}
+                            placeholder={`${referenceType} #`}
+                            className="h-8 text-xs font-mono"
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-400">&mdash;</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Input
@@ -1026,6 +1228,10 @@ function EditBillModal({
   const queryClient = useQueryClient();
   const [editState, setEditState] = useState<BillEditState>(() => initBillEditState(bill));
   const [saveError, setSaveError] = useState<string | null>(null);
+  const requiresManufacturingPo = useMemo(
+    () => bill.trackedLines.some((line) => line.component === 'manufacturing'),
+    [bill.trackedLines],
+  );
 
   const filteredSkus = useMemo(() => {
     if (editState.brandId === '') return [];
@@ -1045,7 +1251,10 @@ function EditBillModal({
   });
 
   const canSave = useMemo(() => {
-    if (editState.poNumber.trim() === '' || editState.brandId === '') {
+    if (editState.brandId === '') {
+      return false;
+    }
+    if (requiresManufacturingPo && editState.poNumber.trim() === '') {
       return false;
     }
 
@@ -1091,7 +1300,7 @@ function EditBillModal({
     }
 
     return true;
-  }, [bill.trackedLines, editState]);
+  }, [bill.trackedLines, editState, requiresManufacturingPo]);
 
   const updateLine = (lineId: string, patch: Partial<LineEditState>) => {
     setEditState((prev) => ({
@@ -1185,16 +1394,18 @@ function EditBillModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
-              <Input
-                value={editState.poNumber}
-                onChange={(event) => setEditState((prev) => ({ ...prev, poNumber: event.target.value }))}
-                placeholder="e.g. PO-2026-001"
-                className="font-mono text-sm"
-              />
-            </div>
+          <div className={cn('grid gap-3', requiresManufacturingPo ? 'grid-cols-2' : 'grid-cols-1')}>
+            {requiresManufacturingPo && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
+                <Input
+                  value={editState.poNumber}
+                  onChange={(event) => setEditState((prev) => ({ ...prev, poNumber: event.target.value }))}
+                  placeholder="e.g. PO-2026-001"
+                  className="font-mono text-sm"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
               <select
@@ -1373,6 +1584,364 @@ function EditBillModal({
   );
 }
 
+function EditPurchaseModal({
+  purchase,
+  skus,
+  accounts,
+  open,
+  onOpenChange,
+}: {
+  purchase: PurchaseRow;
+  skus: SkuOption[];
+  accounts: PurchaseAccountOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [editState, setEditState] = useState<PurchaseEditState>(() => initPurchaseEditState(purchase));
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const accountById = useMemo(() => {
+    const map = new Map<string, PurchaseAccountOption>();
+    for (const account of accounts) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [accounts]);
+
+  const editableLines = useMemo(() => {
+    const states: PurchaseLineEditState[] = [];
+    for (const line of purchase.lines) {
+      const lineState = editState.lines[line.id];
+      if (!lineState) {
+        continue;
+      }
+      states.push(lineState);
+    }
+    return states;
+  }, [editState.lines, purchase.lines]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => savePurchaseMapping({ purchase, editState }),
+    onSuccess: () => {
+      setSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      setSaveError(error.message);
+    },
+  });
+
+  const canSave = useMemo(() => {
+    if (editableLines.length === 0) {
+      return false;
+    }
+
+    for (const line of editableLines) {
+      if (line.accountId === '') {
+        return false;
+      }
+      if (!accountById.has(line.accountId)) {
+        return false;
+      }
+
+      if (line.mode === 'single') {
+        if (normalizePurchaseSku(line.sku) === '') {
+          return false;
+        }
+        if (normalizePurchaseRegion(line.region) === '') {
+          return false;
+        }
+        if (parsePositiveInteger(line.quantity) === null) {
+          return false;
+        }
+        continue;
+      }
+
+      if (line.splits.length < 2) {
+        return false;
+      }
+      const seen = new Set<string>();
+      for (const split of line.splits) {
+        const sku = normalizePurchaseSku(split.sku);
+        if (sku === '') {
+          return false;
+        }
+        const region = normalizePurchaseRegion(split.region);
+        if (region === '') {
+          return false;
+        }
+        if (parsePositiveInteger(split.quantity) === null) {
+          return false;
+        }
+        const splitKey = `${sku}::${region}`;
+        if (seen.has(splitKey)) {
+          return false;
+        }
+        seen.add(splitKey);
+      }
+    }
+
+    return true;
+  }, [accountById, editableLines]);
+
+  const updateLine = (lineId: string, patch: Partial<PurchaseLineEditState>) => {
+    setEditState((prev) => ({
+      ...prev,
+      lines: {
+        ...prev.lines,
+        [lineId]: {
+          ...prev.lines[lineId],
+          ...patch,
+        },
+      },
+    }));
+  };
+
+  const updateSplit = (lineId: string, splitId: string, patch: Partial<PurchaseSplitEntryState>) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+    const splits = lineState.splits.map((split) => (split.id === splitId ? { ...split, ...patch } : split));
+    updateLine(lineId, { splits });
+  };
+
+  const addSplit = (lineId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+    updateLine(lineId, { splits: [...lineState.splits, makePurchaseSplitEntry()] });
+  };
+
+  const removeSplit = (lineId: string, splitId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState || lineState.splits.length <= 2) return;
+    updateLine(lineId, { splits: lineState.splits.filter((split) => split.id !== splitId) });
+  };
+
+  const toggleSplitMode = (lineId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+
+    if (lineState.mode === 'single') {
+      updateLine(lineId, {
+        mode: 'split',
+        splits: [makePurchaseSplitEntry(lineState.sku, lineState.region, lineState.quantity), makePurchaseSplitEntry()],
+      });
+      return;
+    }
+
+    const primary = lineState.splits[0];
+    updateLine(lineId, {
+      mode: 'single',
+      sku: primary ? primary.sku : '',
+      region: primary ? primary.region : '',
+      quantity: primary ? primary.quantity : '',
+      splits: [makePurchaseSplitEntry(), makePurchaseSplitEntry()],
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between gap-3">
+            <span className="truncate">{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</span>
+            <a
+              href={qboTransactionUrl(purchase)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
+              title="Open in QuickBooks"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              QuickBooks
+            </a>
+          </DialogTitle>
+          <DialogDescription>
+            {purchase.txnDate} &middot; {formatCurrency(purchase.totalAmount)}
+            {purchase.docNumber.trim() !== '' ? ` \u00b7 ${purchase.docNumber}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Purchase Lines
+          </h3>
+          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
+                  <TableHead className="text-xs">Account</TableHead>
+                  <TableHead className="text-xs">SKU / Split</TableHead>
+                  <TableHead className="text-xs">Region</TableHead>
+                  <TableHead className="text-xs w-24">Qty</TableHead>
+                  <TableHead className="text-xs text-right">Amount</TableHead>
+                  <TableHead className="text-xs w-28">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {editableLines.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                      This purchase has no editable account-based lines.
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {editableLines.map((lineState) => (
+                  <TableRow key={lineState.qboLineId}>
+                    <TableCell>
+                      <select
+                        value={lineState.accountId}
+                        onChange={(event) => updateLine(lineState.qboLineId, { accountId: event.target.value })}
+                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                      >
+                        <option value="">Select account</option>
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <div className="space-y-1">
+                          {lineState.splits.map((split) => (
+                            <div key={split.id} className="flex items-center gap-2">
+                              <Input
+                                value={split.sku}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { sku: event.target.value })}
+                                placeholder="SKU"
+                                className="h-7 text-xs"
+                                list={`purchase-skus-${purchase.id}`}
+                              />
+                              <Input
+                                value={split.region}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { region: event.target.value })}
+                                placeholder="Region"
+                                className="h-7 w-28 text-xs"
+                              />
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={split.quantity}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { quantity: event.target.value })}
+                                placeholder="Qty"
+                                className="h-7 w-20 text-xs"
+                              />
+                              {lineState.splits.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeSplit(lineState.qboLineId, split.id)}
+                                  className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <Input
+                          value={lineState.sku}
+                          onChange={(event) => updateLine(lineState.qboLineId, { sku: event.target.value })}
+                          placeholder="SKU"
+                          className="h-7 text-xs"
+                          list={`purchase-skus-${purchase.id}`}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Split rows include region</span>
+                      ) : (
+                        <Input
+                          value={lineState.region}
+                          onChange={(event) => updateLine(lineState.qboLineId, { region: event.target.value })}
+                          placeholder="Region"
+                          className="h-7 text-xs"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
+                      ) : (
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={lineState.quantity}
+                          onChange={(event) => updateLine(lineState.qboLineId, { quantity: event.target.value })}
+                          placeholder="Qty"
+                          className="h-7 w-20 text-xs"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-xs font-medium">
+                      {formatCurrency(lineState.amountCents / 100)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleSplitMode(lineState.qboLineId)}
+                          className="h-7 px-2 text-xs"
+                        >
+                          {lineState.mode === 'split' ? 'Single' : 'Split'}
+                        </Button>
+                        {lineState.mode === 'split' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addSplit(lineState.qboLineId)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <datalist id={`purchase-skus-${purchase.id}`}>
+          {skus.map((sku) => (
+            <option key={sku.id} value={sku.sku}>
+              {sku.productName ? `${sku.sku} - ${sku.productName}` : sku.sku}
+            </option>
+          ))}
+        </datalist>
+
+        {saveError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={!canSave || saveMutation.isPending}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
 
@@ -1394,6 +1963,7 @@ export default function TransactionsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editBill, setEditBill] = useState<BillRow | null>(null);
+  const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
 
@@ -1462,9 +2032,12 @@ export default function TransactionsPage() {
     trackedLines: row.trackedLines ? row.trackedLines : [],
     mapping: row.mapping ? row.mapping : null,
   })), [rows]);
+  const purchaseRows = useMemo(() => rows.filter(isPurchaseRow), [rows]);
+  const visibleRows = tab === 'purchase' ? purchaseRows : rows;
 
   const brands = useMemo(() => (data?.brands ? data.brands : []), [data]);
   const skus = useMemo(() => (data?.skus ? data.skus : []), [data]);
+  const purchaseAccounts = useMemo(() => (data?.accounts ? data.accounts : []), [data]);
 
   const brandNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1752,7 +2325,7 @@ export default function TransactionsPage() {
                         </TableRow>
                       )}
 
-                      {!isLoading && !error && rows.length === 0 && (
+                      {!isLoading && !error && visibleRows.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={8}>
                             <EmptyState
@@ -1763,7 +2336,7 @@ export default function TransactionsPage() {
                         </TableRow>
                       )}
 
-                      {!isLoading && !error && rows.map((row) => {
+                      {!isLoading && !error && visibleRows.map((row) => {
                         const isExpanded = expanded[row.id] === true;
                         const docNumber = row.docNumber.trim() === '' ? '—' : row.docNumber;
                         const memo = row.memo.trim() === '' ? '—' : row.memo;
@@ -1820,6 +2393,20 @@ export default function TransactionsPage() {
                               <TableCell className="align-top">
                                 <div className="flex items-start gap-2">
                                   <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
+                                  {isPurchaseRow(row) && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setEditPurchase(row);
+                                      }}
+                                      className="h-7 px-2 text-2xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                    >
+                                      Map
+                                    </Button>
+                                  )}
                                   <Button
                                     asChild
                                     variant="ghost"
@@ -1993,6 +2580,21 @@ export default function TransactionsPage() {
             onOpenChange={(open) => {
               if (!open) {
                 setEditBill(null);
+              }
+            }}
+          />
+        )}
+
+        {editPurchase && (
+          <EditPurchaseModal
+            key={editPurchase.id}
+            purchase={editPurchase}
+            skus={skus}
+            accounts={purchaseAccounts}
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditPurchase(null);
               }
             }}
           />

@@ -65,6 +65,14 @@ type TransactionRow = {
   } | null;
 };
 
+type TransactionsAccountOption = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  type: string;
+  subType: string | null;
+};
+
 function requireTransactionType(raw: string | null): TransactionTypeParam {
   if (raw === 'journalEntry' || raw === 'bill' || raw === 'purchase') return raw;
   throw new RequestValidationError('Invalid transaction type');
@@ -274,6 +282,7 @@ export async function GET(req: NextRequest) {
     let updatedConnection: QboConnection | undefined;
     let brands: Array<{ id: string; name: string }> | undefined;
     let skus: Array<{ id: string; sku: string; productName: string | null; brandId: string }> | undefined;
+    let accounts: TransactionsAccountOption[] | undefined;
 
     if (type === 'journalEntry') {
       const result = await fetchJournalEntries(activeConnection, {
@@ -338,6 +347,22 @@ export async function GET(req: NextRequest) {
       updatedConnection = result.updatedConnection;
       totalCount = result.totalCount;
       transactions = result.purchases.map((purchase) => mapPurchase(purchase, accountsById));
+
+      skus = await db.sku.findMany({
+        select: { id: true, sku: true, productName: true, brandId: true },
+        orderBy: { sku: 'asc' },
+      });
+
+      accounts = accountsResult.accounts
+        .filter((account) => account.Active !== false)
+        .map((account) => ({
+          id: account.Id,
+          name: account.Name,
+          fullyQualifiedName: account.FullyQualifiedName ? account.FullyQualifiedName : account.Name,
+          type: account.AccountType,
+          subType: account.AccountSubType ? account.AccountSubType : null,
+        }))
+        .sort((left, right) => left.fullyQualifiedName.localeCompare(right.fullyQualifiedName));
     }
 
     const finalConnection = updatedConnection ? updatedConnection : activeConnection;
@@ -349,6 +374,7 @@ export async function GET(req: NextRequest) {
       transactions,
       ...(brands ? { brands } : {}),
       ...(skus ? { skus } : {}),
+      ...(accounts ? { accounts } : {}),
       pagination: {
         page,
         pageSize,
