@@ -96,7 +96,7 @@ type BillsResponse = {
 
 type ConnectionStatus = { connected: boolean; error?: string };
 
-type MappingStatus = 'unmapped' | 'saved';
+type MappingStatus = 'unmapped' | 'saved' | 'synced';
 
 type LineEditState = { sku: string; quantity: string };
 
@@ -158,6 +158,7 @@ const formatCurrency = (amount: number) =>
 
 function getStatus(bill: BillData): MappingStatus {
   if (!bill.mapping) return 'unmapped';
+  if (bill.mapping.syncedAt) return 'synced';
   return 'saved';
 }
 
@@ -168,14 +169,18 @@ function StatusBadge({ status }: { status: MappingStatus }) {
       label: 'Unmapped',
     },
     saved: {
-      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+      style: 'bg-slate-100/70 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300',
       label: 'Saved',
+    },
+    synced: {
+      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+      label: 'Synced',
     },
   };
   const { style, label } = config[status];
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
-      {status === 'saved' && <CheckCircle2 className="h-3 w-3" />}
+      {status === 'synced' && <CheckCircle2 className="h-3 w-3" />}
       {label}
     </span>
   );
@@ -281,12 +286,14 @@ async function createBillApi(payload: {
 
 function EditBillModal({
   bill,
+  realmId,
   brands,
   skus,
   open,
   onOpenChange,
 }: {
   bill: BillData;
+  realmId: string;
   brands: BrandOption[];
   skus: SkuOption[];
   open: boolean;
@@ -342,7 +349,21 @@ function EditBillModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{bill.vendor}</DialogTitle>
+          <DialogTitle className="flex items-center justify-between gap-3">
+            <span className="truncate">{bill.vendor}</span>
+            {realmId !== '' && (
+              <a
+                href={`https://app.qbo.intuit.com/app/bill?txnId=${bill.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
+                title="Open in QuickBooks"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                QuickBooks
+              </a>
+            )}
+          </DialogTitle>
           <DialogDescription>
             {bill.date} &middot; {formatCurrency(bill.amount)}
             {bill.docNumber ? ` \u00b7 ${bill.docNumber}` : ''}
@@ -420,6 +441,7 @@ function EditBillModal({
                             <Input
                               type="number"
                               min="1"
+                              step="1"
                               value={ls?.quantity ?? ''}
                               onChange={(e) => updateLine(line.lineId, 'quantity', e.target.value)}
                               placeholder="Units"
@@ -687,6 +709,7 @@ function CreateBillModal({
                             <Input
                               type="number"
                               min="1"
+                              step="1"
                               value={line.quantity}
                               onChange={(e) => updateLineField(line.id, 'quantity', e.target.value)}
                               placeholder="Units"
@@ -794,9 +817,10 @@ export default function BillsPage() {
   const skus = useMemo(() => billsQuery.data?.skus ?? [], [billsQuery.data]);
 
   const counts = useMemo(() => {
+    const synced = bills.filter((b) => getStatus(b) === 'synced').length;
     const saved = bills.filter((b) => getStatus(b) === 'saved').length;
     const unmapped = bills.filter((b) => getStatus(b) === 'unmapped').length;
-    return { all: bills.length, saved, unmapped };
+    return { all: bills.length, synced, saved, unmapped };
   }, [bills]);
 
   const totalPages = billsQuery.data?.pagination.totalPages ?? 1;
@@ -837,6 +861,9 @@ export default function BillsPage() {
                 </span>
                 <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="h-3 w-3" />
+                  Synced: {counts.synced}
+                </span>
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/60 dark:bg-slate-800/30 text-slate-700 dark:text-slate-300">
                   Saved: {counts.saved}
                 </span>
                 <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/60 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400">
@@ -980,6 +1007,7 @@ export default function BillsPage() {
         {editBill && (
           <EditBillModal
             bill={editBill}
+            realmId={realmId}
             brands={brands}
             skus={skus}
             open={true}

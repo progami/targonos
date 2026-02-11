@@ -159,7 +159,13 @@ export async function POST(req: NextRequest) {
       // Build description
       let description = getComponentDefaultDescription(line.component as BillComponent);
       const sku = typeof line.sku === 'string' && line.sku !== '' ? line.sku : null;
-      const quantity = typeof line.quantity === 'number' && line.quantity > 0 ? line.quantity : null;
+      const quantity =
+        typeof line.quantity === 'number' &&
+        Number.isFinite(line.quantity) &&
+        Number.isInteger(line.quantity) &&
+        line.quantity > 0
+          ? line.quantity
+          : null;
 
       if (line.component === 'manufacturing' && (!sku || !quantity)) {
         return NextResponse.json(
