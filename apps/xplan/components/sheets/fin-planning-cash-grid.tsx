@@ -209,6 +209,11 @@ function computeSelectionStats(
   };
 }
 
+function isMonthBoundary(currentDate: string, prevDate: string | undefined): boolean {
+  if (!prevDate) return false;
+  return new Date(currentDate).getMonth() !== new Date(prevDate).getMonth();
+}
+
 export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGridProps) {
   const columnHelper = useMemo(() => createColumnHelper<WeeklyRow>(), []);
   const locale = localeForRegion(strategyRegion);
@@ -942,7 +947,7 @@ export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGri
     <section className="space-y-4">
       <div
         className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10"
-        style={{ height: 'calc(100vh - 180px)', minHeight: '420px' }}
+        style={{ height: 'calc(100vh - 164px)', minHeight: '420px' }}
       >
         <textarea
           ref={clipboardRef}
@@ -982,8 +987,8 @@ export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGri
                   <TableHead
                     key={config.key}
                     className={cn(
-                      'sticky top-0 z-20 h-10 whitespace-nowrap border-b border-r px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80',
-                      config.editable ? 'bg-cyan-100/90 dark:bg-cyan-900/50' : 'bg-muted',
+                      'sticky top-0 z-20 h-10 whitespace-nowrap border-b-2 border-b-slate-200 dark:border-b-slate-700 border-r px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80',
+                      config.editable ? 'bg-cyan-100/90 dark:bg-cyan-900/50 border-b-[3px] border-b-cyan-500/50 dark:border-b-[#00C2B9]/40' : 'bg-muted',
                       config.sticky && 'z-30',
                     )}
                     style={{
@@ -1006,7 +1011,11 @@ export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGri
                 return (
                   <TableRow
                     key={row.id}
-                    className={cn('hover:bg-transparent', rowIndex % 2 === 1 && 'bg-muted/30')}
+                    className={cn(
+                      'hover:bg-transparent',
+                      rowIndex % 2 === 1 && 'bg-slate-50 dark:bg-slate-800/40',
+                      rowIndex > 0 && isMonthBoundary(row.original.weekDate, data[rowIndex - 1]?.weekDate) && 'border-t-2 border-t-slate-300 dark:border-t-slate-600',
+                    )}
                   >
                     {columnConfig.map((config, colIndex) => {
                       const isSelected = selectionRange
@@ -1071,6 +1080,8 @@ export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGri
                           className={cn(
                             'block min-w-0 truncate tabular-nums',
                             config.align === 'left' ? 'text-left' : 'text-right',
+                            (config.key === 'netCash' || config.key === 'cashBalance') &&
+                              sanitizeNumeric(rawValue) < 0 && 'text-danger-600 dark:text-danger-400 font-semibold',
                           )}
                         >
                           {displayValue}
@@ -1081,23 +1092,25 @@ export function CashFlowGrid({ strategyId, strategyRegion, weekly }: CashFlowGri
                         <TableCell
                           key={config.key}
                           className={cn(
-                            'h-8 whitespace-nowrap border-r px-2 py-0 text-sm overflow-hidden',
+                            'h-9 whitespace-nowrap border-r px-2.5 py-0.5 text-sm overflow-hidden',
                             isPinned
                               ? isEvenRow
-                                ? 'bg-muted'
+                                ? 'bg-slate-100 dark:bg-slate-800/60'
                                 : 'bg-card'
                               : isEvenRow
-                                ? 'bg-muted/30'
+                                ? 'bg-slate-50 dark:bg-slate-800/40'
                                 : 'bg-card',
                             isWeekCellWithActualData &&
                               'bg-cyan-100 dark:bg-cyan-900/50',
                             isPinned && 'sticky z-10',
                             colIndex === 1 && 'border-r-2',
                             config.editable &&
-                              'cursor-text font-medium bg-cyan-50/80 dark:bg-cyan-950/40',
+                              'cursor-text font-medium bg-cyan-50 dark:bg-cyan-950/50',
                             config.key === 'inventorySpend' &&
                               hasInbound &&
                               'bg-danger-100/90 dark:bg-danger-500/25 dark:ring-1 dark:ring-inset dark:ring-danger-300/45',
+                            config.key === 'cashBalance' && sanitizeNumeric(rawValue) < 0 &&
+                              'bg-danger-50/80 dark:bg-danger-950/30',
                             isSelected && 'bg-accent',
                             isCurrent && 'ring-2 ring-inset ring-cyan-600 dark:ring-cyan-400',
                           )}

@@ -3,14 +3,19 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import {
+  buildLotReference,
+  normalizeSkuGroup,
+  resolveOrderReferenceSeed,
+} from '@/lib/services/supply-chain-reference-service'
 
 const UpdateLineSchema = z.object({
   skuCode: z.string().trim().min(1).optional(),
   skuDescription: z.string().optional(),
-  batchLot: z.string().trim().min(1).optional(),
   piNumber: z.string().trim().nullable().optional(),
   commodityCode: z.string().trim().nullable().optional(),
   countryOfOrigin: z.string().trim().nullable().optional(),
@@ -86,6 +91,14 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
   const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const line = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: lineId,
@@ -101,7 +114,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     id: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription,
-    batchLot: line.batchLot,
+    lotRef: line.lotRef,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
@@ -150,6 +163,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const line = await prisma.purchaseOrderLine.findFirst({
@@ -336,39 +358,17 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       result.data.skuCode !== undefined &&
       result.data.skuCode.trim().toLowerCase() !== line.skuCode.trim().toLowerCase()
 
-    const currentBatchLot = line.batchLot?.trim().toUpperCase() ?? null
-    const requestedBatchLot = result.data.batchLot?.trim()
-    const normalizedRequestedBatchLot =
-      requestedBatchLot && requestedBatchLot.length > 0 ? requestedBatchLot.toUpperCase() : null
-
-    if (skuCodeChanged && !normalizedRequestedBatchLot) {
-      return ApiResponses.badRequest('Batch is required when changing SKU')
-    }
-
-    if (normalizedRequestedBatchLot === 'DEFAULT') {
-      return ApiResponses.badRequest('Batch is required')
-    }
-
-    const batchLotChanged =
-      normalizedRequestedBatchLot !== null && normalizedRequestedBatchLot !== currentBatchLot
-
-    const needsSkuBatchSnapshot = skuCodeChanged || batchLotChanged
-
-    if (needsSkuBatchSnapshot) {
-      const nextSkuCode = (result.data.skuCode ?? line.skuCode).trim()
-      const nextBatchLot = (normalizedRequestedBatchLot ?? currentBatchLot ?? '')
-        .trim()
-        .toUpperCase()
-
-      if (!nextBatchLot || nextBatchLot === 'DEFAULT') {
-        return ApiResponses.badRequest('Batch is required')
+    if (skuCodeChanged) {
+      const nextSkuCode = result.data.skuCode?.trim() ?? ''
+      if (!nextSkuCode) {
+        return ApiResponses.badRequest('SKU is required')
       }
 
       const sku = await prisma.sku.findFirst({
         where: { skuCode: nextSkuCode },
         select: {
-          id: true,
           skuCode: true,
+          skuGroup: true,
           description: true,
           isActive: true,
           cartonDimensionsCm: true,
@@ -390,43 +390,47 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         )
       }
 
-      const existingBatch = await prisma.skuBatch.findFirst({
-        where: {
-          skuId: sku.id,
-          batchCode: { equals: nextBatchLot, mode: 'insensitive' },
-        },
-        select: {
-          id: true,
-          batchCode: true,
-          cartonDimensionsCm: true,
-          cartonSide1Cm: true,
-          cartonSide2Cm: true,
-          cartonSide3Cm: true,
-          cartonWeightKg: true,
-          packagingType: true,
-          storageCartonsPerPallet: true,
-          shippingCartonsPerPallet: true,
-        },
-      })
+      const effectiveSkuGroup =
+        typeof order.skuGroup === 'string' && order.skuGroup.trim().length > 0
+          ? normalizeSkuGroup(order.skuGroup)
+          : typeof sku.skuGroup === 'string' && sku.skuGroup.trim().length > 0
+            ? normalizeSkuGroup(sku.skuGroup)
+            : null
 
-      if (!existingBatch) {
+      if (!effectiveSkuGroup) {
         return ApiResponses.badRequest(
-          `Batch ${nextBatchLot} not found for SKU ${sku.skuCode}. Create it in Products → Batches first.`
+          `SKU group is required for SKU ${sku.skuCode}. Set it in Config → Products before updating this line.`
         )
       }
 
-      updateData.batchLot = existingBatch.batchCode
-      updateData.cartonDimensionsCm =
-        existingBatch.cartonDimensionsCm ?? sku.cartonDimensionsCm ?? null
-      updateData.cartonSide1Cm = existingBatch.cartonSide1Cm ?? sku.cartonSide1Cm ?? null
-      updateData.cartonSide2Cm = existingBatch.cartonSide2Cm ?? sku.cartonSide2Cm ?? null
-      updateData.cartonSide3Cm = existingBatch.cartonSide3Cm ?? sku.cartonSide3Cm ?? null
-      updateData.cartonWeightKg = existingBatch.cartonWeightKg ?? sku.cartonWeightKg ?? null
-      updateData.packagingType = existingBatch.packagingType ?? sku.packagingType ?? null
-      updateData.storageCartonsPerPallet = existingBatch.storageCartonsPerPallet ?? null
-      updateData.shippingCartonsPerPallet = existingBatch.shippingCartonsPerPallet ?? null
+      if (order.skuGroup !== effectiveSkuGroup) {
+        await prisma.purchaseOrder.update({
+          where: { id: order.id },
+          data: { skuGroup: effectiveSkuGroup },
+        })
+      }
 
-      if (skuCodeChanged && result.data.skuDescription === undefined) {
+      const orderReferenceSeed = resolveOrderReferenceSeed({
+        orderNumber: order.orderNumber,
+        poNumber: order.poNumber,
+        skuGroup: effectiveSkuGroup,
+      })
+
+      updateData.lotRef = buildLotReference(
+        orderReferenceSeed.sequence,
+        orderReferenceSeed.skuGroup,
+        sku.skuCode
+      )
+      updateData.cartonDimensionsCm = sku.cartonDimensionsCm ?? null
+      updateData.cartonSide1Cm = sku.cartonSide1Cm ?? null
+      updateData.cartonSide2Cm = sku.cartonSide2Cm ?? null
+      updateData.cartonSide3Cm = sku.cartonSide3Cm ?? null
+      updateData.cartonWeightKg = sku.cartonWeightKg ?? null
+      updateData.packagingType = sku.packagingType ?? null
+      updateData.storageCartonsPerPallet = null
+      updateData.shippingCartonsPerPallet = null
+
+      if (result.data.skuDescription === undefined) {
         updateData.skuDescription = sku.description
       }
     }
@@ -453,7 +457,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: line.id,
     skuCode: line.skuCode,
     skuDescription: line.skuDescription ?? null,
-    batchLot: line.batchLot ?? null,
+    lotRef: line.lotRef,
     piNumber: line.piNumber ?? null,
     commodityCode: line.commodityCode ?? null,
     countryOfOrigin: line.countryOfOrigin ?? null,
@@ -480,7 +484,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     lineId: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription ?? null,
-    batchLot: updated.batchLot ?? null,
+    lotRef: updated.lotRef,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
@@ -529,7 +533,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     id: updated.id,
     skuCode: updated.skuCode,
     skuDescription: updated.skuDescription,
-    batchLot: updated.batchLot,
+    lotRef: updated.lotRef,
     piNumber: updated.piNumber ?? null,
     commodityCode: updated.commodityCode ?? null,
     countryOfOrigin: updated.countryOfOrigin ?? null,
@@ -580,6 +584,15 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   // Only allow deleting lines in RFQ status
   if (order.status !== 'RFQ') {
     return ApiResponses.badRequest('Can only delete line items from orders in RFQ status')
@@ -609,7 +622,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
       lineId: line.id,
       skuCode: line.skuCode,
       skuDescription: line.skuDescription ?? null,
-      batchLot: line.batchLot ?? null,
+      lotRef: line.lotRef,
       cartonDimensionsCm: line.cartonDimensionsCm ?? null,
       cartonSide1Cm: toNumberOrNull(line.cartonSide1Cm),
       cartonSide2Cm: toNumberOrNull(line.cartonSide2Cm),

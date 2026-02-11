@@ -12,6 +12,7 @@ import { redirectToPortal } from '@/lib/portal'
 import { Button } from '@/components/ui/button'
 import { ImportButton } from '@/components/ui/import-button'
 import { AmazonImportButton } from './amazon-import-button'
+import { withBasePath } from '@/lib/utils/base-path'
 
 const ALLOWED_ROLES = ['admin', 'staff']
 
@@ -31,8 +32,7 @@ function ProductsPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-      redirectToPortal('/login', `${window.location.origin}${basePath}/config/products`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/products')}`)
       return
     }
 

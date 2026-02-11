@@ -61,9 +61,9 @@ export const CommonSchemas = {
  .min(1, 'Warehouse code is required')
  .max(20, 'Warehouse code too long'),
  
- batchLot: z.string()
- .min(1, 'Batch is required')
- .max(100, 'Batch too long'),
+ lotRef: z.string()
+ .min(1, 'Lot is required')
+ .max(100, 'Lot too long'),
  
  pagination: z.object({
  page: z.number().int().positive().default(1),

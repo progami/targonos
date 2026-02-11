@@ -1,31 +1,20 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
 import { getApiBaseUrl } from '@/lib/qbo/client';
-import { getValidToken, type QboConnection } from '@/lib/qbo/api';
+import { getValidToken } from '@/lib/qbo/api';
 import type { QboConnectionStatus, QboCompanyInfoResponse, QboPreferences } from '@/lib/qbo/types';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-status' });
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const connectionCookie = cookieStore.get('qbo_connection')?.value;
+  const connection = await getQboConnection();
 
-  if (!connectionCookie) {
+  if (!connection) {
     return NextResponse.json<QboConnectionStatus>({
       connected: false,
     });
   }
-
-  let connection: QboConnection;
-  try {
-    connection = JSON.parse(connectionCookie);
-  } catch {
-    logger.error('Failed to parse QBO connection cookie');
-    return NextResponse.json<QboConnectionStatus>({ connected: false });
-  }
-  await ensureServerQboConnection(connection);
 
   // Try to get a valid token (auto-refreshes if expired)
   let accessToken = connection.accessToken;
@@ -33,15 +22,7 @@ export async function GET() {
     const result = await getValidToken(connection);
     accessToken = result.accessToken;
 
-    // Update cookie if token was refreshed
     if (result.updatedConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(result.updatedConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100, // 100 days
-        path: '/',
-      });
       await saveServerQboConnection(result.updatedConnection);
       logger.info('QBO token refreshed successfully');
     }

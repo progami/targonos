@@ -46,7 +46,7 @@ Therefore:
 
 ---
 
-## Current Status (2026-01-23)
+## Current Status (2026-02-10)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -55,12 +55,25 @@ Therefore:
 | Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API. User completes LMB setup manually for BOTH connections (US + UK). |
 | Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in the Bills tooling (Bill Guide + Compliance Scanner). |
 | Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Bill Guide + Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
-| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). |
-| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation deferred. |
-| Phase 7 (Testing) | 🚧 IN PROGRESS | CI checks for changed workspaces (lint/type-check/build). |
-| Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
+| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). Audit invoices are matched to settlements deterministically by marketplace + settlement period (no guessing). |
+| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation tooling restored (compare Amazon Transaction Report vs stored Audit Data); inventory adjustment posting is still deferred. |
+| Phase 7 (Testing) | ✅ BASIC COVERAGE | Minimal unit coverage exists (matching + inventory ledger + reconciliation CSV parsing). CI checks for changed workspaces (lint/type-check/build). |
+| Phase 8 (Go-Live) | ✅ DEPLOYED (Production) | Production deployment is live; remaining work is operational validation (process a full quarter, confirm brand P&L totals, confirm bill SOP compliance). |
 
 **Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.
+
+### Implementation Notes (v1 Reality)
+
+The plan below includes some legacy design notes from earlier iterations. As of **2026-02-10**, the implemented v1 behavior is:
+
+- **Audit invoice identity is `(marketplace, invoiceId)`** (invoiceId is the CSV `Invoice` column, not a PO number).
+- Inventory costing in v1 is computed via **ledger replay** from parsed QBO bills + settlement unit movements; **there is no `SkuCostHistory` / `SkuCost` table** in the current Prisma schema.
+- Settlement preview shows **blocking issues** that must be fixed before posting:
+  - `PNL_ALLOCATION_ERROR`: SKU-less fee buckets exist, but there are **no** `Amazon Sales - Principal` rows with SKU + `quantity > 0` to use as allocation weights (fees-only/refunds-only invoice, or wrong invoice selected).
+  - `MISSING_COST_BASIS`: Sales exist for a SKU but the inventory ledger has **no on-hand units/cost basis** at that point in time. The UI aggregates this by SKU (with occurrence counts) to avoid thousands of duplicate rows.
+  - `BILLS_FETCH_ERROR` / `BILLS_PARSE_ERROR`: Bills could not be retrieved/parsed, so inventory costing cannot proceed (avoid cascading cost-basis noise until bills are fixed).
+- Bills created in the Plutus **Bills** UI are posted directly to **brand sub-accounts** under the mapped parent accounts (inventory, warehousing, and product expenses). Plutus blocks bill creation until Setup has created the brand sub-accounts in QBO.
+- **Opening Snapshots are NOT implemented in v1**. Where this plan mentions an “Opening Snapshot” button/workflow, treat it as *planned/deferred*; current v1 requires entering historical bills (or starting settlement processing only after bill history exists).
 
 ---
 
@@ -108,7 +121,7 @@ Settlement Report                    Manual Inventory Count
 
 **Historical Catch-Up:** New users starting from a specific date must either:
 1. Process all historical bills and settlements from the beginning, OR
-2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation)
+2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation) (planned/deferred; not implemented in v1)
 
 See Setup Wizard Step 8 and V1 Constraint #9.
 
@@ -337,11 +350,11 @@ Opening Inventory Initialization JE
 Date: [Catch-up start date, e.g., 2025-01-01]
 
 DEBITS (Inventory Asset sub-accounts):
-  Inv Manufacturing - US    $X,XXX.XX
-  Inv Freight - US          $XXX.XX
-  Inv Duty - US             $XXX.XX
-  Inv Mfg Accessories - US  $XX.XX
-  Inv Manufacturing - UK    $X,XXX.XX
+  Manufacturing - US    $X,XXX.XX
+  Freight - US          $XXX.XX
+  Duty - US             $XXX.XX
+  Mfg Accessories - US  $XX.XX
+  Manufacturing - UK    $X,XXX.XX
   ... (all component sub-accounts)
 
 CREDITS:
@@ -379,7 +392,7 @@ JEs must balance to the penny. We eliminate rounding variance by construction:
 For each component (Mfg, Freight, Duty, MfgAcc) per brand:
 1. Sum all SKU costs at 4-decimal precision
 2. Round the COMPONENT TOTAL to 2 decimals (HALF_UP)
-3. Use the SAME rounded total for both debit (COGS) and credit (Inv Asset)
+3. Use the SAME rounded total for both debit (COGS) and credit (Inventory Asset)
 
 Result: Debits = Credits by construction. No separate rounding account needed.
 ```
@@ -409,9 +422,9 @@ DEBITS (COGS):
   Total Debits:                      $174.13
 
 CREDITS (Inventory Asset):
-  Inv Manufacturing - US-Dust Sheets $151.46
-  Inv Freight - US-Dust Sheets       $15.12
-  Inv Duty - US-Dust Sheets          $7.55
+  Manufacturing - US-Dust Sheets $151.46
+  Freight - US-Dust Sheets       $15.12
+  Duty - US-Dust Sheets          $7.55
   Total Credits:                     $174.13
 
 Result: Balanced! (No rounding account needed)
@@ -782,7 +795,7 @@ Even reprocessing leaves a trail of what happened and why.
 | Land Freight | Local shipping (3PL → Amazon FC) | No (direct expense) |
 | Storage 3PL | 3PL warehouse storage fees | No (direct expense) |
 
-**Note:** Land Freight and Storage 3PL go directly to COGS when billed (not capitalized to inventory) because they're period costs that are difficult to tie to specific units.
+**Note:** Land Freight and 3PL Storage are **warehousing period costs**. They are posted directly to the appropriate `Warehousing:*:{Brand}` COGS accounts (not capitalized to inventory).
 
 ---
 
@@ -798,7 +811,7 @@ The account names below are **suggestions** - users can customize names during s
 **What the Setup Wizard does:**
 - Step 2: User acknowledges LMB Accounts & Taxes Wizard is complete (creates LMB parent accounts)
 - Step 3: Lets user define brand names
-- Step 4: Prompts user to map/select the correct QBO parent accounts (names vary) and then creates ALL sub-accounts (38 total: 8 Inv Asset + 14 COGS + 16 Revenue/Fee)
+- Step 4: Prompts user to map/select the correct QBO parent accounts (names vary) and then creates ALL sub-accounts (40 total: 8 Inventory Asset + 10 COGS + 6 Warehousing + 16 Revenue/Fee)
 
 ## Step 1.0: Map Parent Accounts (Required)
 
@@ -808,9 +821,7 @@ Because account names vary between companies, Plutus does not assume literal nam
 - Inventory Asset
 - Manufacturing
 - Freight & Custom Duty
-- Land Freight (legacy parent; may be replaced by Warehousing:3PL)
-- Storage 3PL (legacy parent; may be replaced by Warehousing:3PL)
-- Warehousing (new parent; contains Amazon FC, AWD, 3PL)
+- Warehousing (strategy buckets: 3PL, Amazon FC, AWD)
 
 **Plutus-created parents (create if missing):**
 - Mfg Accessories
@@ -840,7 +851,7 @@ The account names below are **suggestions** - users can customize names during s
 **What the Setup Wizard does:**
 - Step 2: User acknowledges LMB Accounts & Taxes Wizard is complete (creates parent accounts)
 - Step 3: Lets user define brand names
-- Step 4: Creates ALL sub-accounts (38 total: 8 Inv Asset + 14 COGS + 16 Revenue/Fee)
+- Step 4: Creates ALL sub-accounts (40 total: 8 Inventory Asset + 10 COGS + 6 Warehousing + 16 Revenue/Fee)
 
 ## MASTER CHECKLIST - ALL ACCOUNTS
 
@@ -848,15 +859,15 @@ This is the complete list of accounts needed. The Plutus Setup Wizard creates su
 
 **⚠️ QBO Account Naming Convention:**
 - **Name** = The leaf account name you create (e.g., `Manufacturing - US-Dust Sheets`)
-- **FullyQualifiedName** = Display path with colons (e.g., `Inventory Asset:Inv Manufacturing - US-Dust Sheets`)
+- **FullyQualifiedName** = Display path with colons (e.g., `Inventory Asset:Manufacturing - US-Dust Sheets`)
 - Do NOT include colons in the `Name` field when creating accounts - QBO adds them automatically for sub-accounts
 - In this document, tables show FullyQualifiedName for clarity, but create accounts using just the leaf Name
 
 **Account Summary (for 2 brands):**
 - 2 Plutus parent accounts to create (Mfg Accessories, Inventory Shrinkage)
-- 5 Plutus parent accounts (should exist: Inventory Asset, Manufacturing, Freight & Duty, Land Freight, Storage 3PL)
+- 6 Plutus accounts to map (Inventory Asset, Manufacturing, Freight & Duty, Warehousing:3PL, Warehousing:Amazon FC, Warehousing:AWD)
 - 8 LMB parent accounts (created by LMB wizard - listed for reference)
-- 38 sub-accounts (Setup Wizard creates these: 8 Inv Asset + 14 COGS + 16 Revenue/Fee)
+- 40 sub-accounts (Setup Wizard creates these: 8 Inventory Asset + 10 COGS + 6 Warehousing + 16 Revenue/Fee)
 
 ### PARENT ACCOUNTS TO CREATE (2 accounts)
 
@@ -865,16 +876,16 @@ This is the complete list of accounts needed. The Plutus Setup Wizard creates su
 | 1 | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | ❌ MISSING |
 | 2 | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | ❌ MISSING |
 
-### EXISTING PLUTUS PARENT ACCOUNTS (6 accounts - verify these exist)
+### EXISTING PLUTUS ACCOUNTS TO MAP (6 accounts - verify these exist)
 
 | # | Account Name | Account Type | Detail Type | Purpose |
 |---|--------------|--------------|-------------|---------|
 | 1 | Inventory Asset | Other Current Assets | Inventory | Parent for inventory component sub-accounts |
 | 2 | Manufacturing | Cost of Goods Sold | Supplies & Materials - COGS | Parent for manufacturing COGS sub-accounts |
 | 3 | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for freight + duty COGS sub-accounts |
-| 4 | Land Freight | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Legacy parent for land freight COGS sub-accounts |
-| 5 | Storage 3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Legacy parent for 3PL storage COGS sub-accounts |
-| 6 | Warehousing | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Parent for warehousing strategy buckets (Amazon FC, AWD, 3PL) |
+| 4 | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Brand leaf accounts for 3PL warehousing costs |
+| 5 | Warehousing:Amazon FC | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Brand leaf accounts for Amazon FC warehousing costs |
+| 6 | Warehousing:AWD | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Brand leaf accounts for AWD warehousing costs |
 
 ### LMB PARENT ACCOUNTS (created by LMB Accounts & Taxes Wizard)
 
@@ -929,27 +940,42 @@ Posting behavior:
 
 ### INVENTORY ASSET SUB-ACCOUNTS (8 accounts) - Plutus posts here
 
-**⚠️ NAMING: QBO requires unique Account.Name across all accounts.** Since COGS accounts use names like "Manufacturing - US-Dust Sheets", we prefix Inventory Asset accounts with "Inv" to avoid collisions.
-
 | # | Account Name (Leaf) | Parent Account | Account Type | Detail Type | Status |
 |---|---------------------|----------------|--------------|-------------|--------|
-| 1 | Inv Manufacturing - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 2 | Inv Manufacturing - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 3 | Inv Freight - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 4 | Inv Freight - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 5 | Inv Duty - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 6 | Inv Duty - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 7 | Inv Mfg Accessories - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
-| 8 | Inv Mfg Accessories - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 1 | Manufacturing - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 2 | Manufacturing - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 3 | Freight - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 4 | Freight - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 5 | Duty - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 6 | Duty - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 7 | Mfg Accessories - US-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
+| 8 | Mfg Accessories - UK-Dust Sheets | Inventory Asset | Other Current Assets | Inventory | ❌ MISSING |
 
-**FullyQualifiedName in QBO:** `Inventory Asset:Inv Manufacturing - US-Dust Sheets`
+**FullyQualifiedName in QBO (example):** `Inventory Asset:Manufacturing - US-Dust Sheets`
 
-### COGS SUB-ACCOUNTS (14 total, all brand-specific)
+### WAREHOUSING SUB-ACCOUNTS (6 accounts) - bills post here
+
+Warehousing uses strategy buckets in QBO. The **leaf account name is the Brand**, so it can exist under multiple buckets:
+
+| # | Leaf Account (Brand) | Parent Bucket | Account Type | Detail Type |
+|---|----------------------|--------------|--------------|-------------|
+| 1 | US-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| 2 | UK-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| 3 | US-Dust Sheets | Warehousing:Amazon FC | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| 4 | UK-Dust Sheets | Warehousing:Amazon FC | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| 5 | US-Dust Sheets | Warehousing:AWD | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| 6 | UK-Dust Sheets | Warehousing:AWD | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+
+**Where costs go:**
+- 3PL invoices (storage + 3PL → FBA transfers) → `Warehousing:3PL:{Brand}`
+- Amazon FC invoices (if any outside LMB settlements) → `Warehousing:Amazon FC:{Brand}`
+- AWD invoices → `Warehousing:AWD:{Brand}`
+
+### COGS SUB-ACCOUNTS (10 total, brand-specific)
 
 **Posting responsibility:**
 - **Plutus posts:** Manufacturing, Freight, Duty, Mfg Accessories (4 components × 2 brands = 8 accounts)
 - **Plutus posts (reconciliation):** Inventory Shrinkage (2 brand accounts)
-- **Manual (user enters bills directly):** Land Freight, Storage 3PL (2 components × 2 brands = 4 accounts)
 
 | # | Account Name | Parent Account | Account Type | Detail Type | Posted By |
 |---|--------------|----------------|--------------|-------------|-----------|
@@ -959,19 +985,15 @@ Posting behavior:
 | 4 | Freight - UK-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
 | 5 | Duty - US-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
 | 6 | Duty - UK-Dust Sheets | Freight & Custom Duty | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Plutus |
-| 7 | Land Freight - US-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 8 | Land Freight - UK-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 9 | Storage 3PL - US-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 10 | Storage 3PL - UK-Dust Sheets | Warehousing:3PL | Cost of Goods Sold | Shipping, Freight & Delivery - COS | Manual |
-| 11 | Mfg Accessories - US-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
-| 12 | Mfg Accessories - UK-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
-| 13 | Inventory Shrinkage - US-Dust Sheets | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | Plutus |
-| 14 | Inventory Shrinkage - UK-Dust Sheets | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | Plutus |
+| 7 | Mfg Accessories - US-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
+| 8 | Mfg Accessories - UK-Dust Sheets | Mfg Accessories | Cost of Goods Sold | Supplies & Materials - COGS | Plutus |
+| 9 | Inventory Shrinkage - US-Dust Sheets | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | Plutus |
+| 10 | Inventory Shrinkage - UK-Dust Sheets | Inventory Shrinkage | Cost of Goods Sold | Other Costs of Services - COS | Plutus |
 
 **Notes:**
 - All COGS accounts are brand-specific → brand P&Ls (for Amazon ops) sum to exactly 100%
 - No shared Rounding account needed (see Rounding Policy below)
-- Land Freight and Storage 3PL bills are entered directly to COGS (not capitalized) - see Step 4.5 and 4.6
+- Warehousing bills are coded to the Warehousing bucket accounts above (no separate "Land Freight" / "Storage 3PL" accounts)
 
 ### SUMMARY
 
@@ -981,11 +1003,12 @@ Posting behavior:
 | Income sub-accounts | 6 | 6 | 0 | Setup Wizard (or manual) |
 | Fee sub-accounts | 10 | 10 | 0 | Setup Wizard (or manual) |
 | Inventory Asset sub-accounts | 8 | 0 | 8 | Setup Wizard |
-| COGS component sub-accounts | 12 | 0 | 12 | Setup Wizard |
+| Warehousing sub-accounts | 6 | 0 | 6 | Setup Wizard |
+| COGS component sub-accounts | 8 | 0 | 8 | Setup Wizard |
 | COGS Shrinkage sub-accounts | 2 | 0 | 2 | Setup Wizard |
-| **SUB-ACCOUNTS TOTAL** | **38** | **16** | **22** | |
+| **SUB-ACCOUNTS TOTAL** | **40** | **16** | **24** | |
 
-**Note:** For this specific QBO (Targon), Revenue/Fee sub-accounts were created manually. For new users, Setup Wizard creates all 38 sub-accounts.
+**Note:** For this specific QBO (Targon), Revenue/Fee sub-accounts were created manually. For new users, Setup Wizard creates all 40 sub-accounts.
 
 ---
 
@@ -1054,21 +1077,19 @@ Create sub-accounts under existing LMB parent accounts:
 
 ## Step 1.4: Create Inventory Asset Sub-Accounts
 
-**⚠️ IMPORTANT: Use "Inv" prefix to avoid name collision with COGS accounts**
-
 **Under Inventory Asset**
 | Sub-Account Name | Account Type | Detail Type |
 |------------------|--------------|-------------|
-| Inv Manufacturing - US-Dust Sheets | Other Current Assets | Inventory |
-| Inv Manufacturing - UK-Dust Sheets | Other Current Assets | Inventory |
-| Inv Freight - US-Dust Sheets | Other Current Assets | Inventory |
-| Inv Freight - UK-Dust Sheets | Other Current Assets | Inventory |
-| Inv Duty - US-Dust Sheets | Other Current Assets | Inventory |
-| Inv Duty - UK-Dust Sheets | Other Current Assets | Inventory |
-| Inv Mfg Accessories - US-Dust Sheets | Other Current Assets | Inventory |
-| Inv Mfg Accessories - UK-Dust Sheets | Other Current Assets | Inventory |
+| Manufacturing - US-Dust Sheets | Other Current Assets | Inventory |
+| Manufacturing - UK-Dust Sheets | Other Current Assets | Inventory |
+| Freight - US-Dust Sheets | Other Current Assets | Inventory |
+| Freight - UK-Dust Sheets | Other Current Assets | Inventory |
+| Duty - US-Dust Sheets | Other Current Assets | Inventory |
+| Duty - UK-Dust Sheets | Other Current Assets | Inventory |
+| Mfg Accessories - US-Dust Sheets | Other Current Assets | Inventory |
+| Mfg Accessories - UK-Dust Sheets | Other Current Assets | Inventory |
 
-## Step 1.5: Create COGS Component Sub-Accounts
+## Step 1.5: Create COGS + Warehousing Sub-Accounts
 
 **Under Manufacturing**
 | Sub-Account Name | Account Type | Detail Type |
@@ -1084,23 +1105,35 @@ Create sub-accounts under existing LMB parent accounts:
 | Duty - US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 | Duty - UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 
-**Under Land Freight**
-| Sub-Account Name | Account Type | Detail Type |
-|------------------|--------------|-------------|
-| Land Freight - US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
-| Land Freight - UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+**Under Warehousing:3PL**
+| Sub-Account Name (Leaf) | Account Type | Detail Type |
+|-------------------------|--------------|-------------|
+| US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 
-**Under Storage 3PL**
-| Sub-Account Name | Account Type | Detail Type |
-|------------------|--------------|-------------|
-| Storage 3PL - US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
-| Storage 3PL - UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+**Under Warehousing:Amazon FC**
+| Sub-Account Name (Leaf) | Account Type | Detail Type |
+|-------------------------|--------------|-------------|
+| US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+
+**Under Warehousing:AWD**
+| Sub-Account Name (Leaf) | Account Type | Detail Type |
+|-------------------------|--------------|-------------|
+| US-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
+| UK-Dust Sheets | Cost of Goods Sold | Shipping, Freight & Delivery - COS |
 
 **Under Mfg Accessories**
 | Sub-Account Name | Account Type | Detail Type |
 |------------------|--------------|-------------|
 | Mfg Accessories - US-Dust Sheets | Cost of Goods Sold | Supplies & Materials - COGS |
 | Mfg Accessories - UK-Dust Sheets | Cost of Goods Sold | Supplies & Materials - COGS |
+
+**Under Inventory Shrinkage**
+| Sub-Account Name | Account Type | Detail Type |
+|------------------|--------------|-------------|
+| Inventory Shrinkage - US-Dust Sheets | Cost of Goods Sold | Other Costs of Services - COS |
+| Inventory Shrinkage - UK-Dust Sheets | Cost of Goods Sold | Other Costs of Services - COS |
 
 ## Step 1.6: Verification
 
@@ -1112,10 +1145,11 @@ After creating all accounts, verify against the MASTER CHECKLIST at the top of P
 3. Filter by "Manufacturing" - should see 2 sub-accounts (US + UK)
 4. Filter by "Freight" - should see 2 sub-accounts under "Freight & Custom Duty"
 5. Filter by "Duty" - should see 2 sub-accounts under "Freight & Custom Duty"
-6. Filter by "Land Freight" - should see 2 sub-accounts
-7. Filter by "Storage 3PL" - should see 2 sub-accounts
-8. Filter by "Mfg Accessories" - should see parent + 2 sub-accounts
-9. Search for "Inventory Shrinkage" - should exist as parent account
+6. Filter by "Warehousing:3PL" - should see 2 brand leaf accounts
+7. Filter by "Warehousing:Amazon FC" - should see 2 brand leaf accounts
+8. Filter by "Warehousing:AWD" - should see 2 brand leaf accounts
+9. Filter by "Mfg Accessories" - should see parent + 2 sub-accounts
+10. Search for "Inventory Shrinkage" - should exist as parent account + 2 sub-accounts
 
 ---
 
@@ -1316,8 +1350,8 @@ Planned tooling (pre-core):
 ├───┬────────────────────────────────────────────────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Inv Manufacturing - US-Du │ CS-007 x 500 units │ $1,250.00 │
-│ 2 │ Inv Manufacturing - US-Du │ CS-010 x 500 units │ $1,250.00 │
+│ 1 │ Manufacturing - US-Du │ CS-007 x 500 units │ $1,250.00 │
+│ 2 │ Manufacturing - US-Du │ CS-010 x 500 units │ $1,250.00 │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                            $2,500.00 │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1331,7 +1365,7 @@ Planned tooling (pre-core):
 | Due Date | Payment due date |
 | Bill No | Vendor's invoice number (for your reference) |
 | Memo | `PO: PO-YYYY-NNN` (links related bills) |
-| Account | Inv Manufacturing - [Brand] |
+| Account | Manufacturing - [Brand] |
 | Description | SKU + quantity (e.g., "CS-007 x 500 units") |
 | Amount | Cost for that line item |
 
@@ -1397,7 +1431,7 @@ The Plutus Bill Review UI will show:
 ├───┬────────────────────────────────────────┬────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Inv Freight - US-Dust She │ Ocean freight CHN→US│ $400.00  │
+│ 1 │ Freight - US-Dust She │ Ocean freight CHN→US│ $400.00  │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                              $400.00 │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1422,7 +1456,7 @@ The Plutus Bill Review UI will show:
 ├───┬────────────────────────────────────────┬────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Inv Duty - US-Dust Sheets │ Import duty 7.5%   │ $187.50   │
+│ 1 │ Duty - US-Dust Sheets │ Import duty 7.5%   │ $187.50   │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                             $187.50  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1445,13 +1479,14 @@ The Plutus Bill Review UI will show:
 ├───┬────────────────────────────────────────┬────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Land Freight - US-Dust Sheets          │ 3PL → FBA transfer │ $150.00   │
+│ 1 │ Warehousing:3PL:US-Dust Sheets         │ 3PL → FBA transfer │ $150.00   │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                             $150.00  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Note:** Land Freight goes directly to **COGS** (not Inventory Asset) because:
+- Code it to `Warehousing:3PL:{Brand}` (warehousing bucket, not a separate Land Freight account)
 - It's incurred AFTER goods arrive at 3PL
 - It's a fulfillment cost, not a product cost
 - Simplifies landed cost calculation
@@ -1473,8 +1508,8 @@ The Plutus Bill Review UI will show:
 ├───┬────────────────────────────────────────┬────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Storage 3PL - US-Dust Sheets           │ 60% of storage     │ $300.00   │
-│ 2 │ Storage 3PL - UK-Dust Sheets           │ 40% of storage     │ $200.00   │
+│ 1 │ Warehousing:3PL:US-Dust Sheets         │ 60% of storage     │ $300.00   │
+│ 2 │ Warehousing:3PL:UK-Dust Sheets         │ 40% of storage     │ $200.00   │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                             $500.00  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1482,6 +1517,7 @@ The Plutus Bill Review UI will show:
 
 **Note:**
 - 3PL storage goes directly to **COGS** (not Inventory Asset) - it's a period cost
+- Code it to `Warehousing:3PL:{Brand}` (warehousing bucket, not a separate Storage 3PL account)
 - Split by brand based on estimated inventory % at 3PL
 - NO PO Number needed - this is a recurring monthly cost, not tied to a specific shipment
 - Plutus does NOT process this - entered manually in QBO
@@ -1503,9 +1539,9 @@ The Plutus Bill Review UI will show:
 ├───┬────────────────────────────────────────┬────────────────────┬───────────┤
 │ # │ ACCOUNT                                │ DESCRIPTION        │ AMOUNT    │
 ├───┼────────────────────────────────────────┼────────────────────┼───────────┤
-│ 1 │ Inv Mfg Accessories - US  │ Poly bags x 1000   │ $50.00    │
-│ 2 │ Inv Mfg Accessories - US  │ Labels x 1000      │ $30.00    │
-│ 3 │ Inv Mfg Accessories - US  │ Insert cards x 1000│ $20.00    │
+│ 1 │ Mfg Accessories - US  │ Poly bags x 1000   │ $50.00    │
+│ 2 │ Mfg Accessories - US  │ Labels x 1000      │ $30.00    │
+│ 3 │ Mfg Accessories - US  │ Insert cards x 1000│ $20.00    │
 ├───┴────────────────────────────────────────┴────────────────────┴───────────┤
 │ TOTAL                                                             $100.00  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1517,12 +1553,12 @@ The Plutus Bill Review UI will show:
 
 | Bill Type | Account | Goes to Inventory Asset? | PO Number Required? |
 |-----------|---------|-------------------------|---------------------|
-| Manufacturing | Inv Manufacturing - [Brand] | ✅ Yes | ✅ Yes |
-| Freight | Inv Freight - [Brand] | ✅ Yes | ✅ Yes |
-| Duty | Inv Duty - [Brand] | ✅ Yes | ✅ Yes |
-| Mfg Accessories | Inv Mfg Accessories - [Brand] | ✅ Yes | ✅ Yes |
-| Land Freight | Land Freight - [Brand] (COGS) | ❌ No - direct COGS | ✅ Yes |
-| 3PL Storage | Storage 3PL - [Brand] (COGS) | ❌ No - direct COGS | ❌ No |
+| Manufacturing | Manufacturing - [Brand] | ✅ Yes | ✅ Yes |
+| Freight | Freight - [Brand] | ✅ Yes | ✅ Yes |
+| Duty | Duty - [Brand] | ✅ Yes | ✅ Yes |
+| Mfg Accessories | Mfg Accessories - [Brand] | ✅ Yes | ✅ Yes |
+| Land Freight | Warehousing:3PL:[Brand] (COGS) | ❌ No - direct COGS | ✅ Yes |
+| 3PL Storage | Warehousing:3PL:[Brand] (COGS) | ❌ No - direct COGS | ❌ No |
 
 ---
 
@@ -1585,7 +1621,7 @@ SKU ALIAS STRATEGY (for bill line parsing):
 Real supplier docs have formatting drift: CS007 vs CS-007 vs CS 007
 
 Parser logic:
-1. Determine BRAND CONTEXT from bill line's Account (e.g., "Inv Manufacturing - US-Dust Sheets" → US-Dust Sheets brand)
+1. Determine BRAND CONTEXT from bill line's Account (e.g., "Manufacturing - US-Dust Sheets" → US-Dust Sheets brand)
 2. Build alias lookup map SCOPED TO THAT BRAND only
 3. For each bill line, match against brand-scoped aliases (longest match first)
 4. If multiple SKUs match same line → BLOCK (ambiguous)
@@ -2312,14 +2348,14 @@ DEBITS (COGS):
   Total COGS                            $2,500.00
 
 CREDITS (Inventory Asset):
-  Inv Manufacturing - US   $1,200.00
-  Inv Freight - US         $180.00
-  Inv Duty - US            $90.00
-  Inv Mfg Accessories - US $30.00
-  Inv Manufacturing - UK   $800.00
-  Inv Freight - UK         $120.00
-  Inv Duty - UK            $60.00
-  Inv Mfg Accessories - UK $20.00
+  Manufacturing - US   $1,200.00
+  Freight - US         $180.00
+  Duty - US            $90.00
+  Mfg Accessories - US $30.00
+  Manufacturing - UK   $800.00
+  Freight - UK         $120.00
+  Duty - UK            $60.00
+  Mfg Accessories - UK $20.00
                                         ─────────
   Total Credit                          $2,500.00
 
@@ -2331,10 +2367,10 @@ Memo: "Plutus COGS - Settlement 12345678 (Dec 19 - Jan 2, 2026)"
 Sellable Return: 2 units of CS-007 @ $2.50 total landed cost
 
 DEBITS (Inventory Asset - cost goes BACK to balance sheet):
-  Inv Manufacturing - US   $4.00
-  Inv Freight - US         $0.60
-  Inv Duty - US            $0.30
-  Inv Mfg Accessories - US $0.10
+  Manufacturing - US   $4.00
+  Freight - US         $0.60
+  Duty - US            $0.30
+  Mfg Accessories - US $0.10
 
 CREDITS (COGS - reduces expense):
   Manufacturing - US-Dust Sheets        $4.00
@@ -2420,14 +2456,14 @@ Memo: "Returns reversal - Jan 2026"
 │                                                                 │
 │    Example (US brand, 10 units short @ $3.00 total landed):     │
 │    - Debit: Inventory Shrinkage - US-Dust Sheets    $30.00      │
-│    - Credit: Inv Manufacturing - US-Dust Sheets     $25.00      │
-│    - Credit: Inv Freight - US-Dust Sheets           $3.00       │
-│    - Credit: Inv Duty - US-Dust Sheets              $1.50       │
-│    - Credit: Inv Mfg Accessories - US-Dust Sheets   $0.50       │
+│    - Credit: Manufacturing - US-Dust Sheets     $25.00      │
+│    - Credit: Freight - US-Dust Sheets           $3.00       │
+│    - Credit: Duty - US-Dust Sheets              $1.50       │
+│    - Credit: Mfg Accessories - US-Dust Sheets   $0.50       │
 │                                                                 │
 │    COMPONENT SPLIT RULE:                                        │
 │    Use current per-unit component averages as-of reconciliation │
-│    date to split the adjustment across Inv Asset sub-accounts.  │
+│    date to split the adjustment across Inventory Asset sub-accounts.  │
 │    This keeps reconciliation JE consistent with sub-account     │
 │    structure and makes variances explainable.                   │
 │                                                                 │
@@ -2555,8 +2591,9 @@ These accounts are duplicates of LMB-created accounts. Delete them if safe; othe
 | Inventory Asset | Other Current Assets | Inventory | Parent for component sub-accounts |
 | Manufacturing | COGS | Supplies & Materials - COGS | Parent for brand sub-accounts |
 | Freight & Custom Duty | COGS | Shipping, Freight & Delivery - COS | Parent for brand sub-accounts |
-| Land Freight | COGS | Shipping, Freight & Delivery - COS | Parent for brand sub-accounts |
-| Storage 3PL | COGS | Shipping, Freight & Delivery - COS | Parent for brand sub-accounts |
+| Warehousing:3PL | COGS | Shipping, Freight & Delivery - COS | Brand leaf accounts for 3PL warehousing costs |
+| Warehousing:Amazon FC | COGS | Shipping, Freight & Delivery - COS | Brand leaf accounts for Amazon FC warehousing costs |
+| Warehousing:AWD | COGS | Shipping, Freight & Delivery - COS | Brand leaf accounts for AWD warehousing costs |
 
 ---
 
@@ -2741,8 +2778,9 @@ model CsvUpload {
 | COGS (Freight) | COGS | Yes | Plutus |
 | COGS (Duty) | COGS | Yes | Plutus |
 | COGS (Mfg Accessories) | COGS | Yes | Plutus |
-| Storage 3PL | COGS | Yes | Manual (QBO) |
-| Land Freight | COGS | Yes | Manual (QBO) |
+| Warehousing:3PL | COGS | Yes | Manual (QBO) |
+| Warehousing:Amazon FC | COGS | Yes | Manual (QBO) |
+| Warehousing:AWD | COGS | Yes | Manual (QBO) |
 
 ---
 
@@ -2830,10 +2868,10 @@ Refund: 2 units of CS-007 @ $2.50 total landed cost
 (Assumes sellable return)
 
 DEBITS (Inventory Asset - cost goes BACK to balance sheet):
-  Inv Manufacturing - US   $4.00
-  Inv Freight - US         $0.60
-  Inv Duty - US            $0.30
-  Inv Mfg Accessories - US $0.10
+  Manufacturing - US   $4.00
+  Freight - US         $0.60
+  Duty - US            $0.30
+  Mfg Accessories - US $0.10
 
 CREDITS (COGS - reduces expense):
   Manufacturing - US-Dust Sheets        $4.00
@@ -2940,7 +2978,7 @@ New weighted average: $700 / 300 units = $2.33/unit
 
 **How to handle:**
 1. When bill arrives, estimate brand split based on inventory %
-2. Post directly to COGS accounts (Storage 3PL - [Brand] or Land Freight - [Brand])
+2. Post directly to `Warehousing:3PL:{Brand}` COGS accounts
 3. Plutus does NOT process these - manual entry in QBO
 
 **Brand Split Estimation:**
@@ -3034,6 +3072,7 @@ Add Promotions account mapping to each Product Group in LMB.
 
 - v1: January 15, 2026 - Initial plan
 - v3.22: January 18, 2026 - MAJOR: (1) Phase 0 moved to Appendix A (optional migration cleanup, not required for all clients). (2) Phase 1 updated to require parent account mapping (QBO account IDs) so Plutus works across arbitrary client account names. (3) Phase 3/4 reframed as onboarding + persistent tooling (Bill Entry Guide + Bill Compliance Scanner), not wizard-as-workflow. (4) Appendices relettered (B+).
+- v3.23: February 4, 2026 - MAJOR: (1) Updated warehousing mapping to use `Warehousing` buckets (3PL/Amazon FC/AWD) instead of separate Land Freight / Storage 3PL accounts. (2) Removed legacy "Inv" naming assumptions for Inventory Asset sub-accounts. (3) Synced Setup Wizard + MASTER CHECKLIST to the real QBO Chart of Accounts structure.
 - v2: January 15, 2026 - Comprehensive A-Z implementation guide
 - v2.1: January 16, 2026 - Currency simplification (all COGS in USD), refund handling (reverse COGS)
 - v2.2: January 16, 2026 - Tags→Custom Fields, InventoryLedger model, dual stream processing (Sales/Returns separate), reconciliation includes 3PL+In-Transit, UNASSIGNED Product Group safety net
@@ -3052,10 +3091,10 @@ Add Promotions account mapping to each Product Group in LMB.
 - v3.11: January 16, 2026 - MAJOR: (1) InventoryLedger now tracks component costs (unitMfgUSD, unitFreightUSD, etc.) for sub-account reconciliation. (2) Added orderId field for cross-period refund matching (DB-first lookup). (3) Added Opening Snapshot support for catch-up mode with sourced documentation. (4) Added Rounding account and JE balancing policy. (5) Added Mixed-Brand PO constraint. Total V1 constraints now 12.
 - v3.12: January 17, 2026 - (1) Added late freight edge case: block when on-hand = 0. (2) Added QBO Opening Initialization JE requirement for catch-up mode. (3) Added QBO query pagination limits (90-day lookback, 100 per page). (4) Clarified Name vs FullyQualifiedName for account creation. (5) Added returns quantity priority logic. (6) Updated idempotency key to include marketplace. (7) Clarified Settlement vs CsvUpload model hierarchy. (8) Fixed account summary to show "8 + 12 + 1 Rounding + 16".
 - v3.13: January 17, 2026 - (1) Added Inventory Shrinkage brand sub-accounts (2 accounts) so brand P&Ls sum to 100%. (2) Total sub-accounts now 39 (was 37). (3) Clarified COGS posting responsibility (Plutus vs Manual for Land Freight/Storage 3PL). (4) Fixed bill parsing validation to apply to manufacturing lines only. (5) Added detailed PO completeness rules.
-- v3.14: January 17, 2026 - MAJOR: (1) Fixed QBO Account.Name uniqueness issue - Inventory Asset accounts now prefixed with "Inv" (e.g., "Inv Manufacturing - US-Dust Sheets") to avoid collision with COGS accounts. (2) Removed Rounding account - JEs now balance by construction (round component totals, not individual SKUs). Total sub-accounts now 38 (was 39). (3) Updated bill parsing to support UK SKUs with spaces (e.g., "CS 007", "CS 1SD-32M"). (4) Fixed Step 6.x numbering (6.2→6.3→6.4). (5) Standardized Detail Type spelling to "Other Costs of Services - COS".
+- v3.14: January 17, 2026 - MAJOR: (1) Fixed Inventory Asset sub-account naming to be consistent across docs + wizard. (2) Removed Rounding account - JEs now balance by construction (round component totals, not individual SKUs). (3) Updated bill parsing to support UK SKUs with spaces (e.g., "CS 007", "CS 1SD-32M"). (4) Fixed Step 6.x numbering (6.2→6.3→6.4). (5) Standardized Detail Type spelling to "Other Costs of Services - COS".
 - v3.15: January 17, 2026 - (1) CRITICAL: Settlement processing now stores sales at ORDER-LINE granularity (one InventoryLedger entry per orderId+sku), not aggregated. Required for DB-first refund matching to work across periods. (2) Added explicit Bill Effective Date Rule: "bill date" = QBO TxnDate, not entry time. (3) Clarified "Brand P&L sums to 100%" applies to Amazon operations only, not company overhead.
-- v3.16: January 17, 2026 - (1) Added COST_ADJUSTMENT ledger type for late freight/duty bills (value-only events with quantityChange=0). (2) Synced Setup Wizard to use correct "Inv" prefix for all Inventory Asset account names. (3) Added Inventory Shrinkage to wizard COGS list. (4) Separated "Plutus posts" vs "Manual" COGS sections in wizard.
-- v3.17: January 17, 2026 - (1) Fixed Step 1.4 to use "Inv" prefix for Inventory Asset accounts (was inconsistent with MASTER CHECKLIST). (2) Updated QBO pagination: maxresults up to 1000, recommended 500-1000 for efficiency. (3) Added V1 Constraint #14: Immutable Cost Snapshots (no retro-costing). (4) Added V1 Constraint #15: Date Normalization (midnight UTC). (5) Added SkuMapping.aliases field for SKU text variant matching in bill parsing.
+- v3.16: January 17, 2026 - (1) Added COST_ADJUSTMENT ledger type for late freight/duty bills (value-only events with quantityChange=0). (2) Synced Setup Wizard to use correct Inventory Asset account naming. (3) Added Inventory Shrinkage to wizard COGS list. (4) Separated "Plutus posts" vs "Manual" COGS sections in wizard.
+- v3.17: January 17, 2026 - (1) Fixed Step 1.4 naming mismatch with MASTER CHECKLIST. (2) Updated QBO pagination: maxresults up to 1000, recommended 500-1000 for efficiency. (3) Added V1 Constraint #14: Immutable Cost Snapshots (no retro-costing). (4) Added V1 Constraint #15: Date Normalization (midnight UTC). (5) Added SkuMapping.aliases field for SKU text variant matching in bill parsing.
 - v3.18: January 17, 2026 - (1) Added V1 Constraint #16: QBO Duplicate JE Safety Check (two-tier idempotency - DB + QBO search). (2) Added V1 Constraint #17: Same-Day Event Ordering (deterministic ledger replay). (3) Added note that InventoryLedger running totals are derived/recomputable. (4) Improved late freight BLOCK message with actionable diagnostics (shows PO, SKU, depleting settlements, options).
 - v3.19: January 17, 2026 - (1) Added V1 Constraint #18: Marketplace Normalization (canonical values). (2) Added partial refund guardrail to Refund Matching Rule. (3) Added PURCHASE date semantics as explicit accounting policy. (4) Added reconciliation component split rule. (5) Made SKU alias matching BRAND-AWARE (scope to brand from bill line Account to prevent cross-brand alias collisions).
 - v3.20: January 17, 2026 - MAJOR: (1) Changed ledger value fields to 4 decimal precision (Decimal(14,4)) to prevent reconciliation drift - round to 2 decimals only for QBO JE output. (2) Added explicit partial refund threshold (80% of expected = flag). (3) Added V1 Constraint #19: Negative Inventory Prevention (hard block with diagnostic). (4) Added V1 Constraint #20: Posting Atomicity Rule (all-or-nothing). (5) Added V1 Constraint #21: Cost Lookup Rule (block if no cost). (6) Added V1 Constraint #22: COST_ADJUSTMENT as Component Deltas.

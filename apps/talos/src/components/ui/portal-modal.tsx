@@ -48,6 +48,11 @@ export function PortalModal({ open, children, className, onClose }: PortalModalP
           'relative z-10 flex h-full w-full justify-center p-4 items-center',
           className
         )}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && onClose) {
+            onClose()
+          }
+        }}
       >
         {children}
       </div>

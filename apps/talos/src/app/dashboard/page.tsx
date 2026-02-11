@@ -25,6 +25,7 @@ import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { DashboardSkeleton } from '@/components/common/loading-state'
 import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface DashboardStats {
  totalInventory: number
@@ -171,7 +172,7 @@ export default function DashboardPage() {
  endDate: timeRanges[selectedTimeRange].endDate.toISOString()
  })
  
- const response = await fetch(`/api/dashboard/stats?${params}`)
+ const response = await fetch(withBasePath(`/api/dashboard/stats?${params}`), { credentials: 'include' })
  
  if (response.ok) {
  const data = await response.json()
@@ -345,7 +346,7 @@ export default function DashboardPage() {
  subtitle="need attention"
  icon={AlertTriangle}
  variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
- onClick={() => window.location.href = '/amazon/fba-fee-discrepancies'}
+ onClick={() => router.push('/amazon/fba-fee-discrepancies')}
  />
  </StatsCardGrid>
 

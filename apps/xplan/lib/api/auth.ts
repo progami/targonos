@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { Session } from 'next-auth';
-import { getAppEntitlement } from '@targon/auth';
+import { hasCapability } from '@targon/auth';
 import { auth } from '@/lib/auth';
 import {
   checkRateLimit,
@@ -25,8 +25,8 @@ export function withXPlanAuth(
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const entitlement = getAppEntitlement((session as any).roles, 'xplan');
-    if (!entitlement) {
+    const canEnter = hasCapability({ session, appId: 'xplan', capability: 'enter' });
+    if (!canEnter) {
       return NextResponse.json({ error: 'No access to xplan' }, { status: 403 });
     }
 

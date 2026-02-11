@@ -35,31 +35,48 @@ Goal: **brand-level P&L** where everything adds up to the total, with **inventor
 
 ## Ongoing: Bills (cost basis source)
 
-1. Human enters supplier bills in QBO using strict SOP:
-   - `Memo` links the PO: `PO: PO-YYYY-NNN`
-   - Manufacturing bill lines have parseable descriptions (SKU + qty).
-2. Plutus reads QBO Bills (not QBO balances) and builds **cost history** per SKU:
+Preferred v1 workflow: create or map bills in **Plutus → Bills** so the memo + line descriptions are consistent.
+
+1. Create (or map) supplier bills:
+   - Bill memo must link the PO: `PO: PO-YYYY-NNN`
+   - Manufacturing lines must include `SKU x <qty> units` so Plutus can establish on-hand units per PO/SKU.
+   - Freight/Duty/Accessories can be SKU-specific or PO-level (allocated across PO units).
+2. Plutus reads mapped QBO Bills and builds SKU cost basis via **ledger replay**:
    - Costing method: **moving average** (v1)
    - Late freight/duty uses “apply to remaining on-hand only” behavior (v1)
 
+## Ongoing: Audit Data (bulk upload)
+
+LMB exports Audit Data as a single CSV covering a date range (e.g. `audit-data-Targon US-2025-10-2026-02.csv`). One file contains **all settlements** in that range — rows are grouped by the `Invoice` column, where each unique Invoice ID maps to one LMB settlement.
+
+1. In LMB:
+   - Download the **Audit Data CSV** for the desired date range.
+2. In Plutus → **Cost Management → Audit Data**:
+   - Upload the CSV (or ZIP containing a CSV).
+   - Plutus parses the file and splits rows by `Invoice`.
+   - Matches each Invoice to a known LMB settlement (via QBO journal entry lookup).
+   - Shows upload summary: how many settlements matched, how many rows, any unmatched invoices.
+   - Stores the parsed data — settlements can now be processed from the Settlements page.
+
+Re-uploading a file with overlapping Invoices is safe (idempotent via processing hash).
+
 ## Ongoing: Settlements (the main workflow)
 
-This is the “posting unit”: **one LMB `Invoice` group** from Audit Data.
+This is the "posting unit": **one LMB `Invoice` group** from Audit Data.
 
 1. In Plutus (LMB-like UX):
    - Open the Settlements list.
    - Plutus polls **QBO** to find LMB-posted settlements (LMB has no API).
    - Each row shows:
      - **LMB Posted** (inferred from QBO)
+     - **Audit Data**: whether audit data has been uploaded for this settlement
      - **Plutus Processed / Pending / Blocked**
-2. In LMB:
-   - Download the **Audit Data CSV** for that settlement (often delivered as a ZIP containing a single CSV).
-3. In Plutus:
-   - Upload the Audit Data file for the selected settlement.
-   - Plutus groups rows by **Invoice** and uses the settlement as:
+2. To process a settlement, audit data must already be uploaded (via Inventory → Audit Data).
+3. Plutus uses the stored audit data for the settlement's Invoice:
      - **Processed** (already posted by Plutus)
-     - **Pending** (ready to post)
+     - **Pending** (ready to post — audit data available)
      - **Blocked** (missing cost basis, negative inventory risk, missing SKU mapping, etc.)
+     - **No Audit Data** (audit data not yet uploaded for this Invoice)
 4. Plutus validation (hard blocks in v1):
    - Missing SKU → block (must exist + be mapped to a Brand)
    - Missing cost basis for SKU as-of sale date (from Bills) → **block**
@@ -74,6 +91,24 @@ This is the “posting unit”: **one LMB `Invoice` group** from Audit Data.
    - **P&L Reclass JE**: move P&L amounts from parent accounts → Brand sub-accounts (brand-level P&L)
 7. Mark the settlement **Processed**:
    - Store `(marketplace, invoiceId, processingHash)` + QBO JE IDs for idempotency and traceability.
+
+## Optional: Autopost (safe automation)
+
+Plutus includes an **Auto-process** action on the Settlements page plus a headless runner (`pnpm -C apps/plutus autopost:check`) suitable for cron/PM2.
+
+Design rule: **never guess** which audit invoice belongs to a settlement.
+- Matching is deterministic by settlement marketplace + settlement period (from LMB DocNumber).
+- If there is no unique match (missing period, none found, ambiguous), the settlement is **skipped** and requires manual selection in the UI.
+
+## Ongoing: Reconciliation (compare-only in v1)
+
+Plutus includes a Reconciliation page (`/reconciliation`) to compare an Amazon Date Range Transaction Report against stored LMB Audit Data, surfaced as:
+- matched orders
+- discrepancies
+- Amazon-only
+- LMB-only
+
+This is optional reporting in v1. It requires exporting the Amazon Seller Central Date Range Transaction Report. Posting reconciliation adjustments to QBO is still a future step.
 
 ## Decision Tree (v1 defaults)
 

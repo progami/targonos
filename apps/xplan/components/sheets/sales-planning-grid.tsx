@@ -329,6 +329,11 @@ function computeSelectionStatsFromData(
   };
 }
 
+function isMonthBoundary(currentDate: string, prevDate: string | undefined): boolean {
+  if (!prevDate) return false;
+  return new Date(currentDate).getMonth() !== new Date(prevDate).getMonth();
+}
+
 export function SalesPlanningGrid({
   strategyId,
   rows,
@@ -2268,7 +2273,7 @@ export function SalesPlanningGrid({
     <section className="space-y-4">
       <div
         className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10"
-        style={{ height: 'calc(100vh - 180px)', minHeight: '420px' }}
+        style={{ height: 'calc(100vh - 164px)', minHeight: '420px' }}
       >
         <textarea
           ref={clipboardRef}
@@ -2317,7 +2322,7 @@ export function SalesPlanningGrid({
                       key={column.id}
                       rowSpan={2}
                       className={cn(
-                        'sticky top-0 z-40 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 align-middle dark:text-cyan-300/80',
+                        'sticky top-0 z-40 h-10 whitespace-nowrap border-b-2 border-b-slate-200 dark:border-b-slate-700 border-r bg-muted px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 align-middle dark:text-cyan-300/80',
                         meta?.sticky && 'z-50',
                       )}
                       style={{
@@ -2334,7 +2339,7 @@ export function SalesPlanningGrid({
                   <TableHead
                     key={product.id}
                     colSpan={columnIds.length}
-                    className="sticky top-0 z-20 h-10 whitespace-nowrap border-b bg-muted px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300/80"
+                    className="sticky top-0 z-20 h-10 whitespace-nowrap border-b-2 border-b-slate-200 dark:border-b-slate-700 bg-muted px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300/80"
                   >
                     {renderProductGroupHeader(product)}
                   </TableHead>
@@ -2352,6 +2357,7 @@ export function SalesPlanningGrid({
                         className={cn(
                           'sticky top-10 z-20 h-10 whitespace-nowrap border-b border-r px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300/80',
                           isInputColumn ? 'bg-cyan-100/90 dark:bg-cyan-900/50' : 'bg-muted',
+                          isEditableMetric(field) && 'border-b-[3px] border-b-cyan-500/50 dark:border-b-[#00C2B9]/40',
                         )}
                       >
                         {renderMetricHeader(field)}
@@ -2365,7 +2371,11 @@ export function SalesPlanningGrid({
               {table.getRowModel().rows.map((row, visibleRowIndex) => (
                 <TableRow
                   key={row.id}
-                  className={cn('hover:bg-transparent', visibleRowIndex % 2 === 1 && 'bg-muted/30')}
+                  className={cn(
+                    'hover:bg-transparent',
+                    visibleRowIndex % 2 === 1 && 'bg-slate-50 dark:bg-slate-800/40',
+                    visibleRowIndex > 0 && isMonthBoundary(row.original.weekDate ?? '', table.getRowModel().rows[visibleRowIndex - 1]?.original.weekDate) && 'border-t-2 border-t-slate-300 dark:border-t-slate-600',
+                  )}
                 >
                   {leafColumns.map((column, colIndex) => {
                     const meta = column.columnDef.meta as
@@ -2455,22 +2465,23 @@ export function SalesPlanningGrid({
 	                      <TableCell
 	                        key={column.id}
 	                        className={cn(
-	                          'h-8 select-none whitespace-nowrap border-r px-2 py-0 text-sm overflow-hidden',
+	                          'h-9 select-none whitespace-nowrap border-r px-2.5 py-0.5 text-sm overflow-hidden',
 	                          meta?.sticky
 	                            ? isEvenRow
 	                              ? 'bg-muted'
 	                              : 'bg-card'
                             : isEvenRow
-                              ? 'bg-muted/30'
+                              ? 'bg-slate-50 dark:bg-slate-800/40'
                               : 'bg-card',
                           isWeekCellWithActualData &&
                             'bg-cyan-100 dark:bg-cyan-900/50',
                           meta?.sticky && 'sticky z-10',
                           colIndex === 2 && 'border-r-2',
+                          productBoundaryColumns.firstColIndices.has(colIndex) && 'border-l-[3px] border-l-cyan-400/50 dark:border-l-cyan-500/30',
                           presentation.isEditable && 'cursor-text font-medium',
                           presentation.isEditable &&
                             presentation.highlight === 'none' &&
-                            'bg-cyan-50/80 dark:bg-cyan-950/40',
+                            'bg-cyan-50 dark:bg-cyan-950/50',
                           presentation.highlight === 'warning' &&
                             'bg-danger-100/90 dark:bg-danger-500/25 dark:ring-1 dark:ring-inset dark:ring-danger-300/45',
                           presentation.isWarning && 'text-danger-700 dark:text-danger-200',

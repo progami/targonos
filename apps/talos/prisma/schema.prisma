@@ -63,6 +63,18 @@ model UserPermission {
   @@map("user_permissions")
 }
 
+model PoProductAssignment {
+  userEmail      String   @map("user_email")
+  skuCode        String   @map("sku_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+  createdByEmail String   @map("created_by_email")
+
+  @@id([userEmail, skuCode])
+  @@index([userEmail])
+  @@index([skuCode])
+  @@map("po_product_assignments")
+}
+
 model Warehouse {
   id                 String     @id @default(uuid())
   code               String     @unique
@@ -89,6 +101,7 @@ model Warehouse {
 model Sku {
   id                  String     @id @default(uuid())
   skuCode             String     @unique @map("sku_code")
+  skuGroup            String?    @map("sku_group")
   asin                String?
   category             String?    @map("category")
   subcategory          String?    @map("subcategory")
@@ -140,7 +153,6 @@ model Sku {
   updatedAt           DateTime   @updatedAt @map("updated_at")
   fbaStock            Int?       @map("fba_stock")
   fbaStockLastUpdated DateTime?  @map("fba_stock_last_updated")
-  batches             SkuBatch[]
   warehouseStorageConfigs WarehouseSkuStorageConfig[]
   amazonFbaFeeAlert   AmazonFbaFeeAlert?
 
@@ -187,36 +199,6 @@ model WarehouseSkuStorageConfig {
   @@index([warehouseId])
   @@index([skuId])
   @@map("warehouse_sku_storage_configs")
-}
-
-model SkuBatch {
-  id                       String    @id @default(uuid())
-  skuId                    String    @map("sku_id")
-  sku                      Sku       @relation(fields: [skuId], references: [id], onDelete: Cascade)
-  batchCode                String    @map("batch_code")
-  description              String?   @map("description")
-  productionDate           DateTime? @map("production_date")
-  expiryDate               DateTime? @map("expiry_date")
-  packSize                 Int?      @map("pack_size")
-  unitsPerCarton           Int?      @map("units_per_carton")
-  material                 String?   @map("material")
-  cartonDimensionsCm       String?   @map("carton_dimensions_cm")
-  cartonSide1Cm            Decimal?  @map("carton_side1_cm") @db.Decimal(8, 2)
-  cartonSide2Cm            Decimal?  @map("carton_side2_cm") @db.Decimal(8, 2)
-  cartonSide3Cm            Decimal?  @map("carton_side3_cm") @db.Decimal(8, 2)
-  cartonWeightKg           Decimal?  @map("carton_weight_kg") @db.Decimal(8, 3)
-  packagingType            String?   @map("packaging_type")
-  amazonSizeTier           String?   @map("amazon_size_tier")
-  amazonFbaFulfillmentFee  Decimal?  @map("amazon_fba_fulfillment_fee") @db.Decimal(12, 2)
-  amazonReferenceWeightKg  Decimal?  @map("amazon_reference_weight_kg") @db.Decimal(8, 3)
-  storageCartonsPerPallet  Int?      @map("storage_cartons_per_pallet")
-  shippingCartonsPerPallet Int?      @map("shipping_cartons_per_pallet")
-  isActive                 Boolean   @default(true) @map("is_active")
-  createdAt                DateTime  @default(now()) @map("created_at")
-  updatedAt                DateTime  @updatedAt @map("updated_at")
-
-  @@unique([skuId, batchCode])
-  @@map("sku_batches")
 }
 
 model Supplier {
@@ -279,7 +261,7 @@ model InventoryTransaction {
   packagingType            String?            @map("packaging_type")
   unitsPerCarton           Int                @map("units_per_carton")
   // Transaction data
-  batchLot                 String             @map("batch_lot")
+  lotRef                   String             @map("lot_ref")
   transactionType          TransactionType    @map("transaction_type")
   referenceId              String?            @map("reference_id")
   cartonsIn                Int                @default(0) @map("cartons_in")
@@ -311,9 +293,9 @@ model InventoryTransaction {
   financialLedgerEntries   FinancialLedgerEntry[] @relation("FinancialLedgerInventoryTransaction")
 
   @@index([transactionDate])
-  @@index([warehouseCode, skuCode, batchLot])
+  @@index([warehouseCode, skuCode, lotRef])
   @@index([transactionDate(sort: Desc)], map: "idx_inventory_transactions_date")
-  @@index([warehouseCode, skuCode, batchLot], map: "idx_inventory_transactions_warehouse_sku_batch")
+  @@index([warehouseCode, skuCode, lotRef], map: "idx_inventory_transactions_warehouse_sku_lot")
   @@index([createdAt(sort: Desc)], map: "idx_inventory_transactions_created_at")
   @@index([purchaseOrderId], map: "idx_inventory_transactions_purchase_order")
   @@index([purchaseOrderLineId], map: "idx_inventory_transactions_purchase_order_line")
@@ -325,6 +307,7 @@ model InventoryTransaction {
 model PurchaseOrder {
   id               String              @id @default(uuid())
   orderNumber      String              @map("order_number")
+  skuGroup         String?             @map("sku_group")
   poNumber         String?             @unique @map("po_number") // Auto-generated PO-0001 format
   splitGroupId     String?             @map("split_group_id")
   splitParentId    String?             @map("split_parent_id")
@@ -573,7 +556,7 @@ model FulfillmentOrderLine {
   fulfillmentOrder   FulfillmentOrder      @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
   skuCode            String                @map("sku_code")
   skuDescription     String?               @map("sku_description")
-  batchLot           String                @map("batch_lot")
+  lotRef             String                @map("lot_ref")
   quantity           Int
   status             FulfillmentOrderLineStatus @default(PENDING)
   shippedQuantity    Int                   @default(0) @map("shipped_quantity")
@@ -582,7 +565,7 @@ model FulfillmentOrderLine {
   updatedAt          DateTime              @updatedAt @map("updated_at")
   transactions       InventoryTransaction[] @relation("TransactionFulfillmentOrderLine")
 
-  @@unique([fulfillmentOrderId, skuCode, batchLot])
+  @@unique([fulfillmentOrderId, skuCode, lotRef])
   @@index([fulfillmentOrderId])
   @@map("fulfillment_order_lines")
 }
@@ -656,7 +639,8 @@ model PurchaseOrderLine {
   purchaseOrder     PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   skuCode           String                  @map("sku_code")
   skuDescription    String?                 @map("sku_description")
-  batchLot          String?                 @map("batch_lot")
+  lotRef            String                  @map("lot_ref")
+  productionDate    DateTime?               @map("production_date") @db.Date
   piNumber          String?                 @map("pi_number")
   commodityCode     String?                 @map("commodity_code")
   countryOfOrigin   String?                 @map("country_of_origin")
@@ -690,7 +674,7 @@ model PurchaseOrderLine {
   grnLines          GrnLine[]
   invoiceLines      WarehouseInvoiceLine[]
 
-  @@unique([purchaseOrderId, skuCode, batchLot])
+  @@unique([purchaseOrderId, skuCode])
   @@index([purchaseOrderId])
   @@map("purchase_order_lines")
 }
@@ -741,7 +725,7 @@ model GrnLine {
   purchaseOrderLine        PurchaseOrderLine?     @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
   skuCode                  String                 @map("sku_code")
   skuDescription           String?                @map("sku_description")
-  batchLot                 String?                @map("batch_lot")
+  lotRef                   String?                @map("lot_ref")
   quantity                 Int
   varianceQuantity         Int                    @default(0) @map("variance_quantity")
   storageCartonsPerPallet  Int?                   @map("storage_cartons_per_pallet")
@@ -812,7 +796,7 @@ model StorageLedger {
   warehouseName    String   @map("warehouse_name")
   skuCode          String   @map("sku_code")
   skuDescription   String   @map("sku_description")
-  batchLot         String   @map("batch_lot")
+  lotRef           String   @map("lot_ref")
   weekEndingDate   DateTime @map("week_ending_date") @db.Date
   openingBalance   Int      @map("opening_balance")
   weeklyReceive    Int      @map("weekly_receive")
@@ -838,7 +822,7 @@ model StorageLedger {
   createdByName String   @map("created_by_name")
   financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerStorageLedger")
 
-  @@unique([warehouseCode, skuCode, batchLot, weekEndingDate])
+  @@unique([warehouseCode, skuCode, lotRef, weekEndingDate])
   @@index([warehouseCode, weekEndingDate])
   @@index([weekEndingDate, isCostCalculated])
   @@map("storage_ledger")
@@ -877,7 +861,7 @@ model FinancialLedgerEntry {
   warehouseName        String                   @map("warehouse_name")
   skuCode              String?                  @map("sku_code")
   skuDescription       String?                  @map("sku_description")
-  batchLot             String?                  @map("batch_lot")
+  lotRef               String?                  @map("lot_ref")
   inventoryTransactionId String?                @map("inventory_transaction_id")
   storageLedgerId      String?                  @map("storage_ledger_id")
   purchaseOrderId      String?                  @map("purchase_order_id")

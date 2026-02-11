@@ -1,12 +1,13 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createLogger } from '@targon/logger';
-import type { QboAccount, QboConnection } from '@/lib/qbo/api';
-import { fetchAccounts, fetchJournalEntryById } from '@/lib/qbo/api';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import type { QboAccount } from '@/lib/qbo/api';
+import { fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementTotalFromJournalEntry, parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
 import { db } from '@/lib/db';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const logger = createLogger({ name: 'plutus-settlement-detail' });
 
@@ -14,14 +15,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, context: RouteContext) {
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
-    if (!connectionCookie) {
+    const connection = await getQboConnection();
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const { id: settlementId } = await context.params;
 
@@ -38,13 +35,6 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         : connection;
 
     if (activeConnection !== connection) {
-      cookieStore.set('qbo_connection', JSON.stringify(activeConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(activeConnection);
     }
 
@@ -132,6 +122,10 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         : null,
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to fetch settlement detail', { error });
     return NextResponse.json(
       {
@@ -145,9 +139,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
-    if (!connectionCookie) {
+    const connection = await getQboConnection();
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
 
@@ -198,6 +191,19 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     await db.settlementProcessing.delete({
       where: { qboSettlementJournalEntryId: settlementId },
+    });
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'SETTLEMENT_ROLLED_BACK',
+      entityType: 'SettlementProcessing',
+      entityId: settlementId,
+      details: {
+        marketplace: existing.marketplace,
+        invoiceId: existing.invoiceId,
+      },
     });
 
     return NextResponse.json({ success: true }, { status: 200 });

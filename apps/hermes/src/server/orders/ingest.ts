@@ -86,19 +86,25 @@ function applySpread(d: Date, cfg: ScheduleConfig): Date {
 export function computeScheduleForOrder(order: HermesOrder, cfg: ScheduleConfig): {
   scheduledAt: Date;
   expiresAt: Date | null;
-  policyAnchor: "delivery" | "purchase" | "unknown";
+  policyAnchor: "delivery" | "ship" | "purchase" | "unknown";
 } {
   const delayDays = clamp(cfg.delayDays, 5, 30);
 
   const latestDelivery = parseDate(order.latestDeliveryDate);
   const earliestDelivery = parseDate(order.earliestDeliveryDate);
+  const latestShip = parseDate(order.latestShipDate);
   const purchase = parseDate(order.purchaseDate);
 
   const deliveryAnchor = latestDelivery ?? earliestDelivery;
+  const anchor = deliveryAnchor ?? latestShip ?? purchase;
 
-  // Scheduled at: (delivery + delay) when we have a delivery estimate; otherwise now.
-  const base = deliveryAnchor ?? new Date();
-  const scheduledBase = deliveryAnchor ? addDays(base, delayDays) : base;
+  // Scheduled at:
+  // - prefer delivery estimate (delivery + delay)
+  // - otherwise fall back to ship date (ship + delay)
+  // - otherwise purchase date (purchase + delay)
+  // - otherwise now (best effort)
+  const base = anchor ?? new Date();
+  const scheduledBase = anchor ? addDays(base, delayDays) : base;
   let scheduledAt = applySendWindow(scheduledBase, cfg);
   scheduledAt = applySpread(scheduledAt, cfg);
 
@@ -107,6 +113,8 @@ export function computeScheduleForOrder(order: HermesOrder, cfg: ScheduleConfig)
   let expiresAt: Date | null = null;
   if (deliveryAnchor) {
     expiresAt = endOfDay(addDays(deliveryAnchor, 30));
+  } else if (latestShip) {
+    expiresAt = endOfDay(addDays(latestShip, 45));
   } else if (purchase) {
     expiresAt = endOfDay(addDays(purchase, 60));
   }
@@ -114,7 +122,7 @@ export function computeScheduleForOrder(order: HermesOrder, cfg: ScheduleConfig)
   return {
     scheduledAt,
     expiresAt,
-    policyAnchor: deliveryAnchor ? "delivery" : purchase ? "purchase" : "unknown",
+    policyAnchor: deliveryAnchor ? "delivery" : latestShip ? "ship" : purchase ? "purchase" : "unknown",
   };
 }
 
@@ -222,6 +230,13 @@ export async function enqueueRequestReviewsForOrders(params: {
   }> = [];
 
   for (const o of params.orders) {
+    if (typeof o.orderStatus === "string") {
+      const s = o.orderStatus.trim();
+      if (s !== "Shipped" && s !== "PartiallyShipped") {
+        continue;
+      }
+    }
+
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
 
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
@@ -370,6 +385,7 @@ export async function countOrders(params: {
   connectionId: string;
   marketplaceId?: string | null;
   orderStatus?: string | null;
+  orderIdQuery?: string | null;
   delivery?: "has" | "missing";
   reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<number> {
@@ -386,6 +402,11 @@ export async function countOrders(params: {
   if (params.orderStatus) {
     values.push(params.orderStatus);
     where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.orderIdQuery) {
+    values.push(params.orderIdQuery);
+    where.push(`o.order_id ILIKE ('%' || $${values.length} || '%')`);
   }
 
   if (params.delivery === "has") {
@@ -440,6 +461,7 @@ export async function listOrdersPage(params: {
   cursor?: HermesOrdersListCursor | null;
   marketplaceId?: string | null;
   orderStatus?: string | null;
+  orderIdQuery?: string | null;
   delivery?: "has" | "missing";
   reviewState?: "not_queued" | "queued" | "sending" | "sent" | "failed" | "skipped";
 }): Promise<{
@@ -450,6 +472,7 @@ export async function listOrdersPage(params: {
     latestDeliveryDate: string | null;
     orderStatus: string | null;
     fulfillmentChannel: string | null;
+    dispatchId: string | null;
     dispatchState: string | null;
     dispatchScheduledAt: string | null;
     dispatchExpiresAt: string | null;
@@ -476,6 +499,11 @@ export async function listOrdersPage(params: {
   if (params.orderStatus) {
     values.push(params.orderStatus);
     where.push(`o.order_status = $${values.length}`);
+  }
+
+  if (params.orderIdQuery) {
+    values.push(params.orderIdQuery);
+    where.push(`o.order_id ILIKE ('%' || $${values.length} || '%')`);
   }
 
   if (params.delivery === "has") {
@@ -556,6 +584,7 @@ export async function listOrdersPage(params: {
       o.order_status,
       o.fulfillment_channel,
       o.imported_at::text AS imported_at,
+      d.id AS dispatch_id,
       d.state AS dispatch_state,
       d.scheduled_at::text AS dispatch_scheduled_at,
       d.expires_at::text AS dispatch_expires_at,
@@ -580,6 +609,7 @@ export async function listOrdersPage(params: {
     order_status: string | null;
     fulfillment_channel: string | null;
     imported_at: string;
+    dispatch_id: string | null;
     dispatch_state: string | null;
     dispatch_scheduled_at: string | null;
     dispatch_expires_at: string | null;
@@ -596,6 +626,7 @@ export async function listOrdersPage(params: {
     latestDeliveryDate: r.latest_delivery_date,
     orderStatus: r.order_status,
     fulfillmentChannel: r.fulfillment_channel,
+    dispatchId: r.dispatch_id,
     dispatchState: r.dispatch_state,
     dispatchScheduledAt: r.dispatch_scheduled_at,
     dispatchExpiresAt: r.dispatch_expires_at,

@@ -1,16 +1,18 @@
-// Set up logging before anything else
-// Temporarily disabled for debugging
-// try {
-//   require('./src/lib/setup-logging.js');
-// } catch (error) {
-//   console.error('Failed to set up logging:', error);
-// }
-
 // Get version from package.json
 const { version } = require('./package.json')
 const resolvedVersion = process.env.NEXT_PUBLIC_VERSION || version
 
-const basePath = process.env.BASE_PATH || ''
+const rawBasePath = (process.env.BASE_PATH ?? '').trim()
+const rawBasePathWithoutTrailingSlash = rawBasePath.endsWith('/') ? rawBasePath.slice(0, -1) : rawBasePath
+const basePathSegments = rawBasePathWithoutTrailingSlash.split('/').filter(Boolean)
+const basePathHalfLen = Math.floor(basePathSegments.length / 2)
+const hasDuplicatedBasePath =
+  basePathSegments.length > 0 &&
+  basePathSegments.length % 2 === 0 &&
+  basePathSegments.slice(0, basePathHalfLen).join('/') === basePathSegments.slice(basePathHalfLen).join('/')
+const basePath = hasDuplicatedBasePath
+  ? `/${basePathSegments.slice(0, basePathHalfLen).join('/')}`
+  : rawBasePathWithoutTrailingSlash
 const assetPrefix = basePath || ''
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
@@ -198,6 +200,7 @@ const nextConfig = {
   experimental: {
     // optimizeCss: true, // Disabled to avoid critters dependency issue
     optimizePackageImports: ['lucide-react', 'date-fns', 'recharts', '@radix-ui/react-icons', '@radix-ui/react-dialog', '@radix-ui/react-select'],
+    proxyClientMaxBodySize: '1gb',
   },
   
   // Server external packages (moved from experimental in Next.js 15)

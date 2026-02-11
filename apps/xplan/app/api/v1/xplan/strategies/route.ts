@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
+import { buildAuditRequestMeta, emitAuditEvent } from '@/lib/audit-log';
 import {
   areStrategyAssignmentFieldsAvailable,
   buildStrategyAccessWhere,
@@ -21,6 +22,7 @@ const createSchema = z.object({
   description: z.string().optional(),
   region: z.enum(['US', 'UK']).optional(),
   assigneeId: z.string().min(1).optional(),
+  assigneeIds: z.array(z.string().min(1)).optional(),
 });
 
 const updateSchema = z.object({
@@ -30,6 +32,7 @@ const updateSchema = z.object({
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
   region: z.enum(['US', 'UK']).optional(),
   assigneeId: z.string().min(1).optional(),
+  assigneeIds: z.array(z.string().min(1)).optional(),
 });
 
 const deleteSchema = z.object({
@@ -40,6 +43,12 @@ const countsSelect = {
   products: true,
   purchaseOrders: true,
   salesWeeks: true,
+};
+
+const assigneeRelationSelect = {
+  id: true,
+  assigneeId: true,
+  assigneeEmail: true,
 };
 
 const listSelect = {
@@ -53,6 +62,10 @@ const listSelect = {
   createdByEmail: true,
   assigneeId: true,
   assigneeEmail: true,
+  strategyAssignees: {
+    select: assigneeRelationSelect,
+    orderBy: { assigneeEmail: 'asc' },
+  },
   createdAt: true,
   updatedAt: true,
   _count: { select: countsSelect },
@@ -81,6 +94,10 @@ const writeSelect = {
   createdByEmail: true,
   assigneeId: true,
   assigneeEmail: true,
+  strategyAssignees: {
+    select: assigneeRelationSelect,
+    orderBy: { assigneeEmail: 'asc' },
+  },
   createdAt: true,
   updatedAt: true,
 };
@@ -94,9 +111,93 @@ function strategyAccessUnavailableResponse() {
   );
 }
 
+type StrategyActor = ReturnType<typeof getStrategyActor>;
+
+function normalizeAssigneeIds(input: string | string[] | undefined): string[] {
+  const values = Array.isArray(input) ? input : input ? [input] : [];
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const id = value.trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    normalized.push(id);
+  }
+
+  return normalized;
+}
+
+async function resolveStrategyAssigneesByIds(
+  assigneeIds: string[],
+  actor: StrategyActor,
+  cookieHeader: string | null,
+) {
+  const resolved: Array<{ id: string; email: string }> = [];
+  const seen = new Set<string>();
+
+  for (const assigneeId of assigneeIds) {
+    if (seen.has(assigneeId)) {
+      continue;
+    }
+    seen.add(assigneeId);
+
+    if (actor.id === assigneeId && actor.email) {
+      resolved.push({ id: actor.id, email: actor.email });
+      continue;
+    }
+
+    const allowed = await resolveAllowedXPlanAssigneeByIdWithCookie(assigneeId, cookieHeader);
+    if (!allowed) {
+      return { error: 'Assignee must be an allowed X-Plan user' as const };
+    }
+
+    resolved.push({
+      id: allowed.id,
+      email: allowed.email.trim().toLowerCase(),
+    });
+  }
+
+  return { assignees: resolved };
+}
+
+function canActorAccessStrategy(existing: any, actor: StrategyActor): boolean {
+  if (actor.isSuperAdmin) {
+    return true;
+  }
+
+  if (actor.id) {
+    if (existing.createdById === actor.id || existing.assigneeId === actor.id) {
+      return true;
+    }
+    if (
+      Array.isArray(existing.strategyAssignees) &&
+      existing.strategyAssignees.some((entry: any) => entry.assigneeId === actor.id)
+    ) {
+      return true;
+    }
+  }
+
+  if (actor.email) {
+    if (existing.createdByEmail === actor.email || existing.assigneeEmail === actor.email) {
+      return true;
+    }
+    if (
+      Array.isArray(existing.strategyAssignees) &&
+      existing.strategyAssignees.some((entry: any) => entry.assigneeEmail === actor.email)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export const GET = withXPlanAuth(async (_request, session) => {
   const actor = getStrategyActor(session);
-  const orderBy = [{ updatedAt: 'desc' }];
+  const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
 
   let strategies: any[];
   if (areStrategyAssignmentFieldsAvailable()) {
@@ -146,22 +247,20 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     return strategyAccessUnavailableResponse();
   }
 
-  const requestedAssigneeId = parsed.data.assigneeId ?? actor.id;
-  let assigneeEmail = actor.email;
-
-  if (requestedAssigneeId !== actor.id) {
-    const allowed = await resolveAllowedXPlanAssigneeByIdWithCookie(
-      requestedAssigneeId,
-      cookieHeader,
-    );
-    if (!allowed) {
-      return NextResponse.json(
-        { error: 'Assignee must be an allowed X-Plan user' },
-        { status: 400 },
-      );
-    }
-    assigneeEmail = allowed.email.trim().toLowerCase();
+  const requestedAssigneeIds = normalizeAssigneeIds(
+    parsed.data.assigneeIds ?? parsed.data.assigneeId ?? actor.id,
+  );
+  const resolvedAssigneesResult = await resolveStrategyAssigneesByIds(
+    requestedAssigneeIds,
+    actor,
+    cookieHeader,
+  );
+  if ('error' in resolvedAssigneesResult) {
+    return NextResponse.json({ error: resolvedAssigneesResult.error }, { status: 400 });
   }
+
+  const resolvedAssignees = resolvedAssigneesResult.assignees;
+  const primaryAssignee = resolvedAssignees[0] ?? null;
 
   let strategy: any;
   try {
@@ -174,8 +273,14 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
         status: 'DRAFT',
         createdById: actor.id,
         createdByEmail: actor.email,
-        assigneeId: requestedAssigneeId,
-        assigneeEmail,
+        assigneeId: primaryAssignee?.id ?? null,
+        assigneeEmail: primaryAssignee?.email ?? null,
+        strategyAssignees: {
+          create: resolvedAssignees.map((assignee) => ({
+            assigneeId: assignee.id,
+            assigneeEmail: assignee.email,
+          })),
+        },
       },
       select: writeSelect,
     });
@@ -186,6 +291,23 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     markStrategyAssignmentFieldsUnavailable();
     return strategyAccessUnavailableResponse();
   }
+
+  emitAuditEvent({
+    event: 'xplan.strategy.create',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+      assigneeEmails: Array.isArray(strategy.strategyAssignees)
+        ? strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+        : [],
+    },
+    request: buildAuditRequestMeta(request),
+  });
 
   return NextResponse.json({ strategy });
 });
@@ -205,7 +327,9 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
   }
 
   const { id, ...data } = parsed.data;
-  const { assigneeId: requestedAssigneeId, ...strategyUpdates } = data;
+  const { assigneeId, assigneeIds, ...strategyUpdates } = data;
+  const shouldUpdateAssignees =
+    Boolean(body) && typeof body === 'object' && ('assigneeId' in body || 'assigneeIds' in body);
 
   const actor = getStrategyActor(session);
 
@@ -224,6 +348,9 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyAssignees: {
+          select: assigneeRelationSelect,
+        },
       },
     });
   } catch (error) {
@@ -238,20 +365,13 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
   }
 
-  const actorCanAccess =
-    actor.isSuperAdmin ||
-    (actor.id != null && (existing.createdById === actor.id || existing.assigneeId === actor.id)) ||
-    (actor.email != null &&
-      (existing.createdByEmail === actor.email || existing.assigneeEmail === actor.email));
-
-  if (!actorCanAccess) {
+  if (!canActorAccessStrategy(existing, actor)) {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
 
-  let resolvedAssigneeId: string | undefined;
-  let resolvedAssigneeEmail: string | undefined;
+  let resolvedAssignees: Array<{ id: string; email: string }> | undefined;
 
-  if (requestedAssigneeId) {
+  if (shouldUpdateAssignees) {
     const actorCanAssign =
       actor.isSuperAdmin ||
       (actor.id != null && existing.createdById === actor.id) ||
@@ -264,19 +384,16 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
       );
     }
 
-    const allowed = await resolveAllowedXPlanAssigneeByIdWithCookie(
-      requestedAssigneeId,
+    const requestedAssigneeIds = normalizeAssigneeIds(assigneeIds ?? assigneeId);
+    const resolvedAssigneesResult = await resolveStrategyAssigneesByIds(
+      requestedAssigneeIds,
+      actor,
       cookieHeader,
     );
-    if (!allowed) {
-      return NextResponse.json(
-        { error: 'Assignee must be an allowed X-Plan user' },
-        { status: 400 },
-      );
+    if ('error' in resolvedAssigneesResult) {
+      return NextResponse.json({ error: resolvedAssigneesResult.error }, { status: 400 });
     }
-
-    resolvedAssigneeId = allowed.id;
-    resolvedAssigneeEmail = allowed.email.trim().toLowerCase();
+    resolvedAssignees = resolvedAssigneesResult.assignees;
   }
 
   // If setting this as ACTIVE, set others to DRAFT
@@ -294,14 +411,43 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     }),
     ...(strategyUpdates.status && { status: strategyUpdates.status }),
     ...(strategyUpdates.region && { region: strategyUpdates.region }),
-    ...(resolvedAssigneeId && { assigneeId: resolvedAssigneeId }),
-    ...(resolvedAssigneeEmail && { assigneeEmail: resolvedAssigneeEmail }),
   };
+
+  if (resolvedAssignees) {
+    const primaryAssignee = resolvedAssignees[0] ?? null;
+    updateData.assigneeId = primaryAssignee?.id ?? null;
+    updateData.assigneeEmail = primaryAssignee?.email ?? null;
+    updateData.strategyAssignees = {
+      deleteMany: {},
+      create: resolvedAssignees.map((assignee) => ({
+        assigneeId: assignee.id,
+        assigneeEmail: assignee.email,
+      })),
+    };
+  }
 
   const strategy = await prismaAny.strategy.update({
     where: { id },
     data: updateData,
     select: writeSelect,
+  });
+
+  emitAuditEvent({
+    event: 'xplan.strategy.update',
+    actor,
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      region: strategy.region,
+      isDefault: strategy.isDefault,
+      createdByEmail: strategy.createdByEmail,
+      assigneeEmail: strategy.assigneeEmail,
+      assigneeEmails: Array.isArray(strategy.strategyAssignees)
+        ? strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+        : [],
+    },
+    changes: updateData,
+    request: buildAuditRequestMeta(request),
   });
 
   return NextResponse.json({ strategy });
@@ -329,11 +475,16 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
       where: { id },
       select: {
         id: true,
+        name: true,
+        region: true,
         isDefault: true,
         createdById: true,
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyAssignees: {
+          select: assigneeRelationSelect,
+        },
       },
     });
   } catch (error) {
@@ -348,19 +499,26 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
   }
 
-  const actorCanAccess =
-    actor.isSuperAdmin ||
-    (actor.id != null && (existing.createdById === actor.id || existing.assigneeId === actor.id)) ||
-    (actor.email != null &&
-      (existing.createdByEmail === actor.email || existing.assigneeEmail === actor.email));
-
-  if (!actorCanAccess) {
+  if (!canActorAccessStrategy(existing, actor)) {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
   }
 
-  if (existing.isDefault) {
-    return NextResponse.json({ error: 'Default strategy cannot be deleted' }, { status: 400 });
-  }
+  emitAuditEvent({
+    event: 'xplan.strategy.delete',
+    actor,
+    strategy: {
+      id,
+      name: existing.name,
+      region: existing.region,
+      isDefault: existing.isDefault,
+      createdByEmail: existing.createdByEmail,
+      assigneeEmail: existing.assigneeEmail,
+      assigneeEmails: Array.isArray(existing.strategyAssignees)
+        ? existing.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+        : [],
+    },
+    request: buildAuditRequestMeta(request),
+  });
 
   // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
   await prismaAny.$transaction(async (tx: any) => {

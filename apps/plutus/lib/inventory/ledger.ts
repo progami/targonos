@@ -77,6 +77,12 @@ type TimelineEvent =
   | { date: string; order: number; kind: 'sale_compute'; event: PlannedSaleEvent };
 
 function applyBillEvent(snapshot: LedgerSnapshot, parsedBills: ParsedBills, event: ParsedBills['events'][number], blocks: LedgerBlock[]) {
+  if (event.kind === 'brand_cost') {
+    // Brand-level cost events are tracked separately — they don't map to individual SKUs
+    // Settlement processing handles brand-level P&L allocation directly
+    return;
+  }
+
   if (event.kind === 'manufacturing') {
     const state = getState(snapshot, event.sku);
     requirePositiveInt(event.units, 'manufacturing units');

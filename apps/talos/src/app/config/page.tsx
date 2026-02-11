@@ -2,7 +2,6 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import Link from 'next/link'
 import { 
  Package, 
- Eye, 
  Building, 
  DollarSign, 
  Users,
@@ -23,13 +22,6 @@ const configModules = [
  href: '/config/suppliers',
  icon: Users,
  color: 'bg-indigo-100 text-indigo-700'
- },
- {
- title: 'Batch Attributes',
- description: 'Define batch tracking attributes',
- href: '/config/batch-attributes',
- icon: Eye,
- color: 'bg-brand-teal-100 text-brand-teal-700'
  },
  {
  title: 'Warehouse Configs',

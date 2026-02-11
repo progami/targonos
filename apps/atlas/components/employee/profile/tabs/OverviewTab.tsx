@@ -10,8 +10,10 @@ import {
   UserCircleIcon,
   HashtagIcon,
   ClockIcon,
+  ExclamationCircleIcon,
+  DocumentIcon,
 } from '@/components/ui/Icons'
-import { EMPLOYMENT_TYPE_LABELS } from '@/lib/domain/employee/constants'
+import { EMPLOYMENT_TYPE_LABELS, EXIT_REASON_LABELS } from '@/lib/domain/employee/constants'
 import { formatDate } from '../utils'
 
 function getInitials(firstName: string, lastName: string): string {
@@ -205,6 +207,42 @@ export function EmployeeOverviewTab({ employee }: { employee: Employee }) {
           ) : null}
         </div>
       </div>
+
+      {/* Separation Details — shown for offboarded employees */}
+      {(employee.status === 'RESIGNED' || employee.status === 'TERMINATED') && (employee.exitReason || employee.lastWorkingDay || employee.exitNotes) ? (
+        <div className="border-t border-border p-5">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Separation Details</h3>
+          <div className="space-y-1">
+            {employee.exitReason ? (
+              <InfoRow
+                icon={ExclamationCircleIcon}
+                label="Exit Reason"
+                value={EXIT_REASON_LABELS[employee.exitReason as keyof typeof EXIT_REASON_LABELS]}
+              />
+            ) : null}
+
+            {employee.lastWorkingDay ? (
+              <InfoRow
+                icon={CalendarIcon}
+                label="Last Working Day"
+                value={formatDate(employee.lastWorkingDay)}
+              />
+            ) : null}
+
+            {employee.exitNotes ? (
+              <div className="flex items-start gap-3 py-2.5">
+                <div className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <DocumentIcon className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Exit Notes</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{employee.exitNotes}</p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

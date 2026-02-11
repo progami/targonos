@@ -34,7 +34,7 @@ export default function SheetError({
             Try again
           </Button>
           <Button asChild type="button" variant="outline">
-            <Link href={withAppBasePath('/1-strategies')}>Go to strategies</Link>
+            <Link href={withAppBasePath('/1-setup')}>Go to setup</Link>
           </Button>
         </div>
 

@@ -4,12 +4,13 @@ import { apiLogger } from '@/lib/logger/server'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
 import { getS3Service } from '@/services/s3.service'
 import { validateFile } from '@/lib/security/file-upload'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_DOCUMENT_SIZE_MB = 50
+const MAX_DOCUMENT_SIZE_MB = 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'RFQ',
@@ -117,6 +118,15 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 })
     }
 
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+      purchaseOrderStatus: order.status,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
+    }
+
     if (order.isLegacy) {
       return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
     }
@@ -153,9 +163,9 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     )
 
     // Browsers cannot PUT directly to our S3 bucket (CORS). Return a same-origin upload URL that
-    // proxies the PUT through our API so older clients keep working.
-    const origin = request.nextUrl.origin
-    const uploadUrl = `${origin}/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
+    // proxies the PUT through our API. Keep this URL relative so the client can apply its base
+    // path logic (e.g. /talos) consistently even when the server environment lacks BASE_PATH.
+    const uploadUrl = `/api/purchase-orders/${id}/documents/upload-proxy?s3Key=${encodeURIComponent(
       s3Key
     )}&stage=${encodeURIComponent(stage)}&documentType=${encodeURIComponent(
       documentType

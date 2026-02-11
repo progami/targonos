@@ -1,2 +1,2 @@
 export { getPortalAuthPrisma } from './db.js';
-export { authenticateWithPortalDirectory, getUserEntitlements, getUserByEmail } from './user-service.js';
+export { authenticateWithPortalDirectory, getUserAuthz, getUserEntitlements, getUserByEmail, getOrCreatePortalUserByEmail, getUserGlobalRoles, provisionPortalUser, removeManualUserAppGrant, syncGroupBasedAppAccess, upsertManualUserAppGrant, } from './user-service.js';

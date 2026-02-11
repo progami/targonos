@@ -3,6 +3,7 @@ import { z } from "zod";
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { queueRequestReview } from "@/server/dispatch/ledger";
 import { withApiLogging } from "@/server/api-logging";
+import { isHermesDryRun } from "@/server/env/flags";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,13 @@ export const runtime = "nodejs";
  * - mark sent + append audit attempts
  */
 async function handlePost(req: Request) {
+  if (isHermesDryRun()) {
+    return NextResponse.json(
+      { ok: false, error: "Hermes is in dry-run mode. Dispatch queueing is disabled." },
+      { status: 403 }
+    );
+  }
+
   await maybeAutoMigrate();
 
   const schema = z.object({

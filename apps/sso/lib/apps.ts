@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 export type AppLifecycle = 'active' | 'dev' | 'archive'
+export type AppEntryPolicy = 'role_gated' | 'public'
 
 function normalizeOrigin(raw: string | undefined | null): string | undefined {
   if (!raw) return undefined
@@ -55,6 +56,7 @@ type AppBase = {
   name: string
   description: string
   url: string
+  entryPolicy?: AppEntryPolicy
   category: string
   icon?: string
   devPath?: string
@@ -77,6 +79,7 @@ type AppOverrideConfig = {
 
 export type AppDef = AppBase & {
   lifecycle: AppLifecycle
+  entryPolicy: AppEntryPolicy
 }
 
 const PORTAL_BASE_URL = resolvePortalBaseUrl()
@@ -102,6 +105,7 @@ const BASE_APPS: AppBase[] = [
     name: 'Website',
     description: 'Marketing website and CMS.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/'),
+    entryPolicy: 'public',
     category: 'Product',
   },
   {
@@ -114,7 +118,7 @@ const BASE_APPS: AppBase[] = [
   },
   {
     id: 'xplan',
-    name: 'xplan',
+    name: 'xPlan',
     description: 'Collaborative planning workspace for sales, operations, and finance.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-strategies'),
     category: 'Product',
@@ -137,6 +141,15 @@ const BASE_APPS: AppBase[] = [
     category: 'Account / Listing',
     devPath: '/hermes',
     devUrl: 'http://localhost:3014',
+  },
+  {
+    id: 'argus',
+    name: 'Argus',
+    description: 'Listings watcher (ASIN + search snapshots, screenshots, diffs).',
+    url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
+    category: 'Account / Listing',
+    devPath: '/argus',
+    devUrl: 'http://localhost:3016',
   },
 ]
 
@@ -241,6 +254,7 @@ const SOURCE_APPS = overrideAppIds ? BASE_APPS.filter((app) => overrideAppIds.ha
 export const ALL_APPS: AppDef[] = SOURCE_APPS.map((app) => ({
   ...app,
   lifecycle: resolveLifecycle(app.id),
+  entryPolicy: app.entryPolicy ?? 'role_gated',
 }))
 
 export function filterAppsForUser(allowedAppIds: string[]) {
@@ -248,6 +262,9 @@ export function filterAppsForUser(allowedAppIds: string[]) {
   return ALL_APPS.filter(app => {
     if (app.lifecycle === 'archive') {
       return false
+    }
+    if (app.entryPolicy === 'public') {
+      return true
     }
     return set.has(app.id)
   })

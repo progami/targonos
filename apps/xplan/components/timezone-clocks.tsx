@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 function formatTimestamp(value: Date, timeZone: string) {
   return new Intl.DateTimeFormat('en-GB', {
@@ -40,24 +41,21 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
   const userLabel = formatTimeZoneLabel(userTimeZone);
 
   return (
-    <div className="hidden items-center gap-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur dark:border-[#0b3a52] dark:bg-[#06182b]/70 dark:text-slate-300 sm:flex" title={`${reportTimeZone} / ${userTimeZone}`}>
-      <div className="flex flex-col leading-tight">
-        <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Report
-        </span>
-        <span className="tabular-nums text-slate-800 dark:text-slate-100">
-          {reportLabel} {reportNow}
-        </span>
+    <Tooltip
+      content={
+        <div className="space-y-1">
+          <div><span className="font-semibold">Report:</span> {reportLabel} {reportNow}</div>
+          <div><span className="font-semibold">Local:</span> {userLabel} {userNow}</div>
+        </div>
+      }
+      position="bottom"
+      className="hidden sm:flex"
+    >
+      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-2 py-1 text-[10px] font-medium text-slate-600 shadow-sm backdrop-blur dark:border-[#0b3a52] dark:bg-[#06182b]/70 dark:text-slate-300">
+        <span className="tabular-nums">{reportNow.split(' ').pop()}</span>
+        <span className="text-slate-300 dark:text-slate-600">/</span>
+        <span className="tabular-nums">{userNow.split(' ').pop()}</span>
       </div>
-      <span className="text-slate-300 dark:text-slate-600">|</span>
-      <div className="flex flex-col leading-tight">
-        <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          User
-        </span>
-        <span className="tabular-nums text-slate-800 dark:text-slate-100">
-          {userLabel} {userNow}
-        </span>
-      </div>
-    </div>
+    </Tooltip>
   );
 }

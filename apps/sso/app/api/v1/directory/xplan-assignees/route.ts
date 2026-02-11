@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { hasCapability } from '@targon/auth';
 import { auth } from '@/lib/auth';
 import { getPortalAuthPrisma } from '@targon/auth/server';
 
@@ -10,9 +11,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
-  const apps = (session.user as unknown as { apps?: unknown }).apps;
-  const appList = Array.isArray(apps) ? apps : [];
-  if (!appList.includes('xplan')) {
+  const canEnterXPlan = hasCapability({ session, appId: 'xplan', capability: 'enter' });
+  if (!canEnterXPlan) {
     return NextResponse.json({ error: 'No access to xplan directory' }, { status: 403 });
   }
 

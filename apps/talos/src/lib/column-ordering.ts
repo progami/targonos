@@ -88,9 +88,9 @@ export const INVENTORY_TRANSACTION_COLUMNS: ColumnDefinition[] = [
  relationPath: 'sku.description'
  },
  {
- fieldName: 'batchLot',
- displayName: 'Batch',
- exportName: 'Batch',
+ fieldName: 'lotRef',
+ displayName: 'Lot',
+ exportName: 'Lot',
  group: 'product',
  order: 8,
  showInUI: true,
@@ -367,9 +367,9 @@ export const INVENTORY_BALANCE_COLUMNS: ColumnDefinition[] = [
  relationPath: 'warehouse.name'
  },
  {
- fieldName: 'batchLot',
- displayName: 'Batch',
- exportName: 'Batch',
+ fieldName: 'lotRef',
+ displayName: 'Lot',
+ exportName: 'Lot',
  group: 'product',
  order: 4,
  showInUI: true,
@@ -403,7 +403,7 @@ export const INVENTORY_BALANCE_COLUMNS: ColumnDefinition[] = [
  showInUI: true,
  showInExport: true
  },
- // Configuration (batch-specific, less prominent)
+ // Configuration (less prominent)
  {
  fieldName: 'storageCartonsPerPallet',
  displayName: 'Storage Config',

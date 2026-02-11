@@ -39,7 +39,7 @@ export const GET = withAuth(async (req, session) => {
  const results = aggregated.balances.map(item => ({
  skuCode: item.skuCode,
  skuDescription: item.skuDescription,
- batchLot: item.batchLot,
+ lotRef: item.lotRef,
  currentCartons: item.currentCartons,
  currentUnits: item.currentUnits,
  unitsPerCarton: item.unitsPerCarton,

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { fetchAccounts, type QboConnection } from '@/lib/qbo/api';
+import { fetchAccounts, QboAuthError } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { getAccountSource } from '@/lib/lmb/default-accounts';
 import { randomUUID } from 'crypto';
 
@@ -31,35 +30,24 @@ export async function GET() {
   const requestId = randomUUID();
 
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
-      logger.info('Missing qbo_connection cookie', { requestId });
+    if (!connection) {
+      logger.info('Missing qbo_connection', { requestId });
       return NextResponse.json({ error: 'Not connected to QBO', requestId }, { status: 401 });
     }
 
-    const connection: QboConnection = JSON.parse(connectionCookie);
     logger.info('Fetching QBO accounts', { requestId, realmId: connection.realmId, expiresAt: connection.expiresAt });
-    await ensureServerQboConnection(connection);
 
     const { accounts, updatedConnection } = await fetchAccounts(connection, {
       includeInactive: true,
     });
 
-    // Update cookie if token was refreshed
     if (updatedConnection) {
       logger.info('QBO access token refreshed', {
         requestId,
         realmId: updatedConnection.realmId,
         expiresAt: updatedConnection.expiresAt,
-      });
-      cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
       });
       await saveServerQboConnection(updatedConnection);
     }
@@ -87,7 +75,7 @@ export async function GET() {
           isSubAccount: a.SubAccount === true,
           parentName,
           depth,
-          source: getAccountSource(a.Name),
+          source: getAccountSource(fullyQualifiedName),
         };
       })
       // Sort by Account Type (QBO order), then by FullyQualifiedName within each type
@@ -105,6 +93,14 @@ export async function GET() {
     logger.info('Fetched QBO accounts', { requestId, total: allAccounts.length });
     return NextResponse.json({ accounts: allAccounts, total: allAccounts.length, requestId });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      logger.warn('QBO auth required', { requestId });
+      return NextResponse.json(
+        { error: error.message, requestId },
+        { status: 401 },
+      );
+    }
+
     logger.error('Failed to fetch accounts', { requestId, error });
     return NextResponse.json(
       {

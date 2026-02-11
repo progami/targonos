@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, PackageSearch, RefreshCw, Send, Sparkles } from "lucide-react";
+import { CalendarClock, Loader2, RefreshCw, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AmazonConnection } from "@/lib/types";
+import { DispatchStatusBadge, OrderStatusBadge } from "@/components/hermes/status-badge";
 import { PageHeader } from "@/components/hermes/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,10 +28,35 @@ type RecentOrder = {
   latestDeliveryDate: string | null;
   orderStatus: string | null;
   fulfillmentChannel: string | null;
+  dispatchId: string | null;
   dispatchState: string | null;
   dispatchScheduledAt: string | null;
   dispatchExpiresAt: string | null;
   dispatchSentAt: string | null;
+};
+
+type AttemptRow = {
+  id: string;
+  dispatchId: string;
+  attemptNo: number;
+  status: "sent" | "ineligible" | "throttled" | "failed";
+  httpStatus: number | null;
+  spapiRequestId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+type DispatchUpdateResponse = {
+  ok: true;
+  dispatch: {
+    id: string;
+    state: string;
+    scheduledAt: string;
+    expiresAt: string | null;
+    sentAt: string | null;
+    lastError: string | null;
+  };
 };
 
 function fmtDateShort(iso: string | null): string {
@@ -86,14 +112,8 @@ function connectionLabel(c: AmazonConnection): string {
   return `${c.accountName} • ${c.region}${marketplacePart}`;
 }
 
-function stateBadge(state: string | null) {
-  if (!state) return <Badge variant="outline">Not queued</Badge>;
-  if (state === "sent") return <Badge variant="secondary">Sent</Badge>;
-  if (state === "queued") return <Badge variant="outline">Queued</Badge>;
-  if (state === "sending") return <Badge variant="outline">Sending</Badge>;
-  if (state === "failed") return <Badge variant="destructive">Failed</Badge>;
-  if (state === "skipped") return <Badge variant="outline">Skipped</Badge>;
-  return <Badge variant="outline">{state}</Badge>;
+function attemptBadge(status: AttemptRow["status"]) {
+  return <DispatchStatusBadge status={status} />;
 }
 
 type BackfillPreset = { label: string; days: number };
@@ -175,7 +195,15 @@ export function OrdersClient() {
   const [loadingOrdersTotal, setLoadingOrdersTotal] = React.useState(false);
   const totalSeqRef = React.useRef(0);
 
+  // Order drilldown (request_review dispatch attempts)
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [detailsOrder, setDetailsOrder] = React.useState<RecentOrder | null>(null);
+  const [detailsAttempts, setDetailsAttempts] = React.useState<AttemptRow[]>([]);
+  const [detailsAttemptsLoading, setDetailsAttemptsLoading] = React.useState(false);
+  const [detailsActionLoading, setDetailsActionLoading] = React.useState<null | "queue" | "requeue" | "cancel">(null);
+
   // Table filters
+  const filterOrderId = ordersPrefs.filterOrderId;
   const filterMarketplaceId = ordersPrefs.filterMarketplaceId;
   const filterDelivery = ordersPrefs.filterDelivery;
   const filterOrderStatus = ordersPrefs.filterOrderStatus;
@@ -221,6 +249,7 @@ export function OrdersClient() {
     try {
       const qs = new URLSearchParams();
       qs.set("connectionId", connectionId);
+      if (filterOrderId.trim().length > 0) qs.set("orderIdQuery", filterOrderId.trim());
       if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
       if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
       if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
@@ -257,6 +286,7 @@ export function OrdersClient() {
       qs.set("connectionId", connectionId);
       qs.set("limit", String(pageSize));
       if (opts.cursor) qs.set("cursor", opts.cursor);
+      if (filterOrderId.trim().length > 0) qs.set("orderIdQuery", filterOrderId.trim());
       if (filterMarketplaceId !== "any") qs.set("marketplaceId", filterMarketplaceId);
       if (filterDelivery !== "any") qs.set("delivery", filterDelivery);
       if (filterOrderStatus !== "any") qs.set("orderStatus", filterOrderStatus);
@@ -299,7 +329,142 @@ export function OrdersClient() {
     loadOrdersPage({ cursor: null, stack: [] });
     loadOrdersTotal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiHydrated, connectionId, pageSize, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
+  }, [uiHydrated, connectionId, pageSize, filterOrderId, filterMarketplaceId, filterDelivery, filterOrderStatus, filterReviewState]);
+
+  function applyDetailsDispatchUpdate(dispatch: DispatchUpdateResponse["dispatch"]) {
+    setDetailsOrder((prev) => {
+      if (!prev) return prev;
+      if (prev.dispatchId !== dispatch.id) return prev;
+      return {
+        ...prev,
+        dispatchState: dispatch.state,
+        dispatchScheduledAt: dispatch.scheduledAt,
+        dispatchExpiresAt: dispatch.expiresAt,
+        dispatchSentAt: dispatch.sentAt,
+      };
+    });
+  }
+
+  async function refreshOrdersInPlace() {
+    await loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
+    loadOrdersTotal();
+  }
+
+  React.useEffect(() => {
+    const dispatchId = detailsOrder?.dispatchId;
+    if (!detailsOpen || !detailsOrder || !dispatchId) return;
+    if (!connectionId) return;
+
+    setDetailsAttemptsLoading(true);
+    setDetailsAttempts([]);
+
+    const qs = new URLSearchParams();
+    qs.set("connectionId", connectionId);
+    qs.set("dispatchId", dispatchId);
+    qs.set("limit", "50");
+
+    fetch(hermesApiUrl(`/api/logs/attempts?${qs.toString()}`))
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || json?.ok !== true) {
+          throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+        }
+
+        const attempts = Array.isArray(json.attempts) ? (json.attempts as AttemptRow[]) : [];
+        setDetailsAttempts(attempts);
+      })
+      .catch((e: any) => {
+        toast.error("Failed to load attempts", { description: e?.message ?? "" });
+      })
+      .finally(() => {
+        setDetailsAttemptsLoading(false);
+      });
+  }, [detailsOpen, detailsOrder, connectionId]);
+
+  async function queueReviewRequestForDetailsOrder() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("queue");
+    try {
+      const res = await fetch(hermesApiUrl("/api/solicitations/request-review"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectionId,
+          orderId: detailsOrder.orderId,
+          marketplaceId: detailsOrder.marketplaceId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      toast.success("Queued review request");
+      await refreshOrdersInPlace();
+      setDetailsOpen(false);
+    } catch (e: any) {
+      toast.error("Failed to queue review request", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
+
+  async function requeueDetailsDispatchNow() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (!detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("requeue");
+    try {
+      const res = await fetch(hermesApiUrl("/api/dispatches/requeue"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId, dispatchId: detailsOrder.dispatchId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      applyDetailsDispatchUpdate((json as DispatchUpdateResponse).dispatch);
+      toast.success("Requeued");
+      await refreshOrdersInPlace();
+    } catch (e: any) {
+      toast.error("Failed to requeue", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
+
+  async function cancelDetailsDispatch() {
+    if (!detailsOrder) return;
+    if (!connectionId) return;
+    if (!detailsOrder.dispatchId) return;
+
+    setDetailsActionLoading("cancel");
+    try {
+      const res = await fetch(hermesApiUrl("/api/dispatches/cancel"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId, dispatchId: detailsOrder.dispatchId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.ok !== true) {
+        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+
+      applyDetailsDispatchUpdate((json as DispatchUpdateResponse).dispatch);
+      toast.success("Canceled");
+      await refreshOrdersInPlace();
+    } catch (e: any) {
+      toast.error("Failed to cancel", { description: e?.message ?? "" });
+    } finally {
+      setDetailsActionLoading(null);
+    }
+  }
 
   async function runBackfill() {
     if (!connectionId || !connection?.marketplaceIds?.[0]) {
@@ -491,8 +656,17 @@ export function OrdersClient() {
   const totalPages = ordersTotalCount !== null ? Math.ceil(ordersTotalCount / pageSize) : null;
   const pageLabel = totalPages !== null && totalPages > 0 ? `Page ${pageNumber} of ${totalPages}` : `Page ${pageNumber}`;
 
+  if (!uiHydrated) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Orders"
         right={
@@ -502,6 +676,7 @@ export function OrdersClient() {
               onValueChange={(id) => {
                 setActiveConnectionId(id);
                 setOrdersPreferences({
+                  filterOrderId: "",
                   filterMarketplaceId: "any",
                   filterDelivery: "any",
                   filterOrderStatus: "any",
@@ -685,147 +860,165 @@ export function OrdersClient() {
 
       <div className="grid gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Orders</CardTitle>
+          <CardHeader className="gap-2 space-y-0 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-sm">Orders</CardTitle>
+                {ordersTotalCount !== null ? (
+                  <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
+                ) : null}
+                <Badge variant="outline">{pageLabel}</Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
+                  <SelectTrigger className="h-8 w-[84px] whitespace-nowrap text-xs">
+                    <SelectValue placeholder="Rows" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem className="whitespace-nowrap" value="25">25</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="50">50</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="100">100</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="200">200</SelectItem>
+                    <SelectItem className="whitespace-nowrap" value="500">500</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (!canPrev) return;
+                    const prevCursor = ordersCursorStack[ordersCursorStack.length - 1] ?? null;
+                    const nextStack = ordersCursorStack.slice(0, -1);
+                    loadOrdersPage({ cursor: prevCursor, stack: nextStack });
+                  }}
+                  disabled={!canPrev || loadingOrders}
+                >
+                  Prev
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (!ordersNextCursor) return;
+                    const nextStack = [...ordersCursorStack, ordersCursor];
+                    loadOrdersPage({ cursor: ordersNextCursor, stack: nextStack });
+                  }}
+                  disabled={!canNext || loadingOrders}
+                >
+                  Next
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
+                    loadOrdersTotal();
+                  }}
+                  disabled={loadingOrders || loadingOrdersTotal}
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
-              {ordersTotalCount !== null ? (
-                <Badge variant="secondary">Total {fmtInt(ordersTotalCount)}</Badge>
-              ) : null}
-              <Badge variant="outline">{pageLabel}</Badge>
-              <Select value={String(pageSize)} onValueChange={(v) => setOrdersPreferences({ pageSize: Number(v) })}>
-                <SelectTrigger className="h-9 w-[120px] flex-none">
-                  <SelectValue placeholder="Rows" />
+              <Input
+                value={filterOrderId}
+                onChange={(e) => setOrdersPreferences({ filterOrderId: e.target.value })}
+                placeholder="Order id…"
+                className="h-8 w-[220px] font-mono text-xs"
+              />
+
+              <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
+                <SelectTrigger className="h-8 w-[140px] text-xs">
+                  <SelectValue placeholder="Marketplace" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem className="whitespace-nowrap" value="25">
-                    25 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="50">
-                    50 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="100">
-                    100 / page
-                  </SelectItem>
-                  <SelectItem className="whitespace-nowrap" value="200">
-                    200 / page
-                  </SelectItem>
+                  <SelectItem value="any">All marketplaces</SelectItem>
+                  {(connection?.marketplaceIds ?? []).map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {marketplaceDisplay(id)} • {shortMarketplace(id)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+
+              <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">All statuses</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Unshipped">Unshipped</SelectItem>
+                  <SelectItem value="PartiallyShipped">PartiallyShipped</SelectItem>
+                  <SelectItem value="Shipped">Shipped</SelectItem>
+                  <SelectItem value="Canceled">Canceled</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterReviewState}
+                onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}
+              >
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Review" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">All review states</SelectItem>
+                  <SelectItem value="not_queued">Not queued</SelectItem>
+                  <SelectItem value="queued">Queued</SelectItem>
+                  <SelectItem value="sending">Sending</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="skipped">Skipped</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterDelivery}
+                onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}
+              >
+                <SelectTrigger className="h-8 w-[120px] text-xs">
+                  <SelectValue placeholder="Delivery" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any delivery</SelectItem>
+                  <SelectItem value="has">Has date</SelectItem>
+                  <SelectItem value="missing">Missing</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  if (!canPrev) return;
-                  const prevCursor = ordersCursorStack[ordersCursorStack.length - 1] ?? null;
-                  const nextStack = ordersCursorStack.slice(0, -1);
-                  loadOrdersPage({ cursor: prevCursor, stack: nextStack });
-                }}
-                disabled={!canPrev || loadingOrders}
+                onClick={() =>
+                  setOrdersPreferences({
+                    filterOrderId: "",
+                    filterMarketplaceId: "any",
+                    filterDelivery: "any",
+                    filterOrderStatus: "any",
+                    filterReviewState: "any",
+                  })
+                }
               >
-                Prev
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  if (!ordersNextCursor) return;
-                  const nextStack = [...ordersCursorStack, ordersCursor];
-                  loadOrdersPage({ cursor: ordersNextCursor, stack: nextStack });
-                }}
-                disabled={!canNext || loadingOrders}
-              >
-                Next
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  loadOrdersPage({ cursor: ordersCursor, stack: ordersCursorStack });
-                  loadOrdersTotal();
-                }}
-                disabled={loadingOrders || loadingOrdersTotal}
-              >
-                <CalendarClock className="h-4 w-4" />
-                Refresh
+                Clear
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            <Table>
+          <CardContent className="p-0">
+            <Table className="text-xs">
               <TableHeader>
                 <TableRow>
                   <TableHead>Order</TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    <div className="flex flex-col gap-1">
-                      <div>Marketplace</div>
-                      <Select value={filterMarketplaceId} onValueChange={(v) => setOrdersPreferences({ filterMarketplaceId: v })}>
-                        <SelectTrigger className="h-8 w-[140px]">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          {(connection?.marketplaceIds ?? []).map((id) => (
-                            <SelectItem key={id} value={id}>
-                              {marketplaceDisplay(id)} • {shortMarketplace(id)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">Marketplace</TableHead>
                   <TableHead>Purchase</TableHead>
-                  <TableHead>
-                    <div className="flex flex-col gap-1">
-                      <div>Delivery</div>
-                      <Select value={filterDelivery} onValueChange={(v) => setOrdersPreferences({ filterDelivery: v as OrdersPreferences["filterDelivery"] })}>
-                        <SelectTrigger className="h-8 w-[130px]">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="has">Has date</SelectItem>
-                          <SelectItem value="missing">Missing</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex flex-col gap-1">
-                      <div>Status</div>
-                      <Select value={filterOrderStatus} onValueChange={(v) => setOrdersPreferences({ filterOrderStatus: v })}>
-                        <SelectTrigger className="h-8 w-[160px]">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="Pending">Pending</SelectItem>
-                          <SelectItem value="Unshipped">Unshipped</SelectItem>
-                          <SelectItem value="PartiallyShipped">PartiallyShipped</SelectItem>
-                          <SelectItem value="Shipped">Shipped</SelectItem>
-                          <SelectItem value="Canceled">Canceled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      <div>Review request</div>
-                      <Select value={filterReviewState} onValueChange={(v) => setOrdersPreferences({ filterReviewState: v as OrdersPreferences["filterReviewState"] })}>
-                        <SelectTrigger className="h-8 w-[160px]">
-                          <SelectValue placeholder="All" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">All</SelectItem>
-                          <SelectItem value="not_queued">Not queued</SelectItem>
-                          <SelectItem value="queued">Queued</SelectItem>
-                          <SelectItem value="sending">Sending</SelectItem>
-                          <SelectItem value="sent">Sent</SelectItem>
-                          <SelectItem value="failed">Failed</SelectItem>
-                          <SelectItem value="skipped">Skipped</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableHead>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Review</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -835,8 +1028,15 @@ export function OrdersClient() {
                   const purchase = fmtDateTimeShort(o.purchaseDate);
 
                   return (
-                    <TableRow key={o.orderId}>
-                      <TableCell className="font-mono text-xs">{o.orderId}</TableCell>
+                    <TableRow
+                      key={o.orderId}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setDetailsOrder(o);
+                        setDetailsOpen(true);
+                      }}
+                    >
+                      <TableCell className="font-mono text-[11px]">{o.orderId}</TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant="secondary" title={marketplaceTitle}>
                           {marketplaceDisplay(o.marketplaceId)}
@@ -854,30 +1054,24 @@ export function OrdersClient() {
                       </TableCell>
                       <TableCell>{fmtDateShort(o.latestDeliveryDate)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{o.orderStatus ?? "—"}</Badge>
+                        <OrderStatusBadge status={o.orderStatus} />
                       </TableCell>
-                      <TableCell className="text-right">{stateBadge(o.dispatchState)}</TableCell>
+                      <TableCell className="text-right"><DispatchStatusBadge status={o.dispatchState} /></TableCell>
                     </TableRow>
                   );
                 })}
 
                 {(!loadingOrders && orders.length === 0) ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-card">
-                          <PackageSearch className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <div className="text-sm font-medium">No orders yet</div>
-                        <div className="text-xs text-muted-foreground">Run a sync to import orders from Amazon.</div>
-                      </div>
+                    <TableCell colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                      No orders
                     </TableCell>
                   </TableRow>
                 ) : null}
 
                 {loadingOrders ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
@@ -887,6 +1081,149 @@ export function OrdersClient() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={detailsOpen}
+        onOpenChange={(next) => {
+          setDetailsOpen(next);
+          if (!next) {
+            setDetailsOrder(null);
+            setDetailsAttempts([]);
+            setDetailsAttemptsLoading(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">{detailsOrder?.orderId ?? "Order"}</DialogTitle>
+          </DialogHeader>
+
+          {detailsOrder ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{marketplaceDisplay(detailsOrder.marketplaceId)}</Badge>
+                {detailsOrder.orderStatus ? <OrderStatusBadge status={detailsOrder.orderStatus} /> : null}
+                {detailsOrder.purchaseDate ? (
+                  <Badge variant="outline">Purchase {fmtDateShort(detailsOrder.purchaseDate)}</Badge>
+                ) : null}
+                {detailsOrder.latestDeliveryDate ? (
+                  <Badge variant="outline">Delivery {fmtDateShort(detailsOrder.latestDeliveryDate)}</Badge>
+                ) : null}
+                <span className="ml-auto"><DispatchStatusBadge status={detailsOrder.dispatchState} /></span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {detailsOrder.dispatchId ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={detailsActionLoading !== null || detailsOrder.dispatchState === "sent" || detailsOrder.dispatchState === "sending"}
+                      title={(detailsOrder.dispatchState === "sending") ? "Cannot requeue while sending" : undefined}
+                      onClick={requeueDetailsDispatchNow}
+                    >
+                      {detailsActionLoading === "requeue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Requeue now
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={detailsActionLoading !== null || detailsOrder.dispatchState === "sent" || detailsOrder.dispatchState === "sending"}
+                      title={(detailsOrder.dispatchState === "sending") ? "Cannot cancel while sending" : undefined}
+                      onClick={cancelDetailsDispatch}
+                    >
+                      {detailsActionLoading === "cancel" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Cancel (skip)
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={detailsActionLoading !== null}
+                    onClick={queueReviewRequestForDetailsOrder}
+                  >
+                    {detailsActionLoading === "queue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                    Queue review request
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {detailsOrder.dispatchId ? "Applies to this order’s review-request dispatch." : "Creates a review-request dispatch (worker sends asynchronously)."}
+                </span>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Dispatch</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchId ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Scheduled</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchScheduledAt ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Sent</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchSentAt ?? "—"}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Expires</div>
+                  <div className="mt-0.5 font-mono text-[11px]">{detailsOrder.dispatchExpiresAt ?? "—"}</div>
+                </div>
+              </div>
+
+              <Card>
+                <CardHeader className="py-2">
+                  <CardTitle className="text-sm">Attempts</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="max-h-[50vh] overflow-auto">
+                    <Table className="text-xs">
+                      <TableHeader className="sticky top-0 z-10 bg-background">
+                        <TableRow>
+                          <TableHead>At</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden md:table-cell text-right">HTTP</TableHead>
+                          <TableHead className="hidden md:table-cell">Code</TableHead>
+                          <TableHead className="hidden lg:table-cell">Message</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detailsAttempts.map((a) => (
+                          <TableRow key={a.id}>
+                            <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                              {a.createdAt}
+                            </TableCell>
+                            <TableCell>{attemptBadge(a.status)}</TableCell>
+                            <TableCell className="hidden md:table-cell text-right tabular-nums">{a.httpStatus ?? "—"}</TableCell>
+                            <TableCell className="hidden md:table-cell">{a.errorCode ?? "—"}</TableCell>
+                            <TableCell className="hidden lg:table-cell text-muted-foreground">{a.errorMessage ?? "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                        {detailsAttempts.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                              {detailsAttemptsLoading ? "Loading…" : (detailsOrder.dispatchId ? "No attempts" : "Not queued")}
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

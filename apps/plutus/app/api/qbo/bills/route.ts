@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { fetchBills, type QboConnection } from '@/lib/qbo/api';
+import { fetchBills, QboAuthError } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
-import { ensureServerQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 const logger = createLogger({ name: 'qbo-bills' });
 
 export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const connectionCookie = cookieStore.get('qbo_connection')?.value;
+    const connection = await getQboConnection();
 
-    if (!connectionCookie) {
+    if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
-
-    const connection: QboConnection = JSON.parse(connectionCookie);
-    await ensureServerQboConnection(connection);
 
     const searchParams = req.nextUrl.searchParams;
     const rawStartDate = searchParams.get('startDate');
@@ -37,13 +32,6 @@ export async function GET(req: NextRequest) {
     });
 
     if (updatedConnection) {
-      cookieStore.set('qbo_connection', JSON.stringify(updatedConnection), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 100,
-        path: '/',
-      });
       await saveServerQboConnection(updatedConnection);
     }
 
@@ -91,6 +79,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to fetch bills', error);
     return NextResponse.json(
       {

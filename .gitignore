@@ -26,12 +26,17 @@ packages/prisma-atlas/generated/
 packages/prisma-kairos/generated/
 packages/prisma-talos/generated/
 packages/prisma-plutus/generated/
+packages/prisma-argus/generated/
 
 # TypeScript
 *.tsbuildinfo
 
 # Logs
 logs/
+!apps/hermes/src/app/logs/
+!apps/hermes/src/app/logs/**
+!apps/hermes/src/app/api/logs/
+!apps/hermes/src/app/api/logs/**
 **/logs-dev/
 *.log
 
@@ -60,6 +65,7 @@ apps/archived/**/prisma/*.db*
 !apps/atlas/.env.dev.ci
 !apps/sso/.env.dev.ci
 !apps/plutus/.env.dev.ci
+!apps/argus/.env.dev.ci
 
 # Editor
 .DS_Store
@@ -73,6 +79,10 @@ Pers/
 todo-atlas.md
 xplan-todo.md
 cookies.txt
+
+# LMB reference screenshots
+LMB/
+LMB.zip
 
 # Local dev config
 **/local.apps.json

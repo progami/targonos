@@ -1,17 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import {
-  Plus,
-  Check,
-  X,
-  Pencil,
-  Trash2,
-  ArrowRightLeft,
-  ChevronRight,
-  Sparkles,
-} from 'lucide-react';
+import { Plus, Check, Pencil, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
@@ -27,6 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -53,6 +53,11 @@ type Strategy = {
   createdByEmail?: string | null;
   assigneeId?: string | null;
   assigneeEmail?: string | null;
+  strategyAssignees?: Array<{
+    id: string;
+    assigneeId: string;
+    assigneeEmail: string;
+  }>;
   createdAt: string;
   updatedAt: string;
   _count: {
@@ -80,18 +85,18 @@ export function StrategiesWorkspace({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [strategies, setStrategies] = useState<Strategy[]>(initialStrategies);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newRegion, setNewRegion] = useState<'US' | 'UK'>('US');
-  const [newAssigneeId, setNewAssigneeId] = useState<string>('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editRegion, setEditRegion] = useState<'US' | 'UK'>('US');
-  const [editAssigneeId, setEditAssigneeId] = useState<string>('');
+
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
+  const [dialogStrategyId, setDialogStrategyId] = useState<string | null>(null);
+  const [formName, setFormName] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formRegion, setFormRegion] = useState<'US' | 'UK'>('US');
+  const [formAssigneeIds, setFormAssigneeIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Strategy | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [directoryConfigured, setDirectoryConfigured] = useState(true);
@@ -160,15 +165,29 @@ export function StrategiesWorkspace({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isAdding) return;
-    if (!newAssigneeId && viewer.id) {
-      setNewAssigneeId(viewer.id);
-    }
-  }, [isAdding, newAssigneeId, viewer.id]);
+  const strategyAssigneeIds = (strategy: Strategy) =>
+    Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
+      ? strategy.strategyAssignees.map((entry) => entry.assigneeId)
+      : strategy.assigneeId
+        ? [strategy.assigneeId]
+        : [];
+
+  const hasSameAssignees = (left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    const leftSorted = [...left].sort();
+    const rightSorted = [...right].sort();
+    return leftSorted.every((value, index) => value === rightSorted[index]);
+  };
 
   const renderAssigneeLabel = (strategy: Strategy) => {
-    if (strategy.assigneeEmail) return strategy.assigneeEmail;
+    const assigneeEmails =
+      Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
+        ? strategy.strategyAssignees.map((entry) => entry.assigneeEmail)
+        : strategy.assigneeEmail
+          ? [strategy.assigneeEmail]
+          : [];
+
+    if (assigneeEmails.length > 0) return assigneeEmails.join(', ');
     return 'Unassigned';
   };
 
@@ -176,22 +195,55 @@ export function StrategiesWorkspace({
     return formatDateDisplay(strategy.updatedAt, lastEditedFormatter, '—');
   };
 
+  /* ---- Dialog helpers ---- */
+
+  const openCreateDialog = () => {
+    setDialogMode('create');
+    setDialogStrategyId(null);
+    setFormName('');
+    setFormDescription('');
+    setFormRegion('US');
+    setFormAssigneeIds(viewer.id ? [viewer.id] : []);
+  };
+
+  const openEditDialog = (strategy: Strategy) => {
+    setDialogMode('edit');
+    setDialogStrategyId(strategy.id);
+    setFormName(strategy.name);
+    setFormDescription(strategy.description ?? '');
+    setFormRegion(strategy.region ?? 'US');
+    setFormAssigneeIds(strategyAssigneeIds(strategy));
+  };
+
+  const closeDialog = () => {
+    setDialogMode(null);
+    setDialogStrategyId(null);
+  };
+
+  const toggleAssignee = (id: string) => {
+    setFormAssigneeIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  /* ---- Create / Update ---- */
+
   const handleCreate = async () => {
-    if (!newName.trim()) {
+    if (!formName.trim()) {
       toast.error('Enter a strategy name');
       return;
     }
 
-    setIsCreating(true);
+    setIsSubmitting(true);
     try {
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newName,
-          description: newDescription,
-          region: newRegion,
-          ...(newAssigneeId ? { assigneeId: newAssigneeId } : {}),
+          name: formName,
+          description: formDescription,
+          region: formRegion,
+          assigneeIds: formAssigneeIds,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -206,42 +258,41 @@ export function StrategiesWorkspace({
           _count: { products: 0, purchaseOrders: 0, salesWeeks: 0 },
         },
       ]);
-      setNewName('');
-      setNewDescription('');
-      setNewRegion('US');
-      setNewAssigneeId(viewer.id ?? '');
-      setIsAdding(false);
+      closeDialog();
       toast.success('Strategy created');
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Failed to create strategy');
     } finally {
-      setIsCreating(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleUpdate = async (id: string) => {
+  const handleUpdate = async () => {
+    if (!dialogStrategyId) return;
+    const id = dialogStrategyId;
     const strategy = strategies.find((s) => s.id === id);
 
-    if (!editName.trim()) {
+    if (!formName.trim()) {
       toast.error('Enter a strategy name');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const canAssign = Boolean(canAssignByStrategyId.get(id));
-      const currentAssigneeId = strategy?.assigneeId ?? '';
-      const assigneeChanged = editAssigneeId !== currentAssigneeId && editAssigneeId !== '';
+      const currentAssigneeIds = strategy ? strategyAssigneeIds(strategy) : [];
+      const assigneeChanged = !hasSameAssignees(formAssigneeIds, currentAssigneeIds);
 
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id,
-          name: editName,
-          description: editDescription,
-          region: editRegion,
-          ...(canAssign && assigneeChanged ? { assigneeId: editAssigneeId } : {}),
+          name: formName,
+          description: formDescription,
+          region: formRegion,
+          ...(canAssign && assigneeChanged ? { assigneeIds: formAssigneeIds } : {}),
         }),
       });
       const data = await response.json().catch(() => null);
@@ -252,30 +303,59 @@ export function StrategiesWorkspace({
       setStrategies((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...(data as any).strategy } : s)),
       );
-      setEditingId(null);
+      closeDialog();
       toast.success('Strategy updated');
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Failed to update strategy');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleSubmit = () => {
+    if (dialogMode === 'create') void handleCreate();
+    if (dialogMode === 'edit') void handleUpdate();
+  };
+
+  /* ---- Other actions ---- */
+
+  const requestDelete = (id: string) => {
     const strategy = strategies.find((item) => item.id === id);
     if (!strategy) return;
+    setPendingDelete(strategy);
+  };
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+
+    setIsDeleting(true);
     try {
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error('Failed to delete strategy');
+
+      const data = (await response.json().catch(() => null)) as { error?: unknown } | null;
+
+      if (!response.ok) {
+        const message = typeof data?.error === 'string' ? data.error : null;
+        if (message) {
+          throw new Error(message);
+        }
+        throw new Error('Failed to delete strategy');
+      }
+
       setStrategies((prev) => prev.filter((s) => s.id !== id));
+      setPendingDelete(null);
       toast.success('Strategy deleted');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete strategy');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete strategy');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -293,22 +373,6 @@ export function StrategiesWorkspace({
     toast.success(`Switched to "${pendingSwitch.name}"`);
   };
 
-  const startEdit = (strategy: Strategy) => {
-    setEditingId(strategy.id);
-    setEditName(strategy.name);
-    setEditDescription(strategy.description ?? '');
-    setEditRegion(strategy.region ?? 'US');
-    setEditAssigneeId(strategy.assigneeId ?? '');
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName('');
-    setEditDescription('');
-    setEditRegion('US');
-    setEditAssigneeId('');
-  };
-
   const primaryActionClass =
     'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 enabled:hover:border-cyan-500 enabled:hover:bg-cyan-50 enabled:hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:focus:ring-cyan-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-cyan-300/50 dark:enabled:hover:bg-white/10';
 
@@ -324,18 +388,16 @@ export function StrategiesWorkspace({
             forecasts.
           </p>
         </div>
-        {!isAdding ? (
-          <button type="button" onClick={() => setIsAdding(true)} className={primaryActionClass}>
-            <span className="inline-flex items-center gap-1.5">
-              <Plus className="h-4 w-4" />
-              New strategy
-            </span>
-          </button>
-        ) : null}
+        <button type="button" onClick={openCreateDialog} className={primaryActionClass}>
+          <span className="inline-flex items-center gap-1.5">
+            <Plus className="h-4 w-4" />
+            New strategy
+          </span>
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
-        <div className="max-h-[440px] overflow-auto">
+        <div className="max-h-[min(440px,calc(100vh-320px))] overflow-auto">
           <Table className="table-fixed border-collapse">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -363,95 +425,7 @@ export function StrategiesWorkspace({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isAdding ? (
-                <TableRow className="bg-cyan-50/70 hover:bg-cyan-50/70 dark:bg-cyan-900/20 dark:hover:bg-cyan-900/20">
-                  <TableCell className="border-r px-3 py-2 align-top">
-                    <div className="space-y-2">
-                      <Input
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        placeholder="Strategy name (e.g., Q4 2025 Planning)"
-                        autoFocus
-                        className="h-8"
-                      />
-                      <Input
-                        value={newDescription}
-                        onChange={(e) => setNewDescription(e.target.value)}
-                        placeholder="Description (optional)"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void handleCreate();
-                          if (e.key === 'Escape') setIsAdding(false);
-                        }}
-                        className="h-8"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="border-r px-3 py-2 align-top">
-                    <select
-                      value={newRegion}
-                      onChange={(e) => setNewRegion(e.target.value === 'UK' ? 'UK' : 'US')}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <option value="US">US</option>
-                      <option value="UK">UK</option>
-                    </select>
-                  </TableCell>
-                  <TableCell className="border-r px-3 py-2 align-top">
-                    <select
-                      value={newAssigneeId}
-                      onChange={(e) => setNewAssigneeId(e.target.value)}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      disabled={assignees.length === 0}
-                    >
-                      <option value="" disabled>
-                        {assignees.length === 0
-                          ? directoryConfigured
-                            ? 'Loading assignees...'
-                            : 'Directory unavailable'
-                          : directoryConfigured
-                            ? 'Select assignee'
-                            : 'Directory unavailable (limited list)'}
-                      </option>
-                      {assignees.map((assignee) => (
-                        <option key={assignee.id} value={assignee.id}>
-                          {assignee.email}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell className="border-r px-3 py-2 text-right text-xs text-muted-foreground">
-                    —
-                  </TableCell>
-                  <TableCell className="border-r px-3 py-2 text-center text-sm text-muted-foreground">
-                    -
-                  </TableCell>
-                  <TableCell className="border-r px-3 py-2 text-center text-sm text-muted-foreground">
-                    -
-                  </TableCell>
-                  <TableCell className="px-3 py-2">
-                    <div className="flex justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => void handleCreate()}
-                        disabled={isCreating}
-                        className="rounded p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-200 dark:hover:bg-emerald-900/20"
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsAdding(false)}
-                        disabled={isCreating}
-                        className="rounded p-1.5 text-muted-foreground transition hover:bg-muted"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-
-              {strategies.length === 0 && !isAdding ? (
+              {strategies.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
                     No strategies yet. Create your first planning strategy to get started.
@@ -460,13 +434,11 @@ export function StrategiesWorkspace({
               ) : (
                 strategies.map((strategy) => {
                   const isActive = selectedStrategyId === strategy.id;
-                  const isEditing = editingId === strategy.id;
-                  const canAssign = Boolean(canAssignByStrategyId.get(strategy.id));
 
                   return (
                     <TableRow
                       key={strategy.id}
-                      onClick={() => !isEditing && handleSelectStrategy(strategy.id, strategy.name)}
+                      onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                       className={cn(
                         'cursor-pointer',
                         isActive
@@ -475,113 +447,49 @@ export function StrategiesWorkspace({
                       )}
                     >
                       <TableCell className="border-r px-3 py-2">
-                        {isEditing ? (
-                          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                            <Input
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              className="h-8"
-                            />
-                            <Input
-                              value={editDescription}
-                              onChange={(e) => setEditDescription(e.target.value)}
-                              placeholder="Description"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void handleUpdate(strategy.id);
-                                if (e.key === 'Escape') cancelEdit();
-                              }}
-                              className="h-8"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2.5">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  className={cn(
-                                    'text-sm font-medium',
-                                    isActive
-                                      ? 'text-cyan-900 dark:text-cyan-100'
-                                      : 'text-foreground',
-                                  )}
-                                >
-                                  {strategy.name}
-                                </span>
-                                {isActive ? (
-                                  <Badge className="bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
-                                    Active
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              {strategy.description ? (
-                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {strategy.description}
-                                </p>
+                        <div className="flex items-center gap-2.5">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={cn(
+                                  'text-sm font-medium',
+                                  isActive
+                                    ? 'text-cyan-900 dark:text-cyan-100'
+                                    : 'text-foreground',
+                                )}
+                              >
+                                {strategy.name}
+                              </span>
+                              {isActive ? (
+                                <Badge className="ring-2 ring-cyan-300/40 dark:ring-[#00C2B9]/30 px-2.5 py-0.5 text-xs font-bold shadow-sm bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
+                                  Active
+                                </Badge>
                               ) : null}
                             </div>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2 text-center">
-                        {isEditing ? (
-                          <select
-                            value={editRegion}
-                            onChange={(e) => setEditRegion(e.target.value === 'UK' ? 'UK' : 'US')}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          >
-                            <option value="US">US</option>
-                            <option value="UK">UK</option>
-                          </select>
-                        ) : (
-                          <Badge variant="secondary" className="uppercase">
-                            {strategy.region}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell
-                        className="border-r px-3 py-2"
-                        onClick={(event) => {
-                          if (isEditing || canAssign) {
-                            event.stopPropagation();
-                            if (!isEditing) startEdit(strategy);
-                          }
-                        }}
-                      >
-                        {isEditing ? (
-                          <select
-                            value={editAssigneeId}
-                            onChange={(e) => setEditAssigneeId(e.target.value)}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            disabled={!canAssign || assignees.length === 0}
-                          >
-                            <option value="" disabled>
-                              {assignees.length === 0
-                                ? directoryConfigured
-                                  ? 'Loading assignees...'
-                                  : 'Directory unavailable'
-                                : directoryConfigured
-                                  ? 'Select assignee'
-                                  : 'Directory unavailable (limited list)'}
-                            </option>
-                            {assignees.map((assignee) => (
-                              <option key={assignee.id} value={assignee.id}>
-                                {assignee.email}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm text-foreground">
-                              {renderAssigneeLabel(strategy)}
-                            </span>
-                            {!canAssign && strategy.createdByEmail ? (
-                              <span className="text-xs text-muted-foreground">
-                                Creator: {strategy.createdByEmail}
-                              </span>
+                            {strategy.description ? (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {strategy.description}
+                              </p>
                             ) : null}
                           </div>
-                        )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="border-r px-3 py-2 text-center">
+                        <Badge variant="secondary" className="uppercase">
+                          {strategy.region}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="border-r px-3 py-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm text-foreground">
+                            {renderAssigneeLabel(strategy)}
+                          </span>
+                          {!Boolean(canAssignByStrategyId.get(strategy.id)) && strategy.createdByEmail ? (
+                            <span className="text-xs text-muted-foreground">
+                              Creator: {strategy.createdByEmail}
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="border-r px-3 py-2 text-right">
                         <span
@@ -620,42 +528,21 @@ export function StrategiesWorkspace({
                         </span>
                       </TableCell>
                       <TableCell className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
-                          {isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void handleUpdate(strategy.id)}
-                                className="rounded p-1.5 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-200 dark:hover:bg-emerald-900/20"
-                              >
-                                <Check className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEdit}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-muted"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => startEdit(strategy)}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-muted"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(strategy.id)}
-                                className="rounded p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditDialog(strategy)}
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => requestDelete(strategy.id)}
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -667,89 +554,174 @@ export function StrategiesWorkspace({
         </div>
       </div>
 
+      {/* Create / Edit Strategy Dialog */}
+      <Dialog open={dialogMode != null} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {dialogMode === 'edit' ? 'Edit Strategy' : 'New Strategy'}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogMode === 'edit'
+                ? 'Update strategy details.'
+                : 'Create a new planning strategy.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Strategy name (e.g., Q4 2025 Planning)"
+                autoFocus
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                value={formDescription}
+                onChange={(e) => setFormDescription(e.target.value)}
+                placeholder="Optional"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSubmit();
+                }}
+              />
+            </div>
+
+            {/* Region */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Region</label>
+              <select
+                value={formRegion}
+                onChange={(e) => setFormRegion(e.target.value === 'UK' ? 'UK' : 'US')}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="US">US</option>
+                <option value="UK">UK</option>
+              </select>
+            </div>
+
+            {/* Assignees — checkbox list */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Assignees</label>
+              {assignees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {directoryConfigured ? 'Loading assignees...' : 'Directory unavailable'}
+                </p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-background">
+                  {assignees.map((assignee) => {
+                    const checked = formAssigneeIds.includes(assignee.id);
+                    return (
+                      <button
+                        key={assignee.id}
+                        type="button"
+                        onClick={() => toggleAssignee(assignee.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-muted/50',
+                          checked && 'bg-cyan-50 dark:bg-cyan-900/20',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                            checked
+                              ? 'border-cyan-600 bg-cyan-600 text-white dark:border-[#00C2B9] dark:bg-[#00C2B9] dark:text-slate-900'
+                              : 'border-input',
+                          )}
+                        >
+                          {checked ? <Check className="h-3 w-3" /> : null}
+                        </span>
+                        <span className="truncate">{assignee.email}</span>
+                        {assignee.fullName ? (
+                          <span className="truncate text-muted-foreground">
+                            ({assignee.fullName})
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting
+                ? dialogMode === 'edit'
+                  ? 'Saving...'
+                  : 'Creating...'
+                : dialogMode === 'edit'
+                  ? 'Save'
+                  : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Switch strategy confirmation */}
       <AlertDialog
         open={pendingSwitch != null}
         onOpenChange={(open) => {
           if (!open) setPendingSwitch(null);
         }}
       >
-        <AlertDialogContent className="overflow-hidden border-0 bg-white p-0 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:bg-[#0a1f33] dark:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.5),0_0_40px_rgba(0,194,185,0.08)]">
-          {/* Decorative top gradient bar */}
-          <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-cyan-400 to-teal-400 dark:from-[#00c2b9] dark:via-[#00d5cb] dark:to-[#00e5d4]" />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch strategy?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingSwitch
+                ? selectedStrategyName
+                  ? `Switch from "${selectedStrategyName}" to "${pendingSwitch.name}"? Your data is saved automatically.`
+                  : `Switch to "${pendingSwitch.name}"? Your data is saved automatically.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSelectStrategy}>Switch</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          <div className="px-6 pb-6 pt-5">
-            <AlertDialogHeader className="space-y-4">
-              {/* Icon with animated glow */}
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 blur-md dark:from-[#00c2b9]/30 dark:to-[#00d5cb]/20" />
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 shadow-lg dark:from-[#00c2b9] dark:to-[#00a89d] dark:shadow-[0_8px_24px_rgba(0,194,185,0.3)]">
-                    <ArrowRightLeft className="h-5 w-5 text-white" aria-hidden="true" />
-                  </div>
-                </div>
-                <div>
-                  <AlertDialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    Switch strategy
-                  </AlertDialogTitle>
-                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                    Change your active planning context
-                  </p>
-                </div>
-              </div>
-
-              <AlertDialogDescription asChild>
-                <div className="space-y-4">
-                  {/* Strategy transition display */}
-                  {pendingSwitch != null && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-[#1a3a54] dark:bg-[#061828]">
-                      {selectedStrategyName ? (
-                        <div className="flex items-center gap-3">
-                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <span className="truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300">
-                              {selectedStrategyName}
-                            </span>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
-                            <span className="truncate rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800 dark:border-[#00c2b9]/40 dark:bg-[#00c2b9]/10 dark:text-cyan-300">
-                              {pendingSwitch.name}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-sm text-slate-500 dark:text-slate-400">
-                            Switching to
-                          </span>
-                          <span className="truncate rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-sm font-medium text-cyan-800 dark:border-[#00c2b9]/40 dark:bg-[#00c2b9]/10 dark:text-cyan-300">
-                            {pendingSwitch.name}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Auto-save notice */}
-                  <div className="flex items-center gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-2.5 dark:bg-emerald-500/10">
-                    <Sparkles className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-                      Your data is saved automatically
-                    </span>
-                  </div>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            <AlertDialogFooter className="mt-6 flex gap-3 sm:gap-3">
-              <AlertDialogCancel className="flex-1 border-slate-300 bg-white font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]">
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={confirmSelectStrategy}
-                className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl hover:shadow-cyan-500/30 dark:from-[#00c2b9] dark:to-[#00a89d] dark:text-[#002430] dark:shadow-[#00c2b9]/25 dark:hover:from-[#00d5cb] dark:hover:to-[#00c2b9]"
-              >
-                Switch
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </div>
+      {/* Delete strategy confirmation */}
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete strategy?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `This will permanently delete "${pendingDelete.name}" and all its data (${pendingDelete._count.products} products, ${pendingDelete._count.purchaseOrders} purchase orders, ${pendingDelete._count.salesWeeks} sales weeks). This cannot be undone.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </section>

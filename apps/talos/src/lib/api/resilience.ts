@@ -226,13 +226,13 @@ export class ResilientAPIClient {
  }
 }
 
-// Batch processing with partial failure handling
-export async function processBatch<T, R>(
- items: T[],
- processor: (item: T) => Promise<R>,
- options: {
- concurrency?: number;
- continueOnError?: boolean;
+// Bulk processing with partial failure handling
+export async function processBulk<T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  options: {
+    concurrency?: number;
+    continueOnError?: boolean;
  } = {}
 ): Promise<{
  successful: Array<{ item: T; result: R }>;
