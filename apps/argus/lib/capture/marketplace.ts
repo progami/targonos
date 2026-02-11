@@ -29,9 +29,3 @@ export function getMarketplaceConfig(marketplace: Marketplace): MarketplaceConfi
 export function buildAsinUrl(config: MarketplaceConfig, asin: string): string {
   return `${config.baseUrl}/dp/${asin}`;
 }
-
-export function buildSearchUrl(config: MarketplaceConfig, keyword: string): string {
-  const q = encodeURIComponent(keyword);
-  return `${config.baseUrl}/s?k=${q}`;
-}
-

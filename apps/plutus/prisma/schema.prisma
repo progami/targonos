@@ -17,7 +17,8 @@ model Brand {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  skus Sku[]
+  skus         Sku[]
+  billMappings BillMapping[]
 
   @@index([marketplace])
 }
@@ -73,7 +74,10 @@ model SetupConfig {
   amazonStorageFees                String?
   amazonAdvertisingCosts           String?
   amazonPromotions                 String?
-  
+
+  // Product Expenses
+  productExpenses                  String?
+
   // Setup status
   accountsCreated Boolean @default(false)
 
@@ -262,4 +266,42 @@ model NotificationPreference {
   onMonthlyAnalytics Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+/// BillMapping links a QBO bill to a PO batch and brand for cost allocation.
+model BillMapping {
+  id          String    @id @default(cuid())
+  qboBillId   String    @unique
+  poNumber    String
+  brandId     String
+  billDate    String
+  vendorName  String
+  totalAmount Float
+  syncedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  brand Brand          @relation(fields: [brandId], references: [id])
+  lines BillLineMapping[]
+
+  @@index([poNumber])
+  @@index([brandId])
+}
+
+/// BillLineMapping tracks a QBO bill line's component, SKU assignment, and amount for cost allocation.
+model BillLineMapping {
+  id            String  @id @default(cuid())
+  billMappingId String
+  qboLineId     String
+  component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
+  amountCents   Int
+  sku           String?
+  quantity      Int?
+
+  billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([billMappingId, qboLineId])
 }

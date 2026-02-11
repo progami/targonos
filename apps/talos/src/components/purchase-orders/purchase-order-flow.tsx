@@ -46,6 +46,7 @@ import {
 } from '@/lib/lucide-icons'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
+import { getCSRFToken } from '@/lib/utils/csrf'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
@@ -396,15 +397,6 @@ type SupplierAdjustmentEntry = {
   notes: string | null
 }
 
-type CrossTenantPurchaseOrderPayload = PurchaseOrderSummary & {
-  tenantCode: TenantCode
-  matchedSkuCodes: string[]
-  crossTenantReadOnly: true
-  documents: PurchaseOrderDocumentSummary[]
-  forwardingCosts: PurchaseOrderForwardingCostSummary[]
-  costSummary: PurchaseOrderCostLedgerSummary
-  supplierAdjustment: SupplierAdjustmentEntry | null
-}
 
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
@@ -417,6 +409,7 @@ const STAGE_DOCUMENTS: Record<
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
     { id: 'bill_of_lading', label: 'Bill of Lading' },
     { id: 'packing_list', label: 'Packing List' },
+    { id: 'grs_tc', label: 'GRS TC' },
   ],
   WAREHOUSE: [
     { id: 'grn', label: 'GRN' },
@@ -640,74 +633,52 @@ function getAuditActionTheme(action: string): {
   }
 }
 
-function describeAuditChanges(entry: AuditLogEntry): string[] {
+type AuditChangeRow = { field: string; previous: string; current: string }
+
+function describeAuditChangeRows(entry: AuditLogEntry): AuditChangeRow[] {
   const oldValue = toAuditRecord(entry.oldValue)
   const newValue = toAuditRecord(entry.newValue)
 
   switch (entry.action) {
     case 'LINE_ADD': {
       if (!newValue) return []
-      const skuCode = newValue.skuCode
-      const lotRef = typeof newValue.lotRef === 'string' ? newValue.lotRef : null
-      const quantity = newValue.quantity
-      const currency = newValue.currency
-      const unitCost = newValue.unitCost
-      const detail = [
-        typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
-        typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
-        typeof unitCost === 'number' && Number.isFinite(unitCost) && typeof currency === 'string'
-          ? `Unit ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-          : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof newValue.skuCode === 'string') rows.push({ field: 'SKU', previous: '—', current: newValue.skuCode })
+      if (typeof newValue.lotRef === 'string') rows.push({ field: 'Lot', previous: '—', current: newValue.lotRef })
+      if (typeof newValue.quantity === 'number') rows.push({ field: 'Qty', previous: '—', current: newValue.quantity.toLocaleString() })
+      if (typeof newValue.unitCost === 'number' && Number.isFinite(newValue.unitCost)) {
+        const currency = typeof newValue.currency === 'string' ? ` ${newValue.currency}` : ''
+        rows.push({ field: 'Unit Cost', previous: '—', current: `${newValue.unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${currency}` })
+      }
+      return rows
     }
     case 'LINE_DELETE': {
       if (!oldValue) return []
-      const skuCode = oldValue.skuCode
-      const lotRef = typeof oldValue.lotRef === 'string' ? oldValue.lotRef : null
-      const quantity = oldValue.quantity
-      const detail = [
-        typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
-        typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof oldValue.skuCode === 'string') rows.push({ field: 'SKU', previous: oldValue.skuCode, current: '—' })
+      if (typeof oldValue.lotRef === 'string') rows.push({ field: 'Lot', previous: oldValue.lotRef, current: '—' })
+      if (typeof oldValue.quantity === 'number') rows.push({ field: 'Qty', previous: oldValue.quantity.toLocaleString(), current: '—' })
+      return rows
     }
     case 'CONTAINER_ADD':
     case 'CONTAINER_DELETE': {
       const value = entry.action === 'CONTAINER_DELETE' ? oldValue : newValue
       if (!value) return []
-      const number = value.containerNumber
-      const size = value.containerSize
-      const seal = value.sealNumber
-      const detail = [
-        typeof number === 'string' ? `#${number}` : null,
-        typeof size === 'string' ? size : null,
-        typeof seal === 'string' && seal.trim() ? `Seal ${seal}` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const isDelete = entry.action === 'CONTAINER_DELETE'
+      const rows: AuditChangeRow[] = []
+      if (typeof value.containerNumber === 'string') rows.push({ field: 'Container #', previous: isDelete ? value.containerNumber : '—', current: isDelete ? '—' : value.containerNumber })
+      if (typeof value.containerSize === 'string') rows.push({ field: 'Size', previous: isDelete ? value.containerSize : '—', current: isDelete ? '—' : value.containerSize })
+      if (typeof value.sealNumber === 'string' && value.sealNumber.trim()) rows.push({ field: 'Seal', previous: isDelete ? value.sealNumber : '—', current: isDelete ? '—' : value.sealNumber })
+      return rows
     }
     case 'DOCUMENT_UPLOAD':
     case 'DOCUMENT_REPLACE': {
       if (!newValue) return []
-      const stage = newValue.stage
-      const documentType = newValue.documentType
-      const fileName = newValue.fileName
-      const detail = [
-        typeof stage === 'string' ? stage : null,
-        typeof documentType === 'string' ? documentType : null,
-        typeof fileName === 'string' ? fileName : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof newValue.stage === 'string') rows.push({ field: 'Stage', previous: '—', current: newValue.stage })
+      if (typeof newValue.documentType === 'string') rows.push({ field: 'Type', previous: '—', current: newValue.documentType })
+      if (typeof newValue.fileName === 'string') rows.push({ field: 'File', previous: '—', current: newValue.fileName })
+      return rows
     }
   }
 
@@ -725,19 +696,21 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
   ])
 
   const keys = new Set<string>([...Object.keys(oldValue ?? {}), ...Object.keys(newValue ?? {})])
-  const changes: string[] = []
+  const rows: AuditChangeRow[] = []
 
   for (const key of keys) {
     if (skipKeys.has(key)) continue
     const before = oldValue?.[key]
     const after = newValue?.[key]
     if (before === after) continue
-    changes.push(
-      `${formatAuditFieldLabel(key)}: ${formatAuditValue(before)} → ${formatAuditValue(after)}`
-    )
+    rows.push({
+      field: formatAuditFieldLabel(key),
+      previous: formatAuditValue(before),
+      current: formatAuditValue(after),
+    })
   }
 
-  return changes
+  return rows
 }
 
 function formatDateOnly(value: string | null) {
@@ -747,31 +720,21 @@ function formatDateOnly(value: string | null) {
   return parsed.toISOString().slice(0, 10)
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const date = parsed.toISOString().slice(0, 10)
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return `${date} ${hours}:${minutes}`
+}
+
 function formatTextOrDash(value: string | null | undefined) {
   if (value === null || value === undefined) return '—'
   const trimmed = value.trim()
   if (trimmed.length === 0) return '—'
   return value
-}
-
-type CargoSubTabKey = 'details' | 'attributes'
-
-const isIssuedShippingMarksKey = (key: string): boolean => {
-  return (
-    key.includes('.commodityCode') ||
-    key.includes('.countryOfOrigin') ||
-    key.includes('.material') ||
-    key.includes('.netWeightKg') ||
-    key.includes('.cartonWeightKg') ||
-    key.includes('.cartonDimensions') ||
-    key.includes('.unitsPerCarton')
-  )
-}
-
-const resolveCargoSubTabForGateKey = (key: string): CargoSubTabKey | null => {
-  if (!key.startsWith('cargo.')) return null
-  if (isIssuedShippingMarksKey(key)) return 'attributes'
-  return 'details'
 }
 
 export type PurchaseOrderFlowMode = 'detail' | 'create'
@@ -791,8 +754,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const weightUnit = getWeightUnitLabel(unitSystem)
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
-  const crossTenantCode = props.tenantCode
-  const isCrossTenantReadOnly = !isCreate && Boolean(crossTenantCode)
+  const tenantOverride = props.tenantCode
+  const tenantFetchHeaders = useMemo<HeadersInit>(
+    () => tenantOverride ? { 'x-tenant': tenantOverride } : {},
+    [tenantOverride]
+  )
   const [loading, setLoading] = useState(true)
   const [order, setOrder] = useState<PurchaseOrderSummary | null>(null)
   const [splitGroupOrders, setSplitGroupOrders] = useState<SplitGroupOrderSummary[]>([])
@@ -861,6 +827,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [documents, setDocuments] = useState<PurchaseOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
+  const [uploadingDocProgress, setUploadingDocProgress] = useState<Record<string, number | null>>({})
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
 
@@ -891,10 +858,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     notes: '',
   })
 
-  const [inboundBreakdownOpen, setInboundBreakdownOpen] = useState(false)
-  const [storageBreakdownOpen, setStorageBreakdownOpen] = useState(false)
-  const [supplierAdjustmentOpen, setSupplierAdjustmentOpen] = useState(false)
-  const [landedBreakdownOpen, setLandedBreakdownOpen] = useState(false)
 
   // Manual warehouse cost state
   const [manualWarehouseCosts, setManualWarehouseCosts] = useState<
@@ -926,7 +889,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     'details' | 'cargo' | 'costs' | 'documents' | 'history'
   >('details')
   const [productCostsEditing, setProductCostsEditing] = useState(false)
-  const [cargoSubTab, setCargoSubTab] = useState<'details' | 'attributes'>('details')
   const [newLineDraft, setNewLineDraft] = useState({
     skuId: '',
     unitsOrdered: 1,
@@ -957,8 +919,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           ? `/operations/purchase-orders/${orderId}`
           : '/operations/purchase-orders'
       const returnPathWithTenant =
-        !isCreate && crossTenantCode
-          ? `${returnPath}?tenant=${encodeURIComponent(crossTenantCode)}`
+        !isCreate && tenantOverride
+          ? `${returnPath}?tenant=${encodeURIComponent(tenantOverride)}`
           : returnPath
       redirectToPortal(
         '/login',
@@ -974,7 +936,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const loadWarehouses = async () => {
       try {
         setWarehousesLoading(true)
-        const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
+        const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include', headers: tenantFetchHeaders })
         if (!response.ok) return
         const payload: unknown = await response.json().catch(() => null)
 
@@ -1012,7 +974,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     const loadTenant = async () => {
       try {
-        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
+        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include', headers: tenantFetchHeaders })
         if (!response.ok) return
         const payload = await response.json().catch(() => null)
         const currency = payload?.current?.currency
@@ -1044,27 +1006,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
       try {
         setLoading(true)
-        const endpoint = isCrossTenantReadOnly && crossTenantCode
-          ? `/api/purchase-orders/manufacturing/${encodeURIComponent(crossTenantCode)}/${orderId}`
-          : `/api/purchase-orders/${orderId}`
-        const response = await fetch(withBasePath(endpoint), { credentials: 'include' })
+        const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}`), {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        })
         if (!response.ok) {
           throw new Error('Failed to load purchase order')
         }
         const data = await response.json()
-        if (isCrossTenantReadOnly && crossTenantCode) {
-          const crossPayload = data as CrossTenantPurchaseOrderPayload
-          setOrder(crossPayload)
-          setDocuments(Array.isArray(crossPayload.documents) ? crossPayload.documents : [])
-          setForwardingCosts(
-            Array.isArray(crossPayload.forwardingCosts) ? crossPayload.forwardingCosts : []
-          )
-          setCostLedgerSummary(crossPayload.costSummary ?? null)
-          setSupplierAdjustment(crossPayload.supplierAdjustment ?? null)
-          setAuditLogs([])
-        } else {
-          setOrder(data)
-        }
+        setOrder(data)
       } catch (_error) {
         toast.error('Failed to load purchase order')
         router.push('/operations/purchase-orders')
@@ -1080,7 +1030,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       return
     }
     setLoading(false)
-  }, [crossTenantCode, isCreate, isCrossTenantReadOnly, orderId, router, session, status])
+  }, [tenantOverride, tenantFetchHeaders, isCreate, orderId, router, session, status])
 
   useEffect(() => {
     if (!order) return
@@ -1096,7 +1046,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }, [order, orderInfoEditing])
 
   const refreshDocuments = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1104,6 +1053,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setDocumentsLoading(true)
       const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/documents`), {
         credentials: 'include',
+        headers: tenantFetchHeaders,
       })
       if (!response.ok) {
         setDocuments([])
@@ -1118,14 +1068,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setDocumentsLoading(false)
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshDocuments()
   }, [refreshDocuments])
 
   const refreshAuditLogs = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1135,7 +1084,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         withBasePath(
           `/api/audit-logs?entityType=PurchaseOrder&entityId=${encodeURIComponent(orderId)}&limit=200`
         ),
-        { credentials: 'include' }
+        { credentials: 'include', headers: tenantFetchHeaders }
       )
 
       if (!response.ok) {
@@ -1151,7 +1100,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setAuditLogsLoading(false)
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshAuditLogs()
@@ -1160,16 +1109,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const patchOrderLine = useCallback(
     async (lineId: string, data: Record<string, unknown>) => {
       if (!order) return
-      if (isCrossTenantReadOnly) {
-        toast.error('This cross-region manufacturing view is read-only')
-        return
-      }
 
       try {
         const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
+          tenantOverride,
         })
 
         if (!response.ok) {
@@ -1194,7 +1140,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         toast.error('Failed to update line item')
       }
     },
-    [isCrossTenantReadOnly, order, refreshAuditLogs]
+    [tenantOverride, order, refreshAuditLogs]
   )
 
   const maybePatchCartonDimensions = useCallback(
@@ -1240,13 +1186,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   )
 
   const refreshForwardingCosts = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
     try {
       const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/forwarding-costs`), {
         credentials: 'include',
+        headers: tenantFetchHeaders,
       })
       if (!response.ok) {
         setForwardingCosts([])
@@ -1259,14 +1205,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } catch {
       setForwardingCosts([])
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshForwardingCosts()
   }, [refreshForwardingCosts])
 
   const refreshCostLedgerSummary = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) return
 
@@ -1274,6 +1219,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setCostLedgerLoading(true)
       const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/costs`), {
         credentials: 'include',
+        headers: tenantFetchHeaders,
       })
       if (!response.ok) {
         setCostLedgerSummary(null)
@@ -1292,14 +1238,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setCostLedgerLoading(false)
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshCostLedgerSummary()
   }, [refreshCostLedgerSummary])
 
   const refreshSupplierAdjustment = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     const orderId = order?.id
     if (!orderId) {
       setSupplierAdjustment(null)
@@ -1310,6 +1255,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setSupplierAdjustmentLoading(true)
       const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/supplier-adjustments`), {
         credentials: 'include',
+        headers: tenantFetchHeaders,
       })
       if (!response.ok) {
         setSupplierAdjustment(null)
@@ -1384,7 +1330,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setSupplierAdjustmentLoading(false)
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshSupplierAdjustment()
@@ -1407,12 +1353,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }, [supplierAdjustment, supplierAdjustmentEditing])
 
   const refreshManualWarehouseCosts = useCallback(async () => {
-    if (isCrossTenantReadOnly) return
     if (!order?.id) return
     try {
       setManualWarehouseCostsLoading(true)
       const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/warehouse-costs`), {
         credentials: 'include',
+        headers: tenantFetchHeaders,
       })
       if (!response.ok) {
         setManualWarehouseCosts([])
@@ -1442,7 +1388,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setManualWarehouseCostsLoading(false)
     }
-  }, [isCrossTenantReadOnly, order?.id])
+  }, [tenantFetchHeaders, order?.id])
 
   useEffect(() => {
     void refreshManualWarehouseCosts()
@@ -1452,10 +1398,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     async (category: 'Inbound' | 'Storage') => {
       if (!order) return
       if (warehouseCostSaving) return
-      if (isCrossTenantReadOnly) {
-        toast.error('This cross-region manufacturing view is read-only')
-        return
-      }
 
       const amount = Number(warehouseCostDraft.amount)
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -1478,6 +1420,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             amount,
             notes: warehouseCostDraft.notes.trim() ? warehouseCostDraft.notes.trim() : undefined,
           }),
+          tenantOverride,
         })
 
         if (!response.ok) {
@@ -1502,18 +1445,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       warehouseCostDraft.amount,
       warehouseCostDraft.notes,
       warehouseCostSaving,
-      isCrossTenantReadOnly,
+      tenantOverride,
     ]
   )
 
   const deleteWarehouseCost = useCallback(
     async (costId: string) => {
       if (!order) return
-      if (isCrossTenantReadOnly) return
       try {
         const response = await fetchWithCSRF(
           `/api/purchase-orders/${order.id}/warehouse-costs?costId=${encodeURIComponent(costId)}`,
-          { method: 'DELETE' }
+          { method: 'DELETE', tenantOverride }
         )
         if (!response.ok) {
           toast.error(`Failed to delete cost entry (HTTP ${response.status})`)
@@ -1525,16 +1467,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         toast.error('Failed to delete cost entry')
       }
     },
-    [order, refreshManualWarehouseCosts, isCrossTenantReadOnly]
+    [order, refreshManualWarehouseCosts, tenantOverride]
   )
 
   const saveSupplierAdjustment = useCallback(async () => {
     if (!order) return
     if (supplierAdjustmentSaving) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     const amount = Number(supplierAdjustmentDraft.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1554,6 +1492,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             ? supplierAdjustmentDraft.notes.trim()
             : undefined,
         }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -1576,7 +1515,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     supplierAdjustmentDraft.kind,
     supplierAdjustmentDraft.notes,
     supplierAdjustmentSaving,
-    isCrossTenantReadOnly,
+    tenantOverride,
   ])
 
   const forwardingSubtotal = useMemo(
@@ -1586,7 +1525,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const inboundCostRows = costLedgerSummary?.breakdown?.inbound ?? []
   const inboundSubtotal = costLedgerSummary?.totals?.inbound ?? 0
-  const storageCostRows = costLedgerSummary?.breakdown?.storage ?? []
   const storageSubtotal = costLedgerSummary?.totals?.storage ?? 0
 
   const manualInboundCosts = manualWarehouseCosts.filter(c => c.category === 'Inbound')
@@ -1607,10 +1545,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const saveFreightCost = useCallback(async () => {
     if (!order) return
     if (freightCostSaving) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     const raw = freightCostDraft.trim()
     if (!raw) {
@@ -1630,6 +1564,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: parsed }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -1655,7 +1590,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     order,
     refreshCostLedgerSummary,
     refreshForwardingCosts,
-    isCrossTenantReadOnly,
+    tenantOverride,
   ])
 
   const handleDocumentUpload = useCallback(
@@ -1668,14 +1603,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       const input = event.target
       const file = input.files?.[0]
       if (!orderId || !file) return
-      if (isCrossTenantReadOnly) {
-        toast.error('This cross-region manufacturing view is read-only')
-        input.value = ''
-        return
-      }
 
       const key = `${stage}::${documentType}`
       setUploadingDoc(prev => ({ ...prev, [key]: true }))
+      setUploadingDocProgress(prev => ({ ...prev, [key]: null }))
 
       try {
         const presignedResponse = await fetchWithCSRF(
@@ -1689,6 +1620,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               fileType: file.type,
               fileSize: file.size,
             }),
+            tenantOverride,
           }
         )
 
@@ -1720,26 +1652,126 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           return
         }
 
-        const uploadResponse = await fetchWithCSRF(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-
-        if (!uploadResponse.ok) {
-          const uploadPayload = await uploadResponse.json().catch(() => null)
-          const errorMessage = typeof uploadPayload?.error === 'string' ? uploadPayload.error : null
-          const detailsMessage =
-            typeof uploadPayload?.details === 'string' ? uploadPayload.details : null
-          if (errorMessage && detailsMessage) {
-            toast.error(`${errorMessage}: ${detailsMessage}`)
-          } else if (errorMessage) {
-            toast.error(errorMessage)
-          } else {
-            toast.error(`Failed to upload document (HTTP ${uploadResponse.status})`)
+        await new Promise<void>((resolve, reject) => {
+          const resolvedUrl = withBasePath(uploadUrl)
+          const csrfToken = getCSRFToken()
+          if (!csrfToken) {
+            reject(new Error('Missing CSRF token'))
+            return
           }
-          return
-        }
+
+          const startedAt = Date.now()
+          let lastProgressAt = startedAt
+          let lastLoaded = 0
+          let settled = false
+          let abortError: Error | null = null
+
+          const settle = (action: () => void) => {
+            if (settled) return
+            settled = true
+            action()
+          }
+
+          const xhr = new XMLHttpRequest()
+          xhr.open('PUT', resolvedUrl)
+          xhr.withCredentials = true
+          xhr.timeout = 30 * 60 * 1000
+
+          const stallTimeoutMs = 2 * 60 * 1000
+          const stallIntervalMs = 10 * 1000
+          const stallInterval = window.setInterval(() => {
+            if (settled) return
+            if (Date.now() - lastProgressAt < stallTimeoutMs) return
+
+            abortError = new Error('Upload stalled. Please retry.')
+            xhr.abort()
+          }, stallIntervalMs)
+
+          const cleanup = () => {
+            window.clearInterval(stallInterval)
+          }
+
+          xhr.setRequestHeader('x-csrf-token', csrfToken)
+          if (tenantOverride) {
+            xhr.setRequestHeader('x-tenant', tenantOverride)
+          }
+          if (file.type) {
+            xhr.setRequestHeader('Content-Type', file.type)
+          }
+
+          xhr.upload.onloadstart = () => {
+            lastProgressAt = Date.now()
+            lastLoaded = 0
+          }
+
+          xhr.upload.onprogress = event => {
+            if (!event.lengthComputable) return
+
+            if (event.loaded > lastLoaded) {
+              lastLoaded = event.loaded
+              lastProgressAt = Date.now()
+            }
+
+            const progress = Math.min(
+              100,
+              Math.max(0, Math.round((event.loaded / event.total) * 100))
+            )
+            setUploadingDocProgress(prev => ({ ...prev, [key]: progress }))
+          }
+
+          xhr.onerror = () => {
+            cleanup()
+            settle(() => reject(new Error('Failed to upload document')))
+          }
+          xhr.ontimeout = () => {
+            cleanup()
+            settle(() => reject(new Error('Upload timed out')))
+          }
+          xhr.onabort = () => {
+            cleanup()
+            settle(() => reject(abortError ?? new Error('Upload cancelled')))
+          }
+          xhr.onload = () => {
+            cleanup()
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadingDocProgress(prev => ({ ...prev, [key]: 100 }))
+              settle(() => resolve())
+              return
+            }
+
+            const responseText = typeof xhr.responseText === 'string' ? xhr.responseText.trim() : ''
+            const responseContentType = xhr.getResponseHeader('content-type') ?? ''
+            if (responseText && responseContentType.includes('application/json')) {
+              try {
+                const parsed = JSON.parse(responseText) as unknown
+                const error =
+                  parsed && typeof parsed === 'object' && 'error' in parsed
+                    ? (parsed as Record<string, unknown>).error
+                    : null
+                const details =
+                  parsed && typeof parsed === 'object' && 'details' in parsed
+                    ? (parsed as Record<string, unknown>).details
+                    : null
+
+                const errorMessage = typeof error === 'string' ? error.trim() : null
+                const detailsMessage = typeof details === 'string' ? details.trim() : null
+                if (errorMessage && detailsMessage) {
+                  settle(() => reject(new Error(`${errorMessage}: ${detailsMessage}`)))
+                  return
+                }
+                if (errorMessage) {
+                  settle(() => reject(new Error(errorMessage)))
+                  return
+                }
+              } catch {
+                // Fall through to a generic HTTP error below.
+              }
+            }
+            settle(() => reject(new Error(`Failed to upload document (HTTP ${xhr.status})`)))
+          }
+
+          xhr.send(file)
+        })
 
         const response = await fetchWithCSRF(`/api/purchase-orders/${orderId}/documents`, {
           method: 'POST',
@@ -1751,6 +1783,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             fileSize: file.size,
             s3Key,
           }),
+          tenantOverride,
         })
 
         const payload = await response.json().catch(() => null)
@@ -1774,10 +1807,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         toast.error(err instanceof Error ? err.message : 'Failed to upload document')
       } finally {
         setUploadingDoc(prev => ({ ...prev, [key]: false }))
+        setUploadingDocProgress(prev => {
+          const next = { ...prev }
+          delete next[key]
+          return next
+        })
         input.value = ''
       }
     },
-    [isCrossTenantReadOnly, order?.id, refreshAuditLogs, refreshDocuments]
+    [tenantOverride, order?.id, refreshAuditLogs, refreshDocuments]
   )
 
   const ensureSkusLoaded = useCallback(async () => {
@@ -1785,7 +1823,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSkusLoading(true)
-      const response = await fetch(withBasePath('/api/skus'), { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/skus'), { credentials: 'include', headers: tenantFetchHeaders })
       if (!response.ok) {
         setSkus([])
         return
@@ -1857,7 +1895,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setSkusLoading(false)
     }
-  }, [skus.length, skusLoading])
+  }, [skus.length, skusLoading, tenantFetchHeaders])
 
   useEffect(() => {
     if (!session) return
@@ -1872,7 +1910,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSuppliersLoading(true)
-      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include', headers: tenantFetchHeaders })
       if (!response.ok) {
         setSuppliers([])
         return
@@ -1889,7 +1927,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setSuppliersLoading(false)
     }
-  }, [suppliers.length, suppliersLoading])
+  }, [suppliers.length, suppliersLoading, tenantFetchHeaders])
 
   useEffect(() => {
     if (!orderInfoEditing) return
@@ -1982,10 +2020,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }, [selectedStageView, order])
 
   useEffect(() => {
-    setInboundBreakdownOpen(false)
-    setStorageBreakdownOpen(false)
-    setSupplierAdjustmentOpen(false)
-    setLandedBreakdownOpen(false)
+    setWarehouseCostEditing(null)
+    setSupplierAdjustmentEditing(false)
   }, [activeViewStage])
 
   useEffect(() => {
@@ -2024,7 +2060,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         setSplitGroupLoading(true)
         const response = await fetch(
           withBasePath(`/api/purchase-orders?splitGroupId=${encodeURIComponent(groupId)}`),
-          { credentials: 'include' }
+          { credentials: 'include', headers: tenantFetchHeaders }
         )
         if (!response.ok) {
           setSplitGroupOrders([])
@@ -2087,7 +2123,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return () => {
       cancelled = true
     }
-  }, [order?.splitGroupId])
+  }, [order?.splitGroupId, tenantFetchHeaders])
 
   useEffect(() => {
     if (!order) return
@@ -2132,22 +2168,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return details
   }, [gateIssues])
 
-  const cargoSubTabIssues = useMemo(() => {
-    const issues: Record<CargoSubTabKey, boolean> = {
-      details: false,
-      attributes: false,
-    }
-
-    if (!gateIssues) return issues
-
-    for (const key of Object.keys(gateIssues)) {
-      const target = resolveCargoSubTabForGateKey(key)
-      if (!target) continue
-      issues[target] = true
-    }
-
-    return issues
-  }, [gateIssues])
 
   const cargoLineIssueCountById = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -2178,13 +2198,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const jumpToGateKey = (gateKey: string) => {
     const targetTab = tabForGateKey(gateKey)
     setActiveBottomTab(targetTab)
-
-    if (targetTab === 'cargo') {
-      const targetCargoSubTab = resolveCargoSubTabForGateKey(gateKey)
-      if (targetCargoSubTab) {
-        setCargoSubTab(targetCargoSubTab)
-      }
-    }
 
     setTimeout(() => {
       const element = document.querySelector(`[data-gate-key="${gateKey}"]`)
@@ -2227,12 +2240,40 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return null
   }, [order])
 
+  const formatValidationToastMessage = (payload: unknown, fallback: string): string => {
+    if (!payload || typeof payload !== 'object') return fallback
+
+    const candidate = payload as { error?: unknown; details?: unknown }
+    const rawError = typeof candidate.error === 'string' ? candidate.error.trim() : ''
+    const details = candidate.details
+
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      return rawError.length > 0 ? rawError : fallback
+    }
+
+    const messages = Object.values(details as Record<string, unknown>)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map(value => value.trim())
+
+    const uniqueMessages = Array.from(new Set(messages))
+    if (uniqueMessages.length === 0) {
+      return rawError.length > 0 ? rawError : fallback
+    }
+
+    const preview = uniqueMessages.slice(0, 3)
+    const remaining = uniqueMessages.length - preview.length
+    const summary =
+      remaining > 0 ? `${preview.join('; ')} (and ${remaining} more)` : preview.join('; ')
+
+    if (rawError.length > 0 && rawError !== 'Validation failed') {
+      return `${rawError}: ${summary}`
+    }
+
+    return `Fix required: ${summary}`
+  }
+
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     // Show confirmation dialog for cancel
     if (targetStatus === 'CANCELLED') {
@@ -2261,10 +2302,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const executeTransition = async (targetStatus: POStageStatus): Promise<boolean> => {
     if (!order || transitioning) return false
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return false
-    }
 
     try {
       setTransitioning(true)
@@ -2285,6 +2322,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           targetStatus,
           stageData,
         }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -2300,7 +2338,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           }
         }
 
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to transition order')
+        toast.error(formatValidationToastMessage(payload, 'Failed to transition order'))
         return false
       }
 
@@ -2323,10 +2361,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const handleReceiveInventory = async () => {
     if (!order) return
     if (receivingInventory) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     try {
       setReceivingInventory(true)
@@ -2356,6 +2390,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           discrepancyNotes: receiveFormData.discrepancyNotes,
           lineReceipts,
         }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -2370,7 +2405,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             jumpToGateKey(firstKey)
           }
         }
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to receive inventory')
+        toast.error(formatValidationToastMessage(payload, 'Failed to receive inventory'))
         return
       }
 
@@ -2452,7 +2487,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
   const isReceived = Boolean(order?.postedAt)
-  const isReadOnly = isCrossTenantReadOnly || isTerminalStatus || isReceived
+  const isReadOnly = isTerminalStatus || isReceived
   const canEdit = isCreate ? true : !isReadOnly && order?.status === 'RFQ'
   const canEditDispatchAllocation =
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
@@ -2530,10 +2565,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     }
 
     if (!order) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     try {
       setOrderInfoSaving(true)
@@ -2551,6 +2582,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             : null,
           notes: orderInfoDraft.notes.trim() ? orderInfoDraft.notes.trim() : null,
         }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -2675,14 +2707,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     }
 
     if (!order) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     try {
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/lines/${lineId}`, {
         method: 'DELETE',
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -2764,10 +2793,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     }
 
     if (!order) return
-    if (isCrossTenantReadOnly) {
-      toast.error('This cross-region manufacturing view is read-only')
-      return
-    }
 
     setAddLineSubmitting(true)
     try {
@@ -2782,6 +2807,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           currency: tenantCurrency,
           notes: newLineDraft.notes.trim() ? newLineDraft.notes.trim() : undefined,
         }),
+        tenantOverride,
       })
 
       if (!response.ok) {
@@ -2809,12 +2835,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const handleDownloadPdf = async () => {
     if (!order) return
-    if (isCrossTenantReadOnly) {
-      toast.error('PDF generation is not available in cross-region read-only mode')
-      return
-    }
     try {
-      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/pdf`))
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/pdf`), {
+        headers: tenantFetchHeaders,
+      })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const details = payload?.details
@@ -2827,7 +2851,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             jumpToGateKey(firstKey)
           }
         }
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate PDF')
+        toast.error(formatValidationToastMessage(payload, 'Failed to generate PDF'))
         return
       }
 
@@ -2844,13 +2868,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const handleDownloadShippingMarks = async () => {
     if (!order) return
-    if (isCrossTenantReadOnly) {
-      toast.error('Shipping marks generation is not available in cross-region read-only mode')
-      return
-    }
 
     try {
-      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`))
+      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`), {
+        method: 'POST',
+        headers: tenantFetchHeaders,
+      })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const details = payload?.details
@@ -2864,7 +2887,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           }
         }
 
-        toast.error(typeof payload?.error === 'string' ? payload.error : 'Failed to generate shipping marks')
+        toast.error(formatValidationToastMessage(payload, 'Failed to generate shipping marks'))
         return
       }
 
@@ -2938,19 +2961,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       />
 	      <PageContent>
 	        <div className="flex flex-col gap-6">
-            {isCrossTenantReadOnly && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Cross-region manufacturing view ({crossTenantCode}) is read-only.
-              </div>
-            )}
 	          {/* Stage Progress Bar */}
 	          {(isCreate ||
 	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
-	            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
-	              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Order Progress</h2>
-
+	            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
                 {!isCreate && order?.splitGroupId && (
-                  <div className="mb-4 rounded-lg border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-2">
+                  <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-semibold text-muted-foreground uppercase tracking-wide">
                         Split Group
@@ -2988,108 +3004,94 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 )}
 
-              {/* Stage Progress - Clickable Navigation */}
-              <div className="flex items-center justify-between relative">
-                {/* Progress line */}
-                <div className="absolute top-5 left-0 right-0 h-1 bg-slate-200 mx-8" />
-                <div
-                  className="absolute top-5 left-0 h-1 bg-emerald-500 transition-all duration-300 mx-8"
-                  style={{
-                    width: `calc(${(currentStageIndex / (STAGES.length - 1)) * 100}% - 4rem)`,
-                  }}
-                />
+              <div className="flex items-center justify-between gap-4">
+                {/* Stage Steps */}
+                <div className="flex items-center gap-1 min-w-0">
+                  {STAGES.map((stage, index) => {
+                    const isCompleted = index < currentStageIndex
+                    const isCurrent = index === currentStageIndex
+                    const isClickable = canViewStage(stage.value)
+                    const isViewing = activeViewStage === stage.value
+                    const Icon = stage.icon
 
-                {STAGES.map((stage, index) => {
-                  const isCompleted = index < currentStageIndex
-                  const isCurrent = index === currentStageIndex
-                  const isClickable = canViewStage(stage.value)
-                  const isViewing = activeViewStage === stage.value
-                  const Icon = stage.icon
+                    return (
+                      <Fragment key={stage.value}>
+                        {index > 0 && (
+                          <div className={`h-px w-4 flex-shrink-0 ${
+                            isCompleted || isCurrent ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-slate-600'
+                          }`} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => isClickable && setSelectedStageView(stage.value)}
+                          disabled={!isClickable}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
+                            isClickable ? 'cursor-pointer' : 'cursor-not-allowed'
+                          } ${
+                            isViewing
+                              ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-300 dark:ring-emerald-700'
+                              : isCompleted
+                                ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20'
+                                : isCurrent
+                                  ? 'text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                  : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                          ) : (
+                            <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                          )}
+                          {stage.label}
+                        </button>
+                      </Fragment>
+                    )
+                  })}
+                </div>
 
-                  return (
-                    <button
-                      key={stage.value}
-                      type="button"
-                      onClick={() => isClickable && setSelectedStageView(stage.value)}
-                      disabled={!isClickable}
-                      className={`flex flex-col items-center relative z-10 transition-all ${
-                        isClickable ? 'cursor-pointer group' : 'cursor-not-allowed'
-                      }`}
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {nextStage && (
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        if (!nextStage) return
+                        await executeTransition(nextStage.value as POStageStatus)
+                      }}
+                      disabled={transitioning || (order ? activeViewStage !== order.status : false)}
+                      className="gap-1.5"
                     >
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all ${
-                          isViewing ? 'ring-2 ring-offset-2 ring-emerald-400' : ''
-                        } ${
-                          isCompleted
-                            ? 'bg-emerald-500 border-emerald-500 text-white group-hover:bg-emerald-600'
-                            : isCurrent
-                              ? 'bg-white border-emerald-500 text-emerald-600 group-hover:bg-emerald-50 animate-pulse'
-                              : 'bg-white border-slate-300 text-slate-400'
-                        }`}
-                      >
-                        {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
-                      </div>
-                      <span
-                        className={`mt-2 text-xs font-medium transition-colors ${
-                          isViewing
-                            ? 'text-emerald-600'
-                            : isCompleted || isCurrent
-                              ? 'text-slate-900 dark:text-slate-100 group-hover:text-emerald-600'
-                              : 'text-slate-400'
-                        }`}
-                      >
-                        {stage.label}
-                      </span>
-                      {isCurrent && (
-                        <span className="mt-0.5 text-[10px] font-medium text-emerald-600 uppercase tracking-wider">
-                          Current
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+                      {order?.status === 'RFQ' ? 'Issue PO' : `Advance to ${nextStage.label}`}
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+
+                  {order?.status === 'WAREHOUSE' && !isReadOnly && (
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={() => void handleReceiveInventory()}
+                      disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
+                      className="gap-1.5"
+                    >
+                      {receivingInventory && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Receive Inventory
+                    </Button>
+                  )}
+
+                  {isCreate && (
+                    <Button
+                      size="sm"
+                      onClick={() => void handleCreateRfq()}
+                      disabled={creating}
+                      className="gap-1.5"
+                    >
+                      {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Create RFQ
+                    </Button>
+                  )}
+                </div>
               </div>
-
-	              {/* Action Buttons - All grouped together */}
-		              <div className="flex flex-wrap items-center gap-2 mt-6">
-		                {/* Primary: Advance */}
-		                {nextStage && (
-		                  <Button
-                    onClick={async () => {
-                      if (!nextStage) return
-                      await executeTransition(nextStage.value as POStageStatus)
-                    }}
-                    disabled={transitioning || (order ? activeViewStage !== order.status : false)}
-                    className="gap-2"
-                  >
-                    {order?.status === 'RFQ' ? 'Issue PO' : `Advance to ${nextStage.label}`}
-                    <ChevronRight className="h-4 w-4" />
-		                  </Button>
-		                )}
-
-		                {order?.status === 'WAREHOUSE' && !isReadOnly && (
-		                  <Button
-		                    type="button"
-		                    onClick={() => void handleReceiveInventory()}
-		                    disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
-		                    className="gap-2"
-		                  >
-		                    {receivingInventory && <Loader2 className="h-4 w-4 animate-spin" />}
-		                    Receive Inventory
-		                  </Button>
-		                )}
-
-	                {isCreate && (
-	                  <Button
-	                    onClick={() => void handleCreateRfq()}
-                    disabled={creating}
-                    className="gap-2"
-                  >
-                    {creating && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Create RFQ
-                  </Button>
-                )}
-	              </div>
 
             </div>
 	          )}
@@ -3294,93 +3296,76 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 </div>
 
-                {/* Sub-tabs */}
-                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('details')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'details'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Details
-                    {cargoSubTabIssues.details && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-	                  <button
-	                    type="button"
-	                    onClick={() => setCargoSubTab('attributes')}
-	                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-	                      cargoSubTab === 'attributes'
-	                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-	                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-	                    }`}
-	                  >
-	                    <Package2 className="h-4 w-4" />
-	                    Attributes
-	                    {cargoSubTabIssues.attributes && (
-	                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-	                    )}
-	                  </button>
-	                </div>
-
-                {/* Details Sub-tab */}
-                {cargoSubTab === 'details' && (
+                {/* Cargo Lines Table */}
                   <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full table-fixed text-sm">
+                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units/Ctn
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Cartons
                           </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            HS Code
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Country
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Carton Size ({lengthUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Net ({weightUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Gross ({weightUnit})
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Material
+                          </th>
                           {canEditDispatchAllocation && (
-                            <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                               Ship Now
                             </th>
                           )}
-	                          {activeViewStage === 'ISSUED' && (
-	                            <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
-	                              PI #
-	                            </th>
-	                          )}
-	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-	                            <>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                                Recvd
-	                              </th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
-	                                Delta
-	                              </th>
-	                            </>
-	                          )}
-	                          {canEdit && <th className="w-[70px]"></th>}
-	                        </tr>
-	                      </thead>
+                          {activeViewStage === 'ISSUED' && (
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              PI #
+                            </th>
+                          )}
+                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+                            <>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Recvd
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Delta
+                              </th>
+                            </>
+                          )}
+                          {canEdit && <th className="w-[60px]"></th>}
+                        </tr>
+                      </thead>
 	                      <tbody>
 	                        {flowLines.length === 0 ? (
 	                          <tr>
 	                            <td
 	                              colSpan={
-	                                5 +
+	                                11 +
 	                                (canEditDispatchAllocation ? 1 : 0) +
 	                                (activeViewStage === 'ISSUED' ? 1 : 0) +
 	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
@@ -3392,13 +3377,31 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </td>
                           </tr>
                         ) : (
-                          flowLines.map(line => (
+                          flowLines.map(line => {
+                            const canEditAttributes =
+                              !isReadOnly &&
+                              order.status === activeViewStage &&
+                              (order.status === 'RFQ' || order.status === 'ISSUED')
+                            const issuePrefix = `cargo.lines.${line.id}`
+                            const issue = (suffix: string): string | null => {
+                              const key = `${issuePrefix}.${suffix}`
+                              return gateIssues ? gateIssues[key] ?? null : null
+                            }
+                            const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
+                            const cartonTriplet = resolveDimensionTripletCm({
+                              side1Cm: line.cartonSide1Cm ?? null,
+                              side2Cm: line.cartonSide2Cm ?? null,
+                              side3Cm: line.cartonSide3Cm ?? null,
+                              legacy: line.cartonDimensionsCm ?? null,
+                            })
+
+                            return (
                             <tr
                               key={line.id}
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-1">
                                   {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
                                     <span className="text-xs font-semibold text-rose-600">!</span>
                                   )}
@@ -3407,7 +3410,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
                                 <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
                                   {line.lotRef ? line.lotRef : '—'}
                                 </span>
@@ -3464,12 +3467,114 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   line.unitsPerCarton.toLocaleString()
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
                                 {line.quantity.toLocaleString()}
+                              </td>
+                              {/* Attribute columns */}
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.commodityCode ?? ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
+                                    }}
+                                    className={cn('h-7 w-24 px-1 py-0 text-xs', issue('commodityCode') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.commodityCode ?? '—'}</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <span className={cn('text-xs', issue('countryOfOrigin') ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300')}>
+                                  {supplierCountry ?? '—'}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                {canEditAttributes ? (
+                                  <div className="flex gap-0.5">
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
+                                      defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="1"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
+                                      defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="2"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
+                                      defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
+                                      data-carton-side-line={line.id} data-carton-side-axis="3"
+                                      onBlur={() => maybePatchCartonDimensions(line.id)}
+                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">
+                                    {cartonTriplet
+                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
+                                      : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                {canEditAttributes ? (
+                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                    defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) { void patchOrderLine(line.id, { netWeightKg: null }); return }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Net weight must be a positive number'); return }
+                                      void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                    }}
+                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('netWeightKg') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                {canEditAttributes ? (
+                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                    defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      if (!trimmed) { void patchOrderLine(line.id, { cartonWeightKg: null }); return }
+                                      const parsed = Number(trimmed)
+                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Gross weight must be a positive number'); return }
+                                      void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
+                                    }}
+                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('cartonWeightKg') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
+                                {canEditAttributes ? (
+                                  <Input
+                                    defaultValue={line.material ?? ''}
+                                    onBlur={e => {
+                                      const trimmed = e.target.value.trim()
+                                      void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
+                                    }}
+                                    className={cn('h-7 w-20 px-1 py-0 text-xs', issue('material') && 'border-rose-500')}
+                                  />
+                                ) : (
+                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.material ?? '—'}</span>
+                                )}
                               </td>
                               {canEditDispatchAllocation && (
                                 <td
-                                  className="px-3 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
+                                  className="px-2 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
                                   data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
                                 >
                                   {(() => {
@@ -3640,7 +3745,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </td>
                               )}
                             </tr>
-                          ))
+                          )}
+                          )
                         )}
                         {/* Inline Add Row */}
                         {canEdit && (
@@ -3718,9 +3824,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
                               })()}
                             </td>
-                            {canEditDispatchAllocation && <td className="px-3 py-2">—</td>}
-                            {activeViewStage === 'ISSUED' && <td className="px-3 py-2">—</td>}
-                            <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                            {canEditDispatchAllocation && <td className="px-2 py-2">—</td>}
+                            {activeViewStage === 'ISSUED' && <td className="px-2 py-2">—</td>}
+                            <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                             <td className="px-2 py-2 whitespace-nowrap text-right">
                               <Button
                                 type="button"
@@ -3747,343 +3859,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       </tbody>
                     </table>
                   </div>
-                )}
-                {/* Attributes Sub-tab */}
-                {cargoSubTab === 'attributes' && (
-                  <div className="space-y-3">
-                    {flowLines.length === 0 ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                      </div>
-                    ) : (
-                      flowLines.map(line => {
-                        const canEditAttributes =
-                          !isReadOnly &&
-                          order.status === activeViewStage &&
-                          (order.status === 'RFQ' || order.status === 'ISSUED')
-
-                        const issuePrefix = `cargo.lines.${line.id}`
-                        const issue = (suffix: string): string | null => {
-                          const key = `${issuePrefix}.${suffix}`
-                          return gateIssues ? gateIssues[key] ?? null : null
-                        }
-
-                        const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
-
-                        const cartonTriplet = resolveDimensionTripletCm({
-                          side1Cm: line.cartonSide1Cm ?? null,
-                          side2Cm: line.cartonSide2Cm ?? null,
-                          side3Cm: line.cartonSide3Cm ?? null,
-                          legacy: line.cartonDimensionsCm ?? null,
-                        })
-
-                        return (
-                          <div
-                            key={line.id}
-                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                  <span className="text-xs font-semibold text-rose-600">!</span>
-                                )}
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                  {line.skuCode}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Commodity Code
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      defaultValue={line.commodityCode ?? ''}
-                                      data-gate-key={`${issuePrefix}.commodityCode`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, {
-                                          commodityCode: trimmed.length > 0 ? trimmed : null,
-                                        })
-                                      }}
-                                      className={cn(
-                                        'h-8 px-2 py-0 text-xs',
-                                        issue('commodityCode') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('commodityCode') && (
-                                      <p className="text-xs text-rose-600">{issue('commodityCode')}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                                    data-gate-key={`${issuePrefix}.commodityCode`}
-                                  >
-                                    {line.commodityCode ? line.commodityCode : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Country
-                                </p>
-                                {(() => {
-                                  const countryIssue = issue('countryOfOrigin')
-                                  return (
-                                    <>
-                                      <p
-                                        className={cn(
-                                          'text-sm font-medium',
-                                          countryIssue ? 'text-rose-600' : 'text-slate-900 dark:text-slate-100'
-                                        )}
-                                      >
-                                        {supplierCountry ? supplierCountry : '—'}
-                                      </p>
-                                      {countryIssue && <p className="text-xs text-rose-600">{countryIssue}</p>}
-                                    </>
-                                  )
-                                })()}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Units/Ctn
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={String(line.unitsPerCarton)}
-                                      data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) return
-                                        const parsed = Number.parseInt(trimmed, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) {
-                                          toast.error('Units per carton must be a positive integer')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('unitsPerCarton') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('unitsPerCarton') && (
-                                      <p className="text-xs text-rose-600">{issue('unitsPerCarton')}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                  >
-                                    {line.unitsPerCarton.toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Carton Size ({lengthUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <div
-                                      className="flex gap-1 justify-start"
-                                      data-gate-key={`${issuePrefix}.cartonDimensions`}
-                                    >
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="L"
-                                        defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="1"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="W"
-                                        defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="2"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="H"
-                                        defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                        data-carton-side-line={line.id}
-                                        data-carton-side-axis="3"
-                                        onBlur={() => maybePatchCartonDimensions(line.id)}
-                                        className={cn(
-                                          'h-7 w-14 px-1 py-0 text-xs text-center',
-                                          cartonDimsIssue && 'border-rose-500 focus-visible:ring-rose-500'
-                                        )}
-                                      />
-                                    </div>
-                                    {cartonDimsIssue && <p className="text-xs text-rose-600">{cartonDimsIssue}</p>}
-                                  </>
-                                ) : (
-                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                    {cartonTriplet
-                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}x${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
-                                      : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Net ({weightUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.netWeightKg`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { netWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Net weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('netWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('netWeightKg') && <p className="text-xs text-rose-600">{issue('netWeightKg')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.netWeightKg`}
-                                  >
-                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Gross ({weightUnit})
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min="0"
-                                      step="0.001"
-                                      defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                      data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) {
-                                          void patchOrderLine(line.id, { cartonWeightKg: null })
-                                          return
-                                        }
-                                        const parsed = Number(trimmed)
-                                        if (!Number.isFinite(parsed) || parsed <= 0) {
-                                          toast.error('Gross weight must be a positive number')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                      }}
-                                      className={cn(
-                                        'h-8 w-full px-2 py-0 text-xs text-right tabular-nums',
-                                        issue('cartonWeightKg') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('cartonWeightKg') && <p className="text-xs text-rose-600">{issue('cartonWeightKg')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100 text-right tabular-nums"
-                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                  >
-                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                  Material
-                                </p>
-                                {canEditAttributes ? (
-                                  <>
-                                    <Input
-                                      defaultValue={line.material ?? ''}
-                                      data-gate-key={`${issuePrefix}.material`}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
-                                      }}
-                                      className={cn(
-                                        'h-8 px-2 py-0 text-xs',
-                                        issue('material') && 'border-rose-500 focus-visible:ring-rose-500'
-                                      )}
-                                    />
-                                    {issue('material') && <p className="text-xs text-rose-600">{issue('material')}</p>}
-                                  </>
-                                ) : (
-                                  <p
-                                    className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                                    data-gate-key={`${issuePrefix}.material`}
-                                  >
-                                    {line.material ? line.material : '—'}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-	                    )}
-	                  </div>
-	                )}
 	              </div>
 	            ) : (
 	              <div>
@@ -4127,83 +3902,66 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 </div>
 
-                {/* Sub-tabs */}
-                <div className="flex border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('details')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'details'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Details
-                    {cargoSubTabIssues.details && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCargoSubTab('attributes')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                      cargoSubTab === 'attributes'
-                        ? 'text-cyan-700 dark:text-cyan-400 border-b-2 border-cyan-600 bg-white dark:bg-slate-800 -mb-px'
-                        : 'text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <Package2 className="h-4 w-4" />
-                    Attributes
-                    {cargoSubTabIssues.attributes && (
-                      <span className="ml-1 text-xs font-semibold text-rose-600">!</span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Details Sub-tab */}
-                {cargoSubTab === 'details' && (
+                {/* Cargo Lines Table */}
                   <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full table-fixed text-sm">
+                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[220px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[110px]">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
                             Units/Ctn
                           </th>
-	                          <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                            Cartons
-	                          </th>
-	                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-	                            <>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
-	                                Recvd
-	                              </th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[90px]">
-	                                Delta
-	                              </th>
-	                            </>
-	                          )}
-	                          {canEdit && <th className="w-[70px]"></th>}
-	                        </tr>
-	                      </thead>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Cartons
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            HS Code
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Country
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Carton Size ({lengthUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Net ({weightUnit})
+                          </th>
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Gross ({weightUnit})
+                          </th>
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            Material
+                          </th>
+                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
+                            <>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Recvd
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                Delta
+                              </th>
+                            </>
+                          )}
+                          {canEdit && <th className="w-[60px]"></th>}
+                        </tr>
+                      </thead>
 	                      <tbody>
 	                        {draftLines.length === 0 ? (
 	                          <tr>
 	                            <td
 	                              colSpan={
-	                                5 +
+	                                11 +
 	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
 	                                (canEdit ? 1 : 0)
 	                              }
@@ -4213,13 +3971,21 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                            </td>
 	                          </tr>
                         ) : (
-                          draftLines.map(line => (
+                          draftLines.map(line => {
+                            const issuePrefix = `cargo.lines.${line.id}`
+                            const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
+                              setDraftLines(prev =>
+                                prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
+                              )
+                            }
+
+                            return (
                             <tr
                               key={line.id}
                               className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                             >
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                <div className="flex min-w-0 items-center gap-1">
                                   {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
                                     <span className="text-xs font-semibold text-rose-600">!</span>
                                   )}
@@ -4228,7 +3994,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
                                 <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
                                   {line.lotRef ? line.lotRef : '—'}
                                 </span>
@@ -4289,9 +4055,98 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   />
                                 </div>
                               </td>
-	                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+	                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
 	                                {line.quantity.toLocaleString()}
 	                              </td>
+                              {/* Attribute columns */}
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
+                                <Input
+                                  value={line.commodityCode ?? ''}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
+                                  }}
+                                  className="h-7 w-24 px-1 py-0 text-xs"
+                                />
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
+                                <span className="text-xs text-slate-700 dark:text-slate-300">{supplierCountry ?? '—'}</span>
+                              </td>
+                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
+                                <div className="flex gap-0.5">
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
+                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: next, side2Cm: current.cartonSide2Cm ?? null, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide1Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
+                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: next, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide2Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
+                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
+                                    onChange={e => {
+                                      const parsed = Number(e.target.value)
+                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
+                                      updateLine(current => {
+                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: current.cartonSide2Cm ?? null, side3Cm: next, legacy: current.cartonDimensionsCm ?? null })
+                                        return { ...current, cartonSide3Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
+                                      })
+                                    }}
+                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
+                                <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({ ...current, netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
+                                  }}
+                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
+                                <Input type="number" inputMode="decimal" min="0" step="0.001"
+                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
+                                  onChange={e => {
+                                    const parsed = Number(e.target.value)
+                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                    updateLine(current => ({ ...current, cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
+                                  }}
+                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
+                                <Input
+                                  value={line.material ?? ''}
+                                  onChange={e => {
+                                    const value = e.target.value
+                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
+                                  }}
+                                  className="h-7 w-20 px-1 py-0 text-xs"
+                                />
+                              </td>
 	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
 	                                (() => {
 	                                  const received = line.quantityReceived ?? null
@@ -4350,7 +4205,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </td>
                               )}
                             </tr>
-                          ))
+                          )}
+                          )
                         )}
                         {/* Inline Add Row for Create Mode */}
                         <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
@@ -4425,7 +4281,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
                             })()}
                           </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                          <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                           <td className="px-2 py-2 whitespace-nowrap text-right">
                             <Button
                               type="button"
@@ -4451,240 +4313,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       </tbody>
                     </table>
                   </div>
-                )}
-                {/* Attributes Sub-tab */}
-                {cargoSubTab === 'attributes' && (
-                  <div className="space-y-3">
-                    {draftLines.length === 0 ? (
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                        <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
-                      </div>
-                    ) : (
-                      draftLines.map(line => {
-                        const issuePrefix = `cargo.lines.${line.id}`
-
-                        const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
-                          setDraftLines(prev =>
-                            prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
-                          )
-                        }
-
-                        return (
-                          <div
-                            key={line.id}
-                            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/20 p-4"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                  <span className="text-xs font-semibold text-rose-600">!</span>
-                                )}
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                  {line.skuCode}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commodity Code</p>
-                                <Input
-                                  value={line.commodityCode ?? ''}
-                                  data-gate-key={`${issuePrefix}.commodityCode`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
-                                  }}
-                                  className="h-8 px-2 py-0 text-xs"
-                                />
-                              </div>
-
-                              <div className="space-y-1" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Country</p>
-                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {supplierCountry ? supplierCountry : '—'}
-                                </p>
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Units/Ctn</p>
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min="1"
-                                  step="1"
-                                  value={String(line.unitsPerCarton)}
-                                  data-gate-key={`${issuePrefix}.unitsPerCarton`}
-                                  onChange={e => {
-                                    const parsed = Number.parseInt(e.target.value, 10)
-                                    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-                                    updateLine(current => ({ ...current, unitsPerCarton: next }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Carton Size ({lengthUnit})</p>
-                                <div className="flex gap-1 justify-start" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="L"
-                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: next,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide1Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="W"
-                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: next,
-                                          side3Cm: current.cartonSide3Cm ?? null,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide2Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="H"
-                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({
-                                          side1Cm: current.cartonSide1Cm ?? null,
-                                          side2Cm: current.cartonSide2Cm ?? null,
-                                          side3Cm: next,
-                                          legacy: current.cartonDimensionsCm ?? null,
-                                        })
-                                        return {
-                                          ...current,
-                                          cartonSide3Cm: next,
-                                          cartonDimensionsCm: triplet
-                                            ? formatDimensionTripletCm(triplet)
-                                            : current.cartonDimensionsCm ?? null,
-                                        }
-                                      })
-                                    }}
-                                    className="h-7 w-14 px-1 py-0 text-xs text-center"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net ({weightUnit})</p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                  data-gate-key={`${issuePrefix}.netWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({
-                                      ...current,
-                                      netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                    }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gross ({weightUnit})</p>
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.001"
-                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                  data-gate-key={`${issuePrefix}.cartonWeightKg`}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({
-                                      ...current,
-                                      cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem),
-                                    }))
-                                  }}
-                                  className="h-8 w-full px-2 py-0 text-xs text-right tabular-nums"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Material</p>
-                                <Input
-                                  value={line.material ?? ''}
-                                  data-gate-key={`${issuePrefix}.material`}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
-                                  }}
-                                  className="h-8 px-2 py-0 text-xs"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                )}
               </div>
             )}
               </>
             )}
+
 
             {activeBottomTab === 'documents' && (
               <>
@@ -4741,44 +4374,52 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       }
 
                       return (
-                        <div className="space-y-2">
-                          {items.map(item => {
-                            const meta = item.meta
-                            const generatedSummary = meta.generatedAt
-                              ? `Generated ${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
-                              : 'Not generated yet'
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                              >
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-foreground">{item.label}</p>
-                                  <p className="text-xs text-muted-foreground">{generatedSummary}</p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {meta.outOfDate && (
-                                    <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
-                                      Out of date
-                                    </Badge>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={item.onDownload}
-                                    disabled={!item.canDownload}
-                                    className="gap-2"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    Download
-                                  </Button>
-                                </div>
-                              </div>
-                            )
-                          })}
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Document</th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Generated</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map(item => {
+                                const meta = item.meta
+                                const generatedSummary = meta.generatedAt
+                                  ? `${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
+                                  : '—'
+                                return (
+                                  <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                    <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        {item.label}
+                                        {meta.outOfDate && (
+                                          <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                            Out of date
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{generatedSummary}</td>
+                                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={item.onDownload}
+                                        disabled={!item.canDownload}
+                                        className="h-7 gap-1.5 text-xs"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Download
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )
                     })()}
@@ -4883,105 +4524,182 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   }
 
                   return (
-                    <div className="space-y-3">
-                      {rows.map(row => {
-                        const key = `${stage}::${row.id}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-                        const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-                        const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
-                        const icon = existing ? (
-                          <Check className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-                        ) : row.required ? (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-amber-600" />
-                        ) : (
-                          <XCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                        )
-
-                        return (
-                          <div
-                            key={key}
-                            data-gate-key={gateKey ?? undefined}
-                            className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 dark:bg-slate-700 px-3 py-2.5"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              {icon}
-                              <div className="min-w-0">
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {row.label}
-                                </span>
-                                {existing ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setInlinePreviewDocument(existing)}
-                                    className="block truncate text-xs text-primary hover:underline"
-                                    title={existing.fileName}
-                                  >
-                                    {existing.fileName}
-                                  </button>
-                                ) : (
-                                  <span className="block text-xs text-muted-foreground">
-                                    Not uploaded yet
-                                  </span>
-                                )}
-                                {gateMessage && (
-                                  <p className="mt-1 text-xs text-rose-600">{gateMessage}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              {existing && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="h-8 w-8 p-0"
-                                  title="Preview"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {existing && (
-                                <Button
-                                  asChild
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  title="Open in new tab"
-                                >
-                                  <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              )}
-                              <label
-                                className={`inline-flex items-center gap-2 rounded-md border bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-                                  canUpload
-                                    ? 'hover:bg-slate-100 cursor-pointer'
-                                    : 'opacity-50 cursor-not-allowed'
-                                }`}
-                              >
-                                <Upload className="h-3.5 w-3.5" />
-                                {existing ? 'Replace' : 'Upload'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  disabled={isUploading || !canUpload}
-                                  onChange={e => void handleDocumentUpload(e, stage, row.id)}
-                                />
-                                {isUploading && (
-                                  <span className="text-xs text-muted-foreground ml-1">…</span>
-                                )}
-                              </label>
-                            </div>
+                    <div>
+                      {stage === 'OCEAN' && (
+                        <div className="mb-4" data-gate-key="documents.transactionCertNumber">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              TC Number
+                            </p>
+                            {canUpload ? (
+                              <Input
+                                data-gate-key="documents.transactionCertNumber"
+                                value={
+                                  getStageField('transactionCertNumber') ??
+                                  (typeof order.stageData.warehouse.transactionCertNumber === 'string'
+                                    ? order.stageData.warehouse.transactionCertNumber
+                                    : '')
+                                }
+                                onChange={e => setStageField('transactionCertNumber', e.target.value)}
+                                placeholder="Enter TC number"
+                                className={
+                                  gateIssues?.['documents.transactionCertNumber']
+                                    ? 'border-rose-500 focus-visible:ring-rose-500'
+                                    : undefined
+                                }
+                              />
+                            ) : (
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(order.stageData.warehouse.transactionCertNumber)}
+                              </p>
+                            )}
+                            {gateIssues?.['documents.transactionCertNumber'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="documents.transactionCertNumber">
+                                {gateIssues['documents.transactionCertNumber']}
+                              </p>
+                            )}
                           </div>
-                        )
-                      })}
+                        </div>
+                      )}
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="w-[28px] px-2 py-2"></th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">Document</th>
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">File</th>
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[120px]"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(row => {
+                              const key = `${stage}::${row.id}`
+                              const existing = row.doc
+                              const isUploading = Boolean(uploadingDoc[key])
+                              const uploadDisabled = isUploading || !canUpload
+                              const uploadProgress = Object.prototype.hasOwnProperty.call(uploadingDocProgress, key)
+                                ? uploadingDocProgress[key]
+                                : null
+                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
+
+                              return (
+                                <tr
+                                  key={key}
+                                  data-gate-key={gateKey ?? undefined}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                >
+                                  <td className="px-2 py-2 text-center">
+                                    {existing ? (
+                                      <Check className="h-4 w-4 text-emerald-600 inline-block" />
+                                    ) : row.required ? (
+                                      <XCircle className="h-4 w-4 text-amber-600 inline-block" />
+                                    ) : (
+                                      <XCircle className="h-4 w-4 text-slate-400 inline-block" />
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 font-medium text-foreground whitespace-nowrap">
+                                    {row.label}
+                                    {gateMessage && (
+                                      <p className="text-xs text-rose-600 font-normal">{gateMessage}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 whitespace-nowrap max-w-[240px]">
+                                    {existing ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setInlinePreviewDocument(existing)}
+                                        className="text-xs text-primary hover:underline truncate block max-w-full"
+                                        title={existing.fileName}
+                                      >
+                                        {existing.fileName}
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Not uploaded yet</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      {existing && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => setPreviewDocument(existing)}
+                                          className="h-7 w-7 p-0"
+                                          title="Preview"
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                      {existing && (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0"
+                                          title="Open in new tab"
+                                        >
+                                          <a href={existing.viewUrl} target="_blank" rel="noreferrer">
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                          </a>
+                                        </Button>
+                                      )}
+                                      <label
+                                        className={`inline-flex flex-col items-start rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                          isUploading
+                                            ? 'opacity-70 cursor-wait'
+                                            : canUpload
+                                              ? 'hover:bg-slate-100 cursor-pointer'
+                                              : 'opacity-50 cursor-not-allowed'
+                                        }`}
+                                        aria-busy={isUploading}
+                                        aria-disabled={uploadDisabled}
+                                      >
+                                        <span className="inline-flex items-center gap-1.5">
+                                          {isUploading ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Upload className="h-3 w-3" />
+                                          )}
+                                          {isUploading
+                                            ? uploadProgress !== null
+                                              ? `Uploading ${uploadProgress}%`
+                                              : 'Uploading…'
+                                            : existing
+                                              ? 'Replace'
+                                              : 'Upload'}
+                                        </span>
+                                        {isUploading && (
+                                          <span className="mt-1 h-1 w-full rounded bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
+                                            {uploadProgress !== null ? (
+                                              <span
+                                                className="block h-full bg-emerald-500 transition-[width] duration-300"
+                                                style={{ width: `${uploadProgress}%` }}
+                                              />
+                                            ) : (
+                                              <span className="block h-full w-1/3 bg-emerald-500 animate-pulse" />
+                                            )}
+                                          </span>
+                                        )}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          disabled={uploadDisabled}
+                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
+                                        />
+                                      </label>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
                       {inlinePreviewDocument && inlineStageMeta && (
-                        <div className="rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
+                        <div className="mt-4 rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
                           <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-3">
@@ -5075,169 +4793,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               )}
                 </div>
 
-                {false && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-auto text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Stage</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Document Type</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">File</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Uploaded</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Status</th>
-                      <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allRows: Array<{
-                        stage: string
-                        stageLabel: string
-                        documentType: string
-                        label: string
-                        doc: PurchaseOrderDocumentSummary | undefined
-                      }> = []
-
-                      documentStages.forEach(stage => {
-                        const stageDocs = documents.filter(doc => doc.stage === stage)
-                        const requiredDocs =
-                          stage === 'SHIPPED' ? [] : getStageDocuments(stage, order?.lines ?? [])
-                        const requiredIds = new Set(requiredDocs.map(doc => doc.id))
-                        const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                        const otherDocs = stageDocs.filter(
-                          doc => !requiredIds.has(doc.documentType)
-                        )
-                        const meta = DOCUMENT_STAGE_META[stage]
-
-                        requiredDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.id,
-                            label: doc.label,
-                            doc: docsByType.get(doc.id),
-                          })
-                        })
-                        otherDocs.forEach(doc => {
-                          allRows.push({
-                            stage,
-                            stageLabel: meta.label,
-                            documentType: doc.documentType,
-                            label: getDocumentLabel(stage, doc.documentType),
-                            doc,
-                          })
-                        })
-                      })
-
-                      if (allRows.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                              No documents configured for this order.
-                            </td>
-                          </tr>
-                        )
-                      }
-
-                      return allRows.map(row => {
-                        const key = `${row.stage}::${row.documentType}`
-                        const existing = row.doc
-                        const isUploading = Boolean(uploadingDoc[key])
-
-                        return (
-                          <tr key={key} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {row.stageLabel}
-                            </td>
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                              {row.label}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap max-w-[200px]">
-                              {existing ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewDocument(existing)}
-                                  className="text-primary hover:underline truncate block max-w-full"
-                                  title={existing.fileName}
-                                >
-                                  {existing.fileName}
-                                </button>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {existing ? formatDateOnly(existing.uploadedAt) : '—'}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  existing
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : ''
-                                }
-                              >
-                                {existing ? 'UPLOADED' : 'PENDING'}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {existing && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setPreviewDocument(existing)}
-                                    className="h-7 w-7 p-0"
-                                    title="Preview"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                                {existing && (
-                                  <Button
-                                    asChild
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0"
-                                    title="Open in new tab"
-                                  >
-                                    <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                    </a>
-                                  </Button>
-                                )}
-                                {(row.stage !== 'SHIPPED' || existing) && (
-                                  <label
-                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted cursor-pointer"
-                                    title={existing ? 'Replace' : 'Upload'}
-                                  >
-                                    <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <input
-                                      type="file"
-                                      className="hidden"
-                                      disabled={isUploading}
-                                      onChange={e =>
-                                        void handleDocumentUpload(
-                                          e,
-                                          row.stage as PurchaseOrderDocumentStage,
-                                          row.documentType
-                                        )
-                                      }
-                                    />
-                                  </label>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            )}
               </>
             )}
 
@@ -5515,21 +5070,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 )}
 
-	                {!isCreate && order && (showCargoCostsStage || showWarehouseCostsStage) && (
-	                  <div className="p-6 space-y-4">
+                {!isCreate && order && (showCargoCostsStage || showWarehouseCostsStage) && (
+                  <div className="p-6 space-y-6">
+                    {/* ===== TRANSIT (OCEAN) STAGE: FREIGHT COSTS TABLE ===== */}
                     {showCargoCostsStage && (
                       <div className="space-y-3" data-gate-key="costs.forwarding">
                         <div className="flex items-center justify-between">
                           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            Freight Cost
+                            Freight Costs
                           </h4>
                           {canEditFreightCost && !freightCostEditing && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={startEditFreightCost}
-                            >
+                            <Button type="button" size="sm" variant="outline" onClick={startEditFreightCost}>
                               Edit
                             </Button>
                           )}
@@ -5541,623 +5092,315 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </p>
                         )}
 
-                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                          <div className="flex flex-wrap items-end justify-between gap-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Amount ({tenantCurrency})
-                              </p>
-                              {freightCostEditing ? (
-                                <Input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  step="0.01"
-                                  value={freightCostDraft}
-                                  onChange={e => setFreightCostDraft(e.target.value)}
-                                  disabled={!canEditFreightCost || freightCostSaving}
-                                  className="h-9 w-[160px] text-right tabular-nums"
-                                />
-                              ) : (
-                                <p className="text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                                  {forwardingSubtotal > 0
-                                    ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}`
-                                    : '—'}
-                                </p>
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">Qty</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Rate</th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {!freightCostEditing && forwardingCosts.length > 0 && forwardingCosts.map(row => (
+                                <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                  <td className="px-3 py-2 font-medium text-foreground">
+                                    {row.costName}
+                                    {row.notes && (
+                                      <span className="ml-2 text-xs text-muted-foreground">({row.notes})</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                    {row.quantity.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                    {tenantCurrency}{' '}
+                                    {row.unitRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
+                                    {tenantCurrency}{' '}
+                                    {Number(row.totalCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                              {!freightCostEditing && forwardingCosts.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="px-3 py-3 text-sm text-muted-foreground">
+                                    No freight costs recorded.
+                                  </td>
+                                </tr>
                               )}
-                            </div>
-
-                            {freightCostEditing && (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={cancelEditFreightCost}
-                                  disabled={freightCostSaving}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => void saveFreightCost()}
-                                  disabled={!canEditFreightCost || freightCostSaving}
-                                  className="gap-2"
-                                >
-                                  {freightCostSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                                  Save
-                                </Button>
-                              </div>
-                            )}
-                          </div>
+                              {freightCostEditing && (
+                                <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                  <td colSpan={3} className="px-3 py-2 font-medium text-foreground">
+                                    Freight Total
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        value={freightCostDraft}
+                                        onChange={e => setFreightCostDraft(e.target.value)}
+                                        disabled={!canEditFreightCost || freightCostSaving}
+                                        className="h-8 w-[140px] text-sm text-right tabular-nums"
+                                        placeholder="0.00"
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                        onClick={cancelEditFreightCost}
+                                        disabled={freightCostSaving}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                        onClick={() => void saveFreightCost()}
+                                        disabled={!canEditFreightCost || freightCostSaving}
+                                      >
+                                        {freightCostSaving ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <Check className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                                <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                  Freight Subtotal
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                  {forwardingSubtotal > 0
+                                    ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : '—'}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
                         </div>
                       </div>
                     )}
 
+                    {/* ===== WAREHOUSE STAGE: INBOUND COSTS TABLE ===== */}
                     {showWarehouseCostsStage && (
-                      <div className="space-y-4">
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  Inbound
-                                </h4>
-                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                                  {costLedgerLoading
-                                    ? 'Loading…'
-                                    : (inboundSubtotal + manualInboundSubtotal) > 0
-                                      ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}`
-                                      : '—'}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                {warehouseCostEditing !== 'inbound' && !isCrossTenantReadOnly && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={() => {
-                                      setInboundBreakdownOpen(true)
-                                      setWarehouseCostEditing('inbound')
-                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                    }}
-                                    disabled={
-                                      warehouseCostSaving ||
-                                      !order.warehouseCode ||
-                                      !order.warehouseName
-                                    }
-                                  >
-                                    + Add Cost
-                                  </Button>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 px-2 text-xs"
-                                  onClick={() => setInboundBreakdownOpen(prev => !prev)}
-                                >
-                                  {inboundBreakdownOpen ? 'Hide' : 'Breakdown'}
-                                </Button>
-                              </div>
-                            </div>
-
-                            {inboundBreakdownOpen ? (
-                              costLedgerLoading && manualWarehouseCostsLoading ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">Loading inbound costs…</p>
-                                </div>
-                              ) : (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Cost
-                                        </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
-                                          Total
-                                        </th>
-                                        <th className="w-16" />
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {inboundCostRows.map(row => (
-                                        <tr
-                                          key={row.costName}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                                        >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {row.costName}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {tenantCurrency}{' '}
-                                            {row.totalCost.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                          <td />
-                                        </tr>
-                                      ))}
-                                      {manualInboundCosts.map(entry => (
-                                        <tr
-                                          key={entry.id}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                                        >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {entry.costName}
-                                            {entry.notes && (
-                                              <span className="ml-2 text-xs text-muted-foreground">
-                                                ({entry.notes})
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {entry.currency}{' '}
-                                            {entry.amount.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                          <td className="px-1 py-2 text-center">
-                                            {!isCrossTenantReadOnly && (
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                                onClick={() => void deleteWarehouseCost(entry.id)}
-                                              >
-                                                <X className="h-3 w-3" />
-                                              </Button>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                      {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && warehouseCostEditing !== 'inbound' && (
-                                        <tr>
-                                          <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
-                                            No inbound costs recorded.
-                                          </td>
-                                        </tr>
-                                      )}
-                                      {warehouseCostEditing === 'inbound' && (
-                                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                                          <td className="px-3 py-2">
-                                            <div className="flex items-center gap-2">
-                                              <Input
-                                                value={warehouseCostDraft.costName}
-                                                onChange={e =>
-                                                  setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))
-                                                }
-                                                disabled={warehouseCostSaving}
-                                                placeholder="Cost name"
-                                                className="h-8 text-sm"
-                                              />
-                                              <Input
-                                                value={warehouseCostDraft.notes}
-                                                onChange={e =>
-                                                  setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))
-                                                }
-                                                disabled={warehouseCostSaving}
-                                                placeholder="Notes"
-                                                className="h-8 text-sm"
-                                              />
-                                            </div>
-                                          </td>
-                                          <td className="px-3 py-2">
-                                            <Input
-                                              type="number"
-                                              inputMode="decimal"
-                                              min="0"
-                                              step="0.01"
-                                              value={warehouseCostDraft.amount}
-                                              onChange={e =>
-                                                setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))
-                                              }
-                                              disabled={warehouseCostSaving}
-                                              placeholder="0.00"
-                                              className="h-8 text-sm text-right"
-                                            />
-                                          </td>
-                                          <td className="px-1 py-2">
-                                            <div className="flex items-center gap-1">
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                                                onClick={() => {
-                                                  setWarehouseCostEditing(null)
-                                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                                }}
-                                                disabled={warehouseCostSaving}
-                                              >
-                                                <X className="h-3 w-3" />
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-primary hover:text-primary"
-                                                onClick={() => void saveWarehouseCost('Inbound')}
-                                                disabled={
-                                                  warehouseCostSaving ||
-                                                  !warehouseCostDraft.costName.trim() ||
-                                                  !warehouseCostDraft.amount.trim()
-                                                }
-                                              >
-                                                {warehouseCostSaving ? (
-                                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                  <Check className="h-3 w-3" />
-                                                )}
-                                              </Button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )
-                            ) : null}
-                          </div>
-
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                  Storage
-                                </h4>
-                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                                  {costLedgerLoading
-                                    ? 'Loading…'
-                                    : (storageSubtotal + manualStorageSubtotal) > 0
-                                      ? `${tenantCurrency} ${(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}`
-                                      : '—'}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                {warehouseCostEditing !== 'storage' && !isCrossTenantReadOnly && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={() => {
-                                      setStorageBreakdownOpen(true)
-                                      setWarehouseCostEditing('storage')
-                                      setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                    }}
-                                    disabled={
-                                      warehouseCostSaving ||
-                                      !order.warehouseCode ||
-                                      !order.warehouseName
-                                    }
-                                  >
-                                    + Add Cost
-                                  </Button>
-                                )}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 px-2 text-xs"
-                                  onClick={() => setStorageBreakdownOpen(prev => !prev)}
-                                >
-                                  {storageBreakdownOpen ? 'Hide' : 'Breakdown'}
-                                </Button>
-                              </div>
-                            </div>
-
-                            {storageBreakdownOpen ? (
-                              costLedgerLoading && manualWarehouseCostsLoading ? (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                                  <p className="text-sm text-muted-foreground">Loading storage costs…</p>
-                                </div>
-                              ) : (
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                        <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                          Cost
-                                        </th>
-                                        <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
-                                          Total
-                                        </th>
-                                        <th className="w-16" />
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {storageCostRows.map(row => (
-                                        <tr
-                                          key={row.costName}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                                        >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {row.costName}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {tenantCurrency}{' '}
-                                            {row.totalCost.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                          <td />
-                                        </tr>
-                                      ))}
-                                      {manualStorageCosts.map(entry => (
-                                        <tr
-                                          key={entry.id}
-                                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                                        >
-                                          <td className="px-3 py-2 font-medium text-foreground">
-                                            {entry.costName}
-                                            {entry.notes && (
-                                              <span className="ml-2 text-xs text-muted-foreground">
-                                                ({entry.notes})
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                            {entry.currency}{' '}
-                                            {entry.amount.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                          </td>
-                                          <td className="px-1 py-2 text-center">
-                                            {!isCrossTenantReadOnly && (
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                                onClick={() => void deleteWarehouseCost(entry.id)}
-                                              >
-                                                <X className="h-3 w-3" />
-                                              </Button>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                      {storageCostRows.length === 0 && manualStorageCosts.length === 0 && warehouseCostEditing !== 'storage' && (
-                                        <tr>
-                                          <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
-                                            No storage costs recorded.
-                                          </td>
-                                        </tr>
-                                      )}
-                                      {warehouseCostEditing === 'storage' && (
-                                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                                          <td className="px-3 py-2">
-                                            <div className="flex items-center gap-2">
-                                              <Input
-                                                value={warehouseCostDraft.costName}
-                                                onChange={e =>
-                                                  setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))
-                                                }
-                                                disabled={warehouseCostSaving}
-                                                placeholder="Cost name"
-                                                className="h-8 text-sm"
-                                              />
-                                              <Input
-                                                value={warehouseCostDraft.notes}
-                                                onChange={e =>
-                                                  setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))
-                                                }
-                                                disabled={warehouseCostSaving}
-                                                placeholder="Notes"
-                                                className="h-8 text-sm"
-                                              />
-                                            </div>
-                                          </td>
-                                          <td className="px-3 py-2">
-                                            <Input
-                                              type="number"
-                                              inputMode="decimal"
-                                              min="0"
-                                              step="0.01"
-                                              value={warehouseCostDraft.amount}
-                                              onChange={e =>
-                                                setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))
-                                              }
-                                              disabled={warehouseCostSaving}
-                                              placeholder="0.00"
-                                              className="h-8 text-sm text-right"
-                                            />
-                                          </td>
-                                          <td className="px-1 py-2">
-                                            <div className="flex items-center gap-1">
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                                                onClick={() => {
-                                                  setWarehouseCostEditing(null)
-                                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
-                                                }}
-                                                disabled={warehouseCostSaving}
-                                              >
-                                                <X className="h-3 w-3" />
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 w-6 p-0 text-primary hover:text-primary"
-                                                onClick={() => void saveWarehouseCost('Storage')}
-                                                disabled={
-                                                  warehouseCostSaving ||
-                                                  !warehouseCostDraft.costName.trim() ||
-                                                  !warehouseCostDraft.amount.trim()
-                                                }
-                                              >
-                                                {warehouseCostSaving ? (
-                                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                  <Check className="h-3 w-3" />
-                                                )}
-                                              </Button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )
-                            ) : null}
-                          </div>
-                        </div>
-
-                    {/* Supplier Credit/Debit Section */}
-                    {showWarehouseCostsStage && (
-                      <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                      <div className="space-y-6">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
                             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                              Supplier Credit/Debit
+                              Warehouse Costs
                             </h4>
-                            <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                              {supplierAdjustmentLoading
-                                ? 'Loading…'
-                                : supplierAdjustment
-                                  ? `${supplierAdjustment.currency} ${supplierAdjustment.amount.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}`
-                                  : '—'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {!supplierAdjustmentEditing && !isCrossTenantReadOnly && (
+                            {!isReadOnly && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 className="h-8 px-2 text-xs"
                                 onClick={() => {
-                                  setSupplierAdjustmentOpen(true)
-                                  setSupplierAdjustmentEditing(true)
+                                  setWarehouseCostEditing('inbound')
+                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
                                 }}
-                                disabled={
-                                  supplierAdjustmentLoading ||
-                                  supplierAdjustmentSaving ||
-                                  !order.warehouseCode ||
-                                  !order.warehouseName
-                                }
+                                disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
                               >
-                                {supplierAdjustment ? 'Edit' : 'Add'}
+                                + Add Cost
                               </Button>
                             )}
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2 text-xs"
-                              onClick={() => setSupplierAdjustmentOpen(prev => !prev)}
-                              disabled={supplierAdjustmentLoading}
-                            >
-                              {supplierAdjustmentOpen ? 'Hide' : 'Details'}
-                            </Button>
                           </div>
-                        </div>
 
-                        {supplierAdjustmentOpen || supplierAdjustmentEditing ? (
-                          supplierAdjustmentLoading ? (
+                          {costLedgerLoading && manualWarehouseCostsLoading ? (
                             <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                              <p className="text-sm text-muted-foreground">Loading supplier adjustment…</p>
+                              <p className="text-sm text-muted-foreground">Loading costs…</p>
                             </div>
                           ) : (
                             <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
-                                      Type
-                                    </th>
-                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">
-                                      Amount
-                                    </th>
-                                    <th className="w-16" />
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">Notes</th>
+                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Amount</th>
+                                    <th className="w-12" />
                                   </tr>
                                 </thead>
                                 <tbody>
+                                  {inboundCostRows.map(row => (
+                                    <tr key={`inbound-ledger-${row.costName}`} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">{row.costName}</td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {tenantCurrency}{' '}
+                                        {row.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td />
+                                    </tr>
+                                  ))}
+                                  {manualInboundCosts.map(entry => (
+                                    <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">{entry.costName}</td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">{entry.notes ? entry.notes : '—'}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {entry.currency}{' '}
+                                        {entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-1 py-2 text-center">
+                                        {!isReadOnly && (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                            onClick={() => void deleteWarehouseCost(entry.id)}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
                                   {supplierAdjustment && !supplierAdjustmentEditing && (
                                     <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                                       <td className="px-3 py-2 font-medium text-foreground">
-                                        {supplierAdjustment.amount < 0 ? 'Credit Note' : 'Debit Note'}
-                                        {supplierAdjustment.notes && (
-                                          <span className="ml-2 text-xs text-muted-foreground">
-                                            ({supplierAdjustment.notes})
-                                          </span>
-                                        )}
+                                        {supplierAdjustment.amount < 0 ? 'Supplier Credit' : 'Supplier Debit'}
                                       </td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">{supplierAdjustment.notes ? supplierAdjustment.notes : '—'}</td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
                                         {supplierAdjustment.currency}{' '}
-                                        {supplierAdjustment.amount.toLocaleString(undefined, {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}
+                                        {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-1 py-2 text-center">
+                                        {!isReadOnly && (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setSupplierAdjustmentEditing(true)}
+                                            disabled={supplierAdjustmentLoading || supplierAdjustmentSaving}
+                                          >
+                                            <FileEdit className="h-3 w-3" />
+                                          </Button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {order.stageData.warehouse?.dutyAmount != null && order.stageData.warehouse.dutyAmount !== 0 && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                      <td className="px-3 py-2 font-medium text-foreground">Customs & Duty</td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                        {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
+                                        {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td />
                                     </tr>
                                   )}
-                                  {!supplierAdjustment && !supplierAdjustmentEditing && (
+                                  {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && !supplierAdjustment && warehouseCostEditing !== 'inbound' && !supplierAdjustmentEditing && (order.stageData.warehouse?.dutyAmount == null || order.stageData.warehouse.dutyAmount === 0) && (
                                     <tr>
-                                      <td colSpan={3} className="px-3 py-3 text-sm text-muted-foreground">
-                                        No supplier adjustment recorded.
+                                      <td colSpan={4} className="px-3 py-3 text-sm text-muted-foreground">
+                                        No warehouse costs recorded.
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {warehouseCostEditing === 'inbound' && (
+                                    <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          value={warehouseCostDraft.costName}
+                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))}
+                                          disabled={warehouseCostSaving}
+                                          placeholder="Cost name"
+                                          className="h-8 text-sm"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          value={warehouseCostDraft.notes}
+                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))}
+                                          disabled={warehouseCostSaving}
+                                          placeholder="Notes (optional)"
+                                          className="h-8 text-sm"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          value={warehouseCostDraft.amount}
+                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))}
+                                          disabled={warehouseCostSaving}
+                                          placeholder="0.00"
+                                          className="h-8 text-sm text-right"
+                                        />
+                                      </td>
+                                      <td className="px-1 py-2">
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => {
+                                              setWarehouseCostEditing(null)
+                                              setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                            }}
+                                            disabled={warehouseCostSaving}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-primary hover:text-primary"
+                                            onClick={() => void saveWarehouseCost('Inbound')}
+                                            disabled={warehouseCostSaving || !warehouseCostDraft.costName.trim() || !warehouseCostDraft.amount.trim()}
+                                          >
+                                            {warehouseCostSaving ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <Check className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </div>
                                       </td>
                                     </tr>
                                   )}
                                   {supplierAdjustmentEditing && (
                                     <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
                                       <td className="px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                          <select
-                                            value={supplierAdjustmentDraft.kind}
-                                            onChange={e =>
-                                              setSupplierAdjustmentDraft(prev => ({
-                                                ...prev,
-                                                kind: e.target.value as 'credit' | 'debit',
-                                              }))
-                                            }
-                                            disabled={supplierAdjustmentSaving}
-                                            className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                                          >
-                                            <option value="credit">Credit</option>
-                                            <option value="debit">Debit</option>
-                                          </select>
-                                          <Input
-                                            value={supplierAdjustmentDraft.notes}
-                                            onChange={e =>
-                                              setSupplierAdjustmentDraft(prev => ({ ...prev, notes: e.target.value }))
-                                            }
-                                            disabled={supplierAdjustmentSaving}
-                                            placeholder="Notes"
-                                            className="h-8 text-sm"
-                                          />
-                                        </div>
+                                        <select
+                                          value={supplierAdjustmentDraft.kind}
+                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, kind: e.target.value as 'credit' | 'debit' }))}
+                                          disabled={supplierAdjustmentSaving}
+                                          className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                        >
+                                          <option value="credit">Supplier Credit</option>
+                                          <option value="debit">Supplier Debit</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          value={supplierAdjustmentDraft.notes}
+                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, notes: e.target.value }))}
+                                          disabled={supplierAdjustmentSaving}
+                                          placeholder="Notes"
+                                          className="h-8 text-sm"
+                                        />
                                       </td>
                                       <td className="px-3 py-2">
                                         <Input
@@ -6166,9 +5409,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           min="0"
                                           step="0.01"
                                           value={supplierAdjustmentDraft.amount}
-                                          onChange={e =>
-                                            setSupplierAdjustmentDraft(prev => ({ ...prev, amount: e.target.value }))
-                                          }
+                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, amount: e.target.value }))}
                                           disabled={supplierAdjustmentSaving}
                                           placeholder="0.00"
                                           className="h-8 text-sm text-right"
@@ -6205,134 +5446,73 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     </tr>
                                   )}
                                 </tbody>
+                                <tfoot>
+                                  <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                                    <td colSpan={2} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                      Warehouse Subtotal
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0
+                                        ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : '—'}
+                                    </td>
+                                    <td />
+                                  </tr>
+                                </tfoot>
                               </table>
                             </div>
-                          )
-                        ) : null}
+                          )}
+                        </div>
+
+                        {/* ===== LANDED TOTAL SUMMARY ===== */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Landed Total
+                          </h4>
+                          <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <tbody>
+                                <tr className="border-b border-slate-200 dark:border-slate-700">
+                                  <td className="px-3 py-2 text-muted-foreground">Product</td>
+                                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                    {tenantCurrency}{' '}
+                                    {productSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                                {forwardingSubtotal > 0 && (
+                                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                                    <td className="px-3 py-2 text-muted-foreground">Freight</td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                      {tenantCurrency}{' '}
+                                      {forwardingSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                )}
+                                {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0 && (
+                                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                                    <td className="px-3 py-2 text-muted-foreground">Warehouse</td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                      {tenantCurrency}{' '}
+                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              <tfoot>
+                                <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                                  <td className="px-3 py-2 font-semibold">Total</td>
+                                  <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                    {tenantCurrency}{' '}
+                                    {totalCostSummary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                     )}
-
-                {showWarehouseCostsStage && (
-                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Landed Total
-                        </h4>
-                        <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                          {tenantCurrency}{' '}
-                          {totalCostSummary.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </p>
-                      </div>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2 text-xs"
-                        onClick={() => setLandedBreakdownOpen(prev => !prev)}
-                      >
-                        {landedBreakdownOpen ? 'Hide' : 'Breakdown'}
-                      </Button>
-                    </div>
-
-                    {landedBreakdownOpen ? (
-                      <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <table className="w-full text-sm">
-                          <tbody>
-                            <tr className="border-b border-slate-200 dark:border-slate-700">
-                              <td className="px-3 py-2 text-muted-foreground">Product</td>
-                              <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                {tenantCurrency}{' '}
-                                {productSubtotal.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </td>
-                            </tr>
-                            {forwardingSubtotal > 0 && (
-                              <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <td className="px-3 py-2 text-muted-foreground">Freight</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {tenantCurrency}{' '}
-                                  {forwardingSubtotal.toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            )}
-                            {(inboundSubtotal + manualInboundSubtotal) > 0 && (
-                              <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <td className="px-3 py-2 text-muted-foreground">Inbound</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {tenantCurrency}{' '}
-                                  {(inboundSubtotal + manualInboundSubtotal).toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            )}
-                            {(storageSubtotal + manualStorageSubtotal) > 0 && (
-                              <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <td className="px-3 py-2 text-muted-foreground">Storage</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {tenantCurrency}{' '}
-                                  {(storageSubtotal + manualStorageSubtotal).toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            )}
-                            {supplierAdjustment ? (
-                              <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <td className="px-3 py-2 text-muted-foreground">Adjustment</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {supplierAdjustment.currency}{' '}
-                                  {supplierAdjustment.amount.toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            ) : null}
-                            {order.stageData.warehouse?.dutyAmount != null &&
-                            order.stageData.warehouse.dutyAmount !== 0 ? (
-                              <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <td className="px-3 py-2 text-muted-foreground">Customs & Duty</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                  {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
-                                  {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </td>
-                              </tr>
-                            ) : null}
-                            <tr className="bg-slate-50/50 dark:bg-slate-700/50">
-                              <td className="px-3 py-2 font-semibold">Total</td>
-                              <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                {tenantCurrency}{' '}
-                                {totalCostSummary.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : null}
                   </div>
-                )}
-	                      </div>
-	                    )}
-              </div>
                 )}
 
               </>
@@ -7250,7 +6430,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                           <div className="space-y-1 col-span-2" data-gate-key="details.customsEntryNumber">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Import Entry Number
+                              Import Entry / MRN (optional)
                             </p>
                             <Input
                               data-gate-key="details.customsEntryNumber"
@@ -7258,7 +6438,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               onChange={e =>
                                 setReceiveFormData(prev => ({ ...prev, customsEntryNumber: e.target.value }))
                               }
-                              placeholder="Enter import entry number"
+                              placeholder="Optional (e.g., entry #, MRN, or broker reference)"
                               className={
                                 gateIssues?.['details.customsEntryNumber']
                                   ? 'border-rose-500 focus-visible:ring-rose-500'
@@ -7500,11 +6680,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                        <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
-                        <th className="w-[220px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Changes</th>
-                        <th className="w-[180px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
-                        <th className="w-[110px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
+                        <th className="w-8 font-medium text-muted-foreground px-2 py-2 text-xs"></th>
+                        <th className="w-[160px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Action</th>
+                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">Previous</th>
+                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">New</th>
+                        <th className="w-[100px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">By</th>
+                        <th className="w-[120px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Date</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -7512,36 +6693,51 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         auditLogs.map(entry => {
                           const newValue = toAuditRecord(entry.newValue)
                           const title = describeAuditAction(entry.action, newValue)
-                          const changes = describeAuditChanges(entry)
+                          const changeRows = describeAuditChangeRows(entry)
                           const actor = entry.changedBy?.fullName || 'Unknown'
                           const { Icon, iconClassName } = getAuditActionTheme(entry.action)
 
                           return (
-                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                              <td className="px-3 py-2">
+                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 align-top">
+                              <td className="px-2 py-2">
                                 <Icon className={`h-4 w-4 ${iconClassName}`} />
                               </td>
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                              <td className="px-2 py-2 font-medium text-foreground overflow-hidden">
                                 <span className="block truncate" title={title}>
                                   {title}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0 max-w-[360px]">
-                                {changes.length > 0 ? (
-                                  <span className="line-clamp-2" title={changes.join(', ')}>
-                                    {changes.join(', ')}
-                                  </span>
-                                ) : (
-                                  '—'
-                                )}
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                {changeRows.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {changeRows.map((row, i) => (
+                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.previous}`}>
+                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
+                                        {row.previous}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : '—'}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                {changeRows.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {changeRows.map((row, i) => (
+                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.current}`}>
+                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
+                                        {row.current}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : '—'}
+                              </td>
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
                                 <span className="block truncate" title={actor}>
                                   {actor}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                {formatDateOnly(entry.createdAt)}
+                              <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
+                                {formatDateTime(entry.createdAt)}
                               </td>
                             </tr>
                           )
@@ -7549,24 +6745,25 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       ) : order.approvalHistory && order.approvalHistory.length > 0 ? (
                         order.approvalHistory.map((approval, index) => (
                           <tr key={index} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-2">
                               <Check className="h-4 w-4 text-emerald-600" />
                             </td>
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                            <td className="px-2 py-2 font-medium text-foreground">
                               {approval.stage}
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground">—</td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {approval.approvedBy || 'Unknown'}
+                            <td className="px-2 py-2 text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                              <span className="block truncate">{approval.approvedBy || 'Unknown'}</span>
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {approval.approvedAt ? formatDateOnly(approval.approvedAt) : '—'}
+                            <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
+                              {approval.approvedAt ? formatDateTime(approval.approvedAt) : '—'}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                          <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
                             No activity recorded yet.
                           </td>
                         </tr>

@@ -183,7 +183,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
   MANUFACTURING: ['inspection_report'],
-  OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
+  OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
   WAREHOUSE: ['grn', 'custom_declaration'],
 }
 
@@ -321,6 +321,7 @@ const STAGE_EDITABLE_FIELDS: Partial<Record<PurchaseOrderStatus, Array<keyof Sta
       'estimatedArrival',
       'actualDeparture',
       'actualArrival',
+      'transactionCertNumber',
       'commercialInvoiceId',
     ],
     [PurchaseOrderStatus.WAREHOUSE]: [
@@ -507,21 +508,6 @@ function validateCommodityCodeFormat(params: { tenantCode: string; commodityCode
     return digits.length === 10 || digits.length === 8 || digits.length === 6
   }
   return digits.length >= 6
-}
-
-function validateCustomsEntryNumberFormat(params: { tenantCode: string; customsEntryNumber: string }): boolean {
-  const normalized = params.customsEntryNumber.replace(/\s+/g, '').toUpperCase()
-
-  if (params.tenantCode === 'US') {
-    const digits = normalized.replace(/[^0-9]/g, '')
-    return digits.length === 11
-  }
-
-  if (params.tenantCode === 'UK') {
-    return /^[0-9]{2}[A-Z]{2}[A-Z0-9]{14}$/.test(normalized)
-  }
-
-  return normalized.length > 0
 }
 
 function toFinancialCategory(costCategory: CostCategory): FinancialLedgerCategory {
@@ -833,14 +819,19 @@ async function validateTransitionGate(params: {
       }
     }
 
+    const transactionCertNumber = resolveOrderString('transactionCertNumber')
+    if (!transactionCertNumber) {
+      recordGateIssue(issues, 'documents.transactionCertNumber', 'TC number is required')
+    }
+
     await requireDocuments({
       prisma: params.prisma,
       purchaseOrderId: params.order.id,
       stage: PurchaseOrderDocumentStage.OCEAN,
-      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
+      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
       issues,
       issueKeyPrefix: 'documents',
-      issueLabel: (docType) => docType.replace(/_/g, ' '),
+      issueLabel: (docType) => (docType === 'grs_tc' ? 'GRS TC' : docType.replace(/_/g, ' ')),
     })
 
     const hasForwardingCost = await params.prisma.purchaseOrderForwardingCost.findFirst({
@@ -2415,7 +2406,7 @@ export async function transitionPurchaseOrderStage(
 export interface ReceivePurchaseOrderInventoryInput {
   warehouseCode: string
   receiveType: InboundReceiveType
-  customsEntryNumber: string
+  customsEntryNumber?: string | null
   customsClearedDate: Date | string
   receivedDate: Date | string
   dutyAmount?: number | null
@@ -2453,7 +2444,6 @@ export async function receivePurchaseOrderInventory(params: {
   }
 
   const tenant = await getCurrentTenant()
-  const tenantCode = tenant.code
 
   const issues: Record<string, string> = {}
 
@@ -2467,12 +2457,9 @@ export async function receivePurchaseOrderInventory(params: {
     recordGateIssue(issues, 'details.receiveType', 'Receive type is required')
   }
 
-  const customsEntryNumber = params.input.customsEntryNumber.trim()
-  if (!customsEntryNumber) {
-    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number is required')
-  } else if (!validateCustomsEntryNumberFormat({ tenantCode, customsEntryNumber })) {
-    recordGateIssue(issues, 'details.customsEntryNumber', 'Import entry number format is invalid')
-  }
+  const customsEntryNumberText =
+    typeof params.input.customsEntryNumber === 'string' ? params.input.customsEntryNumber.trim() : ''
+  const customsEntryNumber = customsEntryNumberText.length > 0 ? customsEntryNumberText : null
 
   const customsClearedDate = resolveDateValue(params.input.customsClearedDate, 'Customs cleared date')
   if (!customsClearedDate) {
@@ -3319,7 +3306,12 @@ export async function generatePurchaseOrderShippingMarks(params: {
     },
   })
 
-  const labels = activeLines.flatMap(line => {
+  const poNumber = order.poNumber ? escapeHtml(order.poNumber) : ''
+  const consignee = order.shipToName ? escapeHtml(order.shipToName) : ''
+  const destination = [order.shipToCity, order.shipToCountry].filter(Boolean).join(', ')
+  const portOfDischarge = order.portOfDischarge ? escapeHtml(order.portOfDischarge) : ''
+
+  const labels = activeLines.map(line => {
     const cartonRange = resolveLineCartonRange(line)
     const cartonTriplet = resolveDimensionTripletCm({
       side1Cm: line.cartonSide1Cm,
@@ -3338,25 +3330,24 @@ export async function generatePurchaseOrderShippingMarks(params: {
     const grossWeightLabel = formatWeightDisplayFromKg(grossWeightKg, unitSystem, 1)
     const shippingMark = typeof line.lotRef === 'string' ? line.lotRef.trim() : ''
 
-    const perCarton: string[] = []
-    for (let index = cartonRange.start; index <= cartonRange.end; index += 1) {
-      perCarton.push(`
-        <div class="label">
-          <div class="label-header">${escapeHtml(piNumber)} / TARGON/唛头格式</div>
-          <div class="label-row"><span class="k">Carton</span><span class="v">${index} / ${cartonRange.total} Ctns</span></div>
-          <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
-          <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
-          <div class="label-row"><span class="k"># of Units</span><span class="v">${line.unitsPerCarton} sets</span></div>
-          <div class="label-row"><span class="k">Net Weight</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Gross Weight</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
-          <div class="label-row"><span class="k">Dimensions</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
-          <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
-          <div class="label-footer">${escapeHtml(origin)}</div>
-        </div>
-      `)
-    }
-
-    return perCarton
+    return `
+      <div class="label">
+        <div class="label-header">${escapeHtml(piNumber)}</div>
+        <div class="label-row"><span class="k">PO</span><span class="v">${poNumber}</span></div>
+        <div class="label-row"><span class="k">Consignee</span><span class="v">${consignee}</span></div>${destination ? `
+        <div class="label-row"><span class="k">Destination</span><span class="v">${escapeHtml(destination)}</span></div>` : ''}${portOfDischarge ? `
+        <div class="label-row"><span class="k">Port</span><span class="v">${portOfDischarge}</span></div>` : ''}
+        <div class="label-row"><span class="k">Cartons</span><span class="v">${cartonRange.start}–${cartonRange.end} of ${cartonRange.total}</span></div>
+        <div class="label-row"><span class="k">Shipping Mark</span><span class="v">${escapeHtml(shippingMark)}</span></div>
+        <div class="label-row"><span class="k">Commodity Code</span><span class="v mono">${escapeHtml(commodityLabel)}</span></div>
+        <div class="label-row"><span class="k">Units/Carton</span><span class="v">${line.unitsPerCarton} pcs</span></div>
+        <div class="label-row"><span class="k">N/W per carton</span><span class="v">${escapeHtml(netWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">G/W per carton</span><span class="v">${escapeHtml(grossWeightLabel)}</span></div>
+        <div class="label-row"><span class="k">Dims (L×W×H)</span><span class="v mono">${escapeHtml(dimsLabel)}</span></div>
+        <div class="label-row"><span class="k">Material</span><span class="v">${escapeHtml(material)}</span></div>
+        <div class="label-footer">MADE IN ${escapeHtml(origin)}</div>
+      </div>
+    `
   })
 
   return `<!doctype html>
@@ -3366,24 +3357,31 @@ export async function generatePurchaseOrderShippingMarks(params: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shipping Marks</title>
     <style>
-      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 16px; background: #f6f7fb; }
-      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      body { font-family: Arial, Helvetica, sans-serif; padding: 20px; background: #f6f7fb; color: #000; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
       .print-btn { background: #0ea5a4; color: white; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
       .meta { color: #475569; font-size: 12px; }
-      .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-      .label { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 12px 10px 12px; break-inside: avoid; }
-      .label-header { font-weight: 700; font-size: 12px; margin-bottom: 8px; }
-      .label-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; border-bottom: 1px dashed #e2e8f0; }
+      .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .label { background: white; border: 2px solid #000; padding: 16px; break-inside: avoid; }
+      .label-header { font-weight: 900; font-size: 18px; text-align: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #000; text-transform: uppercase; letter-spacing: 0.03em; }
+      .label-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid #ccc; }
       .label-row:last-of-type { border-bottom: none; }
-      .k { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-      .v { color: #0f172a; font-size: 12px; font-weight: 600; text-align: right; }
+      .k { color: #000; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+      .v { color: #000; font-size: 15px; font-weight: 600; text-align: right; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
-      .label-footer { margin-top: 8px; text-align: center; font-weight: 800; color: #0f172a; }
+      .label-footer { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; text-align: center; font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: 0.06em; color: #000; }
+      .handling { margin-top: 20px; padding: 10px 16px; background: white; border: 2px solid #000; }
+      .handling-title { font-weight: 900; font-size: 13px; text-transform: uppercase; text-align: center; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .handling-icons { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+      .handling-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .handling-icon svg { width: 36px; height: 36px; }
+      .handling-icon span { font-size: 9px; font-weight: 700; text-transform: uppercase; text-align: center; line-height: 1.2; }
       @media print {
+        @page { size: A4; margin: 10mm; }
         body { background: white; padding: 0; }
         .toolbar { display: none; }
-        .labels { gap: 8px; }
-        .label { border-radius: 8px; }
+        .labels { gap: 10mm; }
+        .label { border: 2pt solid #000; page-break-inside: avoid; }
       }
     </style>
   </head>
@@ -3394,6 +3392,49 @@ export async function generatePurchaseOrderShippingMarks(params: {
     </div>
     <div class="labels">
       ${labels.join('')}
+    </div>
+    <div class="handling">
+      <div class="handling-title">Handling Instructions / 操作说明</div>
+      <div class="handling-icons">
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <polygon points="30,55 50,20 70,55" fill="none" />
+            <polygon points="30,80 50,45 70,80" fill="none" />
+          </svg>
+          <span>This Side Up<br/>此面朝上</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <path d="M35,85 L35,40 Q35,25 50,25 Q65,25 65,40 L65,55" />
+            <line x1="35" y1="85" x2="65" y2="85" />
+            <line x1="65" y1="55" x2="75" y2="70" />
+            <line x1="65" y1="55" x2="55" y2="70" />
+            <line x1="50" y1="25" x2="50" y2="15" />
+          </svg>
+          <span>Fragile<br/>易碎品</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <path d="M50,20 L50,55 M40,20 Q50,10 60,20" />
+            <line x1="35" y1="45" x2="30" y2="55" />
+            <line x1="65" y1="45" x2="70" y2="55" />
+            <line x1="42" y1="60" x2="38" y2="70" />
+            <line x1="58" y1="60" x2="62" y2="70" />
+            <line x1="50" y1="65" x2="50" y2="75" />
+            <path d="M25,80 Q40,70 50,80 Q60,70 75,80" />
+          </svg>
+          <span>Keep Dry<br/>防潮</span>
+        </div>
+        <div class="handling-icon">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#000" stroke-width="3">
+            <rect x="25" y="50" width="50" height="30" />
+            <rect x="30" y="30" width="40" height="20" stroke-dasharray="6,3" />
+            <line x1="20" y1="20" x2="80" y2="80" stroke-width="4" />
+            <line x1="80" y1="20" x2="20" y2="80" stroke-width="4" />
+          </svg>
+          <span>Do Not Stack<br/>禁止堆放</span>
+        </div>
+      </div>
     </div>
   </body>
 </html>`

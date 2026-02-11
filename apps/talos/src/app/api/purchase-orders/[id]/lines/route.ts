@@ -3,6 +3,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import {
@@ -88,6 +89,15 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   return ApiResponses.success({
     data: order.lines.map(line => ({
       id: line.id,
@@ -150,6 +160,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   if (order.status !== 'RFQ') {

@@ -6,6 +6,10 @@ function labelForSku(input: { skuCode: string; description: string }): string {
   return `${input.skuCode} — ${input.description}`;
 }
 
+function defaultAsinThresholds() {
+  return { titleChanged: true, priceDeltaPct: 5, priceDeltaAbs: 1, imagesChanged: true };
+}
+
 async function syncMarketplace(marketplace: Marketplace) {
   const talos = getTalosClient(marketplace);
   try {
@@ -17,8 +21,10 @@ async function syncMarketplace(marketplace: Marketplace) {
     let createdCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
+    let disabledCount = 0;
 
     const now = new Date();
+    const activeAsins = new Set<string>();
 
     for (const sku of skus) {
       if (!sku.asin) {
@@ -32,24 +38,27 @@ async function syncMarketplace(marketplace: Marketplace) {
         continue;
       }
 
+      activeAsins.add(asin);
+
       const existing = await prisma.watchTarget.findUnique({
-        where: { marketplace_type_asin: { marketplace, type: 'ASIN', asin } },
+        where: { marketplace_asin: { marketplace, asin } },
       });
 
       if (!existing) {
-        await prisma.watchTarget.create({
+        const created = await prisma.watchTarget.create({
           data: {
-            type: 'ASIN',
             marketplace,
             owner: 'OURS',
             source: 'TALOS',
             label: labelForSku({ skuCode: sku.skuCode, description: sku.description }),
             asin,
-            trackedAsins: [],
             cadenceMinutes: 360,
             enabled: true,
             nextRunAt: now,
           },
+        });
+        await prisma.alertRule.create({
+          data: { targetId: created.id, enabled: false, thresholds: defaultAsinThresholds() },
         });
         createdCount += 1;
         continue;
@@ -57,6 +66,11 @@ async function syncMarketplace(marketplace: Marketplace) {
 
       const nextLabel = labelForSku({ skuCode: sku.skuCode, description: sku.description });
       if (existing.label === nextLabel && existing.source === 'TALOS' && existing.owner === 'OURS') {
+        await prisma.alertRule.upsert({
+          where: { targetId: existing.id },
+          create: { targetId: existing.id, enabled: false, thresholds: defaultAsinThresholds() },
+          update: {},
+        });
         skippedCount += 1;
         continue;
       }
@@ -69,10 +83,27 @@ async function syncMarketplace(marketplace: Marketplace) {
           owner: 'OURS',
         },
       });
+      await prisma.alertRule.upsert({
+        where: { targetId: existing.id },
+        create: { targetId: existing.id, enabled: false, thresholds: defaultAsinThresholds() },
+        update: {},
+      });
       updatedCount += 1;
     }
 
-    return { createdCount, updatedCount, skippedCount };
+    const stale = await prisma.watchTarget.updateMany({
+      where: {
+        marketplace,
+        owner: 'OURS',
+        source: 'TALOS',
+        enabled: true,
+        asin: { notIn: Array.from(activeAsins) },
+      },
+      data: { enabled: false },
+    });
+    disabledCount = stale.count;
+
+    return { createdCount, updatedCount, skippedCount, disabledCount };
   } finally {
     await talos.$disconnect();
   }
@@ -92,7 +123,7 @@ export async function runTalosSync() {
     const uk = await syncMarketplace('UK');
 
     const createdCount = us.createdCount + uk.createdCount;
-    const updatedCount = us.updatedCount + uk.updatedCount;
+    const updatedCount = us.updatedCount + uk.updatedCount + us.disabledCount + uk.disabledCount;
     const skippedCount = us.skippedCount + uk.skippedCount;
 
     return await prisma.importRun.update({
@@ -125,4 +156,3 @@ export async function shouldRunTalosSync(minHoursBetweenRuns: number): Promise<b
   const ageMs = Date.now() - last.finishedAt.getTime();
   return ageMs >= minHoursBetweenRuns * 60 * 60 * 1000;
 }
-

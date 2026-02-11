@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ExternalLink } from 'lucide-react';
+import { AlertTriangle, ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
@@ -26,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
+import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -89,15 +91,32 @@ type SettlementDetailResponse = {
 
 type InvoiceSummary = {
   invoiceId: string;
+  marketplace: MarketplaceId;
   rowCount: number;
   minDate: string;
   maxDate: string;
+  markets: string[];
 };
 
 type AuditDataResponse = {
   uploads: Array<{ id: string; filename: string; rowCount: number; invoiceCount: number; uploadedAt: string }>;
   invoiceIds: string[];
   invoices: InvoiceSummary[];
+};
+
+type JeLinePreview = {
+  accountId: string;
+  accountName: string;
+  postingType: 'Debit' | 'Credit';
+  amountCents: number;
+  description: string;
+};
+
+type JePreview = {
+  txnDate: string;
+  docNumber: string;
+  privateNote: string;
+  lines: JeLinePreview[];
 };
 
 type SettlementProcessingPreview = {
@@ -112,11 +131,13 @@ type SettlementProcessingPreview = {
   blocks: Array<{ code: string; message: string; details?: Record<string, string | number> }>;
   sales: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
   returns: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
-  cogsJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
-  pnlJournalEntry: { lines: Array<{ postingType: 'Debit' | 'Credit'; amountCents: number }> };
+  cogsByBrandComponentCents: Record<string, Record<string, number>>;
+  pnlByBucketBrandCents: Record<string, Record<string, number>>;
+  cogsJournalEntry: JePreview;
+  pnlJournalEntry: JePreview;
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -155,6 +176,13 @@ function formatMoney(amount: number, currency: string): string {
   return formatted;
 }
 
+function formatBlockDetails(details: Record<string, string | number> | undefined): string | null {
+  if (!details) return null;
+  const entries = Object.entries(details).filter(([key]) => key !== 'error');
+  if (entries.length === 0) return null;
+  return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
+}
+
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
   if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
   return <Badge variant="secondary">LMB {status}</Badge>;
@@ -185,20 +213,24 @@ async function fetchAuditData(): Promise<AuditDataResponse> {
   return res.json();
 }
 
-async function fetchPreview(settlementId: string, invoiceId: string): Promise<SettlementProcessingPreview> {
+async function fetchPreview(
+  settlementId: string,
+  invoiceId: string,
+  marketplace: MarketplaceId,
+): Promise<SettlementProcessingPreview> {
   const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/preview`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify({ invoiceId, marketplace }),
   });
   return res.json();
 }
 
-async function postSettlement(settlementId: string, invoiceId: string) {
+async function postSettlement(settlementId: string, invoiceId: string, marketplace: MarketplaceId) {
   const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/process`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify({ invoiceId, marketplace }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -217,16 +249,6 @@ function extractDatesFromInvoiceId(invoiceId: string): { start: string; end: str
   const matches = invoiceId.match(datePattern);
   if (!matches || matches.length < 2) return null;
   return { start: matches[0], end: matches[matches.length - 1] };
-}
-
-/**
- * Check if two date ranges overlap (all strings in YYYY-MM-DD format).
- */
-function dateRangesOverlap(
-  aStart: string, aEnd: string,
-  bStart: string, bEnd: string,
-): boolean {
-  return aStart <= bEnd && bStart <= aEnd;
 }
 
 function SignedAmount({
@@ -257,11 +279,13 @@ function ProcessSettlementDialog({
   settlementId,
   periodStart,
   periodEnd,
+  marketplaceId,
   onProcessed,
 }: {
   settlementId: string;
   periodStart: string | null;
   periodEnd: string | null;
+  marketplaceId: MarketplaceId;
   onProcessed: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -279,38 +303,48 @@ function ProcessSettlementDialog({
   });
 
   const invoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
+  const marketplaceInvoices = useMemo(
+    () => invoices.filter((inv) => inv.marketplace === marketplaceId),
+    [invoices, marketplaceId],
+  );
 
-  // Compute recommendation for each invoice
+  const invoiceRecommendation = useMemo(() => {
+    if (periodStart === null || periodEnd === null) {
+      return { kind: 'missing_period' } as const;
+    }
+
+    return selectAuditInvoiceForSettlement({
+      settlementMarketplace: marketplaceId,
+      settlementPeriodStart: periodStart,
+      settlementPeriodEnd: periodEnd,
+      invoices,
+    });
+  }, [invoices, marketplaceId, periodEnd, periodStart]);
+
+  // Compute meta for each invoice
   const invoicesWithMeta = useMemo(() => {
-    return invoices.map((inv) => {
+    return marketplaceInvoices.map((inv) => {
       const invoiceDates = extractDatesFromInvoiceId(inv.invoiceId);
-      let recommended = false;
       let dateLabel: string | null = null;
 
       if (invoiceDates) {
         dateLabel = `${invoiceDates.start} to ${invoiceDates.end}`;
-        if (periodStart !== null && periodEnd !== null) {
-          recommended = dateRangesOverlap(periodStart, periodEnd, invoiceDates.start, invoiceDates.end);
-        }
       }
 
-      // Also check overlap using the actual audit data date range
-      if (!recommended && periodStart !== null && periodEnd !== null) {
-        recommended = dateRangesOverlap(periodStart, periodEnd, inv.minDate, inv.maxDate);
-      }
+      const recommended = invoiceRecommendation.kind === 'match' && inv.invoiceId === invoiceRecommendation.invoiceId;
+      const candidate =
+        invoiceRecommendation.kind === 'ambiguous' && invoiceRecommendation.candidateInvoiceIds.includes(inv.invoiceId);
 
-      return { ...inv, recommended, dateLabel };
+      return { ...inv, recommended, candidate, dateLabel };
     });
-  }, [invoices, periodStart, periodEnd]);
+  }, [invoiceRecommendation, marketplaceInvoices]);
 
   // Auto-select recommended invoice when dialog opens and no invoice is selected
   useEffect(() => {
     if (selectedInvoice !== '') return;
-    const rec = invoicesWithMeta.find((i) => i.recommended);
-    if (rec) {
-      setSelectedInvoice(rec.invoiceId);
-    }
-  }, [invoicesWithMeta, selectedInvoice]);
+    if (invoiceRecommendation.kind !== 'match') return;
+    setSelectedInvoice(invoiceRecommendation.invoiceId);
+  }, [invoiceRecommendation, selectedInvoice]);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -330,7 +364,7 @@ function ProcessSettlementDialog({
     setIsPreviewLoading(true);
 
     try {
-      const result = await fetchPreview(settlementId, selectedInvoice);
+      const result = await fetchPreview(settlementId, selectedInvoice, marketplaceId);
       setPreview(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -346,7 +380,7 @@ function ProcessSettlementDialog({
     setError(null);
 
     try {
-      const result = await postSettlement(settlementId, selectedInvoice);
+      const result = await postSettlement(settlementId, selectedInvoice, marketplaceId);
       if (!result.ok) {
         setPreview(result.data);
         return;
@@ -398,8 +432,30 @@ function ProcessSettlementDialog({
           </div>
         )}
 
-        {!isLoadingAuditData && invoices.length > 0 && (
+        {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/5">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <div className="text-sm font-medium text-slate-900 dark:text-white">No invoices for this marketplace</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Audit data exists, but none of the uploaded invoices match {marketplaceId}. Upload the correct Audit Data file.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isLoadingAuditData && marketplaceInvoices.length > 0 && (
           <div className="space-y-4">
+            {invoiceRecommendation.kind === 'ambiguous' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                Multiple audit invoices match this settlement period. Select the correct invoice manually.
+              </div>
+            )}
+            {invoiceRecommendation.kind === 'none' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                No audit invoice matches this settlement period. Upload the correct Audit Data file or choose an invoice manually.
+              </div>
+            )}
+
             {/* Invoice selector */}
             <div>
               <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Invoice</div>
@@ -415,20 +471,25 @@ function ProcessSettlementDialog({
                   <SelectValue placeholder="Select an invoice..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {invoicesWithMeta.map((inv) => (
-                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
-                      <div className="flex items-center gap-2">
-                        <span>{inv.invoiceId}</span>
+	                  {invoicesWithMeta.map((inv) => (
+	                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+	                      <div className="flex items-center gap-2">
+	                        <span>{inv.invoiceId}</span>
                         {inv.recommended && (
                           <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
                             Recommended
                           </span>
                         )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+	                        {inv.candidate && !inv.recommended && (
+	                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+	                            Candidate
+	                          </span>
+	                        )}
+	                      </div>
+	                    </SelectItem>
+	                  ))}
+	                </SelectContent>
+	              </Select>
 
               {/* Invoice metadata */}
               {selectedMeta && (
@@ -448,10 +509,10 @@ function ProcessSettlementDialog({
                 </div>
               )}
 
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {invoices.length} invoice{invoices.length === 1 ? '' : 's'} from uploaded audit data
-              </div>
-            </div>
+	              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+	                {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'} for this marketplace
+	              </div>
+	            </div>
 
             {/* Preview button */}
             <Button
@@ -509,18 +570,24 @@ function ProcessSettlementDialog({
                   </Card>
                 </div>
 
-                {preview.blocks.length > 0 && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
-                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                      {preview.blocks.map((b, idx) => (
-                        <li key={idx}>
-                          <span className="font-mono">{b.code}</span>: {b.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+	                {preview.blocks.length > 0 && (
+	                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+	                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
+	                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+	                      {preview.blocks.map((b, idx) => (
+	                        <li key={idx}>
+	                          <span className="font-mono">{b.code}</span>: {b.message}
+	                          {b.details && 'error' in b.details && (
+	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+	                          )}
+	                          {formatBlockDetails(b.details) && (
+	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+	                          )}
+	                        </li>
+	                      ))}
+	                    </ul>
+	                  </div>
+	                )}
 
                 {preview.blocks.length === 0 && (
                   <Button onClick={() => void handlePost()} disabled={isPosting}>
@@ -581,8 +648,35 @@ export default function SettlementDetailPage() {
     return total;
   }, [settlement]);
 
+  // Eager-load preview for Pending settlements
+  const { data: auditData, isLoading: isLoadingAudit } = useQuery({
+    queryKey: ['plutus-audit-data'],
+    queryFn: fetchAuditData,
+    enabled: settlement?.plutusStatus === 'Pending',
+    staleTime: 60 * 1000,
+  });
+
+  const recommendedInvoice = useMemo(() => {
+    if (!auditData?.invoices || !settlement) return null;
+    const match = selectAuditInvoiceForSettlement({
+      settlementMarketplace: settlement.marketplace.id,
+      settlementPeriodStart: settlement.periodStart,
+      settlementPeriodEnd: settlement.periodEnd,
+      invoices: auditData.invoices,
+    });
+
+    return match.kind === 'match' ? match.invoiceId : null;
+  }, [auditData?.invoices, settlement]);
+
+  const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
+    queryKey: ['plutus-settlement-preview', settlementId, recommendedInvoice],
+    queryFn: () => fetchPreview(settlementId, recommendedInvoice!, settlement!.marketplace.id),
+    enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
+    staleTime: 5 * 60 * 1000,
+  });
+
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlement Details" />;
+    return <NotConnectedScreen title="Settlement Details" error={connection.error} />;
   }
 
   async function handleRollback() {
@@ -692,6 +786,7 @@ export default function SettlementDetailPage() {
                       settlementId={settlementId}
                       periodStart={settlement.periodStart}
                       periodEnd={settlement.periodEnd}
+                      marketplaceId={settlement.marketplace.id}
                       onProcessed={() => void handleProcessed()}
                     />
                   )}
@@ -718,6 +813,9 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <TabsList>
                   <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
+                  {settlement?.plutusStatus === 'Pending' && (
+                    <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
+                  )}
                   <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
               </div>
@@ -783,6 +881,207 @@ export default function SettlementDetailPage() {
                   </div>
                 )}
               </TabsContent>
+
+              {settlement?.plutusStatus === 'Pending' && (
+                <TabsContent value="plutus-preview" className="p-4">
+                  {(isLoadingAudit || isPreviewLoading) && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-5 w-56" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  )}
+
+                  {!isLoadingAudit && !auditData?.invoices?.length && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data uploaded</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          Upload the LMB Audit Data CSV on the{' '}
+                          <Link href="/audit-data" className="text-brand-teal-600 hover:underline dark:text-brand-cyan">
+                            Audit Data
+                          </Link>{' '}
+                          page first.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">No matching invoice found</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          Use the Process Settlement dialog to select an invoice manually.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {previewError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                      {previewError instanceof Error ? previewError.message : String(previewError)}
+                    </div>
+                  )}
+
+                  {previewData && previewData.cogsJournalEntry && (
+                    <div className="space-y-6">
+                      {/* Header */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Invoice {previewData.invoiceId}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                            {previewData.minDate} &rarr; {previewData.maxDate}
+                          </div>
+                        </div>
+                        <Badge variant={previewData.blocks.length === 0 ? 'success' : 'destructive'}>
+                          {previewData.blocks.length === 0 ? 'Ready to Process' : 'Blocked'}
+                        </Badge>
+                      </div>
+
+                      {/* Summary cards */}
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Sales</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.sales.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Returns</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.returns.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">COGS Lines</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.cogsJournalEntry.lines.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-slate-200/70 dark:border-white/10">
+                          <CardContent className="p-3">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">P&amp;L Lines</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.pnlJournalEntry.lines.length}</div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Blocks */}
+                      {previewData.blocks.length > 0 && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">
+                              {previewData.blocks.length} blocking issue{previewData.blocks.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+	                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+	                            {previewData.blocks.map((b, idx) => (
+	                              <li key={idx}>
+	                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+	                                {b.details && 'error' in b.details && (
+	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+	                                )}
+	                                {formatBlockDetails(b.details) && (
+	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+	                                )}
+	                              </li>
+	                            ))}
+	                          </ul>
+	                        </div>
+	                      )}
+
+                      {/* COGS Journal Entry */}
+                      {previewData.cogsJournalEntry.lines.length > 0 && (
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                            COGS Journal Entry
+                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {previewData.cogsJournalEntry.docNumber}
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Debit</TableHead>
+                                  <TableHead className="text-right">Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.cogsJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.accountName}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* P&L Reclass Journal Entry */}
+                      {previewData.pnlJournalEntry.lines.length > 0 && (
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                            P&amp;L Reclass Journal Entry
+                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {previewData.pnlJournalEntry.docNumber}
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Debit</TableHead>
+                                  <TableHead className="text-right">Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.pnlJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.accountName}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
 
               <TabsContent value="history" className="p-4">
                 {settlement && (

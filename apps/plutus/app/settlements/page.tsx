@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
+import { selectAuditInvoiceForSettlement, type AuditInvoiceSummary } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -53,7 +54,9 @@ type SettlementsResponse = {
   };
 };
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
+type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
+type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -104,6 +107,42 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   return <Badge variant="destructive">Plutus Pending</Badge>;
 }
 
+function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
+  if (!match) {
+    return <Badge variant="outline">—</Badge>;
+  }
+
+  if (match.kind === 'match') {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Badge variant="success">Audit Ready</Badge>
+        <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{match.invoiceId}</span>
+      </div>
+    );
+  }
+
+  if (match.kind === 'ambiguous') {
+    const count = match.candidateInvoiceIds.length;
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Badge
+          variant="secondary"
+          className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+        >
+          Multiple ({count})
+        </Badge>
+        <span className="text-xs text-slate-500 dark:text-slate-400">Select in detail</span>
+      </div>
+    );
+  }
+
+  if (match.kind === 'missing_period') {
+    return <Badge variant="outline">Unknown</Badge>;
+  }
+
+  return <Badge variant="outline">No Audit</Badge>;
+}
+
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
   if (region === 'US') {
     return (
@@ -131,6 +170,15 @@ function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
+
+async function fetchAuditData(): Promise<AuditDataResponse> {
+  const res = await fetch(`${basePath}/api/plutus/audit-data`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
   return res.json();
 }
 
@@ -220,6 +268,13 @@ export default function SettlementsPage() {
     staleTime: 30 * 1000,
   });
 
+  const { data: auditData } = useQuery({
+    queryKey: ['plutus-audit-data'],
+    queryFn: fetchAuditData,
+    enabled: connection !== undefined && connection.connected === true,
+    staleTime: 60 * 1000,
+  });
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace],
     queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace }),
@@ -231,6 +286,24 @@ export default function SettlementsPage() {
     if (!data) return [];
     return data.settlements;
   }, [data]);
+
+  const auditInvoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
+
+  const auditMatchBySettlementId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof selectAuditInvoiceForSettlement>>();
+    for (const settlement of settlements) {
+      map.set(
+        settlement.id,
+        selectAuditInvoiceForSettlement({
+          settlementMarketplace: settlement.marketplace.id,
+          settlementPeriodStart: settlement.periodStart,
+          settlementPeriodEnd: settlement.periodEnd,
+          invoices: auditInvoices,
+        }),
+      );
+    }
+    return map;
+  }, [auditInvoices, settlements]);
 
   // Compute KPI stats from loaded data
   const stats = useMemo(() => {
@@ -265,14 +338,18 @@ export default function SettlementsPage() {
   });
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlements" />;
+    return <NotConnectedScreen title="Settlements" error={connection.error} />;
   }
 
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between">
-          <PageHeader title="Settlements" variant="accent" />
+          <PageHeader
+            title="Settlements"
+            description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
+            variant="accent"
+          />
           <Button
             variant="outline"
             onClick={() => autoprocessMutation.mutate()}
@@ -389,6 +466,7 @@ export default function SettlementsPage() {
                       <TableHead className="font-semibold">Period</TableHead>
                       <TableHead className="font-semibold">Settlement Total</TableHead>
                       <TableHead className="font-semibold">LMB</TableHead>
+                      <TableHead className="font-semibold">Audit Data</TableHead>
                       <TableHead className="font-semibold text-right">Plutus</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -397,7 +475,7 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={5} className="py-4">
+                            <TableCell colSpan={6} className="py-4">
                               <Skeleton className="h-10 w-full" />
                             </TableCell>
                           </TableRow>
@@ -407,7 +485,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -415,7 +493,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && !error && settlements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5}>
+                        <TableCell colSpan={6}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
@@ -468,6 +546,9 @@ export default function SettlementsPage() {
                               <StatusPill status={s.lmbStatus} />
                               <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
                             </a>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
                           </TableCell>
                           <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-2">

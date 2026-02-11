@@ -1,0 +1,302 @@
+Transaction List by Date,,,,,,,,
+TARGON LLC,,,,,,,,
+"February 1, 2024-February 8, 2026",,,,,,,,
+
+Date,Transaction type,Num,Posting (Y/N),Name,Memo/Description,Account name,Account full name,Amount
+08/04/2025,Bill,PI-250804BOXB,Yes,VICTOR HERO HOLDINGS LIMITED,,Accounts Payable (A/P),,"5,321.79"
+08/20/2025,Bill,PI-2508204A,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Accounts Payable (A/P),Inventory Asset:Manufacturing - US-PDS,"1,385.47"
+08/26/2025,Deposit,,Yes,Jarrar Amjad,ORIG CO NAME:AMMAR AMJAD ORIG ID:TXXXXX7665 DESC DATE:250826 CO ENTRY DESCR:SENDER SEC:CIE TRACE#:XXXXXXXX5406899 EED:250826 IND ID:TARGON LLC IND NAME:XXXX7869 2 ONLNE TRNSFRXXXX1070 TRN: XXXXXX6899 TC,Targon US Chase USD (9899),Owner investments,"8,000.00"
+08/29/2025,Deposit,,Yes,Jarrar Amjad,ORIG CO NAME:AMMAR AMJAD ORIG ID:TXXXXX7665 DESC DATE:250829 CO ENTRY DESCR:SENDER SEC:CIE TRACE#:XXXXXXXX8952202 EED:250829 IND ID:TARGON LLC IND NAME:XXXX0364 6 ONLNE TRNSFRXXXX1070 TRN: XXXXXX2202 TC,Targon US Chase USD (9899),Owner investments,"20,000.00"
+09/01/2025,Expense,,Yes,Google,Online Transfer to CHK ...1203 transaction#: XXXXXXX1912 09/02,Targon US Chase USD (9899),Office expenses:Software & apps,-73.35
+09/02/2025,Expense,,Yes,Amazon Web Services,Online Transfer to CHK ...1203 transaction#: XXXXXXX3668 09/02,Targon US Chase USD (9899),Office expenses:Software & apps,-33.53
+09/03/2025,Expense,,Yes,Nezha El Albani,Basic Online Payroll Payment XXXXXXX9213 to #######9168,Targon US Chase USD (9899),Payroll expenses,"-3,229.21"
+09/03/2025,Deposit,,Yes,Jarrar Amjad,ORIG CO NAME:AMMAR AMJAD ORIG ID:TXXXXX7665 DESC DATE:250903 CO ENTRY DESCR:SENDER SEC:CIE TRACE#:XXXXXXXX0680389 EED:250903 IND ID:TARGON LLC IND NAME:XXXX1196 8 ONLNE TRNSFRXXXX1070 TRN: XXXXXX0389 TC,Targon US Chase USD (9899),Owner investments,"20,700.00"
+09/03/2025,Expense,,Yes,"CloudFrame, Inc",CLOUDFLARE,Chase Ink CC (0922),Office expenses:Software & apps,11.86
+09/04/2025,Expense,,Yes,Mr Muhammad Hassan,Trademark Targon - Caelum Star,Targon US Chase USD (9899),Legal & accounting services:Legal fees,"-1,420.00"
+09/04/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+09/04/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+09/04/2025,Bill Payment (Check),,Yes,VICTOR HERO HOLDINGS LIMITED,,Targon US Chase USD (9899),Accounts Payable (A/P),"-5,321.79"
+09/04/2025,Bill Payment (Check),,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Targon US Chase USD (9899),Accounts Payable (A/P),"-32,567.19"
+09/05/2025,Deposit,,Yes,Jarrar Amjad,ORIG CO NAME:AMMAR AMJAD ORIG ID:TXXXXX7665 DESC DATE:250905 CO ENTRY DESCR:SENDER SEC:CIE TRACE#:XXXXXXXX5095176 EED:250905 IND ID:TARGON LLC IND NAME:XXXX7249 8 ONLNE TRNSFRXXXX1070 TRN: XXXXXX5176 TC,Targon US Chase USD (9899),Owner investments,"31,300.00"
+09/05/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+09/05/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+09/05/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 09/05,Targon US Chase USD (9899),Chase Ink CC (0922),-11.86
+09/05/2025,Bill,PI-2507223A,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Accounts Payable (A/P),,"13,830.77"
+09/05/2025,Bill Payment (Check),,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Targon US Chase USD (9899),Accounts Payable (A/P),"-6,915.39"
+09/05/2025,Bill Payment (Check),,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Targon US Chase USD (9899),Accounts Payable (A/P),"-1,385.47"
+09/05/2025,Expense,,Yes,Shelter Insurance,SHELTER INSURANCE - ONE,Chase Ink CC (0922),Insurance:Business insurance,424.00
+09/08/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 09/08,Targon US Chase USD (9899),Chase Ink CC (0922),-424.00
+09/11/2025,Expense,,Yes,KSU Real Estate,KSU REAL ESTATE OFFICE RENT - September 2025 (Invoice #01973),Chase Ink CC (0922),Building & property rent,458.00
+09/11/2025,Expense,,Yes,KSU Real Estate,Security Deposit per Invoice #01974,Chase Ink CC (0922),Security Deposits,687.00
+09/13/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 09/15,Targon US Chase USD (9899),Chase Ink CC (0922),"-1,145.00"
+09/17/2025,Expense,,Yes,Kansas Secretary of State,KANSAS SECRETARY OF STAT,Chase Ink CC (0922),Legal & accounting services:Legal fees,45.00
+09/18/2025,Expense,,Yes,Virginia SCC,VCN*VIRGINIASCC,Chase Ink CC (0922),General business expenses,100.00
+09/20/2025,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTION,Chase Ink CC (0922),Office expenses:Software & apps,20.00
+09/23/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+09/23/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 09/23,Targon US Chase USD (9899),Chase Ink CC (0922),-165.00
+09/23/2025,Bill,ABC20250923007,Yes,"Huizhou Anboson Technology Co., Ltd",,Accounts Payable (A/P),Inventory Asset:Mfg Accessories - US-PDS,560.00
+09/23/2025,Bill Payment (Check),,Yes,"Huizhou Anboson Technology Co., Ltd",,Targon US Chase USD (9899),Accounts Payable (A/P),-560.00
+09/27/2025,Expense,,Yes,US Mobile,US MOBILE,Chase Ink CC (0922),Utilities:Phone service,13.00
+09/29/2025,Bill,PH250940,Yes,"JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD",,Accounts Payable (A/P),,"32,567.19"
+09/30/2025,Expense,,Yes,QuickBooks Payments,INTUIT *QBooks Payroll,Chase Ink CC (0922),Legal & accounting services:Accounting fees,81.50
+09/30/2025,Expense,,Yes,Google,GOOGLE *GSUITE_targong,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,107.52
+10/01/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 10/02,Targon US Chase USD (9899),Chase Ink CC (0922),-94.50
+10/01/2025,Check,2062720,Yes,Chase bank,STANDARD ACH PMNTS INITIAL FEE QTY = 2,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-5.00
+10/01/2025,Expense,,Yes,Chase bank,Online Transfer to CHK ...1203 transaction#: XXXXXXX5744 10/01,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-15.00
+10/01/2025,Expense,,Yes,Amazon Web Services,Amazon web services,Chase Ink CC (0922),Office expenses:Software & apps,30.46
+10/01/2025,Expense,,Yes,Google,GOOGLE *SVCStargonglob,Chase Ink CC (0922),Utilities:Phone service,8.62
+10/02/2025,Expense,,Yes,KSU Real Estate,KSU REAL ESTATE OFFICE RENT - October 2025 (Invoice #02013),Chase Ink CC (0922),Building & property rent,687.00
+10/03/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 10/06,Targon US Chase USD (9899),Chase Ink CC (0922),-116.14
+10/03/2025,Deposit,,Yes,Intuit Inc.,REAL TIME TRANSFER RECD FROM ABA/CONTR BNK-XXXXX0021 FROM: BNF-ACCTVERIFY INTUIT INC. REF: 1cfba586ddX9452b9073 INFO: TEXT-RmtInf-ACCTVERIFY IID: XXXXXXXXXX1000 021P1BRJPCXXXXXXX2274 RECD: 20:57:06 TRN: XXXXXX2276 GB BREF: 95bX3764-dc57-43ca-b24f-bX6768f0bfd,Targon US Chase USD (9899),Other income,0.10
+10/03/2025,Deposit,,Yes,Intuit Inc.,REAL TIME TRANSFER RECD FROM ABA/CONTR BNK-XXXXX0021 FROM: BNF-ACCTVERIFY INTUIT INC. REF: cX1044e58c324e0cbcd2 INFO: TEXT-RmtInf-ACCTVERIFY IID: XXXXXXXXXX1000 021P1BRJPCXXXXXXX0344 RECD: 20:57:06 TRN: XXXXXX2276 GC BREF: eeea9fa7-dea0-4c66-8e10-f5a807d1533,Targon US Chase USD (9899),Other income,0.01
+10/06/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 09/01/2025-09/30/2025,Direct Deposit Payable,,"3,217.26"
+10/07/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 09/01/2025-09/30/2025,Targon US Chase USD (9899),Direct Deposit Payable,"-3,217.26"
+10/07/2025,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,-24.00
+10/07/2025,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,"-1,206.74"
+10/07/2025,Bill,FSHY2509087198,Yes,FOREST SHIPPING WORLDWIDE LTD,,Accounts Payable (A/P),,"8,130.00"
+10/14/2025,Credit Card Payment,,Yes,Chase Ink CC,Payment to Chase card ending in 0922 10/14,Targon US Chase USD (9899),Chase Ink CC (0922),-717.46
+10/15/2025,Expense,,Yes,HQ Tax,PAYPAL *HQ TAX FINA,Chase Ink CC (0922),Legal & accounting services:Legal fees,103.50
+10/18/2025,Credit Card Payment,,Yes,Chase Ink CC,Payment to Chase card ending in 0922 10/20,Targon US Chase USD (9899),Chase Ink CC (0922),-103.50
+10/20/2025,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTION,Chase Ink CC (0922),Office expenses:Software & apps,20.00
+10/22/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 10/22,Targon US Chase USD (9899),Chase Ink CC (0922),-20.00
+10/23/2025,Credit Card Credit,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTION,Chase Ink CC (0922),Office expenses:Software & apps,-20.00
+10/23/2025,Expense,,Yes,Chase Ink CC,FOREIGN TRANSACTION FEE,Chase Ink CC (0922),General business expenses:Bank fees & service charges,21.56
+10/23/2025,Expense,,Yes,KSU Real Estate,"KSU REAL ESTATE OFFICE RENT - November 2025 (Invoice #02053, period 11/01-11/30). NOTE: Invoice is $687.00 but CC was charged $718.72 — $31.72 difference unexplained, pending clarification from KSU Real Estate.",Chase Ink CC (0922),Building & property rent,718.72
+10/27/2025,Expense,,Yes,US Mobile,US MOBILE,Chase Ink CC (0922),Utilities:Phone service,13.00
+10/28/2025,Expense,,Yes,Chase bank,ONLINE US DOLLAR INTL WIRE FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-40.00
+10/28/2025,Bill Payment (Check),,Yes,FOREST SHIPPING WORLDWIDE LTD,,Targon US Chase USD (9899),Accounts Payable (A/P),"-8,130.00"
+10/29/2025,Expense,,Yes,QuickBooks Payments,INTUIT *QBooks Payroll,Chase Ink CC (0922),Legal & accounting services:Accounting fees,103.50
+10/31/2025,Expense,,Yes,Google,GOOGLE *GSUITE_targong,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,110.57
+11/01/2025,Expense,,Yes,Amazon Web Services,Amazon web services,Chase Ink CC (0922),Office expenses:Software & apps,95.89
+11/01/2025,Expense,,Yes,LinkedIn,LinkedIn PXXXXX8024,Chase Ink CC (0922),Office expenses:Software & apps,12.14
+11/01/2025,Expense,,Yes,Google,GOOGLE *SVCStargonglob,Chase Ink CC (0922),Utilities:Phone service,16.70
+11/03/2025,Bill,TC82234,Yes,Tactical Logistic Solutions,,Accounts Payable (A/P),,"1,645.00"
+11/04/2025,Expense,,Yes,IRS,"""Federal payroll taxes for 09/03/2025 payroll""",Targon US Chase USD (9899),Payroll expenses,-922.13
+11/05/2025,Payroll Check,,Yes,Nezha El Albani,Pay Period: 10/01/2025-10/31/2025 Voided check on 11/05/2025,Targon US Chase USD (9899),,"-3,217.26"
+11/05/2025,Payroll Adjustment,,Yes,,Pay Period: 10/01/2025-10/31/2025,,,
+11/05/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 10/01/2025-10/31/2025,Direct Deposit Payable,,"3,217.26"
+11/05/2025,Credit Card Payment,,Yes,Chase bank,Payment Thank You - Web,Targon US Chase USD (9899),Chase Ink CC (0922),"-1,072.08"
+11/05/2025,Expense,,Yes,Chase bank,Online Transfer to CHK ...1203 transaction#: XXXXXXX0219 11/05,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-15.00
+11/05/2025,Expense,,Yes,VA Department of Taxation,VA State withholding tax for 09/03/2025 payroll - paid outside QB,Targon US Chase USD (9899),Payroll expenses,-176.90
+11/06/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 10/01/2025-10/31/2025,Targon US Chase USD (9899),Direct Deposit Payable,"-3,217.26"
+11/06/2025,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,"-1,088.74"
+11/06/2025,Expense,,Yes,VA Employment Commission,VA Employment Commission — UI tax payment ($101.50) + penalty ($100.00),Targon US Chase USD (9899),,-201.50
+11/12/2025,Expense,,Yes,,TEXAS SECRETARY OF STA,Chase Ink CC (0922),General business expenses:Bank fees & service charges,1.00
+11/13/2025,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,0.00
+11/13/2025,Expense,,Yes,,TEXAS S.O.S. SVC,Chase Ink CC (0922),General business expenses:Bank fees & service charges,1.08
+11/13/2025,Expense,,Yes,,TEXAS SECRETARY OF STA,Chase Ink CC (0922),Legal & accounting services:Legal fees,40.00
+11/15/2025,Bill,TC112567VB,Yes,Tactical Logistic Solutions,,Accounts Payable (A/P),,463.68
+11/17/2025,Tax Payment,,Yes,IRS,Tax Payment for Period: 10/01/2025-10/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:Federal Taxes (941/943/944),-922.13
+11/17/2025,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),"-1,645.00"
+11/20/2025,Expense,,Yes,KSU Real Estate,KSU REAL ESTATE OFFICE RENT - December 2025 (invoice not on file),Chase Ink CC (0922),Building & property rent,687.00
+11/20/2025,Expense,,Yes,KSU Real Estate,"The November transaction was transferred wrongly, on our request the money was transferred back.",Chase Ink CC (0922),Building & property rent,687.00
+11/22/2025,Expense,,Yes,U-Haul,U-HAULMIDWEST ACE HARDWAR,Chase Ink CC (0922),Office expenses,74.08
+11/22/2025,Expense,,Yes,Modern Marketplace,SQ *MODERN MARKETPLACE MH,Chase Ink CC (0922),Office expenses,111.85
+11/22/2025,Expense,,Yes,Hy-Vee,Personal expense — Hy-Vee grocery,Chase Ink CC (0922),Owner draws,5.31
+11/23/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 11/24,Targon US Chase USD (9899),Chase Ink CC (0922),"-1,416.08"
+11/23/2025,Expense,,Yes,Amazon,Amazon.com*B256N50O1,Chase Ink CC (0922),Office expenses:Office supplies,23.89
+11/23/2025,Expense,,Yes,Amazon,AMAZON MKTPL*B20I77X91,Chase Ink CC (0922),Office expenses:Office supplies,10.90
+11/23/2025,Expense,,Yes,Google,GOOGLE *Workspace_targ,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,70.80
+11/23/2025,Expense,,Yes,Best Buy,BEST BUY XXXX1015,Chase Ink CC (0922),Office expenses,438.59
+11/23/2025,Expense,,Yes,ASUS,ASUS.COM,Chase Ink CC (0922),Office expenses,139.35
+11/23/2025,Expense,,Yes,GlobalE logitech,GlobalE /Logitech,Chase Ink CC (0922),Office expenses,80.38
+11/23/2025,Expense,,Yes,Dollar Tree,DOLLAR TREE,Chase Ink CC (0922),Office expenses:Office supplies,4.93
+11/23/2025,Expense,,Yes,Dollar Tree,DOLLAR TREE,Chase Ink CC (0922),Office expenses,16.42
+11/24/2025,Credit Card Credit,,Yes,KSU Real Estate,Amount refunded from KSU real Estate against November month dual transaction,Chase Ink CC (0922),Building & property rent,-687.00
+11/24/2025,Expense,,Yes,Amazon,AMAZON MKTPL*B29LK2DV2,Chase Ink CC (0922),Office expenses,17.98
+11/24/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 11/24,Targon US Chase USD (9899),Chase Ink CC (0922),-117.16
+11/25/2025,Tax Payment,,Yes,VA Department of Taxation,Tax Payment for Period: 10/01/2025-10/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:VA Income Tax,-166.61
+11/25/2025,Tax Payment,,Yes,VA Department of Taxation,Tax Payment for Period: 10/01/2025-10/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:VA Income Tax,-166.61
+11/25/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX7642,Targon US Chase USD (9899),Owner investments,"2,727.00"
+11/26/2025,Expense,,Yes,US Mobile,US MOBILE,Chase Ink CC (0922),Utilities:Phone service,13.00
+11/26/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX1913,Targon US Chase USD (9899),Owner investments,"9,409.42"
+11/28/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 11/28,Targon US Chase USD (9899),Chase Ink CC (0922),-190.32
+11/28/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX7012,Targon US Chase USD (9899),Owner investments,"9,149.69"
+11/29/2025,Expense,,Yes,QuickBooks Payroll,INTUIT *QBooks Payroll,Chase Ink CC (0922),Legal & accounting services:Accounting fees,91.50
+11/29/2025,Credit Card Payment,,Yes,,Payment Thank You-Mobile,Targon US Chase USD (9899),Chase Ink CC (0922),-13.00
+11/30/2025,Expense,,Yes,Best Buy,BEST BUY XXXX1015,Chase Ink CC (0922),Office expenses,80.21
+11/30/2025,Expense,,Yes,Walmart,WAL-MART #0035,Chase Ink CC (0922),Office expenses,21.47
+11/30/2025,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTION,Chase Ink CC (0922),Office expenses:Software & apps,10.00
+11/30/2025,Expense,,Yes,Walmart,WAL-MART #0035,Chase Ink CC (0922),Office expenses,58.28
+11/30/2025,Bill,TC113630WS,Yes,Tactical Logistic Solutions,,Accounts Payable (A/P),,579.60
+12/01/2025,Expense,,Yes,Google,GOOGLE *Workspace_targ,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,24.12
+12/01/2025,Check,1062720,Yes,Chase bank,STANDARD ACH PMNTS INITIAL FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-2.50
+12/01/2025,Expense,,Yes,Amazon,AMAZON MKTPL*BB9M74HD0,Chase Ink CC (0922),Office expenses,55.93
+12/01/2025,Expense,,Yes,Best Buy,BESTBUYCOMXXXXXXXX3686,Chase Ink CC (0922),Office expenses:Office supplies,77.47
+12/01/2025,Expense,,Yes,Google,GOOGLE *SVCStargonglob,Chase Ink CC (0922),Utilities:Phone service,33.25
+12/02/2025,Expense,,Yes,Amazon Web Services,Amazon web services,Chase Ink CC (0922),Office expenses:Software & apps,96.60
+12/02/2025,Expense,,Yes,Amazon,AMAZON MKTPL*BI5WT5AA2,Chase Ink CC (0922),Office expenses,43.25
+12/02/2025,Expense,,Yes,Amazon,AMAZON MKTPL*BI5MK5A52,Chase Ink CC (0922),Office expenses,7.22
+12/03/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX2814,Targon US Chase USD (9899),Owner investments,"9,379.01"
+12/03/2025,Credit Card Credit,,Yes,Best Buy,BEST BUY XXXX1015,Chase Ink CC (0922),Office expenses,-49.33
+12/04/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 11/01/2025-11/30/2025,Direct Deposit Payable,,"3,217.26"
+12/04/2025,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 11/01/2025-11/30/2025,Targon US Chase USD (9899),Direct Deposit Payable,"-3,217.26"
+12/04/2025,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,"-1,088.74"
+12/04/2025,Credit Card Payment,,Yes,Chase bank,Payment Thank You - Web,Targon US Chase USD (9899),Chase Ink CC (0922),-599.30
+12/04/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX7557,Targon US Chase USD (9899),Owner investments,"8,940.65"
+12/04/2025,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-463.68
+12/05/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX5702,Targon US Chase USD (9899),Owner investments,"9,459.17"
+12/05/2025,Expense,,Yes,Coursera,COURSERA.ORG,Chase Ink CC (0922),General business expenses:Educational Expenses,20.00
+12/05/2025,Expense,,Yes,Amazon,AMZ*Amazon Payments,Chase Ink CC (0922),Amazon Seller Fees,39.99
+12/06/2025,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTISAN FRANCISCO CA XXXX1002,American Express CC (1002),Office expenses:Software & apps,100.00
+12/06/2025,Expense,,Yes,Wise,Wise bank details acquisition,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-31.00
+12/08/2025,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:251208 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX5957010 EED:251208 IND ID:M2620 IND NAME:TARGON LLC ER AM TRN: XXXXXX7010 TC,Targon US Chase USD (9899),American Express CC (1002),-100.00
+12/08/2025,Transfer,,Yes,,ORIG CO NAME:Wise Inc ORIG ID:XXXXXX3521 DESC DATE:251208 CO ENTRY DESCR:WISE SEC:CCD TRACE#:XXXXXXXX8005292 EED:251208 IND ID:invoice-XXX0897 IND NAME:Targon L LC XXXX0859 TRN: XXXXXX5292 TC,Targon US Chase USD (9899),Targon US Wise USD (1248),-31.00
+12/14/2025,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTISAN FRANCISCO CA XXXX1002,American Express CC (1002),Office expenses:Software & apps,126.28
+12/15/2025,Tax Payment,,Yes,IRS,Tax Payment for Period: 11/01/2025-11/30/2025,QuickBooks Tax Holding Account,Payroll Liabilities:Federal Taxes (941/943/944),-922.13
+12/15/2025,Bill,TC114643GG,Yes,Tactical Logistic Solutions,,Accounts Payable (A/P),,579.60
+12/15/2025,Bill,TC114858RV,Yes,Tactical Logistic Solutions,TC114858RV,Accounts Payable (A/P),,187.60
+12/17/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 12/17,Targon US Chase USD (9899),Chase Ink CC (0922),-10.66
+12/17/2025,Expense,,Yes,Kansas Secretary of State,KANSAS SEC OF STATE,Chase Ink CC (0922),Legal & accounting services:Legal fees,30.00
+12/17/2025,Bill,TC84520,Yes,Tactical Logistic Solutions,TC84520,Accounts Payable (A/P),Warehousing:3PL:US-PDS,384.00
+12/18/2025,Bill,2026014407312,Yes,Amazon Freight,2026014407312_5174260946_AWD,Accounts Payable (A/P),,450.26
+12/18/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX2348,Targon US Chase USD (9899),Owner investments,"9,498.87"
+12/19/2025,Expense,,Yes,Everest Indian Kitchen,EVEREST INDIAN KITCHMANHATTAN KS XXXX1002,American Express CC (1002),Meals:Meals with clients,38.18
+12/19/2025,Journal Entry,LMB-US-05-19DEC-25-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17078-25223291951
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/17910736
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+12/20/2025,Expense,,Yes,Staples,STAPLES MANHATTAN KS XXXX1002,American Express CC (1002),Office expenses,2.42
+12/20/2025,Expense,,Yes,Staples,STAPLES MANHATTAN KS XXXX1002,American Express CC (1002),Office expenses,6.56
+12/20/2025,Credit Card Credit,,Yes,,AMAZON MKTPLACE PMTS,Chase Ink CC (0922),Office expenses,-32.63
+12/22/2025,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 12/22,Targon US Chase USD (9899),Chase Ink CC (0922),"-2,965.33"
+12/22/2025,Expense,,Yes,KSU Real Estate,"KSU REAL ESTATE OFFICE RENT - January 2026 (Invoice #02141, period 01/01-01/31)",Chase Ink CC (0922),Building & property rent,687.00
+12/22/2025,Expense,,Yes,OpenAI ChatGPT,OPENAI *CHATGPT SUBSSAN FRANCISCO CA XXXX1002,American Express CC (1002),Office expenses:Software & apps,200.00
+12/24/2025,Deposit,,Yes,Jarrar Amjad,Online Transfer from CHK ...1268 transaction#: XXXXXXX3029,Targon US Chase USD (9899),Owner investments,"17,553.25"
+12/24/2025,Expense,,Yes,Hy-Vee,Personal expense — Hy-Vee grocery,American Express CC (1002),Owner draws,11.90
+12/25/2025,Expense,,Yes,Chase bank,Owner draw — December 2025,Targon US Chase USD (9899),Owner draws,-74.65
+12/26/2025,Tax Payment,,Yes,VA Department of Taxation,Tax Payment for Period: 11/01/2025-11/30/2025,QuickBooks Tax Holding Account,Payroll Liabilities:VA Income Tax,-166.61
+12/26/2025,Credit Card Payment,,Yes,Chase bank,Payment Thank You - Web,Targon US Chase USD (9899),Chase Ink CC (0922),-687.00
+12/26/2025,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:251226 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX1510646 EED:251226 IND ID:W3448 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX0646 TC,Targon US Chase USD (9899),American Express CC (1002),-385.34
+12/26/2025,Expense,,Yes,US Mobile,US MOBILE,Chase Ink CC (0922),Utilities:Phone service,13.00
+12/27/2025,Credit Card Credit,,Yes,,YOUR CASH REWARD/REFUND IS XXXX1002,American Express CC (1002),Other income:Credit card rewards,-5.47
+12/27/2025,Expense,,Yes,Amazon,AMAZON.COM*XG6P34XE3AMZN.COM/BILL WA XXXX1002,American Express CC (1002),Advertising & marketing,1.03
+12/29/2025,Expense,,Yes,QuickBooks Payments,INTUIT *QBooks Payroll,Chase Ink CC (0922),Legal & accounting services:Accounting fees,173.00
+12/31/2025,Bill,2449464017,Yes,Amazon Web Services,2449464017_Monthly_December 2025,Accounts Payable (A/P),,21.17
+12/31/2025,Expense,,Yes,Google,GOOGLE *Workspace_targ,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,100.80
+12/31/2025,Journal Entry,LMB-US-19-31DEC-25-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17078-25223291971
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/17971233
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+12/31/2025,Bill,TC115638GB,Yes,Tactical Logistic Solutions,TC115638GB,Accounts Payable (A/P),,386.40
+12/31/2025,Journal Entry,LMB-UK-05-31DEC-25-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17079-26144476012
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/17978896
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/01/2026,Bill Payment (Credit Card),,Yes,Amazon Web Services,,Chase Ink CC (0922),Accounts Payable (A/P),21.17
+01/01/2026,Expense,,Yes,Google,GOOGLE *SVCStargonglob,Chase Ink CC (0922),Utilities:Phone service,46.39
+01/01/2026,Credit Card Payment,,Yes,Chase bank,Payment Thank You - Web,Targon US Chase USD (9899),Chase Ink CC (0922),-186.00
+01/02/2026,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-579.60
+01/02/2026,Check,,Yes,Chase bank,STANDARD ACH PMNTS INITIAL FEE,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-2.50
+01/02/2026,Expense,,Yes,Intellectual Property Office,INTELLECTUAL PROPERTUNITED KINGDOM GB XXXX1002,American Express CC (1002),Legal & accounting services:Legal fees,67.40
+01/02/2026,Expense,,Yes,American Express CC,FOREIGN TRANSACTION FEE XXXX1002,American Express CC (1002),General business expenses:Bank fees & service charges,1.81
+01/02/2026,Journal Entry,LMB-UK-01-02JAN-26-2,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17079-26144476012
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/17978897
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/03/2026,Expense,,Yes,Chase Ink CC,FOREIGN TRANSACTION FEE,Chase Ink CC (0922),General business expenses:Bank fees & service charges,19.89
+01/05/2026,Credit Card Payment,,Yes,Chase bank,Payment Thank You - Web,Targon US Chase USD (9899),Chase Ink CC (0922),"-1,600.27"
+01/05/2026,Expense,,Yes,Coursera,COURSERA.ORG,Chase Ink CC (0922),General business expenses:Educational Expenses,20.00
+01/05/2026,Deposit,,Yes,Amazon,ORIG CO NAME:AMAZON.CCTD17V1A ORIG ID:XXXXXX0102 DESC DATE:260104 CO ENTRY DESCR:PAYMENTS SEC:CCD TRACE#:XXXXXXXX2588841 EED:260105 IND ID:4 KNO1AH2ZUBMA9Q IND N AME:TARGON LLC TRN: XXXXXX8841 TC,Targon US Chase USD (9899),Other income,0.01
+01/06/2026,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 12/01/2025-12/31/2025,Direct Deposit Payable,,"3,229.06"
+01/06/2026,Payroll Check,DD,Yes,Nezha El Albani,Pay Period: 12/01/2025-12/31/2025,Targon US Chase USD (9899),Direct Deposit Payable,"-3,229.06"
+01/06/2026,Tax Payment,,Yes,QuickBooks Payroll,Tax withdrawal,Targon US Chase USD (9899),QuickBooks Tax Holding Account,"-1,200.94"
+01/06/2026,Bill,VUK00004437,Yes,V Global Logistics,VUK00004437,Accounts Payable (A/P) - GBP,,248.39
+01/09/2026,Transfer,,Yes,,Online Transfer from CHK ...9899 transaction#: XXXXXXX5003,Targon US Chase USD (9899),Chase Chk ProjectX (9873),"-40,000.00"
+01/09/2026,Expense,,Yes,United States Postal Service (USPS),USPS CHANGE OF ADDRESS,Chase Ink CC (0922),Office expenses:Shipping & postage,1.25
+01/10/2026,Expense,,Yes,FedEx,FEDEX OFFICXXXXXXX1347,Chase Ink CC (0922),Office expenses,12.54
+01/12/2026,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260112 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX1351699 EED:260112 IND ID:W2272 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX1699 TC,Targon US Chase USD (9899),American Express CC (1002),-877.90
+01/12/2026,Transfer,,Yes,,Online ACH Payment XXXXXXX4805 To WiseUSD (_###########1248),Targon US Chase USD (9899),Targon US Wise USD (1248),-217.00
+01/12/2026,Bill,VUK00004444,Yes,V Global Logistics,VUK00004444,Accounts Payable (A/P) - GBP,,63.04
+01/13/2026,Expense,,Yes,Wise,Wise Charges for: TRANSFER-XXXXXX0881,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-2.01
+01/13/2026,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-579.60
+01/13/2026,Expense,,Yes,IDFL,Online ACH Payment XXXXXXX5849 To IDFL (_######8333),Targon US Chase USD (9899),Legal & accounting services:Legal fees,"-2,425.00"
+01/13/2026,Expense,,Yes,Hammad Nayyer,,Targon US Wise USD (1248),Contract labor,-214.29
+01/14/2026,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 01/14,Targon US Chase USD (9899),Chase Ink CC (0922),-218.41
+01/14/2026,Expense,,Yes,Claude.AI,CLAUDE.AI SUBSCRIPTISAN FRANCISCO CA XXXX1002,American Express CC (1002),Office expenses:Software & apps,200.00
+01/14/2026,Credit Card Payment,,Yes,American Express CC,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260114 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX0051651 EED:260114 IND ID:W3880 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX1651 TC,Targon US Chase USD (9899),American Express CC (1002),"-1,010.50"
+01/15/2026,Tax Payment,,Yes,IRS,Tax Payment for Period: 12/01/2025-12/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:Federal Taxes (941/943/944),-922.13
+01/15/2026,Bill Payment (Credit Card),,Yes,Amazon Freight,,American Express CC (1002),Accounts Payable (A/P),450.26
+01/15/2026,Bill,TC116564ZT,Yes,Tactical Logistic Solutions,,Accounts Payable (A/P),,331.20
+01/16/2026,Bill,INV-001302,Yes,AMS Business Accountants Ltd,INV-001302_January 2026,Accounts Payable (A/P) - GBP,,80.29
+01/16/2026,Journal Entry,LMB-US-02-16JAN-26-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17078-25333660651
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/18128696
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/16/2026,Journal Entry,LMB-UK-02-16JAN-26-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17079-26144476032
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/18129565
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/17/2026,Expense,,Yes,Chase Ink CC,FOREIGN TRANSACTION FEE,Chase Ink CC (0922),General business expenses:Bank fees & service charges,41.11
+01/17/2026,Expense,,Yes,Chase bank,Owner draw — January 2026,Targon US Chase USD (9899),Owner draws,-700.00
+01/18/2026,Bill,INV-001306,Yes,AMS Business Accountants Ltd,INV-001306_January 2026,Accounts Payable (A/P) - GBP,,66.95
+01/19/2026,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 01/20,Targon US Chase USD (9899),Chase Ink CC (0922),"-1,411.69"
+01/19/2026,Bill,VUK00004451,Yes,V Global Logistics,VUK00004451,Accounts Payable (A/P) - GBP,,62.88
+01/20/2026,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260120 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX4374266 EED:260120 IND ID:W7900 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX4266 TC,Targon US Chase USD (9899),American Express CC (1002),"-2,937.59"
+01/20/2026,Transfer,,Yes,,Online ACH Payment XXXXXXX4484 To WiseUSD (_###########1248),Targon US Chase USD (9899),Targon US Wise USD (1248),-100.00
+01/22/2026,Expense,,Yes,Wise,Wise Charges for: TRANSFER-XXXXXX7855,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-1.34
+01/22/2026,Expense,,Yes,OpenAI ChatGPT,OPENAI *CHATGPT SUBSSAN FRANCISCO CA XXXX1002,American Express CC (1002),Office expenses:Software & apps,200.00
+01/22/2026,Expense,,Yes,Kansas Secretary of State,KANSAS SEC OF STATE TOPEKA KS XXXX1002,American Express CC (1002),Legal & accounting services:Legal fees,30.00
+01/22/2026,Bill,INVOICE#222326,Yes,CAKE AFFAIRS LAYYAH,INVOICE# 222326,Accounts Payable (A/P),Office expenses,12.51
+01/22/2026,Expense,,Yes,Nuzhat,,Targon US Wise USD (1248),Building & property rent,-92.91
+01/25/2026,Expense,,Yes,US Mobile,US MOBILE,Chase Ink CC (0922),Utilities:Phone service,13.00
+01/26/2026,Tax Payment,,Yes,VA Department of Taxation,Tax Payment for Period: 12/01/2025-12/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:VA Income Tax,-166.61
+01/26/2026,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-331.20
+01/26/2026,Bill,VUK00004458,Yes,V Global Logistics,VUK00004458,Accounts Payable (A/P) - GBP,,64.04
+01/27/2026,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260127 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX3173606 EED:260127 IND ID:W5758 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX3606 TC,Targon US Chase USD (9899),American Express CC (1002),"-1,717.44"
+01/27/2026,Credit Card Credit,,Yes,ASUS,ASUS.COM,Chase Ink CC (0922),Office expenses,-139.35
+01/28/2026,Bill,VUK00004464,Yes,V Global Logistics,VUK00004464,Accounts Payable (A/P) - GBP,,64.73
+01/29/2026,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-386.40
+01/29/2026,Bill Payment (Check),,Yes,Tactical Logistic Solutions,,Targon US Chase USD (9899),Accounts Payable (A/P),-384.00
+01/29/2026,Expense,,Yes,QuickBooks Payments,INTUIT *QBooks Payroll,Chase Ink CC (0922),Legal & accounting services:Accounting fees,169.00
+01/30/2026,Journal Entry,LMB-US-16-30JAN-26-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17078-25438700831
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/18299627
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/30/2026,Transfer,,Yes,,Online ACH Payment XXXXXXX4140 To WiseUSD (_###########1248),Targon US Chase USD (9899),Targon US Wise USD (1248),"-1,515.00"
+01/30/2026,Journal Entry,LMB-UK-16-30JAN-26-1,Yes,,"Full Audit Trail : https://api.linkmybooks.com/app/finance/downloadAuditFile/17079-26323896152
+
+Making Tax Digital Daily Summaries : https://api.linkmybooks.com/app/finance/downloadMTD/18300450
+
+You will need an account on LinkMyBooks.com with appropriate access to view this data",,,
+01/31/2026,Bill,2484486657,Yes,Amazon Web Services,2484486657_Monthly_January 2026,Accounts Payable (A/P),,49.39
+01/31/2026,Expense,,Yes,Google,GOOGLE *Workspace_targ,Chase Ink CC (0922),General business expenses:Memberships & subscriptions,102.96
+02/01/2026,Bill Payment (Credit Card),,Yes,Amazon Web Services,,Chase Ink CC (0922),Accounts Payable (A/P),49.39
+02/01/2026,Expense,,Yes,Chase bank,Owner draw — February 2026 (from ProjectX account),Chase Chk ProjectX (9873),Owner draws,"-20,000.00"
+02/01/2026,Expense,,Yes,KSU Real Estate,"KSU REAL ESTATE OFFICE RENT - February 2026 (Invoice #02192, period 02/01-02/28)",Chase Ink CC (0922),Building & property rent,687.00
+02/02/2026,Tax Payment,,Yes,VA Employment Commission,Tax Payment for Period: 10/01/2025-12/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:VA SUI Employer,-100.00
+02/02/2026,Tax Payment,,Yes,IRS,Tax Payment for Period: 01/01/2025-12/31/2025,QuickBooks Tax Holding Account,Payroll Liabilities:Federal Unemployment (940),-42.00
+02/02/2026,Credit Card Payment,,Yes,Chase bank,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260202 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX0137890 EED:260202 IND ID:W5646 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX7890 TC,Targon US Chase USD (9899),American Express CC (1002),"-2,997.44"
+02/02/2026,Transfer,,Yes,,Online ACH Payment XXXXXXX7964 To WiseUSD (_###########1248),Targon US Chase USD (9899),Targon US Wise USD (1248),-220.00
+02/02/2026,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 02/02,Targon US Chase USD (9899),Chase Ink CC (0922),-114.61
+02/02/2026,Check,9062720,Yes,Chase bank,STANDARD ACH PMNTS INITIAL FEE QTY = 9,Targon US Chase USD (9899),General business expenses:Bank fees & service charges,-22.50
+02/02/2026,Expense,,Yes,Wise,Wise Charges for: TRANSFER-XXXXXX7486,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-3.78
+02/02/2026,Expense,,Yes,Wise,Wise Charges for: TRANSFER-XXXXXX7487,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-3.46
+02/02/2026,Expense,,Yes,Wise,Wise Charges for: TRANSFER-XXXXXX7488,Targon US Wise USD (1248),General business expenses:Bank fees & service charges,-2.80
+02/02/2026,Expense,,Yes,Umair Afzal,,Targon US Wise USD (1248),Contract labor,-536.00
+02/02/2026,Expense,,Yes,Zeeshan Azam,,Targon US Wise USD (1248),Contract labor,-357.33
+02/02/2026,Expense,,Yes,Muhammad Hamad,,Targon US Wise USD (1248),Contract labor,-477.04
+02/03/2026,Payroll Refund,,Yes,QuickBooks Payroll,Tax overpayment credit refund,Targon US Chase USD (9899),QuickBooks Tax Holding Account,124.00
+02/03/2026,Credit Card Payment,,Yes,American Express CC,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260203 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX9247505 EED:260203 IND ID:W1512 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX7505 TC,Targon US Chase USD (9899),American Express CC (1002),-501.49
+02/03/2026,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 02/03,Targon US Chase USD (9899),Chase Ink CC (0922),-219.36
+02/03/2026,Expense,,Yes,Muhammad Mehdi,Sent to Ali (Mehdi's friend),Targon US Wise USD (1248),Contract labor,-350.00
+02/04/2026,Credit Card Payment,,Yes,American Express CC,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260204 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX5576689 EED:260204 IND ID:W4046 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX6689 TC,Targon US Chase USD (9899),American Express CC (1002),-515.02
+02/04/2026,Credit Card Payment,,Yes,Chase bank,Payment to Chase card ending in 0922 02/04,Targon US Chase USD (9899),Chase Ink CC (0922),-687.00
+02/04/2026,Transfer,,Yes,,Online Transfer from CHK ...9873 transaction#: XXXXXXX9802,Chase Chk ProjectX (9873),Targon US Chase USD (9899),"-10,000.00"
+02/04/2026,Transfer,,Yes,,Paid to JPMORGAN CHASE,Targon US Wise USD (1248),Targon US Chase USD (9899),-0.64
+02/04/2026,Expense,,Yes,Chase bank,Owner draw — January 2026 salary/compensation,Targon US Chase USD (9899),Owner draws,"-1,800.00"
+02/05/2026,Transfer,,Yes,,Received money from JPMORGAN CHASE with reference XXXXXXXX5571158,Targon US Chase USD (9899),Targon US Wise USD (1248),-0.36
+02/05/2026,Transfer,,Yes,,Received money from JPMORGAN CHASE with reference XXXXXXXX5571520,Targon US Chase USD (9899),Targon US Wise USD (1248),-0.28
+02/06/2026,Expense,,Yes,American Express CC,ORIG CO NAME:AMERICAN EXPRESS ORIG ID:XXXXXX2111 DESC DATE:260206 CO ENTRY DESCR:ACH PMT SEC:CCD TRACE#:XXXXXXXX7955122 EED:260206 IND ID:W0550 IND NAME:JARRAR AMJAD ER AM TRN: XXXXXX5122 TC,Targon US Chase USD (9899),American Express CC (1002),"-1,023.91"
+TOTAL,,,,,,,,"$50,901.14"
+
+
+
+" Sunday, February 08, 2026 11:22 PM GMTZ",,,,,,,,

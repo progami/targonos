@@ -26,6 +26,14 @@ export type BillEvent =
       component: Exclude<InventoryComponent, 'manufacturing'>;
       costCents: number;
       sku?: string;
+    }
+  | {
+      kind: 'brand_cost';
+      date: string;
+      poNumber: string;
+      brandId: string;
+      component: InventoryComponent;
+      costCents: number;
     };
 
 export type ParsedBills = {
@@ -133,6 +141,9 @@ export function parseQboBillsToInventoryEvents(
 
     if (candidateLines.length === 0) continue;
 
+    // Skip bills that don't follow the "PO: <number>" memo convention
+    const trimmedMemo = memo.trim();
+    if (!trimmedMemo.startsWith('PO: ')) continue;
     const poNumber = parsePoNumber(memo);
 
     for (const { line, component } of candidateLines) {
@@ -176,6 +187,80 @@ export function parseQboBillsToInventoryEvents(
         component,
         costCents,
         sku,
+      });
+    }
+  }
+
+  events.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
+    return 0;
+  });
+
+  return { events, poUnitsBySku };
+}
+
+export type BillMappingWithLines = {
+  qboBillId: string;
+  poNumber: string;
+  brandId: string;
+  billDate: string;
+  lines: Array<{
+    qboLineId: string;
+    component: string;
+    amountCents: number;
+    sku: string | null;
+    quantity: number | null;
+  }>;
+};
+
+export function buildInventoryEventsFromMappings(
+  mappings: BillMappingWithLines[],
+): ParsedBills {
+  const events: BillEvent[] = [];
+  const poUnitsBySku = new Map<string, Map<string, number>>();
+
+  for (const mapping of mappings) {
+    for (const line of mapping.lines) {
+      if (
+        line.component !== 'manufacturing' &&
+        line.component !== 'freight' &&
+        line.component !== 'duty' &&
+        line.component !== 'mfgAccessories'
+      ) {
+        continue;
+      }
+
+      const component = line.component as InventoryComponent;
+
+      if (component === 'manufacturing') {
+        if (!line.sku || !line.quantity || line.quantity <= 0) {
+          throw new Error(
+            `Manufacturing bill mapping line requires sku+quantity: billId=${mapping.qboBillId} lineId=${line.qboLineId}`,
+          );
+        }
+
+        // Per-SKU manufacturing event
+        addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
+        events.push({
+          kind: 'manufacturing',
+          date: mapping.billDate,
+          poNumber: mapping.poNumber,
+          sku: line.sku,
+          units: line.quantity,
+          costCents: line.amountCents,
+        });
+        continue;
+      }
+
+      // Cost-only components (freight/duty/accessories)
+      events.push({
+        kind: 'cost',
+        date: mapping.billDate,
+        poNumber: mapping.poNumber,
+        component,
+        costCents: line.amountCents,
+        ...(line.sku ? { sku: line.sku } : {}),
       });
     }
   }

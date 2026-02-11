@@ -1,6 +1,13 @@
 import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
 import { allocateByWeight, toCents } from '@/lib/inventory/money';
 
+export class PnlAllocationNoWeightsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PnlAllocationNoWeightsError';
+  }
+}
+
 export type PnlBucketKey =
   | 'amazonSellerFees'
   | 'amazonFbaFees'
@@ -39,6 +46,12 @@ function allocateSignedByUnits(
   totalCents: number,
   unitsByBrand: Map<string, number>,
 ): Record<string, number> {
+  if (unitsByBrand.size === 0) {
+    throw new PnlAllocationNoWeightsError(
+      'Cannot allocate SKU-less fee buckets because there are no Amazon Sales - Principal rows with SKU + quantity > 0',
+    );
+  }
+
   const sign = totalCents < 0 ? -1 : 1;
   const abs = Math.abs(totalCents);
 
@@ -46,6 +59,12 @@ function allocateSignedByUnits(
     key: brand,
     weight: units,
   }));
+
+  let totalUnits = 0;
+  for (const w of weights) totalUnits += w.weight;
+  if (totalUnits <= 0) {
+    throw new PnlAllocationNoWeightsError('Cannot allocate SKU-less P&L rows: total units-by-brand weight is 0');
+  }
 
   const allocated = allocateByWeight(abs, weights);
   const result: Record<string, number> = {};
@@ -118,4 +137,3 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
 
   return { invoiceId, allocationsByBucket };
 }
-

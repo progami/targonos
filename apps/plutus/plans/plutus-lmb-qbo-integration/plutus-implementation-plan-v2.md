@@ -46,7 +46,7 @@ Therefore:
 
 ---
 
-## Current Status (2026-01-23)
+## Current Status (2026-02-10)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -55,12 +55,25 @@ Therefore:
 | Phase 2 (LMB Config) | ✅ COMPLETE (Manual) | No LMB API. User completes LMB setup manually for BOTH connections (US + UK). |
 | Phase 3 (Bill Entry Setup) | ✅ COMPLETE | PO memo policy is documented in the Bills tooling (Bill Guide + Compliance Scanner). |
 | Phase 4 (Bill SOP) | ✅ COMPLETE (v1 tooling) | Bill Guide + Compliance Scanner + QBO Bills API are implemented for backfills and SOP enforcement. |
-| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). |
-| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation deferred. |
-| Phase 7 (Testing) | 🚧 IN PROGRESS | CI checks for changed workspaces (lint/type-check/build). |
-| Phase 8 (Go-Live) | ❌ NOT STARTED | Production deployment |
+| Phase 5 (Plutus Engine) | ✅ COMPLETE (v1) | Poll QBO for LMB settlements, upload Audit Data, preview COGS + P&L reclass, post JEs, persist processing + order history, support rollback (void JEs manually, delete Plutus record). Audit invoices are matched to settlements deterministically by marketplace + settlement period (no guessing). |
+| Phase 6 (Workflows) | ✅ COMPLETE (v1) | Settlement processing + cross-period refund matching. Reconciliation tooling restored (compare Amazon Transaction Report vs stored Audit Data); inventory adjustment posting is still deferred. |
+| Phase 7 (Testing) | ✅ BASIC COVERAGE | Minimal unit coverage exists (matching + inventory ledger + reconciliation CSV parsing). CI checks for changed workspaces (lint/type-check/build). |
+| Phase 8 (Go-Live) | ✅ DEPLOYED (Production) | Production deployment is live; remaining work is operational validation (process a full quarter, confirm brand P&L totals, confirm bill SOP compliance). |
 
 **Next Action:** Parallel-run one quarter of settlements and validate brand P&L totals vs expected dividend allocations.
+
+### Implementation Notes (v1 Reality)
+
+The plan below includes some legacy design notes from earlier iterations. As of **2026-02-10**, the implemented v1 behavior is:
+
+- **Audit invoice identity is `(marketplace, invoiceId)`** (invoiceId is the CSV `Invoice` column, not a PO number).
+- Inventory costing in v1 is computed via **ledger replay** from parsed QBO bills + settlement unit movements; **there is no `SkuCostHistory` / `SkuCost` table** in the current Prisma schema.
+- Settlement preview shows **blocking issues** that must be fixed before posting:
+  - `PNL_ALLOCATION_ERROR`: SKU-less fee buckets exist, but there are **no** `Amazon Sales - Principal` rows with SKU + `quantity > 0` to use as allocation weights (fees-only/refunds-only invoice, or wrong invoice selected).
+  - `MISSING_COST_BASIS`: Sales exist for a SKU but the inventory ledger has **no on-hand units/cost basis** at that point in time. The UI aggregates this by SKU (with occurrence counts) to avoid thousands of duplicate rows.
+  - `BILLS_FETCH_ERROR` / `BILLS_PARSE_ERROR`: Bills could not be retrieved/parsed, so inventory costing cannot proceed (avoid cascading cost-basis noise until bills are fixed).
+- Bills created in the Plutus **Bills** UI are posted directly to **brand sub-accounts** under the mapped parent accounts (inventory, warehousing, and product expenses). Plutus blocks bill creation until Setup has created the brand sub-accounts in QBO.
+- **Opening Snapshots are NOT implemented in v1**. Where this plan mentions an “Opening Snapshot” button/workflow, treat it as *planned/deferred*; current v1 requires entering historical bills (or starting settlement processing only after bill history exists).
 
 ---
 
@@ -108,7 +121,7 @@ Settlement Report                    Manual Inventory Count
 
 **Historical Catch-Up:** New users starting from a specific date must either:
 1. Process all historical bills and settlements from the beginning, OR
-2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation)
+2. Provide an Opening Snapshot (sourced from Amazon inventory report + accountant valuation) (planned/deferred; not implemented in v1)
 
 See Setup Wizard Step 8 and V1 Constraint #9.
 

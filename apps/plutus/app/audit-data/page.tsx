@@ -17,7 +17,7 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ConnectionStatus = { connected: boolean };
+type ConnectionStatus = { connected: boolean; error?: string };
 
 type UploadRecord = {
   id: string;
@@ -40,6 +40,7 @@ type UploadResult = {
   uploadedAt: string;
   invoiceSummaries: Array<{
     invoiceId: string;
+    marketplace: 'amazon.com' | 'amazon.co.uk';
     rowCount: number;
     minDate: string;
     maxDate: string;
@@ -140,13 +141,17 @@ export default function AuditDataPage() {
   );
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Audit Data" />;
+    return <NotConnectedScreen title="Audit Data" error={connection.error} />;
   }
 
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Audit Data" variant="accent" />
+        <PageHeader
+          title="Audit Data"
+          description="Upload Link My Books Audit Data (CSV/ZIP). Plutus uses it to compute per-SKU unit movements, COGS, and brand allocation for fees."
+          variant="accent"
+        />
 
         {/* Upload Zone */}
         <Card className="mt-6 border-slate-200/70 dark:border-white/10">
@@ -226,10 +231,17 @@ export default function AuditDataPage() {
                           <TableHead className="text-emerald-700 dark:text-emerald-400 text-right">SKUs</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {uploadResult.invoiceSummaries.map((s) => (
-                          <TableRow key={s.invoiceId}>
-                            <TableCell className="font-mono text-sm">{s.invoiceId}</TableCell>
+                        <TableBody>
+                          {uploadResult.invoiceSummaries.map((s) => (
+                          <TableRow key={`${s.marketplace}:${s.invoiceId}`}>
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {s.marketplace === 'amazon.com' ? 'US' : 'UK'}
+                                </Badge>
+                                <span>{s.invoiceId}</span>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-sm">
                               {s.minDate} &ndash; {s.maxDate}
                             </TableCell>

@@ -133,12 +133,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  const response = NextResponse.next()
-  if (hasTenant) {
-    response.headers.set('x-tenant', tenantCookie)
+  const requestTenantOverride = request.headers.get('x-tenant')
+  const effectiveTenant = isValidTenantCode(requestTenantOverride)
+    ? requestTenantOverride
+    : tenantCookie
+  const requestHeaders = new Headers(request.headers)
+  if (isValidTenantCode(effectiveTenant)) {
+    requestHeaders.set('x-tenant', effectiveTenant)
+  } else {
+    requestHeaders.delete('x-tenant')
+  }
+  if (isValidTenantCode(requestTenantOverride)) {
+    requestHeaders.set('x-tenant-override', '1')
+  } else {
+    requestHeaders.delete('x-tenant-override')
   }
 
-  return response
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 }
 
 export const config = {

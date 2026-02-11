@@ -101,6 +101,9 @@ export type AccountMappings = {
   warehousingAmazonFc: string;
   warehousingAwd: string;
 
+  // Product Expenses
+  productExpenses: string;
+
   // LMB Revenue/Fee accounts
   amazonSales: string;
   amazonRefunds: string;
@@ -153,6 +156,9 @@ export async function ensurePlutusQboLmbPlanAccounts(
     warehousingAmazonFc: requireAccountById(accounts, mappings.warehousingAmazonFc, 'Warehousing Amazon FC'),
     warehousingAwd: requireAccountById(accounts, mappings.warehousingAwd, 'Warehousing AWD'),
 
+    // Product Expenses
+    productExpenses: requireAccountById(accounts, mappings.productExpenses, 'Product Expenses'),
+
     // LMB
     amazonSales: requireAccountById(accounts, mappings.amazonSales, 'Amazon Sales'),
     amazonRefunds: requireAccountById(accounts, mappings.amazonRefunds, 'Amazon Refunds'),
@@ -186,6 +192,9 @@ export async function ensurePlutusQboLmbPlanAccounts(
     { label: 'Warehousing:3PL', parent: parents.warehousing3pl },
     { label: 'Warehousing:Amazon FC', parent: parents.warehousingAmazonFc },
     { label: 'Warehousing:AWD', parent: parents.warehousingAwd },
+
+    // Product Expenses
+    { label: 'Product Expenses', parent: parents.productExpenses },
 
     // LMB P&L
     { label: 'Amazon Sales', parent: parents.amazonSales },

@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { z } from 'zod';
-import { cookies } from 'next/headers';
 import type { QboConnection } from './api';
 
 // ---------------------------------------------------------------------------
@@ -17,14 +16,6 @@ export const QboConnectionSchema = z.object({
   refreshToken: z.string().min(1),
   expiresAt: z.string().min(1),
 });
-
-/** Schema for the lightweight cookie (NO tokens). */
-export const QboCookieSchema = z.object({
-  realmId: z.string().min(1),
-  connected: z.literal(true),
-});
-
-export type QboCookie = z.infer<typeof QboCookieSchema>;
 
 // ---------------------------------------------------------------------------
 // File-path helpers
@@ -89,25 +80,12 @@ export async function deleteServerQboConnection(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Read the lightweight cookie, then load the full connection from the
- * server-side JSON file.  Returns `null` when the user is not connected.
+ * Load the QBO connection from the server-side JSON file.
+ * Returns `null` when no connection exists (user hasn't connected yet).
  *
- * The cookie only contains `{ realmId, connected: true }` — tokens live
- * exclusively on disk.
+ * Access control is handled by Portal auth / middleware — the connection
+ * is shared across all Plutus users so no per-browser cookie gate is needed.
  */
 export async function getQboConnection(): Promise<QboConnection | null> {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get('qbo_connection')?.value;
-  if (!raw) return null;
-
-  const cookieResult = QboCookieSchema.safeParse(JSON.parse(raw));
-  if (!cookieResult.success) return null;
-
-  const serverConnection = await loadServerQboConnection();
-  if (!serverConnection) return null;
-
-  // Validate that the cookie realmId matches the server-side file
-  if (serverConnection.realmId !== cookieResult.data.realmId) return null;
-
-  return serverConnection;
+  return loadServerQboConnection();
 }

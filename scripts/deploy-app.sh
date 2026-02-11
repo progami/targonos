@@ -634,6 +634,11 @@ if [[ -n "$migrate_cmd" ]]; then
           run_migrations="true"
         fi
         ;;
+      argus)
+        # Always run migrate deploy for Argus. It is quick when up-to-date and
+        # prevents schema drift if a previous deploy skipped migrations.
+        run_migrations="true"
+        ;;
     esac
   fi
 
@@ -755,6 +760,15 @@ fi
 log "Step 7: Starting $pm2_name"
 start_and_verify_pm2_process "$pm2_name" "$app_dir" "$deploy_runtime_sha"
 log "$pm2_name started and verified"
+
+if [[ "$app_key" == "argus" ]]; then
+  argus_workers=("${PM2_PREFIX}-argus-scheduler" "${PM2_PREFIX}-argus-capture")
+  for worker in "${argus_workers[@]}"; do
+    log "Step 7: Starting $worker"
+    start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
+    log "$worker started and verified"
+  done
+fi
 
 if [[ "$app_key" == "hermes" ]]; then
   hermes_workers=("${PM2_PREFIX}-hermes-orders-sync" "${PM2_PREFIX}-hermes-request-review")

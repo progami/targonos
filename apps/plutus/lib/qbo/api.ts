@@ -1,6 +1,7 @@
 import { getApiBaseUrl, refreshAccessToken } from './client';
 import { createLogger } from '@targon/logger';
 import { getCached, setCache, invalidateCache } from './cache';
+import { loadServerQboConnection, saveServerQboConnection } from './connection-store';
 
 const logger = createLogger({ name: 'qbo-api' });
 
@@ -378,12 +379,19 @@ export async function createJournalEntry(
   return { journalEntry: data.JournalEntry, updatedConnection };
 }
 
+export interface QboVendor {
+  Id: string;
+  DisplayName: string;
+  Active?: boolean;
+}
+
 export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
     Bill?: QboBill[];
     Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
+    Vendor?: QboVendor[];
     totalCount?: number;
     startPosition?: number;
     maxResults?: number;
@@ -407,6 +415,45 @@ export interface FetchBillsOptions {
   startPosition?: number;
 }
 
+const tokenRefreshPromisesByRealmId = new Map<string, Promise<QboConnection>>();
+
+async function refreshConnectionSingleFlight(connection: QboConnection): Promise<QboConnection> {
+  const existing = tokenRefreshPromisesByRealmId.get(connection.realmId);
+  if (existing) return existing;
+
+  const refreshPromise = (async () => {
+    const storedConnection = await loadServerQboConnection();
+    if (storedConnection && storedConnection.realmId === connection.realmId) {
+      const storedExpiresAt = new Date(storedConnection.expiresAt);
+      const now = new Date();
+      // Another request/process may have already refreshed and persisted the rotated refresh token.
+      if (storedExpiresAt.getTime() - now.getTime() >= 5 * 60 * 1000) {
+        return storedConnection;
+      }
+      connection = storedConnection;
+    }
+
+    const newTokens = await refreshAccessToken(connection.refreshToken);
+    const updatedConnection: QboConnection = {
+      ...connection,
+      accessToken: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,
+      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
+    };
+
+    // Refresh tokens are rotated on each refresh; persist immediately so we don't lose the new refresh token
+    // if a request fails before its caller writes the updated connection.
+    await saveServerQboConnection(updatedConnection);
+
+    return updatedConnection;
+  })().finally(() => {
+    tokenRefreshPromisesByRealmId.delete(connection.realmId);
+  });
+
+  tokenRefreshPromisesByRealmId.set(connection.realmId, refreshPromise);
+  return refreshPromise;
+}
+
 /**
  * Ensure we have a valid access token, refreshing if needed
  */
@@ -419,21 +466,14 @@ export async function getValidToken(
   // If token expires in less than 5 minutes, refresh it
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     logger.info('Access token expired or expiring soon, refreshing...');
-    let newTokens: Awaited<ReturnType<typeof refreshAccessToken>>;
     try {
-      newTokens = await refreshAccessToken(connection.refreshToken);
+      const updatedConnection = await refreshConnectionSingleFlight(connection);
+      return { accessToken: updatedConnection.accessToken, updatedConnection };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn('QBO token refresh failed', { error: message });
+      logger.warn('QBO token refresh failed', { realmId: connection.realmId, error: message });
       throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
     }
-    const updatedConnection: QboConnection = {
-      ...connection,
-      accessToken: newTokens.accessToken,
-      refreshToken: newTokens.refreshToken,
-      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
-    };
-    return { accessToken: newTokens.accessToken, updatedConnection };
   }
 
   return { accessToken: connection.accessToken };
@@ -717,6 +757,107 @@ export async function updateBillLineAccounts(
     const errorText = await response.text();
     logger.error('Failed to update bill', { billId, status: response.status, error: errorText });
     throw new Error(`Failed to update bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+/**
+ * Update a Bill's memo (PrivateNote) and line descriptions.
+ * Fetches the current bill, applies updates, and sends a full update to QBO.
+ */
+export async function updateBill(
+  connection: QboConnection,
+  billId: string,
+  updates: {
+    privateNote?: string;
+    lineDescriptions?: Array<{ lineId: string; description: string }>;
+  },
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const fetchUrl = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+  const fetchResponse = await fetchWithRetry(fetchUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!fetchResponse.ok) {
+    const errorText = await fetchResponse.text();
+    logger.error('Failed to fetch bill for update', { billId, status: fetchResponse.status, error: errorText });
+    throw new Error(`Failed to fetch bill for update: ${fetchResponse.status} ${errorText}`);
+  }
+
+  const fetchData = (await fetchResponse.json()) as { Bill: QboBill };
+  const bill = fetchData.Bill;
+
+  const descMap = new Map(
+    (updates.lineDescriptions ?? []).map((u) => [u.lineId, u.description]),
+  );
+
+  const updatedLines = (bill.Line ?? []).map((line) => {
+    const newDesc = descMap.get(line.Id);
+    if (newDesc !== undefined) {
+      return { ...line, Description: newDesc };
+    }
+    return line;
+  });
+
+  const payload = {
+    ...bill,
+    Line: updatedLines,
+    PrivateNote: updates.privateNote !== undefined ? updates.privateNote : bill.PrivateNote,
+  };
+
+  logger.info('Updating bill in QBO', { billId, updates });
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to update bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+export async function updateBillWithPayload(
+  connection: QboConnection,
+  payload: Record<string, unknown>,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill with payload', { status: response.status, error: errorText });
+    throw new Error(`Failed to update bill with payload: ${response.status} ${errorText}`);
   }
 
   const data = (await response.json()) as { Bill: QboBill };
@@ -1012,4 +1153,107 @@ export async function updateAccountActive(
 
   const data = await response.json();
   return { account: data.Account, updatedConnection };
+}
+
+/**
+ * Create a Bill in QBO.
+ */
+export async function createBill(
+  connection: QboConnection,
+  input: {
+    txnDate: string;
+    vendorId: string;
+    privateNote?: string;
+    lines: Array<{
+      amount: number;
+      accountId: string;
+      description?: string;
+    }>;
+  },
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/bill`;
+
+  const payload = {
+    TxnDate: input.txnDate,
+    VendorRef: { value: input.vendorId },
+    PrivateNote: input.privateNote,
+    Line: input.lines.map((line) => ({
+      DetailType: 'AccountBasedExpenseLineDetail',
+      Amount: line.amount,
+      Description: line.description,
+      AccountBasedExpenseLineDetail: {
+        AccountRef: { value: line.accountId },
+      },
+    })),
+  };
+
+  logger.info('Creating bill in QBO', { txnDate: input.txnDate, vendorId: input.vendorId });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create bill', { status: response.status, error: errorText });
+    throw new Error(`Failed to create bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+const VENDORS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Fetch Vendors from QBO
+ */
+export async function fetchVendors(
+  connection: QboConnection,
+): Promise<{ vendors: QboVendor[]; updatedConnection?: QboConnection }> {
+  const cacheKey = `vendors:${connection.realmId}`;
+
+  const cached = getCached<QboVendor[]>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached vendors', { realmId: connection.realmId, count: cached.length });
+    return { vendors: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM Vendor WHERE Active = true MAXRESULTS 1000`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching vendors from QBO');
+
+  const response = await fetchWithRetry(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch vendors', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch vendors: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as QboQueryResponse;
+  const vendors = data.QueryResponse.Vendor;
+  const result = vendors ? vendors : [];
+
+  setCache(cacheKey, result, VENDORS_CACHE_TTL_MS);
+
+  return { vendors: result, updatedConnection };
 }

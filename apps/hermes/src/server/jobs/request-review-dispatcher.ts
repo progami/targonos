@@ -34,6 +34,7 @@ import {
   createProductReviewAndSellerFeedbackSolicitation,
   getSolicitationActionsForOrder,
 } from "../sp-api/solicitations";
+import { isHermesDryRun } from "../env/flags";
 import { loadHermesEnv } from "./load-env";
 
 function sleep(ms: number) {
@@ -386,7 +387,7 @@ async function processDispatch(row: DispatchRow, opts: {
 async function main() {
   loadHermesEnv();
 
-  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+  if (isHermesDryRun()) {
     console.log(`[${nowIso()}] HERMES_DRY_RUN is enabled — request-review dispatcher will not process dispatches.`);
     // Keep the process alive so monitoring sees it as running, but do nothing.
     setInterval(() => {}, 60_000);

@@ -170,7 +170,15 @@ function extractTextFromPdf(filePath: string): string {
   const plain = execFileSync('pdftotext', [filePath, '-'], { encoding: 'utf8' })
   if (plain.trim().length >= 80) return plain
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'talos-pdf-ocr-'))
+  const tmpDirCandidate = os.tmpdir()
+  // On macOS, /tmp and /var are symlinks into /private; some OCR tooling fails to open the symlink path.
+  const baseTmpDir = tmpDirCandidate.startsWith('/tmp')
+    ? '/private/tmp'
+    : tmpDirCandidate.startsWith('/var/')
+      ? `/private${tmpDirCandidate}`
+      : tmpDirCandidate
+
+  const tmpDir = fs.mkdtempSync(path.join(baseTmpDir, 'talos-pdf-ocr-'))
   try {
     const imagePath = path.join(tmpDir, 'page.png')
     execFileSync('magick', ['-density', '250', `${filePath}[0]`, imagePath], { stdio: 'ignore' })
@@ -352,12 +360,12 @@ function pickBest(files: string[], score: (filePath: string) => number): string 
   return bestPath
 }
 
-function buildOrderNumber(batchIdRaw: string, variant: string): string {
+function buildOrderNumber(tenant: TenantCode, batchIdRaw: string, variant: string): string {
   const normalizedBatch = batchIdRaw.trim().toUpperCase()
   const normalizedVariant = variant.trim().toUpperCase()
   if (!normalizedBatch) throw new Error('batch_id_raw is required')
   if (!normalizedVariant) throw new Error('variant is required')
-  return `INV-${normalizedBatch}-${normalizedVariant}`
+  return `INV-${normalizedBatch}-${normalizedVariant}-${tenant}`
 }
 
 async function uploadPurchaseOrderDocument(params: {
@@ -462,7 +470,7 @@ async function main() {
   for (const row of ukRows) {
     const batchIdRaw = normalizeCsvValue(row.batch_id_raw)
     const variant = normalizeCsvValue(row.variant)
-    const orderNumber = buildOrderNumber(batchIdRaw, variant)
+    const orderNumber = buildOrderNumber(tenant, batchIdRaw, variant)
 
     const folderRel = normalizeCsvValue(row.folder)
     const batchFolder = path.join(SHARED_DRIVES_ROOT, folderRel)

@@ -3,13 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Package,
-  Search,
-  Trophy,
   Bell,
   Download,
+  Images,
   Eye,
+  Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,21 +15,24 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const NAV_SECTIONS = [
   {
     items: [
-      { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { label: 'Attention', href: '/attention', icon: Bell },
     ],
   },
   {
     title: 'MONITORING',
     items: [
-      { label: 'Products', href: '/products', icon: Package },
-      { label: 'Rankings', href: '/rankings', icon: Search },
-      { label: 'Bestsellers', href: '/bestsellers', icon: Trophy },
+      { label: 'Monitoring', href: '/monitoring', icon: Radar },
     ],
   },
   {
-    title: 'SYSTEM',
+    title: 'ASSETS',
     items: [
-      { label: 'Alerts', href: '/alerts', icon: Bell },
+      { label: 'Image Manager', href: '/images', icon: Images },
+    ],
+  },
+  {
+    title: 'ADMIN',
+    items: [
       { label: 'Imports', href: '/imports', icon: Download },
     ],
   },

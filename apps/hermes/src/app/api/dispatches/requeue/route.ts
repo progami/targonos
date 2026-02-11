@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withApiLogging } from "@/server/api-logging";
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { getPgPool } from "@/server/db/pool";
+import { isHermesDryRun } from "@/server/env/flags";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ export const runtime = "nodejs";
  * - Expired dispatches cannot be requeued (worker will ignore them).
  */
 async function handlePost(req: Request) {
-  if (process.env.HERMES_DRY_RUN === "1" || process.env.HERMES_DRY_RUN === "true") {
+  if (isHermesDryRun()) {
     return NextResponse.json(
       { ok: false, error: "Hermes is in dry-run mode. Requeue is disabled." },
       { status: 403 }
@@ -86,4 +87,3 @@ async function handlePost(req: Request) {
 }
 
 export const POST = withApiLogging("POST /api/dispatches/requeue", handlePost);
-

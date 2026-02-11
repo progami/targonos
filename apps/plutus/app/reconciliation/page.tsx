@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
+import { NotConnectedScreen } from '@/components/not-connected-screen';
 import {
   Select,
   SelectContent,
@@ -53,6 +55,13 @@ type ReconciliationResult = {
   rows: ReconciliationRow[];
 };
 
+type ConnectionStatus = { connected: boolean; error?: string };
+
+async function fetchConnectionStatus(): Promise<ConnectionStatus> {
+  const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
+
 function getDefaultMonth(): string {
   const now = new Date();
   // Default to previous month
@@ -60,10 +69,15 @@ function getDefaultMonth(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function formatCurrency(amount: number): string {
+function currencyForMarketplace(marketplace: 'US' | 'UK'): 'USD' | 'GBP' {
+  if (marketplace === 'UK') return 'GBP';
+  return 'USD';
+}
+
+function formatCurrency(amount: number, currency: 'USD' | 'GBP'): string {
   return amount.toLocaleString('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency,
     minimumFractionDigits: 2,
   });
 }
@@ -112,6 +126,14 @@ export default function ReconciliationPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [month, setMonth] = useState(getDefaultMonth);
   const [marketplace, setMarketplace] = useState<'US' | 'UK'>('US');
+
+  const currency = currencyForMarketplace(marketplace);
+
+  const { data: connection, isLoading: isCheckingConnection } = useQuery({
+    queryKey: ['qbo-status'],
+    queryFn: fetchConnectionStatus,
+    staleTime: 30 * 1000,
+  });
 
   const handleReconcile = useCallback(async () => {
     if (!selectedFile) return;
@@ -167,12 +189,16 @@ export default function ReconciliationPage() {
     [onFileSelected],
   );
 
+  if (!isCheckingConnection && connection?.connected === false) {
+    return <NotConnectedScreen title="Reconciliation" error={connection.error} />;
+  }
+
   return (
     <main className="flex-1 page-enter">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Reconciliation"
-          description="Compare Amazon transaction reports against stored LMB audit data"
+          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored LMB audit data"
           variant="accent"
         />
 
@@ -186,11 +212,9 @@ export default function ReconciliationPage() {
                   1
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Download your report
-                  </p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Download your report</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Get the Date Range Transaction Report from Amazon Seller Central
+                    Export the Date Range Transaction Report from Amazon Seller Central (this is not required for settlement processing)
                   </p>
                 </div>
               </div>
@@ -199,9 +223,7 @@ export default function ReconciliationPage() {
                   2
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Select month &amp; marketplace
-                  </p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Select month and marketplace</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                     Choose the period and marketplace to reconcile
                   </p>
@@ -212,11 +234,9 @@ export default function ReconciliationPage() {
                   3
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Upload &amp; reconcile
-                  </p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Upload and reconcile</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Upload the transaction report and compare against LMB data
+                    Compare Amazon order totals against your stored LMB audit data
                   </p>
                 </div>
               </div>
@@ -229,23 +249,13 @@ export default function ReconciliationPage() {
           <CardContent className="p-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  htmlFor="month-input"
-                  className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
-                >
+                <label htmlFor="month-input" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Month
                 </label>
-                <Input
-                  id="month-input"
-                  type="month"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                />
+                <Input id="month-input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Marketplace
-                </label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">Marketplace</label>
                 <Select value={marketplace} onValueChange={(v) => setMarketplace(v as 'US' | 'UK')}>
                   <SelectTrigger>
                     <SelectValue />
@@ -272,25 +282,15 @@ export default function ReconciliationPage() {
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={onFileChange}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={onFileChange} className="hidden" />
 
               {selectedFile ? (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
                     <CheckCircle2 className="h-6 w-6" />
                   </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    {selectedFile.name}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {(selectedFile.size / 1024).toFixed(1)} KB
-                  </p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedFile.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -308,7 +308,7 @@ export default function ReconciliationPage() {
                     Drop your Amazon Transaction Report here
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    CSV format &middot; Date Range Transaction Report from Seller Central
+                    CSV format, Date Range Transaction Report from Seller Central
                   </p>
                   <button
                     type="button"
@@ -323,10 +323,7 @@ export default function ReconciliationPage() {
 
             {/* Reconcile Button */}
             <div className="mt-4 flex justify-end">
-              <Button
-                onClick={handleReconcile}
-                disabled={!selectedFile || isReconciling}
-              >
+              <Button onClick={handleReconcile} disabled={!selectedFile || isReconciling}>
                 {isReconciling ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -400,11 +397,7 @@ export default function ReconciliationPage() {
                       ({result.rows.length.toLocaleString()} orders)
                     </span>
                   </h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportToCsv(result.rows, month, marketplace)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => exportToCsv(result.rows, month, marketplace)}>
                     <Download className="h-3.5 w-3.5" />
                     Export CSV
                   </Button>
@@ -433,17 +426,13 @@ export default function ReconciliationPage() {
                       {result.rows.map((row) => (
                         <TableRow key={row.orderId}>
                           <TableCell className="font-mono text-xs">{row.orderId}</TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">
-                            {row.date}
-                          </TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">
-                            {row.type}
+                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.date}</TableCell>
+                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.type}</TableCell>
+                          <TableCell className="text-sm text-right tabular-nums">
+                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '—'}
                           </TableCell>
                           <TableCell className="text-sm text-right tabular-nums">
-                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal) : '\u2014'}
-                          </TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal) : '\u2014'}
+                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '—'}
                           </TableCell>
                           <TableCell
                             className={`text-sm text-right tabular-nums ${
@@ -455,8 +444,8 @@ export default function ReconciliationPage() {
                             }`}
                           >
                             {row.difference !== 0
-                              ? `${row.difference > 0 ? '+' : ''}${formatCurrency(row.difference)}`
-                              : '\u2014'}
+                              ? `${row.difference > 0 ? '+' : ''}${formatCurrency(row.difference, currency)}`
+                              : '—'}
                           </TableCell>
                           <TableCell>{statusBadge(row.status)}</TableCell>
                         </TableRow>

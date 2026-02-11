@@ -23,6 +23,9 @@ export type Employee = {
   employmentType: string
   joinDate: string
   status: string
+  exitReason?: string | null
+  lastWorkingDay?: string | null
+  exitNotes?: string | null
   roles?: { id: string; name: string }[]
   reportsToId?: string | null
   manager?: { id: string; firstName: string; lastName: string; position: string } | null
@@ -1268,6 +1271,7 @@ export type Task = {
   id: string
   title: string
   description?: string | null
+  actionUrl?: string | null
   status: string
   category: string
   dueDate?: string | null
@@ -1313,6 +1317,7 @@ export const TasksApi = {
   create(payload: {
     title: string
     description?: string | null
+    actionUrl?: string | null
     category?: string
     dueDate?: string | null
     assignedToId?: string | null
