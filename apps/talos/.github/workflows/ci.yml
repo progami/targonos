@@ -44,21 +44,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
-      - run: npm install
+      - run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: pnpm prisma generate
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Type Check
-        run: npm run type-check
+        run: pnpm run type-check
 
   build:
     needs: quality
@@ -66,15 +70,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
-      - run: npm install
+      - run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: pnpm prisma generate
 
       - name: Build
         env:
@@ -86,7 +94,7 @@ jobs:
           PORTAL_AUTH_URL: http://localhost:3001
           NEXT_PUBLIC_PORTAL_AUTH_URL: http://localhost:3001
           COOKIE_DOMAIN: localhost
-        run: npm run build
+        run: pnpm run build
 
       - name: Upload build
         uses: actions/upload-artifact@v4
