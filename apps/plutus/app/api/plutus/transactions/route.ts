@@ -24,6 +24,8 @@ const logger = createLogger({ name: 'plutus-transactions' });
 
 class RequestValidationError extends Error {}
 
+const PURCHASE_BATCH_SIZE = 1000;
+
 type TransactionTypeParam = 'journalEntry' | 'bill' | 'purchase';
 
 type TransactionLine = {
@@ -63,6 +65,14 @@ type TransactionRow = {
       quantity: number | null;
     }>;
   } | null;
+};
+
+type TransactionsAccountOption = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  type: string;
+  subType: string | null;
 };
 
 function requireTransactionType(raw: string | null): TransactionTypeParam {
@@ -248,9 +258,11 @@ export async function GET(req: NextRequest) {
     const rawStartDate = searchParams.get('startDate');
     const rawEndDate = searchParams.get('endDate');
     const rawSearch = searchParams.get('search');
+    const rawAccountId = searchParams.get('accountId');
     const startDate = rawStartDate === null ? undefined : rawStartDate;
     const endDate = rawEndDate === null ? undefined : rawEndDate;
     const search = rawSearch === null ? undefined : rawSearch.trim();
+    const accountId = rawAccountId === null ? undefined : rawAccountId.trim();
 
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
@@ -274,6 +286,7 @@ export async function GET(req: NextRequest) {
     let updatedConnection: QboConnection | undefined;
     let brands: Array<{ id: string; name: string }> | undefined;
     let skus: Array<{ id: string; sku: string; productName: string | null; brandId: string }> | undefined;
+    let accounts: TransactionsAccountOption[] | undefined;
 
     if (type === 'journalEntry') {
       const result = await fetchJournalEntries(activeConnection, {
@@ -328,16 +341,87 @@ export async function GET(req: NextRequest) {
         orderBy: { sku: 'asc' },
       });
     } else {
-      const result = await fetchPurchases(activeConnection, {
-        startDate,
-        endDate,
-        docNumberContains: search,
-        maxResults: pageSize,
-        startPosition,
+      if (accountId) {
+        logger.info('Fetching purchases with payment-account filter', {
+          accountId,
+          page,
+          pageSize,
+          startDate,
+          endDate,
+          search,
+        });
+
+        const allPurchases: QboPurchase[] = [];
+        let nextStartPosition = 1;
+        let expectedTotal = 0;
+
+        while (true) {
+          const batchResult = await fetchPurchases(activeConnection, {
+            startDate,
+            endDate,
+            docNumberContains: search,
+            maxResults: PURCHASE_BATCH_SIZE,
+            startPosition: nextStartPosition,
+          });
+          if (batchResult.updatedConnection) {
+            activeConnection = batchResult.updatedConnection;
+            updatedConnection = batchResult.updatedConnection;
+          }
+
+          allPurchases.push(...batchResult.purchases);
+          expectedTotal = batchResult.totalCount;
+
+          if (batchResult.purchases.length < PURCHASE_BATCH_SIZE) {
+            break;
+          }
+          if (allPurchases.length >= expectedTotal) {
+            break;
+          }
+
+          nextStartPosition += PURCHASE_BATCH_SIZE;
+        }
+
+        const filteredPurchases = allPurchases.filter((purchase) => purchase.AccountRef?.value === accountId);
+        logger.info('Applied payment-account filter to purchases', {
+          accountId,
+          fetchedCount: allPurchases.length,
+          filteredCount: filteredPurchases.length,
+          expectedTotal,
+        });
+
+        totalCount = filteredPurchases.length;
+        const offset = (page - 1) * pageSize;
+        transactions = filteredPurchases
+          .slice(offset, offset + pageSize)
+          .map((purchase) => mapPurchase(purchase, accountsById));
+      } else {
+        const result = await fetchPurchases(activeConnection, {
+          startDate,
+          endDate,
+          docNumberContains: search,
+          maxResults: pageSize,
+          startPosition,
+        });
+        updatedConnection = result.updatedConnection;
+        totalCount = result.totalCount;
+        transactions = result.purchases.map((purchase) => mapPurchase(purchase, accountsById));
+      }
+
+      skus = await db.sku.findMany({
+        select: { id: true, sku: true, productName: true, brandId: true },
+        orderBy: { sku: 'asc' },
       });
-      updatedConnection = result.updatedConnection;
-      totalCount = result.totalCount;
-      transactions = result.purchases.map((purchase) => mapPurchase(purchase, accountsById));
+
+      accounts = accountsResult.accounts
+        .filter((account) => account.Active !== false)
+        .map((account) => ({
+          id: account.Id,
+          name: account.Name,
+          fullyQualifiedName: account.FullyQualifiedName ? account.FullyQualifiedName : account.Name,
+          type: account.AccountType,
+          subType: account.AccountSubType ? account.AccountSubType : null,
+        }))
+        .sort((left, right) => left.fullyQualifiedName.localeCompare(right.fullyQualifiedName));
     }
 
     const finalConnection = updatedConnection ? updatedConnection : activeConnection;
@@ -349,6 +433,7 @@ export async function GET(req: NextRequest) {
       transactions,
       ...(brands ? { brands } : {}),
       ...(skus ? { skus } : {}),
+      ...(accounts ? { accounts } : {}),
       pagination: {
         page,
         pageSize,
@@ -365,7 +450,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    logger.error('Failed to fetch transactions', error);
+    logger.error('Failed to fetch transactions', {
+      error: error instanceof Error ? error.message : String(error),
+      type: req.nextUrl.searchParams.get('type'),
+      startDate: req.nextUrl.searchParams.get('startDate'),
+      endDate: req.nextUrl.searchParams.get('endDate'),
+      search: req.nextUrl.searchParams.get('search'),
+      accountId: req.nextUrl.searchParams.get('accountId'),
+      page: req.nextUrl.searchParams.get('page'),
+      pageSize: req.nextUrl.searchParams.get('pageSize'),
+    });
     return NextResponse.json(
       {
         error: 'Failed to fetch transactions',

@@ -2525,6 +2525,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
   const canEditFreightCost =
     !isCreate && !isTerminalStatus && !isReceived && flowStatus === 'OCEAN' && activeViewStage === 'OCEAN'
+  const canEditWarehouseCosts =
+    !isCreate && !isTerminalStatus && flowStatus === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
 
   const showProductCostsStage =
     activeViewStage === 'RFQ' ||
@@ -5285,11 +5287,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     {showWarehouseCostsStage && (
                       <div className="space-y-6">
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                              Warehouse Costs
-                            </h4>
-                            {!isReadOnly && (
+	                          <div className="flex items-center justify-between">
+	                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+	                              Warehouse Costs
+	                            </h4>
+                            {canEditWarehouseCosts && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -5303,13 +5305,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               >
                                 + Add Cost
                               </Button>
-                            )}
-                          </div>
-
-                          {costLedgerLoading && manualWarehouseCostsLoading ? (
-                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-                              <p className="text-sm text-muted-foreground">Loading costs…</p>
-                            </div>
+	                            )}
+	                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Auto-calculated costs use the warehouse rate template. Add invoice costs here during the
+                            Warehouse stage.
+                          </p>
+	
+	                          {costLedgerLoading && manualWarehouseCostsLoading ? (
+	                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+	                              <p className="text-sm text-muted-foreground">Loading costs…</p>
+	                            </div>
                           ) : (
                             <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                               <table className="w-full text-sm">
@@ -5342,7 +5348,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         {entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td className="px-1 py-2 text-center">
-                                        {!isReadOnly && (
+                                        {canEditWarehouseCosts && (
                                           <Button
                                             type="button"
                                             size="sm"
@@ -5367,7 +5373,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td className="px-1 py-2 text-center">
-                                        {!isReadOnly && (
+                                        {canEditWarehouseCosts && (
                                           <Button
                                             type="button"
                                             size="sm"

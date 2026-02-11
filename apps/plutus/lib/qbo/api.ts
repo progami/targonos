@@ -981,6 +981,34 @@ export async function updatePurchase(
   return { purchase: data.Purchase, updatedConnection };
 }
 
+export async function updatePurchaseWithPayload(
+  connection: QboConnection,
+  payload: Record<string, unknown>,
+): Promise<{ purchase: QboPurchase; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/purchase?operation=update`;
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update purchase with payload', { status: response.status, error: errorText });
+    throw new Error(`Failed to update purchase with payload: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Purchase: QboPurchase };
+  return { purchase: data.Purchase, updatedConnection };
+}
+
 const ACCOUNTS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
@@ -1210,6 +1238,77 @@ export async function createBill(
 
   const data = (await response.json()) as { Bill: QboBill };
   return { bill: data.Bill, updatedConnection };
+}
+
+export async function createPurchase(
+  connection: QboConnection,
+  input: {
+    txnDate: string;
+    paymentType: 'Cash' | 'Check' | 'CreditCard';
+    paymentAccountId: string;
+    docNumber?: string;
+    vendorId?: string;
+    privateNote?: string;
+    lines: Array<{
+      amount: number;
+      accountId: string;
+      description?: string;
+    }>;
+  },
+): Promise<{ purchase: QboPurchase; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/purchase`;
+
+  const payload: Record<string, unknown> = {
+    TxnDate: input.txnDate,
+    PaymentType: input.paymentType,
+    AccountRef: { value: input.paymentAccountId },
+    Line: input.lines.map((line) => ({
+      DetailType: 'AccountBasedExpenseLineDetail',
+      Amount: line.amount,
+      Description: line.description,
+      AccountBasedExpenseLineDetail: {
+        AccountRef: { value: line.accountId },
+      },
+    })),
+  };
+  if (input.docNumber !== undefined) {
+    payload.DocNumber = input.docNumber;
+  }
+  if (input.vendorId !== undefined) {
+    payload.EntityRef = { value: input.vendorId };
+  }
+  if (input.privateNote !== undefined) {
+    payload.PrivateNote = input.privateNote;
+  }
+
+  logger.info('Creating purchase in QBO', {
+    txnDate: input.txnDate,
+    paymentType: input.paymentType,
+    paymentAccountId: input.paymentAccountId,
+    vendorId: input.vendorId,
+  });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create purchase', { status: response.status, error: errorText });
+    throw new Error(`Failed to create purchase: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Purchase: QboPurchase };
+  return { purchase: data.Purchase, updatedConnection };
 }
 
 const VENDORS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
