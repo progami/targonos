@@ -5,7 +5,6 @@
 
 // Purchase Order Status Types (5-stage state machine)
 export type POStatus =
-  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -34,7 +33,6 @@ export type POLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
  * Badge CSS classes for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
-  RFQ: 'bg-slate-100 text-slate-700 border border-slate-200',
   ISSUED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -53,7 +51,6 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
  * Human-readable labels for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
-  RFQ: 'RFQ',
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',

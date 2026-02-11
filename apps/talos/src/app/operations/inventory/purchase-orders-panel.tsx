@@ -30,7 +30,6 @@ import { withBasePath } from '@/lib/utils/base-path'
 
 export type PurchaseOrderTypeOption = 'PURCHASE' | 'ADJUSTMENT' | 'FULFILLMENT'
 export type PurchaseOrderStatusOption =
-  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -248,7 +247,7 @@ function orderMatchesSearch(order: PurchaseOrderSummary, term: string) {
 
 export function PurchaseOrdersPanel({
   onPosted: _onPosted,
-  statusFilter = 'RFQ',
+  statusFilter = 'ISSUED',
   typeFilter,
 }: PurchaseOrdersPanelProps) {
   const [orders, setOrders] = useState<PurchaseOrderSummary[]>([])
@@ -296,7 +295,6 @@ export function PurchaseOrdersPanel({
   const statusCounts = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
-        if (order.status === 'RFQ') acc.rfqCount += 1
         if (order.status === 'ISSUED') acc.issuedCount += 1
         if (order.status === 'MANUFACTURING') acc.manufacturingCount += 1
         if (order.status === 'OCEAN') acc.oceanCount += 1
@@ -306,7 +304,6 @@ export function PurchaseOrdersPanel({
         return acc
       },
       {
-        rfqCount: 0,
         issuedCount: 0,
         manufacturingCount: 0,
         oceanCount: 0,
@@ -397,7 +394,7 @@ export function PurchaseOrdersPanel({
     cols.push({
       key: 'po-number',
       header: buildColumnHeader(
-        statusFilter === 'RFQ' ? 'RFQ #' : 'PO #',
+        'PO #',
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -444,7 +441,7 @@ export function PurchaseOrdersPanel({
           className="block max-w-full truncate text-primary hover:underline"
           prefetch={false}
         >
-          {order.status === 'RFQ' ? order.orderNumber : (order.poNumber ?? order.orderNumber)}
+          {order.poNumber ?? order.orderNumber}
         </Link>
       ),
     })
@@ -521,11 +518,11 @@ export function PurchaseOrdersPanel({
     })
 
     switch (statusFilter) {
-      case 'RFQ': {
+      case 'ISSUED': {
         cols.push(
-	          {
-	            key: 'cargo-ready',
-	            header: buildColumnHeader('Cargo Ready'),
+		          {
+		            key: 'cargo-ready',
+		            header: buildColumnHeader('Cargo Ready'),
 	            fit: true,
 	            thClassName: 'w-[112px]',
 	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
@@ -927,18 +924,15 @@ export function PurchaseOrdersPanel({
     typeFilter,
   ])
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <DataTableContainer
-        title="Purchase Orders"
-        headerContent={
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.rfqCount}</span> RFQ
-            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span> Issued
-            </span>
+	  return (
+	    <div className="flex min-h-0 flex-1 flex-col gap-4">
+	      <DataTableContainer
+	        title="Purchase Orders"
+	        headerContent={
+	          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+	            <span>
+	              <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span> Issued
+	            </span>
             <span>
               <span className="font-semibold text-foreground">{statusCounts.manufacturingCount}</span>{' '}
               Manufacturing

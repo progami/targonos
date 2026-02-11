@@ -312,7 +312,7 @@ model PurchaseOrder {
   splitGroupId     String?             @map("split_group_id")
   splitParentId    String?             @map("split_parent_id")
   type             PurchaseOrderType
-  status           PurchaseOrderStatus @default(RFQ)
+  status           PurchaseOrderStatus @default(ISSUED)
   counterpartyName String?             @map("counterparty_name")
   counterpartyAddress String?          @map("counterparty_address")
   notes            String?
