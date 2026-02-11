@@ -9,18 +9,27 @@ import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const DateInputSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .refine((value) => !Number.isNaN(new Date(value).getTime()), {
-    message: 'Invalid date',
-  })
-
 const emptyToUndefined = (value: unknown) =>
   typeof value === 'string' && value.trim().length === 0 ? undefined : value
 
 const OptionalString = z.preprocess(emptyToUndefined, z.string().trim().optional())
+
+const RequiredString = (message: string) =>
+  z.preprocess(
+    emptyToUndefined,
+    z.string({ required_error: message, invalid_type_error: message }).trim()
+  )
+
+const RequiredDateString = (requiredMessage: string) =>
+  z.preprocess(
+    emptyToUndefined,
+    z
+      .string({ required_error: requiredMessage, invalid_type_error: requiredMessage })
+      .trim()
+      .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+        message: 'Invalid date',
+      })
+  )
 
 const OptionalNumber = z.preprocess((value) => {
   const cleaned = emptyToUndefined(value)
@@ -32,12 +41,20 @@ const OptionalNumber = z.preprocess((value) => {
   return cleaned
 }, z.number().optional())
 
+const RequiredInboundReceiveType = z.preprocess(
+  emptyToUndefined,
+  z.enum(['CONTAINER_20', 'CONTAINER_40', 'CONTAINER_40_HQ', 'CONTAINER_45_HQ', 'LCL'] as const, {
+    required_error: 'Receive type is required',
+    invalid_type_error: 'Receive type is required',
+  })
+)
+
 const ReceivePurchaseOrderSchema = z.object({
-  warehouseCode: z.string().trim().min(1),
-  receiveType: z.enum(['CONTAINER_20', 'CONTAINER_40', 'CONTAINER_40_HQ', 'CONTAINER_45_HQ', 'LCL'] as const),
-  customsEntryNumber: z.string().trim().min(1),
-  customsClearedDate: DateInputSchema,
-  receivedDate: DateInputSchema,
+  warehouseCode: RequiredString('Warehouse is required'),
+  receiveType: RequiredInboundReceiveType,
+  customsEntryNumber: RequiredString('Import entry number is required'),
+  customsClearedDate: RequiredDateString('Customs cleared date is required'),
+  receivedDate: RequiredDateString('Received date is required'),
   dutyAmount: OptionalNumber.nullable().optional(),
   dutyCurrency: OptionalString.nullable().optional(),
   discrepancyNotes: OptionalString.nullable().optional(),
@@ -50,6 +67,27 @@ const ReceivePurchaseOrderSchema = z.object({
     )
     .optional(),
 })
+
+const receiveErrorKeyToGateKey = (key: string): string => {
+  switch (key) {
+    case 'warehouseCode':
+      return 'details.warehouseCode'
+    case 'receiveType':
+      return 'details.receiveType'
+    case 'customsEntryNumber':
+      return 'details.customsEntryNumber'
+    case 'customsClearedDate':
+      return 'details.customsClearedDate'
+    case 'receivedDate':
+      return 'details.receivedDate'
+    case 'discrepancyNotes':
+      return 'details.discrepancyNotes'
+    case 'lineReceipts':
+      return 'cargo.lines'
+    default:
+      return key
+  }
+}
 
 const readParam = (params: Record<string, unknown> | undefined, key: string): string | undefined => {
   const value = params?.[key]
@@ -72,7 +110,12 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   const payload = await request.json().catch(() => null)
   const parsed = ReceivePurchaseOrderSchema.safeParse(payload)
   if (!parsed.success) {
-    return ApiResponses.validationError(parsed.error.flatten().fieldErrors)
+    const errors = parsed.error.flatten().fieldErrors
+    const normalized: Record<string, string | string[]> = {}
+    for (const [key, value] of Object.entries(errors)) {
+      normalized[receiveErrorKeyToGateKey(key)] = value
+    }
+    return ApiResponses.validationError(normalized)
   }
 
   const prisma = await getTenantPrisma()
