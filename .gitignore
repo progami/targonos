@@ -74,5 +74,8 @@ todo-atlas.md
 xplan-todo.md
 cookies.txt
 
+# Local dev config
+**/local.apps.json
+
 # Claude Code
 .claude/
