@@ -11,7 +11,16 @@ import {
   replayInventoryLedger,
 } from '../lib/inventory/ledger';
 import { buildInventoryEventsFromMappings } from '../lib/inventory/qbo-bills';
+import {
+  buildAccountComponentMap,
+  extractTrackedLinesFromBill,
+} from '../lib/plutus/bills/classification';
+import {
+  allocateManufacturingSplitAmounts,
+  normalizeManufacturingSplits,
+} from '../lib/plutus/bills/split';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
+import type { QboAccount, QboBill } from '../lib/qbo/api';
 
 function test(name: string, fn: () => void) {
   try {
@@ -181,6 +190,121 @@ test('bill mappings allocate non-sku costs by PO units', () => {
   // Freight should be allocated by units (SKU-A:1, SKU-B:2) => 100/200 cents.
   assert.equal(stateA?.valueByComponentCents.freight, 100);
   assert.equal(stateB?.valueByComponentCents.freight, 200);
+});
+
+test('manufacturing split allocation preserves total cents', () => {
+  const splits = normalizeManufacturingSplits([
+    { sku: 'sku-a', quantity: 2 },
+    { sku: 'sku-b', quantity: 3 },
+    { sku: 'sku-c', quantity: 5 },
+  ]);
+
+  const allocated = allocateManufacturingSplitAmounts(1000, splits);
+  const total = allocated.reduce((sum, line) => sum + line.amountCents, 0);
+  assert.equal(total, 1000);
+  assert.equal(allocated[0]?.amountCents, 200);
+  assert.equal(allocated[1]?.amountCents, 300);
+  assert.equal(allocated[2]?.amountCents, 500);
+});
+
+test('manufacturing split allocation tie break is deterministic', () => {
+  const splits = normalizeManufacturingSplits([
+    { sku: 'sku-a', quantity: 1 },
+    { sku: 'sku-b', quantity: 1 },
+  ]);
+
+  const allocated = allocateManufacturingSplitAmounts(101, splits);
+  assert.equal(allocated[0]?.amountCents, 51);
+  assert.equal(allocated[1]?.amountCents, 50);
+});
+
+test('manufacturing split validation rejects duplicate sku and invalid qty', () => {
+  assert.throws(() =>
+    normalizeManufacturingSplits([
+      { sku: 'sku-a', quantity: 1 },
+      { sku: 'SKU A', quantity: 2 },
+    ]),
+  );
+
+  assert.throws(() =>
+    normalizeManufacturingSplits([
+      { sku: 'sku-a', quantity: 1.2 },
+      { sku: 'sku-b', quantity: 1 },
+    ]),
+  );
+});
+
+test('tracked line extraction includes configured and inventory accounts', () => {
+  const accounts: QboAccount[] = [
+    {
+      Id: 'acc-mfg',
+      SyncToken: '0',
+      Name: 'Inv Manufacturing',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+    },
+    {
+      Id: 'acc-3pl',
+      SyncToken: '0',
+      Name: 'Warehousing 3PL',
+      AccountType: 'Expense',
+    },
+    {
+      Id: 'acc-3pl-child',
+      SyncToken: '0',
+      Name: 'Warehousing 3PL Child',
+      AccountType: 'Expense',
+      ParentRef: { value: 'acc-3pl' },
+    },
+    {
+      Id: 'acc-ignored',
+      SyncToken: '0',
+      Name: 'General Expense',
+      AccountType: 'Expense',
+    },
+  ];
+
+  const map = buildAccountComponentMap(accounts, {
+    warehousing3pl: 'acc-3pl',
+    warehousingAmazonFc: null,
+    warehousingAwd: null,
+    productExpenses: null,
+  });
+
+  const bill: QboBill = {
+    Id: 'bill-1',
+    SyncToken: '1',
+    TxnDate: '2026-02-01',
+    TotalAmt: 300,
+    Line: [
+      {
+        Id: 'line-1',
+        Amount: 100,
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'acc-mfg', name: 'Inv Manufacturing' },
+        },
+      },
+      {
+        Id: 'line-2',
+        Amount: 150,
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'acc-3pl-child', name: 'Warehousing 3PL Child' },
+        },
+      },
+      {
+        Id: 'line-3',
+        Amount: 50,
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'acc-ignored', name: 'General Expense' },
+        },
+      },
+    ],
+  };
+
+  const tracked = extractTrackedLinesFromBill(bill, map);
+  assert.equal(tracked.length, 2);
+  assert.equal(tracked[0]?.component, 'manufacturing');
+  assert.equal(tracked[1]?.component, 'warehousing3pl');
 });
 
 process.stdout.write('All tests passed.\n');
