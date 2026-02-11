@@ -66,10 +66,10 @@ async function createPurchaseOrders() {
     {
       orderNumber: 'PO-1001',
       type: PurchaseOrderType.PURCHASE,
-      status: PurchaseOrderStatus.RFQ,
+      status: PurchaseOrderStatus.ISSUED,
       counterpartyName: 'CS Suppliers',
       expectedInDays: 7,
-      notes: 'Draft order staged for initial inventory build.',
+      notes: 'Issued order staged for initial inventory build.',
       lines: [
         { skuIndex: 0, quantity: 120, unitCost: 18 },
         { skuIndex: 1, quantity: 80, unitCost: 22 },

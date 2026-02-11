@@ -135,7 +135,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 
 /**
  * POST /api/purchase-orders/[id]/lines
- * Add a new line item to an RFQ purchase order
+ * Add a new line item to an ISSUED purchase order
  */
 export const POST = withAuthAndParams(async (request: NextRequest, params, session) => {
   const id = params.id as string
@@ -171,8 +171,8 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (order.status !== 'RFQ') {
-    return ApiResponses.badRequest('Can only add line items to orders in RFQ status')
+  if (order.status !== 'ISSUED' && order.status !== 'RFQ') {
+    return ApiResponses.badRequest('Can only add line items to orders in ISSUED status')
   }
 
   const payload = await request.json().catch(() => null)

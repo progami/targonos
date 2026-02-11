@@ -83,7 +83,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, _sess
   }
 
   // Only allow adding containers in OCEAN status (or earlier for prep)
-  if (!['RFQ', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
+  if (!['ISSUED', 'RFQ', 'MANUFACTURING', 'OCEAN'].includes(order.status)) {
     return ApiResponses.badRequest('Can only add containers before or during OCEAN stage')
   }
 

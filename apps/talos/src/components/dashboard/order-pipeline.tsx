@@ -5,7 +5,6 @@ import { ChevronRight, FileText, Truck } from '@/lib/lucide-icons'
 
 interface OrderPipelineProps {
   pipeline: {
-    draft: number
     issued: number
     manufacturing: number
     inTransit: number
@@ -15,7 +14,6 @@ interface OrderPipelineProps {
 }
 
 const stages = [
-  { key: 'draft', label: 'RFQ', filter: 'RFQ' },
   { key: 'issued', label: 'Issued', filter: 'ISSUED' },
   { key: 'manufacturing', label: 'Manufacturing', filter: 'MANUFACTURING' },
   { key: 'inTransit', label: 'Transit', filter: 'OCEAN' },
