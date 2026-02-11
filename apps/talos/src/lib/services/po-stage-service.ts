@@ -183,7 +183,7 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
   MANUFACTURING: ['inspection_report'],
-  OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
+  OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
   WAREHOUSE: ['grn', 'custom_declaration'],
 }
 
@@ -321,6 +321,7 @@ const STAGE_EDITABLE_FIELDS: Partial<Record<PurchaseOrderStatus, Array<keyof Sta
       'estimatedArrival',
       'actualDeparture',
       'actualArrival',
+      'transactionCertNumber',
       'commercialInvoiceId',
     ],
     [PurchaseOrderStatus.WAREHOUSE]: [
@@ -833,14 +834,19 @@ async function validateTransitionGate(params: {
       }
     }
 
+    const transactionCertNumber = resolveOrderString('transactionCertNumber')
+    if (!transactionCertNumber) {
+      recordGateIssue(issues, 'documents.transactionCertNumber', 'TC number is required')
+    }
+
     await requireDocuments({
       prisma: params.prisma,
       purchaseOrderId: params.order.id,
       stage: PurchaseOrderDocumentStage.OCEAN,
-      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list'],
+      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
       issues,
       issueKeyPrefix: 'documents',
-      issueLabel: (docType) => docType.replace(/_/g, ' '),
+      issueLabel: (docType) => (docType === 'grs_tc' ? 'GRS TC' : docType.replace(/_/g, ' ')),
     })
 
     const hasForwardingCost = await params.prisma.purchaseOrderForwardingCost.findFirst({

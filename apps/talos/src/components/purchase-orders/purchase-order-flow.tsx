@@ -409,6 +409,7 @@ const STAGE_DOCUMENTS: Record<
     { id: 'commercial_invoice', label: 'Commercial Invoice' },
     { id: 'bill_of_lading', label: 'Bill of Lading' },
     { id: 'packing_list', label: 'Packing List' },
+    { id: 'grs_tc', label: 'GRS TC' },
   ],
   WAREHOUSE: [
     { id: 'grn', label: 'GRN' },
@@ -4524,6 +4525,42 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                   return (
                     <div>
+                      {stage === 'OCEAN' && (
+                        <div className="mb-4" data-gate-key="documents.transactionCertNumber">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              TC Number
+                            </p>
+                            {canUpload ? (
+                              <Input
+                                data-gate-key="documents.transactionCertNumber"
+                                value={
+                                  getStageField('transactionCertNumber') ??
+                                  (typeof order.stageData.warehouse.transactionCertNumber === 'string'
+                                    ? order.stageData.warehouse.transactionCertNumber
+                                    : '')
+                                }
+                                onChange={e => setStageField('transactionCertNumber', e.target.value)}
+                                placeholder="Enter TC number"
+                                className={
+                                  gateIssues?.['documents.transactionCertNumber']
+                                    ? 'border-rose-500 focus-visible:ring-rose-500'
+                                    : undefined
+                                }
+                              />
+                            ) : (
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(order.stageData.warehouse.transactionCertNumber)}
+                              </p>
+                            )}
+                            {gateIssues?.['documents.transactionCertNumber'] && (
+                              <p className="text-xs text-rose-600" data-gate-key="documents.transactionCertNumber">
+                                {gateIssues['documents.transactionCertNumber']}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       <div className="rounded-lg border border-slate-200 dark:border-slate-700">
                         <table className="w-full text-sm">
                           <thead>
