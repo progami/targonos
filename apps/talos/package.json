@@ -23,7 +23,7 @@
     "test:debug": "cd tests && playwright test --debug",
     "test:report": "cd tests && playwright show-report",
     "test:ci": "npm run lint && npm run type-check && npm run test",
-    "test:unit": "echo 'Unit tests placeholder - no unit tests configured'",
+    "test:unit": "node --import tsx --test tests/unit/*.test.ts",
     "test:integration": "echo 'Integration tests placeholder - no integration tests configured'",
     "test:e2e:ci": "cd tests && playwright test e2e/",
     "test:security": "echo 'Security tests placeholder - no security tests configured'",
