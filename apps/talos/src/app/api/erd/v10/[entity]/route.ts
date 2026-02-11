@@ -15,7 +15,6 @@ const ENTITY_ORDER_BY: Record<ErdV10Entity, string> = {
   supplier: '"name"',
   warehouse: '"code"',
   lot: '"created_at" DESC',
-  rfq: '"created_at" DESC',
   purchase_order: '"created_at" DESC',
   po_ci: '"ci_id", "lot_id"',
   commercial_invoice: '"ci_ref"',
@@ -51,4 +50,3 @@ export const GET = withAuthAndParams(async (request, params) => {
     rows,
   })
 })
-

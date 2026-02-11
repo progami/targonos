@@ -140,20 +140,24 @@ function normalizeAuditValue(value: unknown): unknown {
   return value
 }
 
-// Valid stage transitions for new 5-stage workflow
+// Valid stage transitions for current PO workflow (RFQ stage removed; legacy RFQ rows are treated as ISSUED)
 export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
-  // RFQ = editable PO shared with supplier (negotiation)
-  RFQ: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.REJECTED, PurchaseOrderStatus.CANCELLED],
   ISSUED: [
     PurchaseOrderStatus.MANUFACTURING,
+    PurchaseOrderStatus.REJECTED,
     PurchaseOrderStatus.CANCELLED,
   ],
   MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CANCELLED],
   OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CANCELLED],
   WAREHOUSE: [PurchaseOrderStatus.CANCELLED],
   SHIPPED: [], // Terminal state
-  REJECTED: [PurchaseOrderStatus.RFQ, PurchaseOrderStatus.CANCELLED], // Terminal unless reopened
+  REJECTED: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.CANCELLED], // Terminal unless reopened
   CANCELLED: [], // Terminal state
+}
+
+function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
+  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
+  return status
 }
 
 // Stage-specific required fields for transition
@@ -382,7 +386,7 @@ export function isValidTransition(
   fromStatus: PurchaseOrderStatus,
   toStatus: PurchaseOrderStatus
 ): boolean {
-  const validTargets = VALID_TRANSITIONS[fromStatus]
+  const validTargets = VALID_TRANSITIONS[normalizeWorkflowStatus(fromStatus)]
   return validTargets?.includes(toStatus) ?? false
 }
 
@@ -390,7 +394,7 @@ export function isValidTransition(
  * Get valid next stages from current status
  */
 export function getValidNextStages(currentStatus: PurchaseOrderStatus): PurchaseOrderStatus[] {
-  return VALID_TRANSITIONS[currentStatus] ?? []
+  return VALID_TRANSITIONS[normalizeWorkflowStatus(currentStatus)] ?? []
 }
 
 /**
@@ -1185,7 +1189,7 @@ export interface CreatePurchaseOrderLineInput {
 }
 
 /**
- * Create a new Purchase Order in RFQ status
+ * Create a new Purchase Order in ISSUED status
  * Warehouse is NOT required at this stage - it's selected at Stage 4 (WAREHOUSE)
  */
 export async function createPurchaseOrder(
@@ -1364,39 +1368,44 @@ export async function createPurchaseOrder(
     }
 
 	    try {
-	      order = await prisma.$transaction(async tx => {
-	          const supplier = await tx.supplier.findFirst({
-	            where: { name: { equals: counterpartyName, mode: 'insensitive' } },
-	            select: { name: true, address: true },
-	          })
-	          if (!supplier) {
-	            throw new ValidationError(
-	              `Supplier ${counterpartyName} not found. Create it in Config → Suppliers first.`
-	            )
-	          }
-          const counterpartyNameCanonical = supplier.name
-          const counterpartyAddress = supplier.address ?? null
+		  order = await prisma.$transaction(async tx => {
+		      const supplier = await tx.supplier.findFirst({
+		        where: { name: { equals: counterpartyName, mode: 'insensitive' } },
+		        select: { name: true, address: true },
+		      })
+		      if (!supplier) {
+		        throw new ValidationError(
+		          `Supplier ${counterpartyName} not found. Create it in Config → Suppliers first.`
+		        )
+		      }
+	      const counterpartyNameCanonical = supplier.name
+	      const counterpartyAddress = supplier.address ?? null
 
-          const skuByCode = new Map(skuRecordsForLines.map(sku => [sku.skuCode.toLowerCase(), sku]))
+	      const skuByCode = new Map(skuRecordsForLines.map(sku => [sku.skuCode.toLowerCase(), sku]))
+        const now = new Date()
 
-		        return tx.purchaseOrder.create({
-		          data: {
-		            orderNumber,
+			    return tx.purchaseOrder.create({
+			      data: {
+			        orderNumber,
+              poNumber: orderNumber,
                 skuGroup: generatedOrderReference.skuGroup,
-		            type: 'PURCHASE',
-		            status: PurchaseOrderStatus.RFQ,
-	            counterpartyName: counterpartyNameCanonical,
-	            counterpartyAddress,
-            expectedDate,
-            incoterms,
-            paymentTerms,
-            notes: input.notes,
-            createdById: user.id,
-            createdByName: user.name,
-            isLegacy: false,
-            // Create lines if provided
-            lines:
-              input.lines && input.lines.length > 0
+			        type: 'PURCHASE',
+			        status: PurchaseOrderStatus.ISSUED,
+		        counterpartyName: counterpartyNameCanonical,
+		        counterpartyAddress,
+	        expectedDate,
+	        incoterms,
+	        paymentTerms,
+	        notes: input.notes,
+	        createdById: user.id,
+	        createdByName: user.name,
+          rfqApprovedAt: now,
+          rfqApprovedById: user.id,
+          rfqApprovedByName: user.name,
+	        isLegacy: false,
+	        // Create lines if provided
+	        lines:
+	          input.lines && input.lines.length > 0
                 ? {
                     create: input.lines.map(line => {
                       const skuRecord = skuByCode.get(line.skuCode.trim().toLowerCase())
@@ -1514,13 +1523,13 @@ export async function createPurchaseOrder(
     throw new ValidationError('Unable to generate a unique order number. Please retry.')
   }
 
-  await auditLog({
-    userId: user.id,
-    action: 'CREATE',
-    entityType: 'PurchaseOrder',
-    entityId: order.id,
-    data: { orderNumber: order.orderNumber, status: 'RFQ', lineCount: input.lines?.length ?? 0 },
-  })
+	  await auditLog({
+	    userId: user.id,
+	    action: 'CREATE',
+	    entityType: 'PurchaseOrder',
+	    entityId: order.id,
+	    data: { orderNumber: order.orderNumber, status: 'ISSUED', lineCount: input.lines?.length ?? 0 },
+	  })
 
   return order
 }
@@ -1551,7 +1560,8 @@ export async function transitionPurchaseOrderStage(
     throw new ConflictError('Cannot transition legacy orders. They are archived.')
   }
 
-  const currentStatus = order.status as PurchaseOrderStatus
+  const rawStatus = order.status as PurchaseOrderStatus
+  const currentStatus = normalizeWorkflowStatus(rawStatus)
 
   if (targetStatus === PurchaseOrderStatus.SHIPPED) {
     throw new ValidationError(
@@ -1675,6 +1685,21 @@ export async function transitionPurchaseOrderStage(
   // Build the update data
   const updateData: Prisma.PurchaseOrderUpdateInput = {
     status: targetStatus,
+  }
+
+  if (currentStatus === PurchaseOrderStatus.ISSUED && !order.poNumber) {
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: order.orderNumber,
+      poNumber: order.poNumber,
+      skuGroup: order.skuGroup,
+    })
+    updateData.poNumber = buildPurchaseOrderReference(orderReferenceSeed.sequence, orderReferenceSeed.skuGroup)
+  }
+
+  if (currentStatus === PurchaseOrderStatus.ISSUED && !order.rfqApprovedAt) {
+    updateData.rfqApprovedAt = order.createdAt
+    updateData.rfqApprovedById = order.createdById
+    updateData.rfqApprovedByName = order.createdByName
   }
 
   if (targetStatus === PurchaseOrderStatus.ISSUED && !order.poNumber) {
@@ -2253,7 +2278,10 @@ export async function transitionPurchaseOrderStage(
             await tx.purchaseOrderDocument.createMany({
               data: documentsToCopy.map(doc => ({
                 purchaseOrderId: remainder.id,
-                stage: doc.stage,
+                stage:
+                  doc.stage === PurchaseOrderDocumentStage.RFQ
+                    ? PurchaseOrderDocumentStage.ISSUED
+                    : doc.stage,
                 documentType: doc.documentType,
                 fileName: doc.fileName,
                 contentType: doc.contentType,
@@ -3203,10 +3231,6 @@ export async function generatePurchaseOrderShippingMarks(params: {
     throw new ConflictError('Cannot generate shipping marks for legacy orders. They are archived.')
   }
 
-  if (order.status === PurchaseOrderStatus.RFQ) {
-    throw new ConflictError('Shipping marks can be generated after the RFQ is issued')
-  }
-
   if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
     throw new ConflictError(`Cannot generate shipping marks for ${order.status.toLowerCase()} purchase orders`)
   }
@@ -3452,7 +3476,7 @@ export function getStageApprovalHistory(order: PurchaseOrder): {
 
   if (order.rfqApprovedAt) {
     history.push({
-      stage: 'RFQ → ISSUED',
+      stage: 'ISSUED',
       approvedAt: order.rfqApprovedAt,
       approvedBy: order.rfqApprovedByName,
     })
@@ -3636,7 +3660,7 @@ export function serializePurchaseOrder(
   const poPdfGeneratedAt = order.poPdfGeneratedAt ?? null
   const shippingMarksGeneratedAt = order.shippingMarksGeneratedAt ?? null
 
-  return {
+	  return {
     id: order.id,
     orderNumber: toPublicOrderNumber(order.orderNumber),
     skuGroup: order.skuGroup ?? null,
@@ -3644,7 +3668,7 @@ export function serializePurchaseOrder(
     splitGroupId: order.splitGroupId ?? null,
     splitParentId: order.splitParentId ?? null,
     type: order.type,
-    status: order.status,
+    status: normalizeWorkflowStatus(order.status as PurchaseOrderStatus),
     warehouseCode: order.warehouseCode,
     warehouseName: order.warehouseName,
     counterpartyName: order.counterpartyName,

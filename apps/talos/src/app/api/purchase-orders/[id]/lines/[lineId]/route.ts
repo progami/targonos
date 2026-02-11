@@ -185,7 +185,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     throw new NotFoundError(`Line item not found: ${lineId}`)
   }
 
-  // Only allow editing most fields in RFQ status
+  // Only allow editing most fields in ISSUED status
   // quantityReceived can be edited in WAREHOUSE status
   const payload = await request.json().catch(() => null)
   const result = UpdateLineSchema.safeParse(payload)
@@ -197,12 +197,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
-  const allowCommercialEdits = order.status === 'RFQ'
+  const allowCommercialEdits = order.status === 'ISSUED' || order.status === 'RFQ'
   const allowIssuedPackagingEdits = order.status === 'ISSUED'
   const allowPiNumberEdits = order.status === 'ISSUED'
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
 
-  // Core fields - only editable in RFQ
+  // Core fields - editable in ISSUED
   if (allowCommercialEdits) {
     if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
@@ -349,11 +349,11 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     updateData.quantityReceived = result.data.quantityReceived
   }
 
-  if (Object.keys(updateData).length === 0 && order.status !== 'RFQ') {
+  if (Object.keys(updateData).length === 0) {
     return ApiResponses.badRequest('No valid fields to update for current order status')
   }
 
-  if (order.status === 'RFQ') {
+  if (allowCommercialEdits) {
     const skuCodeChanged =
       result.data.skuCode !== undefined &&
       result.data.skuCode.trim().toLowerCase() !== line.skuCode.trim().toLowerCase()
@@ -593,9 +593,9 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     return crossTenantGuard
   }
 
-  // Only allow deleting lines in RFQ status
-  if (order.status !== 'RFQ') {
-    return ApiResponses.badRequest('Can only delete line items from orders in RFQ status')
+  // Only allow deleting lines in ISSUED status
+  if (order.status !== 'ISSUED' && order.status !== 'RFQ') {
+    return ApiResponses.badRequest('Can only delete line items from orders in ISSUED status')
   }
 
   const line = await prisma.purchaseOrderLine.findFirst({

@@ -137,8 +137,11 @@ export async function updatePurchaseOrderDetails(
     throw new NotFoundError('Purchase order not found')
   }
 
-  if (order.isLegacy || order.status !== PurchaseOrderStatus.RFQ) {
-    throw new ConflictError('Only RFQs can be edited')
+  if (
+    order.isLegacy ||
+    (order.status !== PurchaseOrderStatus.ISSUED && order.status !== PurchaseOrderStatus.RFQ)
+  ) {
+    throw new ConflictError('Only purchase orders in ISSUED status can be edited')
   }
 
   let expectedDate: Date | null | undefined = order.expectedDate

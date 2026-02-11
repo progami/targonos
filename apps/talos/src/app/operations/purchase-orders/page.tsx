@@ -12,7 +12,6 @@ import { PageLoading } from '@/components/ui/loading-spinner'
 import {
   FileText,
   Plus,
-  FileEdit,
   Send,
   Factory,
   Ship,
@@ -27,7 +26,6 @@ import type { LucideIcon } from 'lucide-react'
 
 // 5-Stage State Machine Status Types
 type POStageStatus =
-  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -45,15 +43,9 @@ type StatusConfig = {
 // Main pipeline stages (5-stage state machine)
 const PIPELINE_STAGES: StatusConfig[] = [
   {
-    value: 'RFQ',
-    label: 'RFQ',
-    description: 'Request for quote shared with supplier',
-    icon: FileEdit,
-  },
-  {
     value: 'ISSUED',
     label: 'Issued',
-    description: 'Accepted by supplier (signed PI received)',
+    description: 'Purchase order created and issued to supplier',
     icon: Send,
   },
   {
@@ -102,13 +94,13 @@ function OrdersPageContent() {
   const searchParams = useSearchParams()
   const pageState = usePageState(PAGE_KEY)
 
-  // Get status from URL first, then Zustand state, then default to RFQ
+  // Get status from URL first, then Zustand state, then default to ISSUED
   const statusFromUrl = searchParams.get('status') as POStageStatus | null
   const persistedStatus = pageState.activeTab as POStageStatus | undefined
   const currentStatus: POStageStatus =
     (statusFromUrl && STATUS_CONFIGS.some(s => s.value === statusFromUrl) ? statusFromUrl : null) ??
     (persistedStatus && STATUS_CONFIGS.some(s => s.value === persistedStatus) ? persistedStatus : null) ??
-    'RFQ'
+    'ISSUED'
 
   useEffect(() => {
     if (status === 'loading') return

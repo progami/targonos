@@ -52,16 +52,15 @@ const OptionalInt = z.preprocess((value) => {
   return cleaned
 }, z.number().int().optional())
 
- const StageTransitionSchema = z.object({
-	  targetStatus: z.enum([
-	    'RFQ',
-	    'ISSUED',
-	    'MANUFACTURING',
-	    'OCEAN',
-	    'WAREHOUSE',
-	    'REJECTED',
-	    'CANCELLED',
-	  ] as const),
+	 const StageTransitionSchema = z.object({
+		  targetStatus: z.enum([
+		    'ISSUED',
+		    'MANUFACTURING',
+		    'OCEAN',
+		    'WAREHOUSE',
+		    'REJECTED',
+		    'CANCELLED',
+		  ] as const),
   stageData: z
     .object({
       // ===========================================
@@ -253,7 +252,7 @@ export const GET = withAuthAndParams(
     )
 
     return ApiResponses.success({
-      currentStatus: order.status,
+      currentStatus: order.status === PurchaseOrderStatus.RFQ ? PurchaseOrderStatus.ISSUED : order.status,
       validNextStages,
     })
   }
