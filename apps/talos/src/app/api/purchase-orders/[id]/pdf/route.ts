@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { withAuthAndParams, ApiResponses } from '@/lib/api'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getPurchaseOrderById } from '@/lib/services/purchase-order-service'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
@@ -829,6 +830,15 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const order = await getPurchaseOrderById(id)
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   // Prefer snapshot supplier address stored on the PO. Fall back to live supplier for older POs.

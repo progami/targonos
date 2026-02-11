@@ -4,6 +4,7 @@ import { apiLogger } from '@/lib/logger/server'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
 import { getS3Service } from '@/services/s3.service'
 import { scanFileContent, validateFile } from '@/lib/security/file-upload'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { Readable, Transform } from 'node:stream'
@@ -179,13 +180,22 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
       select: { id: true, isLegacy: true, orderNumber: true, status: true },
     })
 
-    if (!order) {
-      return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 })
-    }
+	    if (!order) {
+	      return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 })
+	    }
 
-    if (order.isLegacy) {
-      return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
-    }
+	    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+	      prisma,
+	      purchaseOrderId: id,
+	      purchaseOrderStatus: order.status,
+	    })
+	    if (crossTenantGuard) {
+	      return crossTenantGuard
+	    }
+
+	    if (order.isLegacy) {
+	      return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
+	    }
 
     if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
       return NextResponse.json(
