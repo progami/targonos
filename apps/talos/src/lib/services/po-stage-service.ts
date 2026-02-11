@@ -2852,10 +2852,8 @@ export async function receivePurchaseOrderInventory(params: {
       where: {
         warehouseId: warehouse!.id,
         isActive: true,
-        effectiveDate: { lte: receivedAt },
-        OR: [{ endDate: null }, { endDate: { gte: receivedAt } }],
       },
-      orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }],
+      orderBy: [{ costName: 'asc' }, { updatedAt: 'desc' }],
     })
 
     const ratesByCostName = new Map<

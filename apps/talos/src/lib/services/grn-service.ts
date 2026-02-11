@@ -532,10 +532,8 @@ export async function postGrn(id: string, _user: UserContext) {
         where: {
           warehouseId: warehouse.id,
           isActive: true,
-          effectiveDate: { lte: effectiveAt },
-          OR: [{ endDate: null }, { endDate: { gte: effectiveAt } }],
         },
-        orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }],
+        orderBy: [{ costName: 'asc' }, { updatedAt: 'desc' }],
       })
 
       const ratesByCostName = new Map<

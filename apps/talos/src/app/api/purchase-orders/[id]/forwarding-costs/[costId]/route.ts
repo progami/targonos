@@ -165,7 +165,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
           costName: nextCostName,
           isActive: true,
         },
-        orderBy: [{ effectiveDate: 'desc' }],
+        orderBy: [{ updatedAt: 'desc' }],
       })
     : null
 
