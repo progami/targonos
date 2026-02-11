@@ -233,6 +233,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   warehouseAwd: 'AWD',
   productExpenses: 'Product Expenses',
 };
+const ALL_PURCHASE_ACCOUNTS = '__all_purchase_accounts__';
 
 function referenceTypeForComponent(component: BillComponent | null | undefined): BillReferenceType | null {
   if (component === 'manufacturing') return 'PO';
@@ -495,6 +496,7 @@ async function fetchTransactions(input: {
   search: string;
   startDate: string | null;
   endDate: string | null;
+  accountId: string | null;
 }): Promise<TransactionsResponse> {
   const params = new URLSearchParams();
   params.set('type', input.type);
@@ -503,6 +505,7 @@ async function fetchTransactions(input: {
   if (input.search.trim() !== '') params.set('search', input.search.trim());
   if (input.startDate !== null && input.startDate.trim() !== '') params.set('startDate', input.startDate.trim());
   if (input.endDate !== null && input.endDate.trim() !== '') params.set('endDate', input.endDate.trim());
+  if (input.accountId !== null && input.accountId.trim() !== '') params.set('accountId', input.accountId.trim());
 
   const res = await fetch(`${basePath}/api/plutus/transactions?${params.toString()}`);
   if (!res.ok) {
@@ -1966,6 +1969,7 @@ export default function TransactionsPage() {
   const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
+  const [purchaseAccountId, setPurchaseAccountId] = useState('');
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -1985,6 +1989,7 @@ export default function TransactionsPage() {
 
   const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
   const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
+  const normalizedAccountId = tab === 'purchase' && purchaseAccountId.trim() !== '' ? purchaseAccountId.trim() : null;
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -1994,7 +1999,7 @@ export default function TransactionsPage() {
 
   const apiType = tab;
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-transactions', apiType, page, pageSize, search, normalizedStartDate, normalizedEndDate],
+    queryKey: ['plutus-transactions', apiType, page, pageSize, search, normalizedStartDate, normalizedEndDate, normalizedAccountId],
     queryFn: () =>
       fetchTransactions({
         type: apiType,
@@ -2003,6 +2008,7 @@ export default function TransactionsPage() {
         search,
         startDate: normalizedStartDate,
         endDate: normalizedEndDate,
+        accountId: normalizedAccountId,
       }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 5 * 60 * 1000,
@@ -2038,6 +2044,13 @@ export default function TransactionsPage() {
   const brands = useMemo(() => (data?.brands ? data.brands : []), [data]);
   const skus = useMemo(() => (data?.skus ? data.skus : []), [data]);
   const purchaseAccounts = useMemo(() => (data?.accounts ? data.accounts : []), [data]);
+  const purchasePaymentAccounts = useMemo(
+    () =>
+      purchaseAccounts.filter(
+        (account) => account.type === 'Bank' || account.type === 'Credit Card',
+      ),
+    [purchaseAccounts],
+  );
 
   const brandNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -2079,7 +2092,12 @@ export default function TransactionsPage() {
 
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto] md:items-end">
+              <div className={cn(
+                'grid gap-3 md:items-end',
+                tab === 'purchase'
+                  ? 'md:grid-cols-[1.15fr,0.52fr,0.52fr,0.7fr,0.42fr,auto]'
+                  : 'md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto]',
+              )}>
                 <div className="space-y-1.5">
                   <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                     Search
@@ -2149,6 +2167,33 @@ export default function TransactionsPage() {
                   </Select>
                 </div>
 
+                {tab === 'purchase' && (
+                  <div className="space-y-1.5">
+                    <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                      Payment account
+                    </div>
+                    <Select
+                      value={purchaseAccountId === '' ? ALL_PURCHASE_ACCOUNTS : purchaseAccountId}
+                      onValueChange={(value) => {
+                        setPurchaseAccountId(value === ALL_PURCHASE_ACCOUNTS ? '' : value);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="bg-white dark:bg-white/5">
+                        <SelectValue placeholder="All accounts" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</SelectItem>
+                        {purchasePaymentAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   {tab === 'bill' && (
                     <Button
@@ -2173,8 +2218,11 @@ export default function TransactionsPage() {
                   )}
                   <Button
                     variant="outline"
-                    onClick={() => clear()}
-                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
+                    onClick={() => {
+                      clear();
+                      setPurchaseAccountId('');
+                    }}
+                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && purchaseAccountId.trim() === ''}
                   >
                     Clear
                   </Button>

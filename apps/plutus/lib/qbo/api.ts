@@ -403,6 +403,7 @@ export interface FetchPurchasesOptions {
   startDate?: string;
   endDate?: string;
   docNumberContains?: string;
+  accountId?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -489,7 +490,7 @@ export async function fetchPurchases(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, accountId, maxResults = 100, startPosition = 1 } = options;
 
   // Build query
   let query = `SELECT * FROM Purchase`;
@@ -503,6 +504,9 @@ export async function fetchPurchases(
   }
   if (docNumberContains) {
     conditions.push(`DocNumber LIKE '%${escapeSoql(docNumberContains)}%'`);
+  }
+  if (accountId) {
+    conditions.push(`AccountRef = '${escapeSoql(accountId)}'`);
   }
 
   if (conditions.length > 0) {
