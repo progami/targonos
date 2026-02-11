@@ -14,27 +14,19 @@ export async function POST(request: NextRequest) {
 
  const prisma = await getTenantPrisma()
  const body = await request.json()
-  const { rateId, warehouseId, costName, effectiveDate } = body
+  const { rateId, warehouseId, costName } = body
 
-  if (!warehouseId || !costName || !effectiveDate) {
+  if (!warehouseId || !costName) {
   return NextResponse.json(
-  { error: 'Missing warehouse, rate name, or effective date' },
+  { error: 'Missing warehouse or rate name' },
   { status: 400 }
   )
   }
 
  const sanitizedCostName = sanitizeForDisplay(String(costName).trim())
- const effectiveOn = new Date(effectiveDate)
   if (!sanitizedCostName) {
   return NextResponse.json(
    { error: 'Rate name must be provided' },
-   { status: 400 }
-  )
-  }
-
-  if (Number.isNaN(effectiveOn.getTime())) {
-  return NextResponse.json(
-   { error: 'Effective date is invalid' },
    { status: 400 }
   )
   }
@@ -43,7 +35,7 @@ export async function POST(request: NextRequest) {
   where: {
   warehouseId,
   costName: sanitizedCostName,
-  effectiveDate: effectiveOn,
+  isActive: true,
   ...(rateId ? { NOT: { id: rateId } } : {})
   }
   })
@@ -51,7 +43,7 @@ export async function POST(request: NextRequest) {
   if (duplicateRate) {
   return NextResponse.json({
   hasOverlap: true,
-  message: `A rate named "${sanitizedCostName}" already exists for this warehouse on ${effectiveOn.toISOString().slice(0, 10)}.`
+  message: `A rate named "${sanitizedCostName}" already exists for this warehouse.`
   })
   }
 

@@ -162,7 +162,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       costName: parsed.data.costName,
       isActive: true,
     },
-    orderBy: [{ effectiveDate: 'desc' }],
+    orderBy: [{ updatedAt: 'desc' }],
   })
 
   if (!rate) {
