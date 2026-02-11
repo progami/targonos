@@ -918,37 +918,27 @@ export default function FulfillmentOrderDetailPage() {
         />
         <PageContent>
           <div className="flex flex-col gap-6">
-            {/* Order Type (read-only) - matches new page structure */}
-            <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Order Type</h3>
-                  <div className="flex gap-3">
-                    {(['AMAZON_FBA', 'CUSTOMER', 'TRANSFER'] as const).map(type => (
-                      <div
-                        key={type}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium ${
-                          order.destinationType === type
-                            ? 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-600 text-cyan-700 dark:text-cyan-300'
-                            : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400'
-                        }`}
-                      >
-                        {type === 'AMAZON_FBA'
-                          ? 'Amazon FBA'
-                          : type === 'CUSTOMER'
-                            ? 'Customer'
-                            : 'Transfer'}
-                      </div>
-                    ))}
-                  </div>
+            {/* Status Bar */}
+            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
+                  <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 ring-1 ring-cyan-300 dark:ring-cyan-700">
+                    {order.destinationType === 'AMAZON_FBA'
+                      ? 'Amazon FBA'
+                      : order.destinationType === 'CUSTOMER'
+                        ? 'Customer'
+                        : 'Transfer'}
+                  </span>
+                  <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
+                  <Badge className={STATUS_BADGE_CLASSES[order.status]}>
+                    {order.status === 'DRAFT'
+                      ? 'Draft'
+                      : order.status === 'SHIPPED'
+                        ? 'Shipped'
+                        : 'Cancelled'}
+                  </Badge>
                 </div>
-                <Badge className={STATUS_BADGE_CLASSES[order.status]}>
-                  {order.status === 'DRAFT'
-                    ? 'Draft'
-                    : order.status === 'SHIPPED'
-                      ? 'Shipped'
-                      : 'Cancelled'}
-                </Badge>
               </div>
             </div>
 
