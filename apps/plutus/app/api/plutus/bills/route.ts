@@ -16,6 +16,10 @@ type BillComponent =
   | 'warehouseAwd'
   | 'productExpenses';
 
+function normalizeSku(raw: string): string {
+  return raw.trim().replace(/\s+/g, '-').toUpperCase();
+}
+
 function classifyByInventoryName(account: QboAccount): BillComponent | null {
   if (account.AccountType !== 'Other Current Asset') return null;
   if (account.AccountSubType !== 'Inventory') return null;
@@ -266,7 +270,14 @@ export async function POST(req: NextRequest) {
 
     for (const line of lines) {
       if (line.component !== 'manufacturing') continue;
-      if (typeof line.sku !== 'string' || line.sku === '' || typeof line.quantity !== 'number' || line.quantity <= 0) {
+      if (
+        typeof line.sku !== 'string' ||
+        line.sku === '' ||
+        typeof line.quantity !== 'number' ||
+        !Number.isFinite(line.quantity) ||
+        !Number.isInteger(line.quantity) ||
+        line.quantity <= 0
+      ) {
         return NextResponse.json(
           { error: 'Manufacturing lines require sku and quantity' },
           { status: 400 },
@@ -315,8 +326,16 @@ export async function POST(req: NextRequest) {
     let syncedAt: Date | null = null;
     const connection = await getQboConnection();
     if (connection) {
+      const lineDescriptions = lines
+        .filter((l: { component: string }) => l.component === 'manufacturing')
+        .map((l: { qboLineId: string; sku: string; quantity: number }) => ({
+          lineId: l.qboLineId,
+          description: `${normalizeSku(l.sku)} x ${l.quantity} units`,
+        }));
+
       const { updatedConnection } = await updateBill(connection, qboBillId, {
         privateNote: `PO: ${poNumber}`,
+        lineDescriptions,
       });
       if (updatedConnection) {
         await saveServerQboConnection(updatedConnection);
