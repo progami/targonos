@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ExternalLink,
   Plus,
-  RefreshCw,
   Save,
   Search,
   Trash2,
@@ -805,21 +804,6 @@ async function savePurchaseMapping(input: {
       qboPurchaseId: input.purchase.id,
       lines: payloadLines,
     }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
-  }
-
-  return res.json();
-}
-
-async function syncMappedBillsBulk(qboBillIds: string[]): Promise<{ successCount: number; failureCount: number; failures: Array<{ qboBillId: string; error: string }> }> {
-  const res = await fetch(`${basePath}/api/plutus/bills/sync-bulk`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ qboBillIds }),
   });
 
   if (!res.ok) {
@@ -2288,8 +2272,6 @@ function EditPurchaseModal({
 }
 
 export default function TransactionsPage() {
-  const queryClient = useQueryClient();
-
   const tab = useTransactionsStore((s) => s.tab);
   const searchInput = useTransactionsStore((s) => s.searchInput);
   const search = useTransactionsStore((s) => s.search);
@@ -2311,7 +2293,6 @@ export default function TransactionsPage() {
   const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
   const [createPurchaseOpen, setCreatePurchaseOpen] = useState(false);
-  const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
   const [purchaseAccountId, setPurchaseAccountId] = useState('');
 
   useEffect(() => {
@@ -2357,21 +2338,6 @@ export default function TransactionsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const syncMappedMutation = useMutation({
-    mutationFn: (qboBillIds: string[]) => syncMappedBillsBulk(qboBillIds),
-    onSuccess: (result) => {
-      setBulkSyncError(null);
-      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
-      if (result.failureCount > 0) {
-        const sample = result.failures.slice(0, 3).map((failure) => `${failure.qboBillId}: ${failure.error}`).join(' | ');
-        setBulkSyncError(`Synced ${result.successCount}. Failed ${result.failureCount}. ${sample}`);
-      }
-    },
-    onError: (mutationError: Error) => {
-      setBulkSyncError(mutationError.message);
-    },
-  });
-
   const currency = connection?.homeCurrency ? connection.homeCurrency : 'USD';
   const rows = useMemo(() => (data ? data.transactions : []), [data]);
 
@@ -2402,11 +2368,6 @@ export default function TransactionsPage() {
     }
     return map;
   }, [brands]);
-
-  const mappedBillIds = useMemo(
-    () => billRows.filter((row) => row.isTrackedBill && row.mapping !== null).map((row) => row.id),
-    [billRows],
-  );
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Transactions" error={connection.error} />;
@@ -2558,17 +2519,6 @@ export default function TransactionsPage() {
                       New Expense
                     </Button>
                   )}
-                  {tab === 'bill' && (
-                    <Button
-                      variant="outline"
-                      onClick={() => syncMappedMutation.mutate(mappedBillIds)}
-                      disabled={mappedBillIds.length === 0 || syncMappedMutation.isPending}
-                      className="gap-1.5"
-                    >
-                      <RefreshCw className={cn('h-3.5 w-3.5', syncMappedMutation.isPending && 'animate-spin')} />
-                      {syncMappedMutation.isPending ? 'Syncing...' : 'Sync Mapped Bills'}
-                    </Button>
-                  )}
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -2583,12 +2533,6 @@ export default function TransactionsPage() {
               </div>
             </CardContent>
           </Card>
-
-          {bulkSyncError && (
-            <Card className="p-4 border-red-200 dark:border-red-900">
-              <p className="text-sm text-red-700 dark:text-red-300">{bulkSyncError}</p>
-            </Card>
-          )}
 
           <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
             <CardContent className="p-0">
