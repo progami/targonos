@@ -499,10 +499,10 @@ export default function NewFulfillmentOrderPage() {
       />
       <PageContent>
         <div className="flex flex-col gap-6">
-          {/* Source Type Selector */}
-          <div className="rounded-xl border bg-white dark:bg-slate-800 p-5">
-            <h3 className="text-sm font-semibold mb-3">Order Type</h3>
-            <div className="flex gap-3">
+          {/* Order Type Selector */}
+          <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
               {(['AMAZON_FBA', 'CUSTOMER', 'TRANSFER'] as DestinationType[]).map(type => (
                 <button
                   key={type}
@@ -511,10 +511,10 @@ export default function NewFulfillmentOrderPage() {
                     setSourceType(type)
                     setActiveTab(type === 'AMAZON_FBA' ? 'amazon' : 'details')
                   }}
-                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     sourceType === type
-                      ? 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-500 dark:border-cyan-400 text-cyan-700 dark:text-cyan-300'
-                      : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                      ? 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 ring-1 ring-cyan-300 dark:ring-cyan-700'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   {type === 'AMAZON_FBA'
