@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
   ExternalLink,
   Plus,
   Save,
@@ -153,6 +154,23 @@ type TransactionsResponse = {
   brands?: BrandOption[];
   skus?: SkuOption[];
   accounts?: PurchaseAccountOption[];
+};
+
+type AmazonAdsImportResult = {
+  createdCount: number;
+  skippedCount: number;
+  created: Array<{
+    tenantCode: 'US' | 'UK';
+    amazonTransactionId: string;
+    qboPurchaseId: string;
+    docNumber: string;
+  }>;
+  skipped: Array<{
+    tenantCode: 'US' | 'UK';
+    amazonTransactionId: string;
+    docNumber: string;
+    reason: string;
+  }>;
 };
 
 type BillRow = TransactionRow & {
@@ -666,6 +684,31 @@ async function createPurchaseFromTransactions(input: { state: CreatePurchaseStat
       vendorId: normalizedVendorId === '' ? undefined : normalizedVendorId,
       memo: normalizedMemo === '' ? undefined : normalizedMemo,
       lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
+  return res.json();
+}
+
+async function importAmazonAds(input: {
+  startDate: string;
+  endDate: string;
+  tenantCodes: Array<'US' | 'UK'>;
+  paymentAccountId: string;
+}): Promise<AmazonAdsImportResult> {
+  const res = await fetch(`${basePath}/api/plutus/amazon/ads/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      startDate: input.startDate,
+      endDate: input.endDate,
+      tenantCodes: input.tenantCodes,
+      paymentAccountId: input.paymentAccountId,
     }),
   });
 
@@ -1541,6 +1584,173 @@ function CreatePurchaseModal({
   );
 }
 
+function ImportAmazonAdsModal({
+  paymentAccounts,
+  defaultPaymentAccountId,
+  defaultStartDate,
+  defaultEndDate,
+  open,
+  onOpenChange,
+}: {
+  paymentAccounts: PurchaseAccountOption[];
+  defaultPaymentAccountId: string;
+  defaultStartDate: string;
+  defaultEndDate: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [startDate, setStartDate] = useState(defaultStartDate);
+  const [endDate, setEndDate] = useState(defaultEndDate);
+  const [paymentAccountId, setPaymentAccountId] = useState(defaultPaymentAccountId);
+  const [includeUs, setIncludeUs] = useState(true);
+  const [includeUk, setIncludeUk] = useState(true);
+  const [importResult, setImportResult] = useState<AmazonAdsImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setStartDate(defaultStartDate);
+    setEndDate(defaultEndDate);
+    setPaymentAccountId(defaultPaymentAccountId);
+    setIncludeUs(true);
+    setIncludeUk(true);
+    setImportResult(null);
+    setImportError(null);
+  }, [defaultEndDate, defaultPaymentAccountId, defaultStartDate, open]);
+
+  const tenantCodes = useMemo(() => {
+    const selected: Array<'US' | 'UK'> = [];
+    if (includeUs) selected.push('US');
+    if (includeUk) selected.push('UK');
+    return selected;
+  }, [includeUk, includeUs]);
+
+  const canImport = useMemo(() => {
+    return (
+      /^\d{4}-\d{2}-\d{2}$/.test(startDate.trim()) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(endDate.trim()) &&
+      paymentAccountId.trim() !== '' &&
+      tenantCodes.length > 0
+    );
+  }, [endDate, paymentAccountId, startDate, tenantCodes.length]);
+
+  const importMutation = useMutation({
+    mutationFn: () =>
+      importAmazonAds({
+        startDate: startDate.trim(),
+        endDate: endDate.trim(),
+        tenantCodes,
+        paymentAccountId: paymentAccountId.trim(),
+      }),
+    onSuccess: (result) => {
+      setImportError(null);
+      setImportResult(result);
+      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+    },
+    onError: (error: Error) => {
+      setImportResult(null);
+      setImportError(error.message);
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between gap-3">
+            <span className="truncate">Import Amazon Ads</span>
+          </DialogTitle>
+          <DialogDescription>
+            Fetch Amazon Ads charges via SP-API and create mapped QBO expenses for review.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                Start date
+              </div>
+              <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                End date
+              </div>
+              <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+              Payment account
+            </div>
+            <select
+              value={paymentAccountId}
+              onChange={(event) => setPaymentAccountId(event.target.value)}
+              className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+            >
+              <option value="">Select payment account</option>
+              {paymentAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.fullyQualifiedName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={includeUs}
+                onChange={(event) => setIncludeUs(event.target.checked)}
+              />
+              US
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={includeUk}
+                onChange={(event) => setIncludeUk(event.target.checked)}
+              />
+              UK
+            </label>
+          </div>
+
+          {importError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{importError}</p>
+          )}
+
+          {importResult && (
+            <Card className="border-slate-200/70 dark:border-white/10">
+              <CardContent className="p-3 text-sm">
+                Imported {importResult.createdCount}. Skipped {importResult.skippedCount}.
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          <Button
+            onClick={() => importMutation.mutate()}
+            disabled={!canImport || importMutation.isPending}
+            className="gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {importMutation.isPending ? 'Importing...' : 'Import'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EditBillModal({
   bill,
   brands,
@@ -2293,6 +2503,7 @@ export default function TransactionsPage() {
   const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
   const [createPurchaseOpen, setCreatePurchaseOpen] = useState(false);
+  const [importAmazonAdsOpen, setImportAmazonAdsOpen] = useState(false);
   const [purchaseAccountId, setPurchaseAccountId] = useState('');
 
   useEffect(() => {
@@ -2360,6 +2571,11 @@ export default function TransactionsPage() {
       ),
     [purchaseAccounts],
   );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const adsImportStartDate = startDate.trim() !== '' ? startDate.trim() : `${today.slice(0, 7)}-01`;
+  const adsImportEndDate = endDate.trim() !== '' ? endDate.trim() : today;
+  const adsImportPaymentAccountId = purchaseAccountId.trim() !== '' ? purchaseAccountId.trim() : '';
 
   const brandNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -2517,6 +2733,16 @@ export default function TransactionsPage() {
                     >
                       <Plus className="h-3.5 w-3.5" />
                       New Expense
+                    </Button>
+                  )}
+                  {tab === 'purchase' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setImportAmazonAdsOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Import Amazon Ads
                     </Button>
                   )}
                   <Button
@@ -2918,6 +3144,15 @@ export default function TransactionsPage() {
         <CreatePurchaseModal
           open={createPurchaseOpen}
           onOpenChange={setCreatePurchaseOpen}
+        />
+
+        <ImportAmazonAdsModal
+          paymentAccounts={purchasePaymentAccounts}
+          defaultPaymentAccountId={adsImportPaymentAccountId}
+          defaultStartDate={adsImportStartDate}
+          defaultEndDate={adsImportEndDate}
+          open={importAmazonAdsOpen}
+          onOpenChange={setImportAmazonAdsOpen}
         />
 
         {editBill && (

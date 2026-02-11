@@ -1246,6 +1246,7 @@ export async function createPurchase(
     txnDate: string;
     paymentType: 'Cash' | 'Check' | 'CreditCard';
     paymentAccountId: string;
+    docNumber?: string;
     vendorId?: string;
     privateNote?: string;
     lines: Array<{
@@ -1273,6 +1274,9 @@ export async function createPurchase(
       },
     })),
   };
+  if (input.docNumber !== undefined) {
+    payload.DocNumber = input.docNumber;
+  }
   if (input.vendorId !== undefined) {
     payload.EntityRef = { value: input.vendorId };
   }
