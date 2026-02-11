@@ -4,6 +4,7 @@ import { apiLogger } from '@/lib/logger/server'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
 import { getS3Service } from '@/services/s3.service'
 import { validateFile } from '@/lib/security/file-upload'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { PurchaseOrderDocumentStage, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
@@ -115,6 +116,15 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
     if (!order) {
       return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 })
+    }
+
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+      purchaseOrderStatus: order.status,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
     }
 
     if (order.isLegacy) {
