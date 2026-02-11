@@ -834,9 +834,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>(
     []
   )
-  const [freightCostEditing, setFreightCostEditing] = useState(false)
-  const [freightCostDraft, setFreightCostDraft] = useState('')
-  const [freightCostSaving, setFreightCostSaving] = useState(false)
+  const [freightLineAdding, setFreightLineAdding] = useState(false)
+  const [freightLineDraft, setFreightLineDraft] = useState({ costName: '', amount: '', notes: '' })
+  const [freightLineSaving, setFreightLineSaving] = useState(false)
+  const [freightLineDeleting, setFreightLineDeleting] = useState<string | null>(null)
 
   const [gateIssues, setGateIssues] = useState<Record<string, string> | null>(null)
 
@@ -1532,61 +1533,92 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const manualInboundSubtotal = manualInboundCosts.reduce((sum, c) => sum + c.amount, 0)
   const manualStorageSubtotal = manualStorageCosts.reduce((sum, c) => sum + c.amount, 0)
 
-  const startEditFreightCost = useCallback(() => {
-    setFreightCostDraft(forwardingSubtotal > 0 ? forwardingSubtotal.toFixed(2) : '')
-    setFreightCostEditing(true)
-  }, [forwardingSubtotal])
-
-  const cancelEditFreightCost = useCallback(() => {
-    setFreightCostEditing(false)
-    setFreightCostDraft('')
-  }, [])
-
-  const saveFreightCost = useCallback(async () => {
+  const addFreightLine = useCallback(async () => {
     if (!order) return
-    if (freightCostSaving) return
+    if (freightLineSaving) return
 
-    const raw = freightCostDraft.trim()
-    if (!raw) {
-      toast.error('Freight cost is required')
+    const costName = freightLineDraft.costName.trim()
+    if (!costName) {
+      toast.error('Cost name is required')
       return
     }
 
-    const parsed = Number(raw)
+    const parsed = Number(freightLineDraft.amount)
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      toast.error('Freight cost must be a positive number')
+      toast.error('Amount must be a positive number')
       return
     }
 
     try {
-      setFreightCostSaving(true)
+      setFreightLineSaving(true)
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/freight-cost`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parsed }),
+        body: JSON.stringify({
+          costName,
+          amount: parsed,
+          notes: freightLineDraft.notes.trim() || undefined,
+        }),
         tenantOverride,
       })
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const message = typeof payload?.error === 'string' ? payload.error : null
-        toast.error(message ? message : `Failed to save freight cost (HTTP ${response.status})`)
+        toast.error(message ? message : `Failed to add freight line (HTTP ${response.status})`)
         return
       }
 
-      cancelEditFreightCost()
+      setFreightLineAdding(false)
+      setFreightLineDraft({ costName: '', amount: '', notes: '' })
       void refreshForwardingCosts()
       void refreshCostLedgerSummary()
-      toast.success('Freight cost saved')
+      toast.success('Freight line added')
     } catch {
-      toast.error('Failed to save freight cost')
+      toast.error('Failed to add freight line')
     } finally {
-      setFreightCostSaving(false)
+      setFreightLineSaving(false)
     }
   }, [
-    cancelEditFreightCost,
-    freightCostDraft,
-    freightCostSaving,
+    freightLineDraft,
+    freightLineSaving,
+    order,
+    refreshCostLedgerSummary,
+    refreshForwardingCosts,
+    tenantOverride,
+  ])
+
+  const deleteFreightLine = useCallback(async (costId: string) => {
+    if (!order) return
+    if (freightLineDeleting) return
+
+    try {
+      setFreightLineDeleting(costId)
+      const response = await fetchWithCSRF(
+        `/api/purchase-orders/${order.id}/freight-cost?costId=${encodeURIComponent(costId)}`,
+        {
+          method: 'DELETE',
+          tenantOverride,
+        }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = typeof payload?.error === 'string' ? payload.error : null
+        toast.error(message ? message : `Failed to delete freight line (HTTP ${response.status})`)
+        return
+      }
+
+      void refreshForwardingCosts()
+      void refreshCostLedgerSummary()
+      toast.success('Freight line removed')
+    } catch {
+      toast.error('Failed to delete freight line')
+    } finally {
+      setFreightLineDeleting(null)
+    }
+  }, [
+    freightLineDeleting,
     order,
     refreshCostLedgerSummary,
     refreshForwardingCosts,
@@ -5081,9 +5113,18 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                             Freight Costs
                           </h4>
-                          {canEditFreightCost && !freightCostEditing && (
-                            <Button type="button" size="sm" variant="outline" onClick={startEditFreightCost}>
-                              Edit
+                          {canEditFreightCost && !freightLineAdding && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setFreightLineDraft({ costName: '', amount: '', notes: '' })
+                                setFreightLineAdding(true)
+                              }}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              Add Freight
                             </Button>
                           )}
                         </div>
@@ -5102,10 +5143,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">Qty</th>
                                 <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Rate</th>
                                 <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
+                                {canEditFreightCost && (
+                                  <th className="w-[40px]" />
+                                )}
                               </tr>
                             </thead>
                             <tbody>
-                              {!freightCostEditing && forwardingCosts.length > 0 && forwardingCosts.map(row => (
+                              {forwardingCosts.length > 0 && forwardingCosts.map(row => (
                                 <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                                   <td className="px-3 py-2 font-medium text-foreground">
                                     {row.costName}
@@ -5124,56 +5168,97 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     {tenantCurrency}{' '}
                                     {Number(row.totalCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
-                                </tr>
-                              ))}
-                              {!freightCostEditing && forwardingCosts.length === 0 && (
-                                <tr>
-                                  <td colSpan={4} className="px-3 py-3 text-sm text-muted-foreground">
-                                    No freight costs recorded.
-                                  </td>
-                                </tr>
-                              )}
-                              {freightCostEditing && (
-                                <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                                  <td colSpan={3} className="px-3 py-2 font-medium text-foreground">
-                                    Freight Total
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex items-center justify-end gap-2">
-                                      <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step="0.01"
-                                        value={freightCostDraft}
-                                        onChange={e => setFreightCostDraft(e.target.value)}
-                                        disabled={!canEditFreightCost || freightCostSaving}
-                                        className="h-8 w-[140px] text-sm text-right tabular-nums"
-                                        placeholder="0.00"
-                                      />
+                                  {canEditFreightCost && (
+                                    <td className="px-1 py-2 text-center">
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                                        onClick={cancelEditFreightCost}
-                                        disabled={freightCostSaving}
+                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-600"
+                                        onClick={() => void deleteFreightLine(row.id)}
+                                        disabled={freightLineDeleting === row.id}
                                       >
-                                        <X className="h-3 w-3" />
+                                        {freightLineDeleting === row.id ? (
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        )}
                                       </Button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                              {forwardingCosts.length === 0 && !freightLineAdding && (
+                                <tr>
+                                  <td colSpan={canEditFreightCost ? 5 : 4} className="px-3 py-3 text-sm text-muted-foreground">
+                                    No freight costs recorded.
+                                  </td>
+                                </tr>
+                              )}
+                              {freightLineAdding && (
+                                <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                                  <td className="px-3 py-2">
+                                    <Input
+                                      type="text"
+                                      value={freightLineDraft.costName}
+                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, costName: e.target.value }))}
+                                      disabled={freightLineSaving}
+                                      className="h-8 text-sm"
+                                      placeholder="e.g., Ocean Freight"
+                                      autoFocus
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2" colSpan={2}>
+                                    <Input
+                                      type="text"
+                                      value={freightLineDraft.notes}
+                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, notes: e.target.value }))}
+                                      disabled={freightLineSaving}
+                                      className="h-8 text-sm"
+                                      placeholder="Notes (optional)"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.01"
+                                      value={freightLineDraft.amount}
+                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, amount: e.target.value }))}
+                                      disabled={freightLineSaving}
+                                      className="h-8 text-sm text-right tabular-nums"
+                                      placeholder="0.00"
+                                    />
+                                  </td>
+                                  <td className="px-1 py-2">
+                                    <div className="flex items-center gap-1">
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
                                         className="h-6 w-6 p-0 text-primary hover:text-primary"
-                                        onClick={() => void saveFreightCost()}
-                                        disabled={!canEditFreightCost || freightCostSaving}
+                                        onClick={() => void addFreightLine()}
+                                        disabled={freightLineSaving}
                                       >
-                                        {freightCostSaving ? (
+                                        {freightLineSaving ? (
                                           <Loader2 className="h-3 w-3 animate-spin" />
                                         ) : (
                                           <Check className="h-3 w-3" />
                                         )}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                        onClick={() => {
+                                          setFreightLineAdding(false)
+                                          setFreightLineDraft({ costName: '', amount: '', notes: '' })
+                                        }}
+                                        disabled={freightLineSaving}
+                                      >
+                                        <X className="h-3 w-3" />
                                       </Button>
                                     </div>
                                   </td>
@@ -5182,7 +5267,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </tbody>
                             <tfoot>
                               <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                                <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                <td colSpan={canEditFreightCost ? 4 : 3} className="px-3 py-2 text-right font-medium text-muted-foreground">
                                   Freight Subtotal
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
@@ -6354,6 +6439,22 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           {issue('packingListRef') && (
                             <p className="text-xs text-rose-600" data-gate-key="details.packingListRef">
                               {issue('packingListRef')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            BL Surrender
+                          </p>
+                          {canEditStage ? (
+                            <Input
+                              type="date"
+                              value={textField('surrenderBlDate', order.stageData.warehouse?.surrenderBlDate)}
+                              onChange={e => setStageField('surrenderBlDate', e.target.value)}
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {formatTextOrDash(formatDateOnly(order.stageData.warehouse?.surrenderBlDate ?? null))}
                             </p>
                           )}
                         </div>
