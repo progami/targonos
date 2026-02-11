@@ -1,11 +1,3 @@
-// Set up logging before anything else
-// Temporarily disabled for debugging
-// try {
-//   require('./src/lib/setup-logging.js');
-// } catch (error) {
-//   console.error('Failed to set up logging:', error);
-// }
-
 // Get version from package.json
 const { version } = require('./package.json')
 const resolvedVersion = process.env.NEXT_PUBLIC_VERSION || version
