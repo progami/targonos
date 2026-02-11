@@ -26,12 +26,7 @@ export const GET = withAuth(async (req, _session) => {
  }
  
  if (activeOnly) {
- const now = new Date()
- where.effectiveDate = { lte: now }
- where.OR = [
- { endDate: null },
- { endDate: { gte: now } }
- ]
+ where.isActive = true
  }
 
  const rates = await prisma.costRate.findMany({
@@ -55,7 +50,7 @@ export const GET = withAuth(async (req, _session) => {
  orderBy: [
  { warehouse: { name: 'asc' } },
  { costCategory: 'asc' },
- { effectiveDate: 'desc' }
+ { updatedAt: 'desc' }
  ]
  })
 
