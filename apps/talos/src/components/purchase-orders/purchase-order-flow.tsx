@@ -6430,7 +6430,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                           <div className="space-y-1 col-span-2" data-gate-key="details.customsEntryNumber">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Import Entry Number
+                              Import Entry / MRN (optional)
                             </p>
                             <Input
                               data-gate-key="details.customsEntryNumber"
@@ -6438,7 +6438,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               onChange={e =>
                                 setReceiveFormData(prev => ({ ...prev, customsEntryNumber: e.target.value }))
                               }
-                              placeholder="Enter import entry number"
+                              placeholder="Optional (e.g., entry #, MRN, or broker reference)"
                               className={
                                 gateIssues?.['details.customsEntryNumber']
                                   ? 'border-rose-500 focus-visible:ring-rose-500'
