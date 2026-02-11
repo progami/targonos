@@ -128,7 +128,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: Boxes,
     items: [
       { href: '/audit-data', label: 'Audit Data' },
-      { href: '/bills', label: 'Bills' },
       { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },
