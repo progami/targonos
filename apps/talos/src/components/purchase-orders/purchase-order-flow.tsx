@@ -1557,7 +1557,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         body: JSON.stringify({
           costName,
           amount: parsed,
-          notes: freightLineDraft.notes.trim() || undefined,
+          notes: freightLineDraft.notes.trim() ? freightLineDraft.notes.trim() : undefined,
         }),
         tenantOverride,
       })
@@ -5265,7 +5265,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </tbody>
                             <tfoot>
                               <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                                <td colSpan={canEditFreightCost ? 4 : 3} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
                                   Freight Subtotal
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
@@ -5273,6 +5273,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                     : '—'}
                                 </td>
+                                {canEditFreightCost && <td />}
                               </tr>
                             </tfoot>
                           </table>
