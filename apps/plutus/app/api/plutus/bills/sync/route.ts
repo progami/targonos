@@ -6,6 +6,10 @@ import db from '@/lib/db';
 
 const logger = createLogger({ name: 'plutus-bills-sync' });
 
+function normalizeSku(raw: string): string {
+  return raw.trim().replace(/\s+/g, '-').toUpperCase();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -23,16 +27,26 @@ export async function POST(req: NextRequest) {
     // Load mapping from DB
     const mapping = await db.billMapping.findUnique({
       where: { qboBillId },
-      include: { brand: true },
+      include: { brand: true, lines: true },
     });
 
     if (!mapping) {
       return NextResponse.json({ error: 'No mapping found for this bill. Save the mapping first.' }, { status: 404 });
     }
 
+    const lineDescriptions = mapping.lines
+      .filter((l) => l.component === 'manufacturing')
+      .map((l) => {
+        if (!l.sku || !l.quantity || l.quantity <= 0) {
+          throw new Error(`Manufacturing line mapping missing sku/quantity: billId=${qboBillId} lineId=${l.qboLineId}`);
+        }
+        return { lineId: l.qboLineId, description: `${normalizeSku(l.sku)} x ${l.quantity} units` };
+      });
+
     // Push PO number to QBO memo
     const { updatedConnection } = await updateBill(connection, qboBillId, {
       privateNote: `PO: ${mapping.poNumber}`,
+      lineDescriptions,
     });
 
     if (updatedConnection) {
