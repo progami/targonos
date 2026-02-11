@@ -981,6 +981,34 @@ export async function updatePurchase(
   return { purchase: data.Purchase, updatedConnection };
 }
 
+export async function updatePurchaseWithPayload(
+  connection: QboConnection,
+  payload: Record<string, unknown>,
+): Promise<{ purchase: QboPurchase; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/purchase?operation=update`;
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update purchase with payload', { status: response.status, error: errorText });
+    throw new Error(`Failed to update purchase with payload: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Purchase: QboPurchase };
+  return { purchase: data.Purchase, updatedConnection };
+}
+
 const ACCOUNTS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
