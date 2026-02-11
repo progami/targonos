@@ -632,74 +632,52 @@ function getAuditActionTheme(action: string): {
   }
 }
 
-function describeAuditChanges(entry: AuditLogEntry): string[] {
+type AuditChangeRow = { field: string; previous: string; current: string }
+
+function describeAuditChangeRows(entry: AuditLogEntry): AuditChangeRow[] {
   const oldValue = toAuditRecord(entry.oldValue)
   const newValue = toAuditRecord(entry.newValue)
 
   switch (entry.action) {
     case 'LINE_ADD': {
       if (!newValue) return []
-      const skuCode = newValue.skuCode
-      const lotRef = typeof newValue.lotRef === 'string' ? newValue.lotRef : null
-      const quantity = newValue.quantity
-      const currency = newValue.currency
-      const unitCost = newValue.unitCost
-      const detail = [
-        typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
-        typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
-        typeof unitCost === 'number' && Number.isFinite(unitCost) && typeof currency === 'string'
-          ? `Unit ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-          : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof newValue.skuCode === 'string') rows.push({ field: 'SKU', previous: '—', current: newValue.skuCode })
+      if (typeof newValue.lotRef === 'string') rows.push({ field: 'Lot', previous: '—', current: newValue.lotRef })
+      if (typeof newValue.quantity === 'number') rows.push({ field: 'Qty', previous: '—', current: newValue.quantity.toLocaleString() })
+      if (typeof newValue.unitCost === 'number' && Number.isFinite(newValue.unitCost)) {
+        const currency = typeof newValue.currency === 'string' ? ` ${newValue.currency}` : ''
+        rows.push({ field: 'Unit Cost', previous: '—', current: `${newValue.unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${currency}` })
+      }
+      return rows
     }
     case 'LINE_DELETE': {
       if (!oldValue) return []
-      const skuCode = oldValue.skuCode
-      const lotRef = typeof oldValue.lotRef === 'string' ? oldValue.lotRef : null
-      const quantity = oldValue.quantity
-      const detail = [
-        typeof skuCode === 'string' ? `SKU ${skuCode}` : null,
-        typeof lotRef === 'string' ? `Lot ${lotRef}` : null,
-        typeof quantity === 'number' ? `Qty ${quantity.toLocaleString()}` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof oldValue.skuCode === 'string') rows.push({ field: 'SKU', previous: oldValue.skuCode, current: '—' })
+      if (typeof oldValue.lotRef === 'string') rows.push({ field: 'Lot', previous: oldValue.lotRef, current: '—' })
+      if (typeof oldValue.quantity === 'number') rows.push({ field: 'Qty', previous: oldValue.quantity.toLocaleString(), current: '—' })
+      return rows
     }
     case 'CONTAINER_ADD':
     case 'CONTAINER_DELETE': {
       const value = entry.action === 'CONTAINER_DELETE' ? oldValue : newValue
       if (!value) return []
-      const number = value.containerNumber
-      const size = value.containerSize
-      const seal = value.sealNumber
-      const detail = [
-        typeof number === 'string' ? `#${number}` : null,
-        typeof size === 'string' ? size : null,
-        typeof seal === 'string' && seal.trim() ? `Seal ${seal}` : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const isDelete = entry.action === 'CONTAINER_DELETE'
+      const rows: AuditChangeRow[] = []
+      if (typeof value.containerNumber === 'string') rows.push({ field: 'Container #', previous: isDelete ? value.containerNumber : '—', current: isDelete ? '—' : value.containerNumber })
+      if (typeof value.containerSize === 'string') rows.push({ field: 'Size', previous: isDelete ? value.containerSize : '—', current: isDelete ? '—' : value.containerSize })
+      if (typeof value.sealNumber === 'string' && value.sealNumber.trim()) rows.push({ field: 'Seal', previous: isDelete ? value.sealNumber : '—', current: isDelete ? '—' : value.sealNumber })
+      return rows
     }
     case 'DOCUMENT_UPLOAD':
     case 'DOCUMENT_REPLACE': {
       if (!newValue) return []
-      const stage = newValue.stage
-      const documentType = newValue.documentType
-      const fileName = newValue.fileName
-      const detail = [
-        typeof stage === 'string' ? stage : null,
-        typeof documentType === 'string' ? documentType : null,
-        typeof fileName === 'string' ? fileName : null,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' • ')
-      return detail ? [detail] : []
+      const rows: AuditChangeRow[] = []
+      if (typeof newValue.stage === 'string') rows.push({ field: 'Stage', previous: '—', current: newValue.stage })
+      if (typeof newValue.documentType === 'string') rows.push({ field: 'Type', previous: '—', current: newValue.documentType })
+      if (typeof newValue.fileName === 'string') rows.push({ field: 'File', previous: '—', current: newValue.fileName })
+      return rows
     }
   }
 
@@ -717,19 +695,21 @@ function describeAuditChanges(entry: AuditLogEntry): string[] {
   ])
 
   const keys = new Set<string>([...Object.keys(oldValue ?? {}), ...Object.keys(newValue ?? {})])
-  const changes: string[] = []
+  const rows: AuditChangeRow[] = []
 
   for (const key of keys) {
     if (skipKeys.has(key)) continue
     const before = oldValue?.[key]
     const after = newValue?.[key]
     if (before === after) continue
-    changes.push(
-      `${formatAuditFieldLabel(key)}: ${formatAuditValue(before)} → ${formatAuditValue(after)}`
-    )
+    rows.push({
+      field: formatAuditFieldLabel(key),
+      previous: formatAuditValue(before),
+      current: formatAuditValue(after),
+    })
   }
 
-  return changes
+  return rows
 }
 
 function formatDateOnly(value: string | null) {
@@ -737,6 +717,16 @@ function formatDateOnly(value: string | null) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return ''
   return parsed.toISOString().slice(0, 10)
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const date = parsed.toISOString().slice(0, 10)
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return `${date} ${hours}:${minutes}`
 }
 
 function formatTextOrDash(value: string | null | undefined) {
@@ -6654,10 +6644,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     <thead>
                       <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
                         <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
-                        <th className="w-[220px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Changes</th>
-                        <th className="w-[180px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
-                        <th className="w-[110px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
+                        <th className="w-[200px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Previous</th>
+                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">New</th>
+                        <th className="w-[140px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
+                        <th className="w-[130px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6665,12 +6656,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         auditLogs.map(entry => {
                           const newValue = toAuditRecord(entry.newValue)
                           const title = describeAuditAction(entry.action, newValue)
-                          const changes = describeAuditChanges(entry)
+                          const changeRows = describeAuditChangeRows(entry)
                           const actor = entry.changedBy?.fullName || 'Unknown'
                           const { Icon, iconClassName } = getAuditActionTheme(entry.action)
 
                           return (
-                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 align-top">
                               <td className="px-3 py-2">
                                 <Icon className={`h-4 w-4 ${iconClassName}`} />
                               </td>
@@ -6679,14 +6670,29 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   {title}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0 max-w-[360px]">
-                                {changes.length > 0 ? (
-                                  <span className="line-clamp-2" title={changes.join(', ')}>
-                                    {changes.join(', ')}
-                                  </span>
-                                ) : (
-                                  '—'
-                                )}
+                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                {changeRows.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {changeRows.map((row, i) => (
+                                      <div key={i} className="text-xs">
+                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
+                                        {row.previous}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                {changeRows.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {changeRows.map((row, i) => (
+                                      <div key={i} className="text-xs">
+                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
+                                        {row.current}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : '—'}
                               </td>
                               <td className="px-3 py-2 text-muted-foreground min-w-0">
                                 <span className="block truncate" title={actor}>
@@ -6694,7 +6700,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                {formatDateOnly(entry.createdAt)}
+                                {formatDateTime(entry.createdAt)}
                               </td>
                             </tr>
                           )
@@ -6709,17 +6715,18 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               {approval.stage}
                             </td>
                             <td className="px-3 py-2 text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-muted-foreground">—</td>
                             <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                               {approval.approvedBy || 'Unknown'}
                             </td>
                             <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {approval.approvedAt ? formatDateOnly(approval.approvedAt) : '—'}
+                              {approval.approvedAt ? formatDateTime(approval.approvedAt) : '—'}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                          <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
                             No activity recorded yet.
                           </td>
                         </tr>
