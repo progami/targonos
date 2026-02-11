@@ -13,6 +13,12 @@ import {
   type QboPurchase,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import db from '@/lib/db';
+import {
+  buildAccountComponentMap,
+  extractTrackedLinesFromBill,
+  type TrackedBillLine,
+} from '@/lib/plutus/bills/classification';
 
 const logger = createLogger({ name: 'plutus-transactions' });
 
@@ -42,6 +48,21 @@ type TransactionRow = {
   lines: TransactionLine[];
   createdAt?: string;
   updatedAt?: string;
+  isTrackedBill?: boolean;
+  trackedLines?: TrackedBillLine[];
+  mapping?: {
+    id: string;
+    poNumber: string;
+    brandId: string;
+    syncedAt: string | null;
+    lines: Array<{
+      qboLineId: string;
+      component: string;
+      amountCents: number;
+      sku: string | null;
+      quantity: number | null;
+    }>;
+  } | null;
 };
 
 function requireTransactionType(raw: string | null): TransactionTypeParam {
@@ -65,7 +86,26 @@ function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
   return map;
 }
 
-function mapBill(bill: QboBill, accountsById: Map<string, QboAccount>): TransactionRow {
+type MappingRecord = {
+  id: string;
+  poNumber: string;
+  brandId: string;
+  syncedAt: Date | null;
+  lines: Array<{
+    qboLineId: string;
+    component: string;
+    amountCents: number;
+    sku: string | null;
+    quantity: number | null;
+  }>;
+};
+
+function mapBill(
+  bill: QboBill,
+  accountsById: Map<string, QboAccount>,
+  trackedLines: TrackedBillLine[],
+  mapping: MappingRecord | null,
+): TransactionRow {
   const lines: TransactionLine[] = (bill.Line ?? [])
     .filter((line) => line.AccountBasedExpenseLineDetail !== undefined || line.ItemBasedExpenseLineDetail !== undefined)
     .map((line) => {
@@ -97,6 +137,23 @@ function mapBill(bill: QboBill, accountsById: Map<string, QboAccount>): Transact
     lines,
     createdAt: bill.MetaData?.CreateTime,
     updatedAt: bill.MetaData?.LastUpdatedTime,
+    isTrackedBill: trackedLines.length > 0,
+    trackedLines,
+    mapping: mapping
+      ? {
+          id: mapping.id,
+          poNumber: mapping.poNumber,
+          brandId: mapping.brandId,
+          syncedAt: mapping.syncedAt ? mapping.syncedAt.toISOString() : null,
+          lines: mapping.lines.map((line) => ({
+            qboLineId: line.qboLineId,
+            component: line.component,
+            amountCents: line.amountCents,
+            sku: line.sku,
+            quantity: line.quantity,
+          })),
+        }
+      : null,
   };
 }
 
@@ -215,6 +272,8 @@ export async function GET(req: NextRequest) {
     let transactions: TransactionRow[];
     let totalCount: number;
     let updatedConnection: QboConnection | undefined;
+    let brands: Array<{ id: string; name: string }> | undefined;
+    let skus: Array<{ id: string; sku: string; productName: string | null; brandId: string }> | undefined;
 
     if (type === 'journalEntry') {
       const result = await fetchJournalEntries(activeConnection, {
@@ -237,7 +296,37 @@ export async function GET(req: NextRequest) {
       });
       updatedConnection = result.updatedConnection;
       totalCount = result.totalCount;
-      transactions = result.bills.map((bill) => mapBill(bill, accountsById));
+
+      const config = await db.setupConfig.findFirst();
+      const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
+        warehousing3pl: config?.warehousing3pl,
+        warehousingAmazonFc: config?.warehousingAmazonFc,
+        warehousingAwd: config?.warehousingAwd,
+        productExpenses: config?.productExpenses,
+      });
+
+      const qboBillIds = result.bills.map((bill) => bill.Id);
+      const mappings = await db.billMapping.findMany({
+        where: { qboBillId: { in: qboBillIds } },
+        include: { lines: true },
+      });
+      const mappingByBillId = new Map(mappings.map((mapping) => [mapping.qboBillId, mapping]));
+
+      transactions = result.bills.map((bill) => {
+        const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
+        const mapping = mappingByBillId.get(bill.Id);
+        return mapBill(bill, accountsById, trackedLines, mapping ? mapping : null);
+      });
+
+      brands = await db.brand.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+
+      skus = await db.sku.findMany({
+        select: { id: true, sku: true, productName: true, brandId: true },
+        orderBy: { sku: 'asc' },
+      });
     } else {
       const result = await fetchPurchases(activeConnection, {
         startDate,
@@ -258,6 +347,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       transactions,
+      ...(brands ? { brands } : {}),
+      ...(skus ? { skus } : {}),
       pagination: {
         page,
         pageSize,
