@@ -256,9 +256,11 @@ export async function GET(req: NextRequest) {
     const rawStartDate = searchParams.get('startDate');
     const rawEndDate = searchParams.get('endDate');
     const rawSearch = searchParams.get('search');
+    const rawAccountId = searchParams.get('accountId');
     const startDate = rawStartDate === null ? undefined : rawStartDate;
     const endDate = rawEndDate === null ? undefined : rawEndDate;
     const search = rawSearch === null ? undefined : rawSearch.trim();
+    const accountId = rawAccountId === null ? undefined : rawAccountId.trim();
 
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
@@ -341,6 +343,7 @@ export async function GET(req: NextRequest) {
         startDate,
         endDate,
         docNumberContains: search,
+        accountId,
         maxResults: pageSize,
         startPosition,
       });
