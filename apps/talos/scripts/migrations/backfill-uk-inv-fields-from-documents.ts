@@ -280,10 +280,21 @@ function parseOrderNumberParts(orderNumber: string): { batchIdRaw: string; varia
   const normalized = orderNumber.trim().toUpperCase()
   if (!normalized.startsWith('INV-')) return null
   const rest = normalized.slice('INV-'.length)
-  const dashIndex = rest.lastIndexOf('-')
-  if (dashIndex < 1) return null
-  const batchIdRaw = rest.slice(0, dashIndex).trim()
-  const variant = rest.slice(dashIndex + 1).trim()
+  const partsRaw = rest
+    .split('-')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+
+  if (partsRaw.length < 2) return null
+
+  const maybeTenant = partsRaw[partsRaw.length - 1] ?? ''
+  const parts =
+    maybeTenant === 'US' || maybeTenant === 'UK' ? partsRaw.slice(0, -1) : partsRaw.slice()
+
+  if (parts.length < 2) return null
+
+  const variant = (parts[parts.length - 1] ?? '').trim()
+  const batchIdRaw = parts.slice(0, -1).join('-').trim()
   if (!batchIdRaw) return null
   if (!variant) return null
   return { batchIdRaw, variant }
@@ -376,6 +387,64 @@ function findBatchPiFilePaths(batchFolderPath: string, options: { piNumberHint: 
 
   if (withHint.length > 0) return withHint
   return [...withHint, ...withoutHint]
+}
+
+function scoreShippingMarksCandidate(filePath: string): number {
+  const lower = path.basename(filePath).toLowerCase()
+  const ext = path.extname(lower)
+
+  // Shipping marks are often XLSX/XLS, sometimes PDF.
+  if (ext !== '.xlsx' && ext !== '.xls' && ext !== '.pdf') return 0
+
+  let score = 0
+  if (lower.includes('shipping') && lower.includes('mark')) score += 30
+  if (lower.includes('shipping') && lower.includes('marks')) score += 30
+  if (lower.includes('carton') && lower.includes('mark')) score += 25
+  if (lower.includes('carton') && lower.includes('marking')) score += 25
+  if (lower.includes('marks')) score += 10
+  if (lower.includes('mark')) score += 6
+
+  if (ext === '.xlsx') score += 10
+  if (ext === '.xls') score += 6
+  if (ext === '.pdf') score += 2
+
+  const fullLower = filePath.toLowerCase()
+  if (fullLower.includes(`${path.sep}02 manufacturing${path.sep}`)) score += 4
+  if (fullLower.includes(`${path.sep}03 transit${path.sep}`)) score += 2
+  if (fullLower.includes(`${path.sep}shipping marks${path.sep}`)) score += 6
+
+  if (lower.includes('artwork')) score -= 30
+  if (lower.includes('invoice')) score -= 20
+  if (lower.includes('packing')) score -= 20
+  if (lower.includes('bill') && lower.includes('lading')) score -= 20
+
+  return score
+}
+
+function findBatchShippingMarksFilePaths(batchFolderPath: string): string[] {
+  const allowedExt = new Set(['.pdf', '.xlsx', '.xls'])
+  const candidates: string[] = []
+
+  const walk = (dirPath: string, depth: number) => {
+    if (depth > 4) return
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      const fullPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        walk(fullPath, depth + 1)
+        continue
+      }
+      const ext = path.extname(entry.name).toLowerCase()
+      if (!allowedExt.has(ext)) continue
+      if (scoreShippingMarksCandidate(fullPath) <= 0) continue
+      candidates.push(fullPath)
+    }
+  }
+
+  walk(batchFolderPath, 0)
+  candidates.sort((a, b) => scoreShippingMarksCandidate(b) - scoreShippingMarksCandidate(a) || a.length - b.length)
+  return candidates.slice(0, 3)
 }
 
 function findTenantPiFilePathsByHint(tenant: TenantCode, options: { piNumberHint: string }): string[] {
@@ -648,12 +717,12 @@ function normalizeCsvValue(value: unknown): string {
   return value.trim()
 }
 
-function buildOrderNumber(batchIdRaw: string, variant: string): string {
+function buildOrderNumber(tenant: TenantCode, batchIdRaw: string, variant: string): string {
   const normalizedBatch = batchIdRaw.trim().toUpperCase()
   const normalizedVariant = variant.trim().toUpperCase()
   if (!normalizedBatch) throw new Error('batch_id_raw is required')
   if (!normalizedVariant) throw new Error('variant is required')
-  return `INV-${normalizedBatch}-${normalizedVariant}`
+  return `INV-${normalizedBatch}-${normalizedVariant}-${tenant}`
 }
 
 function safeString(value: unknown): string | null {
@@ -732,7 +801,13 @@ function extractTextFromPdf(
 
   if (!shouldOcr) return { text: plain, method: 'pdftotext', errors }
 
-  const baseTmpDir = os.tmpdir().startsWith('/tmp') ? '/private/tmp' : os.tmpdir()
+  const tmpDirCandidate = os.tmpdir()
+  // On macOS, /tmp and /var are symlinks into /private; some OCR tooling fails to open the symlink path.
+  const baseTmpDir = tmpDirCandidate.startsWith('/tmp')
+    ? '/private/tmp'
+    : tmpDirCandidate.startsWith('/var/')
+      ? `/private${tmpDirCandidate}`
+      : tmpDirCandidate
   const tmpDir = fs.mkdtempSync(path.join(baseTmpDir, 'talos-pdf-ocr-'))
   try {
     try {
@@ -778,14 +853,19 @@ function extractTextFromXlsx(filePath: string): string {
     if (!sheet) continue
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) as unknown[][]
     for (const row of rows) {
+      const rowParts: string[] = []
       for (const cell of row) {
         if (typeof cell === 'string') {
           const trimmed = cell.trim()
-          if (trimmed) parts.push(trimmed)
+          if (trimmed) rowParts.push(trimmed)
+          continue
         }
         if (typeof cell === 'number' && Number.isFinite(cell)) {
-          parts.push(String(cell))
+          rowParts.push(String(cell))
         }
+      }
+      if (rowParts.length > 0) {
+        parts.push(rowParts.join(' | '))
       }
     }
   }
@@ -1390,6 +1470,9 @@ function normalizeShippingMarksSku(raw: string): string | null {
   const airIndex = normalized.indexOf('-AIR-')
   if (airIndex > 0) return normalizeSkuCode(normalized.slice(0, airIndex))
 
+  const invIndex = normalized.indexOf('-INV-')
+  if (invIndex > 0) return normalizeSkuCode(normalized.slice(0, invIndex))
+
   return normalized
 }
 
@@ -1623,7 +1706,17 @@ function extractShippingMarksCandidates(
 
     const start = Math.max(0, i - 12)
     for (let j = start; j <= end; j += 1) {
-      parseLineIntoSku(sku, lines[j] ?? '')
+      const candidateLine = lines[j] ?? ''
+      // Shipping marks files often place the *next* SKU's product number and carton counts above its
+      // "SHIPPING MARK ..." line. Without a guard, we can accidentally attribute those values to
+      // the current SKU and make the candidate set ambiguous.
+      if (
+        j > i &&
+        /(?:产品编号|PRODUCT\s*(?:NO\.?|NUMBER)|ITEM\s*(?:NO\.?|NUMBER))/i.test(candidateLine)
+      ) {
+        break
+      }
+      parseLineIntoSku(sku, candidateLine)
     }
   }
 
@@ -2044,11 +2137,21 @@ function findMrnCandidates(text: string): Array<{ value: string; context: string
   const out: Array<{ value: string; context: string }> = []
 
   for (const line of lines) {
+    // Prefer MRN when present (e.g. 24GB...).
     const tokens = line.split(/\s+/g)
     for (const token of tokens) {
       const cleaned = token.replace(/[^A-Z0-9]/gi, '').toUpperCase()
       if (!/^[0-9]{2}[A-Z]{2}[A-Z0-9]{14}$/.test(cleaned)) continue
       out.push({ value: cleaned, context: line })
+    }
+
+    // Some CDS exports don't include an MRN in the visible text, but they do include an LRN
+    // (e.g. "LRN GB992766263000-0040093"). Use it as a fallback customs entry identifier.
+    if (/\bLRN\b/i.test(line)) {
+      const match = line.match(/\b(GB[0-9]{12}-[0-9]{4,})\b/i)
+      if (match) {
+        out.push({ value: (match[1] ?? '').trim().toUpperCase(), context: line })
+      }
     }
   }
 
@@ -2062,11 +2165,20 @@ function findDateCandidatesByKeyword(text: string, keyword: RegExp): Array<{ iso
     .filter((line) => line.length > 0)
 
   const out: Array<{ iso: string; raw: string; context: string }> = []
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? ''
     if (!keyword.test(line)) continue
-    const date = parseUnambiguousDate(line)
-    if (!date) continue
-    out.push({ iso: date.toISOString(), raw: line, context: line })
+
+    // Keyword and date may appear on the same line or on the next line(s) (common for CDS exports).
+    const window = [line, lines[i + 1] ?? '', lines[i + 2] ?? '']
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+
+    for (const candidate of window) {
+      const date = parseUnambiguousDate(candidate)
+      if (!date) continue
+      out.push({ iso: date.toISOString(), raw: candidate, context: `${line} → ${candidate}` })
+    }
   }
   return out
 }
@@ -2112,6 +2224,13 @@ function findTotalsFromBillOfLading(text: string): {
   }
 
   return { cartons, weightKg, volumeCbm }
+}
+
+function toUtcDateOnlyIso(value: Date): string {
+  const year = value.getUTCFullYear()
+  const month = value.getUTCMonth()
+  const day = value.getUTCDate()
+  return new Date(Date.UTC(year, month, day)).toISOString()
 }
 
 async function main() {
@@ -2218,7 +2337,7 @@ async function main() {
       const batchIdRaw = normalizeCsvValue(row.batch_id_raw)
       const variant = normalizeCsvValue(row.variant)
       if (!batchIdRaw || !variant) continue
-      const orderNumber = buildOrderNumber(batchIdRaw, variant)
+      const orderNumber = buildOrderNumber(options.tenant, batchIdRaw, variant)
       csvOrderNumbers.push(orderNumber)
     }
 
@@ -2570,6 +2689,28 @@ async function main() {
     if (shouldScanBatchFolder) {
       const batchFolderPath = findBatchFolderPath(tenant, order.orderNumber)
       if (batchFolderPath && fs.existsSync(batchFolderPath)) {
+        if (order.lines.length === 0 && shippingMarksBySku.size === 0) {
+          const shippingPaths = findBatchShippingMarksFilePaths(batchFolderPath)
+          for (const shippingPath of shippingPaths) {
+            if (!fs.existsSync(shippingPath)) continue
+            const { text, method, errors } = extractTextForFile(shippingPath, {
+              ocrMode: options.ocrMode,
+              ocrPages: options.ocrPages,
+            })
+            for (const error of errors) warnings.push(`batch_shipping_marks extract: ${error} (${shippingPath})`)
+            if (text.trim().length < 10) continue
+
+            const bySku = extractShippingMarksCandidates(text, {
+              sourcePath: shippingPath,
+              extractionMethod: method,
+              docId: null,
+              documentType: 'batch_shipping_marks_file',
+              stage: null,
+            })
+            mergeShippingMarksCandidates(shippingMarksBySku, bySku)
+          }
+        }
+
         const purchaseOrderPdfPath = findPurchaseOrderPdfPath(batchFolderPath)
         if (purchaseOrderPdfPath && fs.existsSync(purchaseOrderPdfPath)) {
           const { text, method, errors } = extractTextForFile(purchaseOrderPdfPath, {
@@ -3276,10 +3417,10 @@ async function main() {
       }
     }
 
-    if (order.warehouseCode === null || order.warehouseName === null) {
+    if (order.warehouseCode === null || order.warehouseName === null || order.receivedDate === null) {
       const transactions = await prisma.inventoryTransaction.findMany({
         where: { purchaseOrderId: order.id },
-        select: { warehouseCode: true, warehouseName: true },
+        select: { warehouseCode: true, warehouseName: true, transactionDate: true },
       })
 
       for (const tx of transactions) {
@@ -3303,6 +3444,20 @@ async function main() {
             value: name,
             raw: name,
             context: 'inventory_transactions.warehouse_name',
+            sourcePath: 'db:inventory_transactions',
+            extractionMethod: 'text',
+            docId: null,
+            documentType: 'inventory_transaction',
+            stage: null,
+          })
+        }
+
+        if (order.receivedDate === null && tx.transactionDate instanceof Date) {
+          const iso = toUtcDateOnlyIso(tx.transactionDate)
+          receivedDateCandidates.push({
+            value: iso,
+            raw: iso,
+            context: 'inventory_transactions.transaction_date',
             sourcePath: 'db:inventory_transactions',
             extractionMethod: 'text',
             docId: null,

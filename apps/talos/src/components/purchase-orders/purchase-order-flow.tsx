@@ -2973,11 +2973,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	          {/* Stage Progress Bar */}
 	          {(isCreate ||
 	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
-	            <div className="rounded-xl border bg-white dark:bg-slate-800 p-6 shadow-sm">
-	              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Order Progress</h2>
-
+	            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
                 {!isCreate && order?.splitGroupId && (
-                  <div className="mb-4 rounded-lg border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-2">
+                  <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-semibold text-muted-foreground uppercase tracking-wide">
                         Split Group
@@ -3015,108 +3013,94 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   </div>
                 )}
 
-              {/* Stage Progress - Clickable Navigation */}
-              <div className="flex items-center justify-between relative">
-                {/* Progress line */}
-                <div className="absolute top-5 left-0 right-0 h-1 bg-slate-200 mx-8" />
-                <div
-                  className="absolute top-5 left-0 h-1 bg-emerald-500 transition-all duration-300 mx-8"
-                  style={{
-                    width: `calc(${(currentStageIndex / (STAGES.length - 1)) * 100}% - 4rem)`,
-                  }}
-                />
+              <div className="flex items-center justify-between gap-4">
+                {/* Stage Steps */}
+                <div className="flex items-center gap-1 min-w-0">
+                  {STAGES.map((stage, index) => {
+                    const isCompleted = index < currentStageIndex
+                    const isCurrent = index === currentStageIndex
+                    const isClickable = canViewStage(stage.value)
+                    const isViewing = activeViewStage === stage.value
+                    const Icon = stage.icon
 
-                {STAGES.map((stage, index) => {
-                  const isCompleted = index < currentStageIndex
-                  const isCurrent = index === currentStageIndex
-                  const isClickable = canViewStage(stage.value)
-                  const isViewing = activeViewStage === stage.value
-                  const Icon = stage.icon
+                    return (
+                      <Fragment key={stage.value}>
+                        {index > 0 && (
+                          <div className={`h-px w-4 flex-shrink-0 ${
+                            isCompleted || isCurrent ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-slate-600'
+                          }`} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => isClickable && setSelectedStageView(stage.value)}
+                          disabled={!isClickable}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
+                            isClickable ? 'cursor-pointer' : 'cursor-not-allowed'
+                          } ${
+                            isViewing
+                              ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-300 dark:ring-emerald-700'
+                              : isCompleted
+                                ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20'
+                                : isCurrent
+                                  ? 'text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                  : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                          ) : (
+                            <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                          )}
+                          {stage.label}
+                        </button>
+                      </Fragment>
+                    )
+                  })}
+                </div>
 
-                  return (
-                    <button
-                      key={stage.value}
-                      type="button"
-                      onClick={() => isClickable && setSelectedStageView(stage.value)}
-                      disabled={!isClickable}
-                      className={`flex flex-col items-center relative z-10 transition-all ${
-                        isClickable ? 'cursor-pointer group' : 'cursor-not-allowed'
-                      }`}
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {nextStage && (
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        if (!nextStage) return
+                        await executeTransition(nextStage.value as POStageStatus)
+                      }}
+                      disabled={transitioning || (order ? activeViewStage !== order.status : false)}
+                      className="gap-1.5"
                     >
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all ${
-                          isViewing ? 'ring-2 ring-offset-2 ring-emerald-400' : ''
-                        } ${
-                          isCompleted
-                            ? 'bg-emerald-500 border-emerald-500 text-white group-hover:bg-emerald-600'
-                            : isCurrent
-                              ? 'bg-white border-emerald-500 text-emerald-600 group-hover:bg-emerald-50 animate-pulse'
-                              : 'bg-white border-slate-300 text-slate-400'
-                        }`}
-                      >
-                        {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
-                      </div>
-                      <span
-                        className={`mt-2 text-xs font-medium transition-colors ${
-                          isViewing
-                            ? 'text-emerald-600'
-                            : isCompleted || isCurrent
-                              ? 'text-slate-900 dark:text-slate-100 group-hover:text-emerald-600'
-                              : 'text-slate-400'
-                        }`}
-                      >
-                        {stage.label}
-                      </span>
-                      {isCurrent && (
-                        <span className="mt-0.5 text-[10px] font-medium text-emerald-600 uppercase tracking-wider">
-                          Current
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+                      {order?.status === 'RFQ' ? 'Issue PO' : `Advance to ${nextStage.label}`}
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+
+                  {order?.status === 'WAREHOUSE' && !isReadOnly && (
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={() => void handleReceiveInventory()}
+                      disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
+                      className="gap-1.5"
+                    >
+                      {receivingInventory && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Receive Inventory
+                    </Button>
+                  )}
+
+                  {isCreate && (
+                    <Button
+                      size="sm"
+                      onClick={() => void handleCreateRfq()}
+                      disabled={creating}
+                      className="gap-1.5"
+                    >
+                      {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Create RFQ
+                    </Button>
+                  )}
+                </div>
               </div>
-
-	              {/* Action Buttons - All grouped together */}
-		              <div className="flex flex-wrap items-center gap-2 mt-6">
-		                {/* Primary: Advance */}
-		                {nextStage && (
-		                  <Button
-                    onClick={async () => {
-                      if (!nextStage) return
-                      await executeTransition(nextStage.value as POStageStatus)
-                    }}
-                    disabled={transitioning || (order ? activeViewStage !== order.status : false)}
-                    className="gap-2"
-                  >
-                    {order?.status === 'RFQ' ? 'Issue PO' : `Advance to ${nextStage.label}`}
-                    <ChevronRight className="h-4 w-4" />
-		                  </Button>
-		                )}
-
-		                {order?.status === 'WAREHOUSE' && !isReadOnly && (
-		                  <Button
-		                    type="button"
-		                    onClick={() => void handleReceiveInventory()}
-		                    disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
-		                    className="gap-2"
-		                  >
-		                    {receivingInventory && <Loader2 className="h-4 w-4 animate-spin" />}
-		                    Receive Inventory
-		                  </Button>
-		                )}
-
-	                {isCreate && (
-	                  <Button
-	                    onClick={() => void handleCreateRfq()}
-                    disabled={creating}
-                    className="gap-2"
-                  >
-                    {creating && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Create RFQ
-                  </Button>
-                )}
-	              </div>
 
             </div>
 	          )}
