@@ -27,6 +27,7 @@ import {
 import { RestockAlertCard } from '@/components/operations/restock-alert-card'
 import { usePageState } from '@/lib/store/page-state'
 import { redirectToPortal } from '@/lib/portal'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 const PAGE_KEY = '/market/shipment-planning'
 
@@ -204,11 +205,10 @@ export default function ShipmentPlanningPage() {
 	 const handleRefresh = async () => {
 	 setRefreshing(true)
  
- try {
- // Sync with Amazon
- const syncResponse = await fetch('/api/amazon/sync', {
+try {
+// Sync with Amazon
+ const syncResponse = await fetchWithCSRF('/api/amazon/sync', {
  method: 'POST',
- headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({ syncType: 'inventory' })
  })
  

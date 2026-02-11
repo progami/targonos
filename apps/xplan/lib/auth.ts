@@ -68,7 +68,11 @@ function resolveAuthOptions(): NextAuthConfig {
         return token;
       },
       async session({ session, token }) {
+        (session as { authz?: unknown }).authz = (token as { authz?: unknown }).authz;
         (session as { roles?: unknown }).roles = (token as { roles?: unknown }).roles;
+        (session as { globalRoles?: unknown }).globalRoles = (token as { globalRoles?: unknown }).globalRoles;
+        (session as { authzVersion?: unknown }).authzVersion =
+          (token as { authzVersion?: unknown }).authzVersion;
         session.user.id = (token.sub as string) || session.user.id;
         return session;
       },

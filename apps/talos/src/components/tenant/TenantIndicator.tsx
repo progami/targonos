@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { TenantConfig, TenantCode, TENANTS } from '@/lib/tenant/constants'
 import { Globe, MapPin, LogOut } from '@/lib/lucide-icons'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface TenantIndicatorProps {
   className?: string
@@ -61,7 +62,7 @@ export function TenantIndicator({ className, collapsed, showLogout = true }: Ten
 
   useEffect(() => {
     // Fetch current tenant on mount
-    fetch('/api/tenant/current')
+    fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (data.current?.code) {

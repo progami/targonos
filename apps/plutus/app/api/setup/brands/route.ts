@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@targon/prisma-plutus';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const BrandSchema = z.object({
   name: z.string().min(1),
@@ -39,6 +41,18 @@ export async function POST(request: NextRequest) {
     // Fetch updated brands
     const updatedBrands = await db.brand.findMany({
       orderBy: { createdAt: 'asc' },
+    });
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'BRAND_UPDATED',
+      entityType: 'Brand',
+      details: {
+        brandCount: updatedBrands.length,
+        brandNames: updatedBrands.map((b: { name: string }) => b.name),
+      },
     });
 
     return NextResponse.json({

@@ -73,7 +73,7 @@ jobs:
             deployment_id: ${{ steps.deployment.outputs.deployment_id }},
             state: 'in_progress',
             description: 'Deployment in progress...',
-            environment_url: 'https://wms.targonglobal.com'
+            environment_url: 'https://os.targonglobal.com/talos'
           });
     
     - name: Deploy to production server
@@ -85,7 +85,7 @@ jobs:
         NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
         NODE_ENV: ${{ secrets.NODE_ENV || 'production' }}
         PORT: ${{ secrets.PORT || '3001' }}
-        LOG_DIR: ${{ secrets.LOG_DIR || '/home/ubuntu/wms-targon/logs' }}
+        LOG_DIR: ${{ secrets.LOG_DIR || '/home/talos/logs' }}
         S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
         S3_BUCKET_REGION: ${{ secrets.S3_BUCKET_REGION || 'us-east-1' }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
@@ -103,7 +103,7 @@ jobs:
           set -e
           
           echo "📁 Navigating to application directory..."
-          cd /home/ubuntu/wms-targon
+          cd /home/talos/app
           
           # Use environment variables from GitHub Secrets (passed via envs parameter)
           echo "🔐 Using environment variables from GitHub Secrets..."
@@ -119,8 +119,8 @@ jobs:
           echo "✅ Environment variables loaded successfully"
           
           echo "💾 Backing up database before deployment..."
-          BACKUP_FILE="/home/ubuntu/backups/wms_backup_$(date +%Y%m%d_%H%M%S).sql"
-          mkdir -p /home/ubuntu/backups
+          BACKUP_FILE="/home/talos/backups/talos_backup_$(date +%Y%m%d_%H%M%S).sql"
+          mkdir -p /home/talos/backups
           pg_dump $DATABASE_URL > $BACKUP_FILE || echo "⚠️ Backup failed, continuing anyway"
           
           echo "🔄 Pulling latest changes from main branch..."
@@ -185,18 +185,18 @@ jobs:
           npm run build
           
           echo "♻️ Restarting application..."
-          pm2 restart wms-app-ubuntu || pm2 start ecosystem.config.js --env production
+          pm2 restart talos-app || pm2 start ecosystem.config.js --env production
           
           echo "💾 Saving PM2 configuration..."
           pm2 save
           
           # Verify the app is running
           sleep 5
-          if pm2 list | grep -q "wms-app-ubuntu.*online"; then
+          if pm2 list | grep -q "talos-app.*online"; then
             echo "✅ Deployment completed successfully!"
           else
             echo "⚠️ Deployment completed but app may not be running correctly"
-            pm2 logs wms-app-ubuntu --nostream --lines 50 || true
+            pm2 logs talos-app --nostream --lines 50 || true
           fi
           
           echo "📊 Application status:"
@@ -215,11 +215,11 @@ jobs:
           sleep 10
           
           # Check if app is running
-          if curl -f -s http://localhost:3001/api/health > /dev/null; then
+          if curl -f -s http://localhost:3001/talos/api/health > /dev/null; then
             echo "✅ Health check passed!"
           else
             echo "❌ Health check failed!"
-            pm2 logs wms-app-ubuntu --lines 50
+            pm2 logs talos-app --lines 50
             exit 1
           fi
     
@@ -235,7 +235,7 @@ jobs:
             deployment_id: ${{ steps.deployment.outputs.deployment_id }},
             state: 'success',
             description: 'Deployment successful',
-            environment_url: 'https://wms.targonglobal.com'
+            environment_url: 'https://os.targonglobal.com/talos'
           });
     
     - name: Update deployment status (failure)
@@ -249,7 +249,7 @@ jobs:
             deployment_id: ${{ steps.deployment.outputs.deployment_id }},
             state: 'failure',
             description: 'Deployment failed',
-            environment_url: 'https://wms.targonglobal.com'
+            environment_url: 'https://os.targonglobal.com/talos'
           });
     
     - name: Notify deployment status

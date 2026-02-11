@@ -84,6 +84,7 @@ function parseArgs(argv: string[]): CliOpts {
 
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
+    if (a === "--") continue;
     if (a === "--help" || a === "-h") {
       // eslint-disable-next-line no-console
       console.log(
@@ -268,4 +269,3 @@ main().catch((e) => {
   console.error("[orders-backfill] Fatal:", e);
   process.exitCode = 1;
 });
-

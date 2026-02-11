@@ -38,6 +38,8 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
       asin: true,
       fbaFulfillmentFee: true,
       amazonListingPrice: true,
+      amazonSizeTier: true,
+      amazonFbaFulfillmentFee: true,
       // Reference dimensions (user-entered)
       unitDimensionsCm: true,
       unitSide1Cm: true,
@@ -56,24 +58,12 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
       amazonItemPackageSide2Cm: true,
       amazonItemPackageSide3Cm: true,
       amazonReferenceWeightKg: true,
-      batches: {
-        where: { isActive: true },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          batchCode: true,
-          amazonSizeTier: true,
-          amazonFbaFulfillmentFee: true,
-        },
-      },
     },
   })
 
-  const resolvedSkus = skus.map(({ batches, ...sku }) => {
-    const latestBatch = batches[0] ?? null
+  const resolvedSkus = skus.map(sku => {
     return {
       ...sku,
-      latestBatchCode: latestBatch?.batchCode ?? null,
       // Reference dimensions are now on SKU
       referenceItemPackageDimensionsCm: sku.unitDimensionsCm,
       referenceItemPackageSide1Cm: sku.unitSide1Cm,
@@ -86,9 +76,6 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
       amazonItemPackageSide2Cm: sku.amazonItemPackageSide2Cm,
       amazonItemPackageSide3Cm: sku.amazonItemPackageSide3Cm,
       amazonItemPackageWeightKg: sku.amazonReferenceWeightKg,
-      // Fee data still from batch
-      amazonSizeTier: latestBatch?.amazonSizeTier ?? null,
-      amazonFbaFulfillmentFee: latestBatch?.amazonFbaFulfillmentFee ?? null,
     }
   })
 

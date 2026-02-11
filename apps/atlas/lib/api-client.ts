@@ -23,6 +23,9 @@ export type Employee = {
   employmentType: string
   joinDate: string
   status: string
+  exitReason?: string | null
+  lastWorkingDay?: string | null
+  exitNotes?: string | null
   roles?: { id: string; name: string }[]
   reportsToId?: string | null
   manager?: { id: string; firstName: string; lastName: string; position: string } | null
@@ -1268,6 +1271,7 @@ export type Task = {
   id: string
   title: string
   description?: string | null
+  actionUrl?: string | null
   status: string
   category: string
   dueDate?: string | null
@@ -1313,6 +1317,7 @@ export const TasksApi = {
   create(payload: {
     title: string
     description?: string | null
+    actionUrl?: string | null
     category?: string
     dueDate?: string | null
     assignedToId?: string | null
@@ -1484,7 +1489,9 @@ export type CreditCard = {
   title: string
   cardholderName?: string | null
   brand: CreditCardBrand
+  cardNumber?: string | null
   last4: string
+  cvv?: string | null
   expMonth: number
   expYear: number
   department: PasswordDepartment
@@ -1513,7 +1520,9 @@ export const CreditCardsApi = {
     title: string
     cardholderName?: string | null
     brand: CreditCardBrand
-    last4: string
+    cardNumber?: string | null
+    last4?: string
+    cvv?: string | null
     expMonth: number
     expYear: number
     department?: PasswordDepartment
@@ -1530,7 +1539,9 @@ export const CreditCardsApi = {
     title: string
     cardholderName: string | null
     brand: CreditCardBrand
+    cardNumber: string | null
     last4: string
+    cvv: string | null
     expMonth: number
     expYear: number
     department: PasswordDepartment
@@ -1636,6 +1647,119 @@ export const ContractorsApi = {
   delete(id: string) {
     return request<{ ok: boolean }>(`/api/contractors/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+    })
+  },
+}
+
+export type HiringCandidateInterview = {
+  id: string
+  title: string
+  interviewType: string
+  status: string
+  startAt: string
+  endAt: string
+  timeZone: string
+  meetingLink?: string | null
+  googleEventId?: string | null
+  googleHtmlLink?: string | null
+}
+
+export type HiringCandidate = {
+  id: string
+  fullName: string
+  email?: string | null
+  phone?: string | null
+  role?: string | null
+  status: string
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+  interviews?: HiringCandidateInterview[]
+}
+
+export type HiringInterviewInterviewer = {
+  id: string
+  interviewId: string
+  employeeId: string
+  employee: Pick<Employee, 'id' | 'employeeId' | 'firstName' | 'lastName' | 'email' | 'avatar'>
+}
+
+export type HiringInterview = {
+  id: string
+  candidateId: string
+  title: string
+  interviewType: string
+  status: string
+  startAt: string
+  endAt: string
+  timeZone: string
+  location?: string | null
+  meetingLink?: string | null
+  googleEventId?: string | null
+  googleHtmlLink?: string | null
+  notes?: string | null
+  createdById: string
+  createdAt: string
+  updatedAt: string
+  candidate: HiringCandidate
+  interviewers: HiringInterviewInterviewer[]
+}
+
+export const HiringCandidatesApi = {
+  list(params: { q?: string; take?: number; skip?: number; status?: string } = {}) {
+    const qp = new URLSearchParams()
+    if (params.q) qp.set('q', params.q)
+    if (params.take != null) qp.set('take', String(params.take))
+    if (params.skip != null) qp.set('skip', String(params.skip))
+    if (params.status) qp.set('status', params.status)
+    const qs = qp.toString()
+    return request<{ items: HiringCandidate[]; total: number }>(`/api/hiring/candidates${qs ? `?${qs}` : ''}`)
+  },
+  create(payload: {
+    fullName: string
+    email?: string | null
+    phone?: string | null
+    role?: string | null
+    status?: string
+    notes?: string | null
+  }) {
+    return request<HiringCandidate>(`/api/hiring/candidates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+}
+
+export const HiringInterviewsApi = {
+  list(params: { q?: string; take?: number; skip?: number; status?: string; upcoming?: boolean } = {}) {
+    const qp = new URLSearchParams()
+    if (params.q) qp.set('q', params.q)
+    if (params.take != null) qp.set('take', String(params.take))
+    if (params.skip != null) qp.set('skip', String(params.skip))
+    if (params.status) qp.set('status', params.status)
+    if (params.upcoming != null) qp.set('upcoming', params.upcoming ? 'true' : 'false')
+    const qs = qp.toString()
+    return request<{ items: HiringInterview[]; total: number }>(`/api/hiring/interviews${qs ? `?${qs}` : ''}`)
+  },
+  schedule(payload: {
+    candidateFullName: string
+    candidateEmail: string
+    candidatePhone?: string | null
+    candidateRole?: string | null
+    title: string
+    interviewType?: string
+    startAt: string
+    durationMinutes: number
+    timeZone: string
+    location?: string | null
+    notes?: string | null
+    interviewerEmployeeIds: string[]
+  }) {
+    return request<HiringInterview>(`/api/hiring/interviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     })
   },
 }

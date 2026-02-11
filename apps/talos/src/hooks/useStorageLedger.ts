@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'react-hot-toast'
+import { withBasePath } from '@/lib/utils/base-path'
 
 export interface StorageEntry {
  id: string
@@ -7,7 +8,7 @@ export interface StorageEntry {
  warehouseName: string
  skuCode: string
  skuDescription: string
- batchLot: string
+ lotRef: string
  weekEndingDate: string
  closingBalance: number
  averageBalance: number
@@ -70,7 +71,9 @@ export function useStorageLedger(filters: StorageLedgerFilters) {
  
  if (filters.warehouse) params.set('warehouseCode', filters.warehouse)
  
- const response = await fetch(`/api/finance/storage-ledger?${params}`)
+ const response = await fetch(withBasePath(`/api/finance/storage-ledger?${params}`), {
+ credentials: 'include',
+ })
  
  if (!response.ok) {
  throw new Error(`Failed to fetch storage data: ${response.status}`)
@@ -110,7 +113,9 @@ export function useStorageLedger(filters: StorageLedgerFilters) {
  
  if (filters.warehouse) params.set('warehouseCode', filters.warehouse)
  
- const response = await fetch(`/api/finance/storage-ledger/export?${params}`)
+ const response = await fetch(withBasePath(`/api/finance/storage-ledger/export?${params}`), {
+ credentials: 'include',
+ })
  
  if (!response.ok) {
  throw new Error(`Export failed: ${response.status}`)

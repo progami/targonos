@@ -454,10 +454,324 @@ export async function hasPortalSession(options) {
         return false;
     }
 }
-export function getAppEntitlement(roles, appId) {
-    if (!roles || typeof roles !== 'object')
+const AUTHZ_CACHE_TTL_MS = 30_000;
+const authzCache = new Map();
+function normalizeStringArray(value) {
+    return Array.isArray(value)
+        ? value.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+}
+function normalizeAppRole(value) {
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'viewer') {
+            return 'viewer';
+        }
+    }
+    return 'viewer';
+}
+function normalizeAuthzApps(value) {
+    if (!value || typeof value !== 'object')
+        return {};
+    const raw = value;
+    const apps = {};
+    for (const [appId, grant] of Object.entries(raw)) {
+        if (!grant || typeof grant !== 'object')
+            continue;
+        const rawGrant = grant;
+        const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
+        apps[appId] = {
+            role: normalizeAppRole(rawGrant.role),
+            departments,
+        };
+    }
+    return apps;
+}
+export function normalizePortalAuthz(value) {
+    if (!value || typeof value !== 'object')
+        return null;
+    const raw = value;
+    const rawVersion = raw.version;
+    const version = typeof rawVersion === 'number' && Number.isFinite(rawVersion)
+        ? Math.max(1, Math.floor(rawVersion))
+        : 1;
+    return {
+        version,
+        globalRoles: normalizeStringArray(raw.globalRoles),
+        apps: normalizeAuthzApps(raw.apps),
+    };
+}
+function normalizeAuthzFromClaims(payload) {
+    if (!payload)
+        return null;
+    const directAuthz = normalizePortalAuthz(payload.authz);
+    if (directAuthz) {
+        return directAuthz;
+    }
+    const version = typeof payload.authzVersion === 'number' && Number.isFinite(payload.authzVersion)
+        ? Math.max(1, Math.floor(payload.authzVersion))
+        : 1;
+    if (!payload.roles || typeof payload.roles !== 'object') {
+        return null;
+    }
+    return {
+        version,
+        globalRoles: normalizeStringArray(payload.globalRoles),
+        apps: normalizeAuthzApps(payload.roles),
+    };
+}
+function getSessionTokenCacheKey(cookieHeader, cookieNames) {
+    if (!cookieHeader)
+        return null;
+    const cookies = parseCookieHeader(cookieHeader);
+    for (const cookieName of cookieNames) {
+        const values = cookies.get(cookieName);
+        if (!values || values.length === 0)
+            continue;
+        const token = values[0];
+        if (!token)
+            continue;
+        return `${cookieName}:${token.slice(0, 96)}`;
+    }
+    return null;
+}
+function resolveCookieNames(appId, provided) {
+    if (provided && provided.length > 0) {
+        return Array.from(new Set(provided));
+    }
+    return Array.from(new Set([
+        ...getCandidateSessionCookieNames(appId),
+        ...getCandidateSessionCookieNames('targon'),
+    ]));
+}
+function normalizeAuthzApiResponse(value) {
+    if (!value || typeof value !== 'object')
+        return null;
+    const raw = value;
+    if ('authz' in raw) {
+        return normalizePortalAuthz(raw.authz);
+    }
+    return normalizePortalAuthz(value);
+}
+async function fetchPortalAuthz(options) {
+    const { request, cookieHeader, debug, fetchImpl } = options;
+    let portalBase;
+    try {
+        portalBase = resolvePortalAuthOrigin({ request: request });
+    }
+    catch (error) {
+        if (debug) {
+            const detail = error instanceof Error ? error.message : String(error);
+            console.warn('[auth] unable to resolve portal auth origin for authz fetch', detail);
+        }
+        return null;
+    }
+    try {
+        const endpoint = new URL('/api/v1/authz/me', portalBase);
+        const response = await (fetchImpl ?? fetch)(endpoint, {
+            method: 'GET',
+            headers: {
+                cookie: cookieHeader,
+                accept: 'application/json',
+                'x-targon-authz-probe': '1',
+            },
+            cache: 'no-store',
+        });
+        if (response.status === 401 || response.status === 403) {
+            return null;
+        }
+        if (!response.ok) {
+            if (debug) {
+                console.warn('[auth] portal authz endpoint returned status', response.status);
+            }
+            return null;
+        }
+        const payload = await response.json().catch(() => null);
+        const authz = normalizeAuthzApiResponse(payload);
+        if (!authz && debug) {
+            console.warn('[auth] portal authz endpoint returned invalid payload', payload);
+        }
+        return authz;
+    }
+    catch (error) {
+        if (debug) {
+            const detail = error instanceof Error ? error.message : String(error);
+            console.warn('[auth] portal authz fetch failed', detail);
+        }
+        return null;
+    }
+}
+export async function getCurrentAuthz(request, options) {
+    const debug = options?.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
+    const cookieNames = resolveCookieNames(options?.appId, options?.cookieNames);
+    const cookieHeader = request.headers.get('cookie');
+    const decoded = await decodePortalSession({
+        cookieHeader,
+        cookieNames,
+        appId: options?.appId,
+        secret: options?.secret,
+        debug,
+    });
+    const cacheKey = getSessionTokenCacheKey(cookieHeader, cookieNames);
+    const now = Date.now();
+    if (cacheKey) {
+        const cached = authzCache.get(cacheKey);
+        if (cached && cached.expiresAt > now) {
+            return cached.authz;
+        }
+    }
+    if (!decoded) {
+        const authzFromPortalWithoutDecode = cookieHeader
+            ? await fetchPortalAuthz({
+                request,
+                cookieHeader,
+                debug,
+                fetchImpl: options?.fetchImpl,
+            })
+            : null;
+        if (authzFromPortalWithoutDecode) {
+            if (cacheKey) {
+                authzCache.set(cacheKey, {
+                    authz: authzFromPortalWithoutDecode,
+                    expiresAt: now + AUTHZ_CACHE_TTL_MS,
+                });
+            }
+            return authzFromPortalWithoutDecode;
+        }
+        throw new Error('AUTH_UNAUTHENTICATED');
+    }
+    const authzFromPortal = cookieHeader
+        ? await fetchPortalAuthz({
+            request,
+            cookieHeader,
+            debug,
+            fetchImpl: options?.fetchImpl,
+        })
+        : null;
+    const authz = authzFromPortal ?? normalizeAuthzFromClaims(decoded);
+    if (!authz) {
+        throw new Error('AUTH_MISSING_AUTHZ');
+    }
+    if (cacheKey) {
+        authzCache.set(cacheKey, { authz, expiresAt: now + AUTHZ_CACHE_TTL_MS });
+        if (authzCache.size > 5000) {
+            for (const [key, value] of authzCache) {
+                if (value.expiresAt <= now) {
+                    authzCache.delete(key);
+                }
+            }
+        }
+    }
+    return authz;
+}
+export async function requireAppEntry(options) {
+    if (options.lifecycle === 'archive') {
+        return {
+            allowed: false,
+            status: 'forbidden',
+            reason: 'app_archived',
+            authz: null,
+        };
+    }
+    let authz;
+    try {
+        authz = await getCurrentAuthz(options.request, {
+            appId: options.appId,
+            cookieNames: options.cookieNames,
+            secret: options.secret,
+            debug: options.debug,
+        });
+    }
+    catch (error) {
+        if (error instanceof Error && error.message === 'AUTH_UNAUTHENTICATED') {
+            return {
+                allowed: false,
+                status: 'unauthenticated',
+                reason: 'unauthenticated',
+                authz: null,
+            };
+        }
+        return {
+            allowed: false,
+            status: 'forbidden',
+            reason: 'missing_authz',
+            authz: null,
+        };
+    }
+    const isPlatformAdmin = authz.globalRoles.includes('platform_admin');
+    if (options.lifecycle === 'dev' && !isPlatformAdmin) {
+        return {
+            allowed: false,
+            status: 'forbidden',
+            reason: 'dev_app_restricted',
+            authz,
+        };
+    }
+    const entryPolicy = options.entryPolicy ?? 'role_gated';
+    if (entryPolicy === 'public' || isPlatformAdmin) {
+        return {
+            allowed: true,
+            status: 'ok',
+            reason: 'ok',
+            authz,
+        };
+    }
+    const grant = authz.apps[options.appId];
+    if (!grant) {
+        return {
+            allowed: false,
+            status: 'forbidden',
+            reason: 'no_app_role',
+            authz,
+        };
+    }
+    return {
+        allowed: true,
+        status: 'ok',
+        reason: 'ok',
+        authz,
+    };
+}
+function normalizeAuthzFromSessionLike(session) {
+    if (!session || typeof session !== 'object')
+        return null;
+    const raw = session;
+    return (normalizePortalAuthz(raw.authz)
+        ?? normalizePortalAuthz({
+            version: typeof raw.authzVersion === 'number' ? raw.authzVersion : 1,
+            globalRoles: raw.globalRoles,
+            apps: raw.roles,
+        }));
+}
+export function hasCapability(options) {
+    const authz = normalizeAuthzFromSessionLike(options.session);
+    if (!authz)
+        return false;
+    if (authz.globalRoles.includes('platform_admin')) {
+        return true;
+    }
+    const grant = authz.apps[options.appId];
+    if (!grant) {
+        return false;
+    }
+    void options.capability;
+    return true;
+}
+export function getAppEntitlement(rolesOrAuthz, appId) {
+    if (!rolesOrAuthz || typeof rolesOrAuthz !== 'object')
         return undefined;
-    const rec = roles;
+    const authz = normalizePortalAuthz(rolesOrAuthz);
+    if (authz) {
+        const grant = authz.apps[appId];
+        if (!grant)
+            return undefined;
+        return {
+            role: grant.role,
+            departments: grant.departments,
+            depts: grant.departments,
+        };
+    }
+    const rec = rolesOrAuthz;
     let ent = rec[appId];
     if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
         const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
@@ -465,12 +779,10 @@ export function getAppEntitlement(roles, appId) {
     }
     if (!ent || typeof ent !== 'object')
         return undefined;
-    const departments = Array.isArray(ent.departments)
-        ? ent.departments.map(String)
-        : Array.isArray(ent.depts)
-            ? ent.depts.map(String)
-            : undefined;
+    const raw = ent;
+    const departments = normalizeStringArray(raw.departments ?? raw.depts);
     return {
+        role: normalizeAppRole(raw.role),
         departments,
         depts: departments,
     };

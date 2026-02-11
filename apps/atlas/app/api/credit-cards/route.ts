@@ -25,7 +25,9 @@ const CreateCreditCardSchema = z.object({
   title: z.string().min(1).max(200).trim(),
   cardholderName: z.string().max(200).trim().optional().nullable(),
   brand: CreditCardBrandEnum,
-  last4: z.string().regex(/^[0-9]{4}$/),
+  cardNumber: z.string().max(30).trim().optional().nullable(),
+  last4: z.string().regex(/^[0-9]{4}$/).optional(),
+  cvv: z.string().max(10).trim().optional().nullable(),
   expMonth: z.number().int().min(1).max(12),
   expYear: z.number().int().min(2000).max(2100),
   department: PasswordDepartmentEnum.optional(),
@@ -129,12 +131,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Derive last4 from cardNumber if provided
+    const cardNumber = data.cardNumber?.replace(/\s+/g, '') ?? null
+    let last4 = data.last4
+    if (cardNumber && cardNumber.length >= 4) {
+      last4 = cardNumber.slice(-4)
+    }
+    if (!last4) {
+      return NextResponse.json({ error: 'Card number or last 4 digits is required' }, { status: 400 })
+    }
+
     const card = await prisma.creditCard.create({
       data: {
         title: data.title,
         cardholderName: data.cardholderName ?? null,
         brand: data.brand,
-        last4: data.last4,
+        cardNumber,
+        last4,
+        cvv: data.cvv ?? null,
         expMonth: data.expMonth,
         expYear: data.expYear,
         department: data.department,

@@ -137,7 +137,9 @@ export function computeSettlementTotalFromJournalEntry(
   entry: QboJournalEntry,
   accountsById: Map<string, QboAccount>,
 ): number | null {
-  const candidates: Array<{ amount: number; postingType: 'Debit' | 'Credit' }> = [];
+  let total = 0;
+  let found = false;
+  let hasAnyLine = false;
 
   for (const line of entry.Line) {
     const amount = line.Amount;
@@ -147,21 +149,20 @@ export function computeSettlementTotalFromJournalEntry(
     const account = accountsById.get(accountId);
     if (!account) continue;
 
-    if (account.AccountType !== 'Bank') continue;
+    hasAnyLine = true;
 
-    candidates.push({
-      amount,
-      postingType: line.JournalEntryLineDetail.PostingType,
-    });
+    if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
+
+    found = true;
+    const signed = line.JournalEntryLineDetail.PostingType === 'Debit' ? amount : -amount;
+    total += signed;
   }
 
-  if (candidates.length === 0) return null;
-
-  let selected = candidates[0];
-  for (const candidate of candidates) {
-    if (candidate.amount > selected.amount) selected = candidate;
+  if (!found) {
+    // JE has lines but no bank/CC entry — settlement balances to $0
+    return hasAnyLine ? 0 : null;
   }
 
-  return selected.postingType === 'Debit' ? selected.amount : -selected.amount;
+  return total;
 }
 

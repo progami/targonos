@@ -22,6 +22,8 @@ import {
 import { toast } from 'react-hot-toast'
 import { PageHeader } from '@/components/ui/page-header'
 import { redirectToPortal } from '@/lib/portal'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface InventoryComparison {
  sku: string
@@ -142,7 +144,7 @@ export default function AmazonIntegrationPage() {
  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
  
  // Fetch inventory comparison
- const response = await fetch('/api/amazon/inventory-comparison', {
+ const response = await fetch(withBasePath('/api/amazon/inventory-comparison'), {
  signal: controller.signal,
  credentials: 'include',
  headers: {
@@ -157,9 +159,8 @@ export default function AmazonIntegrationPage() {
  setLastRefresh(new Date())
  
  // Try to sync from Amazon API to database (but don't block on it)
- fetch('/api/amazon/sync', {
+ fetchWithCSRF('/api/amazon/sync', {
  method: 'POST',
- headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({ syncType: 'inventory' })
  }).then(async (syncResponse) => {
  if (syncResponse.ok) {
@@ -168,7 +169,7 @@ export default function AmazonIntegrationPage() {
  toast.success(`Synced ${result.synced} items from Amazon FBA`)
  
  // Refresh the inventory comparison after sync
- const refreshResponse = await fetch('/api/amazon/inventory-comparison', {
+ const refreshResponse = await fetch(withBasePath('/api/amazon/inventory-comparison'), {
  credentials: 'include'
  })
  if (refreshResponse.ok) {
@@ -320,7 +321,7 @@ export default function AmazonIntegrationPage() {
  // Skip warehouse setup - it should be done manually
  
  // Fetch inventory comparison
- const response = await fetch('/api/amazon/inventory-comparison', {
+ const response = await fetch(withBasePath('/api/amazon/inventory-comparison'), {
  credentials: 'include'
  })
  if (response.ok) {
@@ -329,9 +330,8 @@ export default function AmazonIntegrationPage() {
  setLastRefresh(new Date())
  
  // Sync from Amazon API to database
- const syncResponse = await fetch('/api/amazon/sync', {
+ const syncResponse = await fetchWithCSRF('/api/amazon/sync', {
  method: 'POST',
- headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({ syncType: 'inventory' })
  })
  
@@ -341,7 +341,7 @@ export default function AmazonIntegrationPage() {
  toast.success(`Synced ${result.synced} items from Amazon FBA`)
  
  // Refresh the inventory comparison after sync
- const refreshResponse = await fetch('/api/amazon/inventory-comparison', {
+ const refreshResponse = await fetch(withBasePath('/api/amazon/inventory-comparison'), {
  credentials: 'include'
  })
  if (refreshResponse.ok) {

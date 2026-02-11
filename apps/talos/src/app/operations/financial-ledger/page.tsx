@@ -22,7 +22,7 @@ type FinancialLedgerEntryRow = {
   warehouseName: string
   skuCode: string | null
   skuDescription: string | null
-  batchLot: string | null
+  lotRef: string | null
   amount: number
   currency: string
   effectiveAt: string
@@ -73,7 +73,7 @@ export default function FinancialLedgerPage() {
 
   const loadWarehouses = useCallback(async () => {
     try {
-      const response = await fetch('/api/warehouses')
+      const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
       if (!response.ok) return
       const payload: unknown = await response.json().catch(() => null)
       const listCandidate: unknown =
@@ -111,7 +111,9 @@ export default function FinancialLedgerPage() {
       if (filters.category.trim()) query.set('category', filters.category.trim())
       query.set('limit', '500')
 
-      const response = await fetch(`/api/finance/financial-ledger?${query.toString()}`)
+      const response = await fetch(withBasePath(`/api/finance/financial-ledger?${query.toString()}`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         toast.error('Failed to load financial ledger')
         setEntries([])
@@ -236,7 +238,7 @@ export default function FinancialLedgerPage() {
                     <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-28">Category</th>
                     <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-56">Cost</th>
                     <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-52">Warehouse</th>
-                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-44">SKU / Batch</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-44">SKU / Lot</th>
                     <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-32">Amount</th>
                   </tr>
                 </thead>
@@ -256,7 +258,7 @@ export default function FinancialLedgerPage() {
                       <td className="px-3 py-2">
                         <div className="font-medium text-slate-900 dark:text-slate-100">
                           {row.skuCode ?? '—'}
-                          {row.batchLot ? ` — ${row.batchLot}` : ''}
+                          {row.lotRef ? ` — ${row.lotRef}` : ''}
                         </div>
                         {row.skuDescription && (
                           <div className="text-xs text-muted-foreground">{row.skuDescription}</div>
@@ -281,4 +283,3 @@ export default function FinancialLedgerPage() {
     </PageContainer>
   )
 }
-

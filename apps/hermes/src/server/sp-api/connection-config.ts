@@ -45,15 +45,15 @@ export function loadSpApiConfigForConnection(connectionId: string): SpApiConfig 
     region,
     sandbox,
     endpointOverride:
-      (mapping?.endpointOverride ?? process.env.SPAPI_ENDPOINT_OVERRIDE) || undefined,
+      mapping?.endpointOverride ?? process.env.SPAPI_ENDPOINT_OVERRIDE,
     awsRegionOverride:
-      (mapping?.awsRegionOverride ?? process.env.SPAPI_AWS_REGION_OVERRIDE) || undefined,
+      mapping?.awsRegionOverride ?? process.env.SPAPI_AWS_REGION_OVERRIDE,
     lwaClientId: getEnvOrThrow("SPAPI_LWA_CLIENT_ID"),
     lwaClientSecret: getEnvOrThrow("SPAPI_LWA_CLIENT_SECRET"),
     lwaRefreshToken: mapping?.lwaRefreshToken ?? getEnvOrThrow("SPAPI_LWA_REFRESH_TOKEN"),
     awsAccessKeyId: getEnvOrThrow("SPAPI_AWS_ACCESS_KEY_ID"),
     awsSecretAccessKey: getEnvOrThrow("SPAPI_AWS_SECRET_ACCESS_KEY"),
-    awsRoleArn: (mapping?.awsRoleArn ?? process.env.SPAPI_AWS_ROLE_ARN) || undefined,
+    awsRoleArn: mapping?.awsRoleArn ?? process.env.SPAPI_AWS_ROLE_ARN,
     userAgent: mapping?.userAgent ?? process.env.SPAPI_USER_AGENT ?? "targon-hermes/0.1",
   };
 }

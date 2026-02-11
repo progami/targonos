@@ -17,6 +17,7 @@ import { Hash } from "@aws-sdk/hash-node";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { getAwsSigningRegion, getSpApiHost, type SpApiRegion } from "./regions";
 import { spApiLimiter, type TokenBucketConfig } from "./rate-limiter";
+import { isHermesDryRun } from "../env/flags";
 
 class Sha256 extends Hash {
   constructor(secret?: any) {
@@ -317,6 +318,16 @@ export class SpApiClient {
   }
 
   async request(opts: SpApiRequestOpts): Promise<SpApiResponse> {
+    // Safety net: block all POST requests in dry-run mode.
+    if (isHermesDryRun() && opts.method === "POST") {
+      console.log(`[hermes:dry-run] BLOCKED ${opts.method} ${opts.path}`);
+      return {
+        status: 499,
+        body: { dryRun: true, blocked: `${opts.method} ${opts.path}` },
+        headers: {},
+      };
+    }
+
     const opKey = opts.rateLimitKey ?? `${opts.method} ${opts.path.split("?")[0]}`;
     const limiterKey = this.limiterKey(opKey);
 

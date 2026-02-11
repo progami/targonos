@@ -10,6 +10,21 @@ type NavigationHistoryContextType = {
   previousPath: string | null // Fallback when there's no browser history
 }
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+
+function stripBasePath(pathname: string) {
+  if (basePath === '') return pathname
+  if (basePath === '/') return pathname
+  if (!pathname.startsWith(basePath)) return pathname
+  const stripped = pathname.slice(basePath.length)
+  return stripped === '' ? '/' : stripped
+}
+
+function buildLocation(pathname: string, search: string) {
+  if (search === '') return pathname
+  return `${pathname}?${search}`
+}
+
 /**
  * Contextual navigation defaults
  * Instead of recording the literal journey like browser history,
@@ -135,6 +150,7 @@ type NavigationHistoryStore = {
   search: string
   historyIndex: number
   previousPath: string | null
+  previousLocation: string | null
   setLocation: (pathname: string, search: string, historyIndex: number) => void
 }
 
@@ -143,14 +159,22 @@ const useNavigationHistoryStore = create<NavigationHistoryStore>((set) => ({
   search: '',
   historyIndex: 0,
   previousPath: null,
+  previousLocation: null,
   setLocation: (pathname, search, historyIndex) => {
-    const previousPath = getDefaultBackPath(pathname)
-    set({ pathname, search, historyIndex, previousPath })
+    set((prev) => {
+      const previousPath = getDefaultBackPath(pathname)
+      const previousLocation =
+        prev.pathname !== '' && prev.pathname !== pathname
+          ? buildLocation(prev.pathname, prev.search)
+          : prev.previousLocation
+
+      return { pathname, search, historyIndex, previousPath, previousLocation }
+    })
   },
 }))
 
 export function NavigationHistoryProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname()
+  const pathname = stripBasePath(usePathname())
   const searchParams = useSearchParams()
   const search = searchParams.toString()
 
@@ -169,12 +193,18 @@ export function useNavigationHistory() {
   const router = useRouter()
 
   const previousPath = useNavigationHistoryStore((s) => s.previousPath)
+  const previousLocation = useNavigationHistoryStore((s) => s.previousLocation)
   const historyIndex = useNavigationHistoryStore((s) => s.historyIndex)
-  const canGoBack = historyIndex > 0 ? true : previousPath !== null
+  const canGoBack = historyIndex > 0 ? true : previousLocation !== null ? true : previousPath !== null
 
   const goBack = useCallback(() => {
     if (historyIndex > 0) {
       router.back()
+      return
+    }
+
+    if (previousLocation !== null) {
+      router.push(previousLocation)
       return
     }
 
@@ -184,7 +214,7 @@ export function useNavigationHistory() {
     }
 
     router.back()
-  }, [historyIndex, previousPath, router])
+  }, [historyIndex, previousLocation, previousPath, router])
 
   return { goBack, canGoBack, previousPath } satisfies NavigationHistoryContextType
 }

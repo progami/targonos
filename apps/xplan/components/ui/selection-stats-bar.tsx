@@ -31,7 +31,7 @@ export function SelectionStatsBar({ stats, className }: SelectionStatsBarProps) 
   return (
     <div
       className={clsx(
-        'pointer-events-none absolute bottom-3 right-3 z-30 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-700 shadow-sm backdrop-blur-sm dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-200',
+        'pointer-events-none absolute bottom-3 right-3 z-30 rounded-xl border border-slate-200/80 border-l-[3px] border-l-cyan-500 dark:border-l-[#00C2B9] bg-white/95 px-3 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-700 shadow-md backdrop-blur-md dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-200',
         className,
       )}
       aria-hidden="true"

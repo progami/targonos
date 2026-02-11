@@ -19,6 +19,7 @@ import {
   processBuyerMessageDispatch,
   requeueStuckBuyerMessages,
 } from "../messaging/dispatcher";
+import { isHermesDryRun } from "../env/flags";
 import { loadHermesEnv } from "./load-env";
 
 function sleep(ms: number) {
@@ -38,6 +39,13 @@ function getInt(name: string, fallback: number): number {
 
 async function main() {
   loadHermesEnv();
+
+  if (isHermesDryRun()) {
+    console.log(`[${nowIso()}] HERMES_DRY_RUN is enabled — buyer-message dispatcher will not process dispatches.`);
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);

@@ -64,14 +64,14 @@ const PIPELINE_STAGES: StatusConfig[] = [
   },
   {
     value: 'OCEAN',
-    label: 'In Transit',
-    description: 'Goods in transit from manufacturer',
+    label: 'Transit',
+    description: 'Goods moving from manufacturer',
     icon: Ship,
   },
   {
     value: 'WAREHOUSE',
-    label: 'At Warehouse',
-    description: 'Goods received at warehouse',
+    label: 'Warehouse',
+    description: 'Goods received in warehouse',
     icon: Warehouse,
   },
 ]
@@ -166,8 +166,8 @@ function OrdersPageContent() {
           </Button>
         }
       />
-      <PageContent>
-        <div className="flex flex-col gap-6">
+      <PageContent className="overflow-hidden">
+        <div className="flex min-h-0 flex-col gap-6">
           {/* Status Tabs */}
           <PageTabs
             tabs={statusTabs}
@@ -176,11 +176,13 @@ function OrdersPageContent() {
             variant="underline"
           />
 
-          <PurchaseOrdersPanel
-            onPosted={() => {}}
-            statusFilter={currentStatus}
-            typeFilter="PURCHASE"
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <PurchaseOrdersPanel
+              onPosted={() => {}}
+              statusFilter={currentStatus}
+              typeFilter="PURCHASE"
+            />
+          </div>
         </div>
       </PageContent>
     </PageContainer>

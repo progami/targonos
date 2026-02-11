@@ -5,13 +5,14 @@ import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
 import { getS3Service } from '@/services/s3.service'
 import { validateFile, scanFileContent } from '@/lib/security/file-upload'
 import { auditLog } from '@/lib/security/audit-logger'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { PurchaseOrderDocumentStage, Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60 // 60 seconds for file uploads
+export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
 
-const MAX_DOCUMENT_SIZE_MB = 50
+const MAX_DOCUMENT_SIZE_MB = 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'RFQ',
@@ -163,6 +164,15 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
     if (!order) {
       return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 })
+    }
+
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+      purchaseOrderStatus: order.status,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
     }
 
     if (order.isLegacy) {
@@ -401,6 +411,14 @@ export const GET = withAuthAndParams(async (request, params, _session) => {
 
     const prisma = await getTenantPrisma()
     const s3Service = getS3Service()
+
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
+    }
 
     const searchParams = request.nextUrl.searchParams
     const download = searchParams.get('download') === 'true'

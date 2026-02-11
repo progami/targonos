@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Download, Calendar } from '@/lib/lucide-icons'
 import { toast } from 'react-hot-toast'
 import { LucideIcon } from '@/lib/lucide-icons'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface Warehouse {
  id: string
@@ -43,7 +45,7 @@ export function ReportGenerator({
  ]
 }: ReportGeneratorProps) {
  const [generatingReport, setGeneratingReport] = useState<string | null>(null)
- const [customReportType, setCustomReportType] = useState(customReportTypes[0]?.value || 'monthly-inventory')
+ const [customReportType, setCustomReportType] = useState(customReportTypes[0]!.value)
  const [customPeriod, setCustomPeriod] = useState(new Date().toISOString().slice(0, 7))
  const [customWarehouseId, setCustomWarehouseId] = useState('')
  const [customFormat, setCustomFormat] = useState<'xlsx' | 'csv' | 'pdf'>('xlsx')
@@ -56,7 +58,7 @@ export function ReportGenerator({
 
  const fetchWarehouses = async () => {
  try {
- const response = await fetch('/api/warehouses')
+ const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
  if (response.ok) {
  const data = await response.json()
  setWarehouses(data)
@@ -75,11 +77,8 @@ export function ReportGenerator({
  const month = currentDate.getMonth() + 1
  const period = `${year}-${month.toString().padStart(2, '0')}`
 
- const response = await fetch('/api/reports', {
+ const response = await fetchWithCSRF('/api/reports', {
  method: 'POST',
- headers: {
- 'Content-Type': 'application/json',
- },
  body: JSON.stringify({
  reportType,
  period,
@@ -127,15 +126,12 @@ export function ReportGenerator({
  } = {
  reportType: customReportType,
  period: customPeriod,
- warehouseId: customWarehouseId || undefined,
+ warehouseId: customWarehouseId.trim().length > 0 ? customWarehouseId : undefined,
  exportFormat: showCustomFormat ? customFormat : 'xlsx'
  }
 
- const response = await fetch('/api/reports', {
+ const response = await fetchWithCSRF('/api/reports', {
  method: 'POST',
- headers: {
- 'Content-Type': 'application/json',
- },
  body: JSON.stringify(body),
  })
 

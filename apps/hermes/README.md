@@ -27,6 +27,17 @@ This means Hermes can be run with “at‑least once” worker semantics (retrie
 
 ---
 
+## Reading Hermes metrics (avoid confusion)
+
+Hermes tracks two different things:
+
+- **Dispatches**: one row per order action (unique by DB constraints). This is the closest thing to “how many orders were requested”.
+- **Attempts**: retries against a dispatch (immutable log). A single order can produce many attempts (e.g. “ineligible” retries) before it becomes sendable.
+
+If you see large “ineligible” numbers, that is usually **attempts** (retries), not unique orders.
+
+---
+
 ## How Request‑a‑Review works (end‑to‑end)
 
 1) **Orders are ingested** into the local order cache (either via the Orders UI backfill or the orders‑sync worker).
@@ -64,14 +75,30 @@ This means Hermes can be run with “at‑least once” worker semantics (retrie
 
 ---
 
+## Verification (Hermes ↔ Amazon)
+
+To verify a specific order:
+
+- **In Hermes**
+  - `Orders`: filter by order id → check Review state (`sent` / `queued` / `not queued`)
+  - `Logs`: filter by order id → look for `request_review` attempts with `status=sent` (the row includes `spapiRequestId`)
+- **In Seller Central**
+  - Open the order details page → the “Request a Review” action should be unavailable/disabled after it has been sent.
+  - If Amazon’s “Request a Review” action is not available, Hermes will record attempts as `ineligible` and reschedule (no duplicate sends).
+
+---
+
 ## What you can do in the UI today
 
-- **Dashboard**: queue KPIs + recent dispatch activity.
-- **Orders**: backfill from Orders API into the local cache; optionally enqueue review requests; browse/filter cached orders.
+- **Insights (landing page)**: daily sent vs queued, plus per-account summaries.
+- **Orders**: browse/filter the local order cache and review-request state; run backfill/sync when needed.
 - **Messaging**: fetch allowed actions for an order and send a safe buyer message; view recent message dispatches.
 - **Accounts**: view configured connections and run a lightweight SP‑API connectivity test.
-- **Insights**: basic analytics from the local DB (dispatch states, attempts, order counts).
-- **Campaigns / Experiments / Templates / Settings / Logs**: UI + basic persistence exist; campaign/experiment metadata is not yet what drives dispatch generation (dispatches can store campaign/experiment IDs, but scheduling is currently driven by the order ingest flows).
+- **Logs**: attempt log for review requests and buyer messages (sent / ineligible / throttled / failed).
+- **Settings**: UI defaults (account + Insights range + Orders rows/page).
+
+Notes:
+- Pages like Campaigns / Experiments / Templates are scaffolding; dispatch generation is currently driven by order ingest + scheduling.
 
 ---
 

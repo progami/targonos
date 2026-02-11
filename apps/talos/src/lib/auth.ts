@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig, Session } from 'next-auth'
+import type { JWT } from 'next-auth/jwt'
 import Credentials from 'next-auth/providers/credentials'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
 import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
@@ -13,6 +14,16 @@ const userCache = new Map<string, {
 }>()
 
 const CACHE_TTL_MS = 1 * 60 * 1000 // 1 minute - reduced to ensure role changes propagate quickly
+
+type AuthzClaims = {
+  authz?: unknown
+  roles?: unknown
+  globalRoles?: unknown
+  authzVersion?: unknown
+}
+
+type SessionWithAuthz = Session & AuthzClaims
+type TokenWithAuthz = JWT & AuthzClaims
 
 function getCachedUser(email: string, tenant: TenantCode) {
   const key = `${email}:${tenant}`
@@ -106,6 +117,14 @@ const baseAuthOptions: NextAuthConfig = {
       return token
     },
     async session({ session, token }) {
+      const sessionWithAuthz = session as SessionWithAuthz
+      const tokenWithAuthz = token as TokenWithAuthz
+
+      sessionWithAuthz.authz = tokenWithAuthz.authz
+      sessionWithAuthz.roles = tokenWithAuthz.roles
+      sessionWithAuthz.globalRoles = tokenWithAuthz.globalRoles
+      sessionWithAuthz.authzVersion = tokenWithAuthz.authzVersion
+
       // Always hydrate a stable user id (portal-issued) so API routes don't crash
       // when a Talos user record doesn't exist yet in the tenant schema.
       if (
@@ -144,8 +163,8 @@ const baseAuthOptions: NextAuthConfig = {
 
       // Cache miss - fetch from DB
       const prisma = await getTenantPrisma()
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const user = await prisma.user.findFirst({
+        where: { email, isActive: true },
         select: { id: true, role: true, region: true, warehouseId: true },
       })
 
@@ -179,7 +198,7 @@ export const authOptions: NextAuthConfig = withSharedAuth(
   baseAuthOptions,
   {
     cookieDomain: process.env.COOKIE_DOMAIN || '.targonglobal.com',
-    // Use portal cookie prefix so NextAuth reads the same dev cookie as ecomOS
+    // Use portal cookie prefix so NextAuth reads the same dev cookie as Targon OS
     appId: 'targon',
   }
 )

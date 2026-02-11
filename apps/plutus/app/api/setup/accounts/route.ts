@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { getCurrentUser } from '@/lib/current-user';
+import { logAudit } from '@/lib/plutus/audit-log';
 
 const AccountMappingsSchema = z.object({
   accountMappings: z.object({
@@ -12,9 +14,11 @@ const AccountMappingsSchema = z.object({
     cogsFreight: z.string().optional(),
     cogsDuty: z.string().optional(),
     cogsMfgAccessories: z.string().optional(),
-    cogsLandFreight: z.string().optional(),
-    cogsStorage3pl: z.string().optional(),
     cogsShrinkage: z.string().optional(),
+    productExpenses: z.string().optional(),
+    warehousing3pl: z.string().optional(),
+    warehousingAmazonFc: z.string().optional(),
+    warehousingAwd: z.string().optional(),
     amazonSales: z.string().optional(),
     amazonRefunds: z.string().optional(),
     amazonFbaInventoryReimbursement: z.string().optional(),
@@ -55,6 +59,17 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    const user = await getCurrentUser();
+    await logAudit({
+      userId: user?.id ?? 'system',
+      userName: user?.name ?? user?.email ?? 'system',
+      action: 'CONFIG_UPDATED',
+      entityType: 'SetupConfig',
+      details: {
+        accountsCreated: accountsCreated ?? existing?.accountsCreated ?? false,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

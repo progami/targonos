@@ -276,10 +276,10 @@ async function syncProducts(session: Session) {
 
           const unitTriplet = parseCatalogItemPackageDimensions(attributes)
           const unitWeightKg = parseCatalogItemPackageWeightKg(attributes)
-          const computedTier =
-            unitTriplet && unitWeightKg !== null
-              ? calculateSizeTierForTenant(tenantCode, unitTriplet.side1Cm, unitTriplet.side2Cm, unitTriplet.side3Cm, unitWeightKg)
-              : null
+	          const computedTier =
+	            unitTriplet && unitWeightKg !== null
+	              ? calculateSizeTierForTenant(tenantCode, unitTriplet.side1Cm, unitTriplet.side2Cm, unitTriplet.side3Cm, unitWeightKg)
+	              : null
 
           // Add Amazon item package dimensions to SKU updates
           if (unitTriplet) {
@@ -288,37 +288,17 @@ async function syncProducts(session: Session) {
             updates.amazonItemPackageSide2Cm = unitTriplet.side2Cm
             updates.amazonItemPackageSide3Cm = unitTriplet.side3Cm
           }
-          if (unitWeightKg !== null) {
-            updates.amazonReferenceWeightKg = unitWeightKg
-          }
+	          if (unitWeightKg !== null) {
+	            updates.amazonReferenceWeightKg = unitWeightKg
+	          }
+	          if (computedTier) {
+	            updates.amazonSizeTier = computedTier
+	          }
 
-          // Update batch with Amazon fee/tier data only
-          const batchUpdates: Record<string, unknown> = {}
-          if (unitWeightKg !== null) {
-            batchUpdates.amazonReferenceWeightKg = unitWeightKg
-          }
-          if (computedTier) {
-            batchUpdates.amazonSizeTier = computedTier
-          }
-
-          if (Object.keys(batchUpdates).length > 0) {
-            const latestBatch = await prisma.skuBatch.findFirst({
-              where: { skuId: sku.id, isActive: true },
-              orderBy: { createdAt: 'desc' },
-              select: { id: true },
-            })
-            if (latestBatch) {
-              await prisma.skuBatch.update({
-                where: { id: latestBatch.id },
-                data: batchUpdates,
-              })
-            }
-          }
-
-          const itemTriplet = parseCatalogItemDimensions(attributes)
-          if (itemTriplet) {
-            updates.amazonItemDimensionsCm = formatDimensionTripletCm(itemTriplet)
-            updates.amazonItemSide1Cm = itemTriplet.side1Cm
+	          const itemTriplet = parseCatalogItemDimensions(attributes)
+	          if (itemTriplet) {
+	            updates.amazonItemDimensionsCm = formatDimensionTripletCm(itemTriplet)
+	            updates.amazonItemSide1Cm = itemTriplet.side1Cm
             updates.amazonItemSide2Cm = itemTriplet.side2Cm
             updates.amazonItemSide3Cm = itemTriplet.side3Cm
           }

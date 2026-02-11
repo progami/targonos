@@ -6,6 +6,7 @@ import {
   serializePurchaseOrder,
   getValidNextStages,
 } from '@/lib/services/po-stage-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
@@ -153,6 +154,15 @@ export const PATCH = withAuthAndParams(
       return ApiResponses.badRequest('Purchase order ID is required')
     }
 
+    const prisma = await getTenantPrisma()
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
+    }
+
     const payload = await request.json().catch(() => null)
     const result = StageTransitionSchema.safeParse(payload)
 
@@ -175,7 +185,6 @@ export const PATCH = withAuthAndParams(
         result.data.stageData as StageTransitionInput,
         userContext
       )
-      const prisma = await getTenantPrisma()
       const supplier =
         order.counterpartyName && order.counterpartyName.trim().length > 0
           ? await prisma.supplier.findFirst({
@@ -228,6 +237,15 @@ export const GET = withAuthAndParams(
 
     if (!order) {
       return ApiResponses.notFound('Purchase order not found')
+    }
+
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+      purchaseOrderStatus: order.status,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
     }
 
     const validNextStages = getValidNextStages(

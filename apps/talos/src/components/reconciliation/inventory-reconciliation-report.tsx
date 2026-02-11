@@ -1,12 +1,14 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, CheckCircle, XCircle, Calculator } from '@/lib/lucide-icons';
-import { formatDistanceToNow } from 'date-fns';
+import React, { useState, useEffect } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Loader2, AlertTriangle, CheckCircle, XCircle, Calculator } from '@/lib/lucide-icons'
+import { formatDistanceToNow } from 'date-fns'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 
 interface ReconciliationReport {
  id: string;
@@ -29,7 +31,7 @@ interface Discrepancy {
  id: string;
  warehouse_id: string;
  sku_id: string;
- batch_lot: string;
+ lot_ref: string;
  recorded_balance: number;
  calculated_balance: number;
  difference: number;
@@ -59,7 +61,9 @@ export function InventoryReconciliationReport() {
  const fetchReports = async () => {
  try {
  setLoading(true);
- const response = await fetch('/api/reconciliation/inventory?limit=5');
+ const response = await fetch(withBasePath('/api/reconciliation/inventory?limit=5'), {
+ credentials: 'include',
+ });
  if (!response.ok) throw new Error('Failed to fetch reports');
  const data = await response.json();
  setReports(data.reports);
@@ -72,13 +76,19 @@ export function InventoryReconciliationReport() {
 
  const fetchReportDetails = async (reportId: string) => {
  try {
- const response = await fetch(`/api/reconciliation/inventory?reportId=${reportId}`);
+ const response = await fetch(
+ withBasePath(`/api/reconciliation/inventory?reportId=${reportId}`),
+ { credentials: 'include' }
+ );
  if (!response.ok) throw new Error('Failed to fetch report details');
  const data = await response.json();
  setSelectedReport(data.report);
  
  // Fetch discrepancies
- const discrepResponse = await fetch(`/api/reconciliation/inventory/discrepancies?reportId=${reportId}`);
+ const discrepResponse = await fetch(
+ withBasePath(`/api/reconciliation/inventory/discrepancies?reportId=${reportId}`),
+ { credentials: 'include' }
+ );
  if (!discrepResponse.ok) throw new Error('Failed to fetch discrepancies');
  const discrepData = await discrepResponse.json();
  setDiscrepancies(discrepData.discrepancies);
@@ -92,16 +102,8 @@ export function InventoryReconciliationReport() {
  setTriggering(true);
  setError(null);
  
- // Get CSRF token
- const csrfResponse = await fetch('/api/csrf');
- const { csrfToken } = await csrfResponse.json();
- 
- const response = await fetch('/api/reconciliation/inventory', {
+ const response = await fetchWithCSRF('/api/reconciliation/inventory', {
  method: 'POST',
- headers: {
- 'Content-Type': 'application/json',
- 'x-csrf-token': csrfToken,
- },
  });
  
  if (!response.ok) {
@@ -255,7 +257,7 @@ export function InventoryReconciliationReport() {
  <tr className="border-b">
  <th className="text-left p-2">Warehouse</th>
  <th className="text-left p-2">SKU</th>
- <th className="text-left p-2">Batch</th>
+ <th className="text-left p-2">Lot</th>
  <th className="text-right p-2">Recorded</th>
  <th className="text-right p-2">Calculated</th>
  <th className="text-right p-2">Difference</th>
@@ -272,7 +274,7 @@ export function InventoryReconciliationReport() {
  <p className="text-sm text-slate-600">{disc.skus.description}</p>
  </div>
  </td>
- <td className="p-2">{disc.batch_lot}</td>
+ <td className="p-2">{disc.lot_ref}</td>
  <td className="p-2 text-right">{disc.recorded_balance}</td>
  <td className="p-2 text-right">{disc.calculated_balance}</td>
  <td className="p-2 text-right font-medium">

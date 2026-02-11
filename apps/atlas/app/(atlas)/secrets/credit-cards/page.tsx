@@ -9,7 +9,7 @@ import {
   type CreditCardBrand,
   type PasswordDepartment,
 } from '@/lib/api-client'
-import { LockClosedIcon, PlusIcon, ExternalLinkIcon, TrashIcon, PencilIcon } from '@/components/ui/Icons'
+import { LockClosedIcon, PlusIcon, TrashIcon, PencilIcon, ClipboardIcon, EyeIcon, EyeSlashIcon } from '@/components/ui/Icons'
 import { ListPageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -53,11 +53,139 @@ function getBrandLabel(brand: CreditCardBrand) {
   return BRAND_OPTIONS.find((b) => b.value === brand)?.label ?? brand
 }
 
+function CardNumberCell({ cardNumber, last4 }: { cardNumber?: string | null; last4: string }) {
+  const [visible, setVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const raw = cardNumber?.replace(/\s+/g, '')
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(raw ?? last4)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const display = raw
+    ? (visible ? raw : '•'.repeat(raw.length - 4) + raw.slice(-4))
+    : `•••• ${last4}`
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <code className={cn(
+        "px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs",
+        !visible && "tracking-wider"
+      )}>
+        {display}
+      </code>
+      {raw ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
+          className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={visible ? 'Hide number' : 'Show number'}
+        >
+          {visible ? (
+            <EyeSlashIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <EyeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy number'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
+function CvcCell({ cvv }: { cvv?: string | null }) {
+  const [visible, setVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  if (!cvv) return <span className="text-muted-foreground">—</span>
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(cvv)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
+        {visible ? cvv : '•••'}
+      </code>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={visible ? 'Hide CVC' : 'Show CVC'}
+      >
+        {visible ? (
+          <EyeSlashIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <EyeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy CVC'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
+function ExpiryCell({ expMonth, expYear }: { expMonth: number; expYear: number }) {
+  const [copied, setCopied] = useState(false)
+  const display = `${String(expMonth).padStart(2, '0')}/${expYear}`
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(display)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <span className="text-sm text-muted-foreground">{display}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        title={copied ? 'Copied!' : 'Copy expiry'}
+      >
+        <ClipboardIcon className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          copied ? "text-emerald-500" : "text-muted-foreground"
+        )} />
+      </button>
+    </div>
+  )
+}
+
 type CreditCardFormData = {
   title: string
   cardholderName: string
   brand: CreditCardBrand
-  last4: string
+  cardNumber: string
+  cvv: string
   expMonth: number
   expYear: number
   department: PasswordDepartment
@@ -69,7 +197,8 @@ const defaultFormData: CreditCardFormData = {
   title: '',
   cardholderName: '',
   brand: 'VISA',
-  last4: '',
+  cardNumber: '',
+  cvv: '',
   expMonth: 1,
   expYear: new Date().getFullYear(),
   department: 'FINANCE',
@@ -146,7 +275,8 @@ export default function CreditCardsPage() {
       title: card.title,
       cardholderName: card.cardholderName ?? '',
       brand: card.brand,
-      last4: card.last4,
+      cardNumber: card.cardNumber ?? '',
+      cvv: card.cvv ?? '',
       expMonth: card.expMonth,
       expYear: card.expYear,
       department: card.department,
@@ -161,6 +291,8 @@ export default function CreditCardsPage() {
     setSaving(true)
     try {
       const cardholderName = formData.cardholderName.trim() ? formData.cardholderName : null
+      const cardNumber = formData.cardNumber.trim() ? formData.cardNumber : null
+      const cvv = formData.cvv.trim() ? formData.cvv : null
       const url = formData.url.trim() ? formData.url : null
       const notes = formData.notes.trim() ? formData.notes : null
 
@@ -169,7 +301,8 @@ export default function CreditCardsPage() {
           title: formData.title,
           cardholderName,
           brand: formData.brand,
-          last4: formData.last4,
+          cardNumber,
+          cvv,
           expMonth: formData.expMonth,
           expYear: formData.expYear,
           department: formData.department,
@@ -181,7 +314,8 @@ export default function CreditCardsPage() {
           title: formData.title,
           cardholderName,
           brand: formData.brand,
-          last4: formData.last4,
+          cardNumber,
+          cvv,
           expMonth: formData.expMonth,
           expYear: formData.expYear,
           department: formData.department,
@@ -218,12 +352,17 @@ export default function CreditCardsPage() {
         accessorKey: 'title',
         header: 'Card',
         cell: ({ row }) => (
-          <div>
-            <p className="font-semibold text-foreground">{row.original.title}</p>
-            {row.original.cardholderName ? (
-              <p className="text-xs text-muted-foreground mt-0.5">{row.original.cardholderName}</p>
-            ) : null}
-          </div>
+          <p className="font-semibold text-foreground">{row.original.title}</p>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'cardholderName',
+        header: 'Cardholder',
+        cell: ({ row }) => row.original.cardholderName ? (
+          <span className="text-sm text-foreground">{row.original.cardholderName}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
         ),
         enableSorting: true,
       },
@@ -239,22 +378,22 @@ export default function CreditCardsPage() {
       },
       {
         accessorKey: 'last4',
-        header: 'Last 4',
+        header: 'Number',
         cell: ({ row }) => (
-          <code className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs">
-            •••• {row.original.last4}
-          </code>
+          <CardNumberCell cardNumber={row.original.cardNumber} last4={row.original.last4} />
         ),
+        enableSorting: false,
+      },
+      {
+        id: 'cvc',
+        header: 'CVC',
+        cell: ({ row }) => <CvcCell cvv={row.original.cvv} />,
         enableSorting: false,
       },
       {
         id: 'expiry',
         header: 'Expiry',
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {String(row.original.expMonth).padStart(2, '0')}/{row.original.expYear}
-          </span>
-        ),
+        cell: ({ row }) => <ExpiryCell expMonth={row.original.expMonth} expYear={row.original.expYear} />,
         enableSorting: false,
       },
       {
@@ -269,25 +408,6 @@ export default function CreditCardsPage() {
           )
         },
         enableSorting: true,
-      },
-      {
-        accessorKey: 'url',
-        header: 'Link',
-        cell: ({ row }) => row.original.url ? (
-          <a
-            href={row.original.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <span className="truncate max-w-[150px]">{new URL(row.original.url).hostname}</span>
-            <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
-          </a>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-        enableSorting: false,
       },
       {
         id: 'actions',
@@ -413,15 +533,15 @@ export default function CreditCardsPage() {
             />
 
             <FormField
-              label="Last 4"
-              name="last4"
+              label="Card Number"
+              name="cardNumber"
               required
-              placeholder="1234"
-              value={formData.last4}
-              onChange={(e) => setFormData(prev => ({ ...prev, last4: e.target.value }))}
+              placeholder="4111 1111 1111 1234"
+              value={formData.cardNumber}
+              onChange={(e) => setFormData(prev => ({ ...prev, cardNumber: e.target.value }))}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <SelectField
                 label="Expiry Month"
                 name="expMonth"
@@ -435,6 +555,13 @@ export default function CreditCardsPage() {
                 value={String(formData.expYear)}
                 onChange={(e) => setFormData(prev => ({ ...prev, expYear: Number(e.target.value) }))}
                 options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+              />
+              <FormField
+                label="CVC"
+                name="cvv"
+                placeholder="123"
+                value={formData.cvv}
+                onChange={(e) => setFormData(prev => ({ ...prev, cvv: e.target.value }))}
               />
             </div>
 

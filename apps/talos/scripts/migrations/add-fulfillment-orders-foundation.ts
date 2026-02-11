@@ -237,7 +237,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         "fulfillment_order_id" TEXT NOT NULL,
         "sku_code" TEXT NOT NULL,
         "sku_description" TEXT,
-        "batch_lot" TEXT NOT NULL,
+        "lot_ref" TEXT NOT NULL,
         "quantity" INTEGER NOT NULL,
         "status" "FulfillmentOrderLineStatus" NOT NULL DEFAULT 'PENDING',
         "shipped_quantity" INTEGER NOT NULL DEFAULT 0,
@@ -248,8 +248,30 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       );
     `,
     `
-      CREATE UNIQUE INDEX IF NOT EXISTS "fulfillment_order_lines_fulfillment_order_id_sku_code_batch_lot_key"
-        ON "fulfillment_order_lines" ("fulfillment_order_id", "sku_code", "batch_lot");
+      -- Legacy schemas used "batch_lot". ERD v9 uses "lot_ref" everywhere.
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'fulfillment_order_lines'
+            AND column_name = 'batch_lot'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'fulfillment_order_lines'
+            AND column_name = 'lot_ref'
+        ) THEN
+          ALTER TABLE "fulfillment_order_lines" RENAME COLUMN "batch_lot" TO "lot_ref";
+        END IF;
+      END $$;
+    `,
+    `
+      DROP INDEX IF EXISTS "fulfillment_order_lines_fulfillment_order_id_sku_code_batch_lot_key";
+    `,
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS "fulfillment_order_lines_fulfillment_order_id_sku_code_lot_ref_key"
+        ON "fulfillment_order_lines" ("fulfillment_order_id", "sku_code", "lot_ref");
     `,
     `
       CREATE INDEX IF NOT EXISTS "fulfillment_order_lines_fulfillment_order_id_idx"
@@ -407,4 +429,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

@@ -17,6 +17,11 @@ import mime from 'mime-types';
 
 export interface S3UploadOptions {
   contentType?: string;
+  /**
+   * Content length in bytes. When provided for streaming uploads, the SDK can send a non-chunked
+   * request which avoids multipart permissions and improves compatibility with some proxies.
+   */
+  contentLength?: number;
   metadata?: Record<string, string>;
   tags?: Record<string, string>;
   cacheControl?: string;
@@ -87,10 +92,13 @@ export class S3Service {
       throw new Error('S3_BUCKET_NAME environment variable is required');
     }
 
-    const clientConfig: S3ClientConfig = {
+    const clientConfig: S3ClientConfig & { expectContinueHeader?: boolean | number } = {
       region: this.region,
       useAccelerateEndpoint: process.env.S3_USE_ACCELERATED_ENDPOINT === 'true',
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+      // Some proxies and load balancers mishandle `Expect: 100-continue`, which can stall large uploads.
+      // Disabling it ensures the request body starts streaming immediately.
+      expectContinueHeader: false,
     };
 
     if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
@@ -212,7 +220,11 @@ export class S3Service {
         fileSize = file.length;
       } else if (file instanceof Readable) {
         uploadBody = file;
-        fileSize = 0;
+        if (typeof options.contentLength === 'number' && Number.isFinite(options.contentLength) && options.contentLength > 0) {
+          fileSize = options.contentLength;
+        } else {
+          fileSize = 0;
+        }
       } else {
         throw new Error('Unsupported file type for upload');
       }
@@ -241,13 +253,33 @@ export class S3Service {
         ContentDisposition: options.contentDisposition || this.getContentDisposition(key),
       };
 
+      if (fileSize > 0) {
+        uploadParams.ContentLength = fileSize;
+      }
+
       if (options.tags) {
         uploadParams.Tagging = Object.entries(options.tags)
           .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
           .join('&');
       }
 
-      if (fileSize > 5 * 1024 * 1024) {
+      const shouldUseMultipartUpload = fileSize === 0 || fileSize > 5 * 1024 * 1024;
+      if (shouldUseMultipartUpload) {
+        if (file instanceof Readable && fileSize > 0) {
+          const command = new PutObjectCommand(uploadParams);
+          const result = await this.client.send(command);
+
+          return {
+            key,
+            bucket: this.bucket,
+            url: this.getPublicUrl(key),
+            etag: result.ETag?.replace(/"/g, '') || '',
+            size: fileSize,
+            contentType: contentType as string,
+            versionId: (result as any).VersionId,
+          };
+        }
+
         const upload = new Upload({
           client: this.client,
           params: uploadParams,

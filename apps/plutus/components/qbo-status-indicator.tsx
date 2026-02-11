@@ -31,6 +31,7 @@ export function QboStatusIndicator() {
   const { data: status, isLoading } = useQuery({
     queryKey: ['qbo-status'],
     queryFn: fetchQboStatus,
+    staleTime: 5 * 60 * 1000,
   });
 
   const disconnectMutation = useMutation({

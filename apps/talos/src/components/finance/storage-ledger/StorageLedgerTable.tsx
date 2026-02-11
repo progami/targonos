@@ -12,7 +12,7 @@ export interface StorageLedgerColumnFilters {
  skuCodes: string[]
  weekEnding: string
  description: string
- batch: string
+ lot: string
  status: Array<'CALCULATED' | 'PENDING'>
  palletDaysMin: string
  palletDaysMax: string
@@ -277,8 +277,8 @@ export function StorageLedgerTable({
  </th>
  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">
  <div className="flex items-center justify-between gap-1">
- <span>Batch</span>
- {renderTextFilter('Batch', 'batch')}
+ <span>Lot</span>
+ {renderTextFilter('Lot', 'lot')}
  </div>
  </th>
  <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
@@ -374,7 +374,7 @@ export function StorageLedgerTable({
  {entry.skuDescription}
  </td>
  <td className="px-3 py-2 text-sm text-muted-foreground font-mono whitespace-nowrap">
- {entry.batchLot}
+ {entry.lotRef}
  </td>
  <td className="px-3 py-2 text-sm font-semibold text-foreground text-right whitespace-nowrap">
  {entry.palletDays.toLocaleString()}

@@ -17,7 +17,8 @@ model Brand {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  skus Sku[]
+  skus         Sku[]
+  billMappings BillMapping[]
 
   @@index([marketplace])
 }
@@ -58,6 +59,11 @@ model SetupConfig {
   cogsLandFreight     String?
   cogsStorage3pl      String?
   cogsShrinkage       String?
+
+  // Warehousing buckets (COGS)
+  warehousing3pl      String?
+  warehousingAmazonFc String?
+  warehousingAwd      String?
   
   // LMB Revenue/Fee accounts
   amazonSales                      String?
@@ -68,12 +74,53 @@ model SetupConfig {
   amazonStorageFees                String?
   amazonAdvertisingCosts           String?
   amazonPromotions                 String?
-  
+
+  // Product Expenses
+  productExpenses                  String?
+
   // Setup status
   accountsCreated Boolean @default(false)
-  
+
+  // Autopost settings
+  autopostEnabled    Boolean  @default(false)
+  autopostStartDate  DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// AuditDataUpload tracks a single LMB Audit Data CSV upload.
+/// One CSV may contain rows for multiple settlements (Invoice groups).
+model AuditDataUpload {
+  id        String   @id @default(cuid())
+  filename  String
+  rowCount  Int
+  invoiceCount Int
+  uploadedAt DateTime @default(now())
+
+  rows AuditDataRow[]
+}
+
+/// AuditDataRow stores a single parsed row from an LMB Audit Data CSV.
+/// Rows are grouped by invoiceId which maps to one LMB settlement.
+model AuditDataRow {
+  id        String   @id @default(cuid())
+
+  invoiceId   String
+  market      String
+  date        String   // YYYY-MM-DD
+  orderId     String
+  sku         String
+  quantity    Int
+  description String
+  net         Int      // cents
+
+  uploadId String
+  upload   AuditDataUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([uploadId])
+  @@index([uploadId, invoiceId])
 }
 
 /// SettlementProcessing tracks Plutus processing for a single LMB settlement invoice group.
@@ -103,6 +150,7 @@ model SettlementProcessing {
   @@unique([marketplace, invoiceId])
   @@unique([qboSettlementJournalEntryId])
   @@index([marketplace])
+  @@index([marketplace, createdAt])
 }
 
 /// SettlementRollback tracks manual rollbacks of processed settlements.
@@ -159,6 +207,7 @@ model OrderSale {
   @@unique([marketplace, orderId, sku])
   @@index([settlementProcessingId])
   @@index([marketplace])
+  @@index([saleDate])
 }
 
 /// OrderReturn stores per-order, per-SKU return (refund) COGS reversals for replaying inventory over time.
@@ -187,4 +236,72 @@ model OrderReturn {
   @@unique([marketplace, orderId, sku, settlementProcessingId])
   @@index([settlementProcessingId])
   @@index([marketplace, orderId, sku])
+  @@index([returnDate])
+}
+
+/// AuditLog tracks user actions across the Plutus app for audit trail purposes.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  userName   String
+  action     String   // e.g., "SETTLEMENT_PROCESSED", "SETTLEMENT_ROLLED_BACK", "CONFIG_UPDATED", "BRAND_CREATED", "SKU_UPDATED", "ACCOUNTS_CREATED"
+  entityType String   // e.g., "SettlementProcessing", "SetupConfig", "Brand", "Sku"
+  entityId   String?
+  details    Json?    // Additional context
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+/// NotificationPreference stores per-user notification settings for Plutus events.
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  onNewSettlement    Boolean  @default(true)
+  onSettlementPosted Boolean  @default(true)
+  onProcessingError  Boolean  @default(true)
+  onMonthlyAnalytics Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// BillMapping links a QBO bill to a PO batch and brand for cost allocation.
+model BillMapping {
+  id          String    @id @default(cuid())
+  qboBillId   String    @unique
+  poNumber    String
+  brandId     String
+  billDate    String
+  vendorName  String
+  totalAmount Float
+  syncedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  brand Brand          @relation(fields: [brandId], references: [id])
+  lines BillLineMapping[]
+
+  @@index([poNumber])
+  @@index([brandId])
+}
+
+/// BillLineMapping tracks a QBO bill line's component, SKU assignment, and amount for cost allocation.
+model BillLineMapping {
+  id            String  @id @default(cuid())
+  billMappingId String
+  qboLineId     String
+  component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
+  amountCents   Int
+  sku           String?
+  quantity      Int?
+
+  billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([billMappingId, qboLineId])
 }

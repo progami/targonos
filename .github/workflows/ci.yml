@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify workspace versions are in sync

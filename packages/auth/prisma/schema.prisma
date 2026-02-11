@@ -8,6 +8,16 @@ datasource db {
   url      = env("PORTAL_DB_URL")
 }
 
+enum AppAccessRole {
+  viewer
+}
+
+enum AppAccessSource {
+  manual
+  group
+  bootstrap
+}
+
 model User {
   id            String      @id @default(uuid())
   email         String      @unique
@@ -17,6 +27,7 @@ model User {
   lastName      String?
   isActive      Boolean     @default(true)
   isDemo        Boolean     @default(false)
+  authzVersion  Int         @default(1)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   roles         UserRole[]
@@ -52,6 +63,7 @@ model App {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   assignments UserApp[]
+  groupMaps   GroupAppMapping[]
 }
 
 model UserApp {
@@ -59,11 +71,30 @@ model UserApp {
   appId        String
   assignedById String?
   assignedAt   DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  role         AppAccessRole   @default(viewer)
+  source       AppAccessSource @default(manual)
+  locked       Boolean   @default(false)
   departments  Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   app  App  @relation(fields: [appId], references: [id], onDelete: Cascade)
 
   @@id([userId, appId])
+  @@index([appId])
+}
+
+model GroupAppMapping {
+  googleGroup String
+  appId       String
+  role        AppAccessRole @default(viewer)
+  departments Json?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@id([googleGroup, appId])
   @@index([appId])
 }

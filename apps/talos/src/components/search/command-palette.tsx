@@ -12,6 +12,7 @@ import {
   X,
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
+import { withBasePath } from '@/lib/utils/base-path'
 
 type SearchResultType = 'SKU' | 'PURCHASE_ORDER' | 'SUPPLIER' | 'WAREHOUSE'
 
@@ -183,7 +184,7 @@ export function CommandPalette() {
     const controller = new AbortController()
     const timeout = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, {
+        const res = await fetch(withBasePath(`/api/search?q=${encodeURIComponent(trimmed)}`), {
           signal: controller.signal,
         })
         if (!res.ok) {

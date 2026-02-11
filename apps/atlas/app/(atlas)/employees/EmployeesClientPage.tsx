@@ -11,6 +11,8 @@ import { UsersIcon } from '@/components/ui/Icons'
 import { TableEmptyContent } from '@/components/ui/EmptyState'
 import { Avatar } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/badge'
+import { NativeSelect } from '@/components/ui/select'
+import { ensureMe } from '@/lib/store/me'
 
 function fullName(emp: Pick<Employee, 'firstName' | 'lastName'>) {
   return `${emp.firstName} ${emp.lastName}`.trim()
@@ -20,11 +22,13 @@ export function EmployeesClientPage() {
   const router = useRouter()
   const [items, setItems] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
+  const [me, setMe] = useState<{ isHR: boolean; isSuperAdmin: boolean } | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ON_LEAVE' | 'TERMINATED' | 'RESIGNED' | 'ALL'>('ACTIVE')
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await EmployeesApi.list({})
+      const data = await EmployeesApi.list({ status: statusFilter === 'ALL' ? undefined : statusFilter })
       setItems(data.items)
     } catch (e) {
       console.error('Failed to load employees', e)
@@ -32,11 +36,27 @@ export function EmployeesClientPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [statusFilter])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    ensureMe()
+      .then((me) => {
+        if (cancelled) return
+        setMe({ isHR: Boolean(me.isHR), isSuperAdmin: Boolean(me.isSuperAdmin) })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setMe(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const columns = useMemo<ColumnDef<Employee>[]>(
     () => [
@@ -108,6 +128,22 @@ export function EmployeesClientPage() {
       />
 
       <div className="space-y-6">
+        {me?.isHR || me?.isSuperAdmin ? (
+          <div className="flex items-center gap-3">
+            <div className="text-sm font-medium text-foreground">Status</div>
+            <NativeSelect
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            >
+              <option value="ACTIVE">Active</option>
+              <option value="ON_LEAVE">On leave</option>
+              <option value="RESIGNED">Resigned</option>
+              <option value="TERMINATED">Terminated</option>
+              <option value="ALL">All</option>
+            </NativeSelect>
+          </div>
+        ) : null}
+
         <ResultsCount count={items.length} singular="employee" plural="employees" loading={loading} />
 
         <DataTable

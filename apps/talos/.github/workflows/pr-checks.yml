@@ -10,7 +10,7 @@ jobs:
     with:
       check-pr-title: true
       add-size-labels: true
-      comment-test-results: true
+      comment-test-results: false
       size-thresholds: |
         {
           "xs": 10,

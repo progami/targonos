@@ -6,7 +6,7 @@ export interface StorageLedgerRecalcInput {
   warehouseName: string
   skuCode: string
   skuDescription: string
-  batchLot: string
+  lotRef: string
   transactionDate: Date
 }
 
@@ -19,7 +19,7 @@ export async function recalculateStorageLedgerForTransactions(
 
   for (const input of inputs) {
     const weekEnding = endOfWeek(input.transactionDate, { weekStartsOn: 1 })
-    const key = `${input.warehouseCode}::${input.skuCode}::${input.batchLot}::${weekEnding.toISOString()}`
+    const key = `${input.warehouseCode}::${input.skuCode}::${input.lotRef}::${weekEnding.toISOString()}`
     if (!deduped.has(key)) {
       deduped.set(key, input)
     }
@@ -44,4 +44,3 @@ export async function recalculateStorageLedgerForTransactions(
     })
   }
 }
-

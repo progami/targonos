@@ -252,16 +252,16 @@ export function optimizeShipmentQuantity(
 }
 
 /**
- * Batch optimization for multiple SKUs shipping together
+ * Bulk optimization for multiple SKUs shipping together
  */
-export interface BatchOptimizationInput {
+export interface BulkOptimizationInput {
  skuCode: string
  suggestedCartons: number
  urgencyScore: number
  cartonsPerPallet?: number
 }
 
-export interface BatchOptimizationResult {
+export interface BulkOptimizationResult {
  totalPallets: number
  totalCartons: number
  skuAllocations: Array<{
@@ -272,14 +272,14 @@ export interface BatchOptimizationResult {
  efficiency: number
 }
 
-export function optimizeBatchShipment(
- items: BatchOptimizationInput[],
+export function optimizeBulkShipment(
+ items: BulkOptimizationInput[],
  maxPallets?: number
-): BatchOptimizationResult {
+): BulkOptimizationResult {
  // Sort by urgency score (highest first)
  const sortedItems = [...items].sort((a, b) => b.urgencyScore - a.urgencyScore)
  
- const allocations: BatchOptimizationResult['skuAllocations'] = []
+ const allocations: BulkOptimizationResult['skuAllocations'] = []
  let totalCartons = 0
  let totalPallets = 0
  

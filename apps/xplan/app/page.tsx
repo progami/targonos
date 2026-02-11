@@ -6,7 +6,7 @@ export default async function HomePage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   return SheetPage({
-    params: Promise.resolve({ sheet: '1-strategies' }),
+    params: Promise.resolve({ sheet: '1-setup' }),
     searchParams,
   });
 }

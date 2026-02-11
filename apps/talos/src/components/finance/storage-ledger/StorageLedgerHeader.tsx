@@ -3,6 +3,7 @@ import { Calculator, Download, Loader2 } from '@/lib/lucide-icons'
 import { toast } from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { PageTabs } from '@/components/ui/page-tabs'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 interface StorageLedgerHeaderProps {
  aggregationView: 'weekly' | 'monthly'
@@ -24,15 +25,12 @@ export function StorageLedgerHeader({
 
  setIsCalculating(true)
  try {
- const response = await fetch('/api/finance/storage-calculation/weekly', {
- method: 'POST',
- headers: {
- 'Content-Type': 'application/json',
- },
- body: JSON.stringify({
- weekEndingDate: new Date().toISOString(),
- forceRecalculate: false
- })
+ const response = await fetchWithCSRF('/api/finance/storage-calculation/weekly', {
+   method: 'POST',
+   body: JSON.stringify({
+     weekEndingDate: new Date().toISOString(),
+     forceRecalculate: false,
+   }),
  })
 
  if (!response.ok) {

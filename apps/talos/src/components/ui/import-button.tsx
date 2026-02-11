@@ -6,6 +6,8 @@ import { Upload, FileSpreadsheet, X, CheckCircle, AlertCircle, Download } from '
 import { toast } from 'react-hot-toast'
 import { getImportConfig } from '@/lib/import-config'
 import { Button } from '@/components/ui/button'
+import { withBasePath } from '@/lib/utils/base-path'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 interface ImportResult {
  imported: number
@@ -71,7 +73,7 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
  formData.append('entityName', entityName)
 
  try {
- const response = await fetch('/api/import', {
+ const response = await fetchWithCSRF('/api/import', {
  method: 'POST',
  body: formData
  })
@@ -102,7 +104,9 @@ export function ImportButton({ entityName, onImportComplete, className = '', but
 
  const downloadTemplate = async () => {
  try {
- const response = await fetch(`/api/import/template?entity=${entityName}`)
+ const response = await fetch(withBasePath(`/api/import/template?entity=${entityName}`), {
+  credentials: 'include',
+ })
  if (response.ok) {
  const blob = await response.blob()
  const url = window.URL.createObjectURL(blob)

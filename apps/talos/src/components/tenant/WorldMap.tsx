@@ -11,6 +11,8 @@ import {
 import { cn } from '@/lib/utils'
 import { getAllTenants, TenantCode, TenantConfig } from '@/lib/tenant/constants'
 import { FlatFlag } from './TenantIndicator'
+import { withBasePath } from '@/lib/utils/base-path'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 interface WorldMapProps {
   className?: string
@@ -37,7 +39,7 @@ export function WorldMap({ className }: WorldMapProps) {
   useEffect(() => {
     async function fetchAccessibleRegions() {
       try {
-        const response = await fetch('/api/tenant/current')
+        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
         if (response.ok) {
           const data = await response.json()
           // Store ALL accessible regions
@@ -70,9 +72,8 @@ export function WorldMap({ className }: WorldMapProps) {
     setError(null)
 
     try {
-      const response = await fetch('/api/tenant/select', {
+      const response = await fetchWithCSRF('/api/tenant/select', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenant: tenant.code }),
       })
 

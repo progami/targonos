@@ -3,6 +3,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 
@@ -29,6 +30,15 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   return ApiResponses.success({
@@ -61,6 +71,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, _sess
 
   if (!order) {
     throw new NotFoundError(`Purchase Order not found: ${id}`)
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   // Only allow adding containers in OCEAN status (or earlier for prep)

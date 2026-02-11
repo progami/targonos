@@ -67,7 +67,7 @@ function showHelp() {
 Ensure Talos Tenant Schema
 
 Brings each tenant schema in sync with required baseline tables/columns used by
-the Talos app (e.g. suppliers + supplier links + batch pallet fields).
+the Talos app (e.g. suppliers + supplier links + pallet fields).
 
 This is an idempotent migration intended for deployments on long-lived schemas
 where Prisma migrate deploy is not used.
@@ -256,43 +256,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         END IF;
       END $$;
     `,
-    // batch pallet configuration fields (missing in some schemas)
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "storage_cartons_per_pallet" integer`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "shipping_cartons_per_pallet" integer`,
-    `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1
-          FROM pg_constraint c
-          JOIN pg_class t ON t.oid = c.conrelid
-          JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'sku_batches_storage_cartons_per_pallet_check'
-            AND n.nspname = current_schema()
-        ) THEN
-          ALTER TABLE "sku_batches"
-            ADD CONSTRAINT "sku_batches_storage_cartons_per_pallet_check"
-            CHECK (storage_cartons_per_pallet IS NULL OR storage_cartons_per_pallet > 0);
-        END IF;
-      END $$;
-    `,
-    `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1
-          FROM pg_constraint c
-          JOIN pg_class t ON t.oid = c.conrelid
-          JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'sku_batches_shipping_cartons_per_pallet_check'
-            AND n.nspname = current_schema()
-        ) THEN
-          ALTER TABLE "sku_batches"
-            ADD CONSTRAINT "sku_batches_shipping_cartons_per_pallet_check"
-            CHECK (shipping_cartons_per_pallet IS NULL OR shipping_cartons_per_pallet > 0);
-        END IF;
-      END $$;
-    `,
+    // Pallet configuration fields now live on purchase order line snapshots + warehouse/SKU configs.
 
     // Purchase order essentials (stage 1 / issued)
     `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'ISSUED'`,
@@ -301,7 +265,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "payment_terms" text`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "counterparty_address" text`,
 
-    // Purchase order line snapshots (avoid dynamic SKU/batch enrichment after creation)
+    // Purchase order line snapshots (avoid dynamic SKU enrichment after creation)
     `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_dimensions_cm" text`,
     `
       DO $$

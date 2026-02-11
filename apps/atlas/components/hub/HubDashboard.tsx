@@ -55,19 +55,17 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'px-4 py-2 text-sm font-semibold rounded-lg transition-all',
+        'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
         active
-          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-md'
-          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          ? 'bg-card text-foreground shadow-soft'
+          : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
       )}
     >
       {children}
       {count !== undefined && count > 0 ? (
         <span className={cn(
-          'ml-2 px-1.5 py-0.5 text-xs font-bold rounded-full',
-          active
-            ? 'bg-white/20 dark:bg-slate-900/20'
-            : 'bg-slate-200 dark:bg-slate-700'
+          'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
+          active ? 'bg-muted text-foreground' : 'bg-background/70 text-muted-foreground'
         )}>
           {count}
         </span>
@@ -92,19 +90,17 @@ function SubTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'px-3 py-1.5 text-xs font-semibold rounded-md transition-all',
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
         active
-          ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900'
-          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+          ? 'bg-card text-foreground shadow-soft'
+          : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
       )}
     >
       {children}
       {count !== undefined && count > 0 ? (
         <span className={cn(
-          'ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full',
-          active
-            ? 'bg-white/20 dark:bg-slate-900/20'
-            : 'bg-slate-300 dark:bg-slate-600'
+          'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums',
+          active ? 'bg-muted text-foreground' : 'bg-background/70 text-muted-foreground'
         )}>
           {count}
         </span>
@@ -115,8 +111,8 @@ function SubTabButton({
 
 function SectionHeader({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between mb-4">
-      <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">
+    <div className="flex items-center justify-between gap-3 mb-2">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em]">
         {children}
       </h2>
       {action}
@@ -151,20 +147,20 @@ function ProfileCard({
   const tenure = joinDate ? Math.floor((Date.now() - joinDate.getTime()) / (1000 * 60 * 60 * 24 * 365)) : null
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+    <div className="rounded-xl border border-border bg-card p-4 shadow-soft">
       <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-200 dark:to-slate-400 flex items-center justify-center text-white dark:text-slate-900 text-lg font-bold shadow-lg shrink-0">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground text-base font-semibold">
           {employee.firstName[0]}
           {employee.lastName[0]}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold text-foreground">
                 {employee.firstName} {employee.lastName}
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{employee.position}</p>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+              <p className="text-sm text-muted-foreground">{employee.position}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{employee.department}</span>
                 {tenure !== null && tenure >= 0 ? (
                   <>
@@ -174,36 +170,37 @@ function ProfileCard({
                 ) : null}
               </div>
             </div>
-            <Link
+            <Button
               href={`/employees/${employee.id}/edit`}
-              className="shrink-0 p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-              title="Edit full profile"
+              variant="outline"
+              size="icon"
+              aria-label="Edit full profile"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-            </Link>
+            </Button>
           </div>
 
           {/* Editable fields */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {/* Phone */}
             <div className="group">
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Phone</label>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Phone</label>
               {editingField === 'phone' ? (
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <input
                     type="tel"
                     value={editValue}
                     onChange={(e) => onEditChange(e.target.value)}
-                    className="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     autoFocus
                   />
                   <button
                     onClick={onSave}
                     disabled={saving}
-                    className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded"
+                    className="rounded-md p-1 text-success-700 hover:bg-success-50 disabled:opacity-50 dark:text-success-300 dark:hover:bg-success-900/20"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -211,7 +208,7 @@ function ProfileCard({
                   </button>
                   <button
                     onClick={onCancel}
-                    className="p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -220,10 +217,10 @@ function ProfileCard({
                 </div>
               ) : (
                 <button
-                  onClick={() => onStartEdit('phone', employee.phone || '')}
-                  className="flex items-center gap-1.5 mt-0.5 text-sm text-slate-700 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                  onClick={() => onStartEdit('phone', employee.phone ? employee.phone : '')}
+                  className="mt-0.5 flex items-center gap-1.5 text-sm text-foreground hover:text-accent transition-colors"
                 >
-                  <span>{employee.phone || 'Add phone'}</span>
+                  <span>{employee.phone ? employee.phone : 'Add phone'}</span>
                   <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                   </svg>
@@ -233,8 +230,8 @@ function ProfileCard({
 
             {/* Email - read-only */}
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Email</label>
-              <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-200 truncate">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Email</label>
+              <p className="mt-0.5 text-sm text-foreground truncate">
                 {employee.email}
               </p>
             </div>
@@ -257,14 +254,14 @@ function PTOHeroCard({ balance }: { balance: LeaveBalance }) {
   const isLow = total > 0 && available <= Math.ceil(total * 0.2) && available > 0
   const isEmpty = available === 0
 
-  const size = 100
+  const size = 88
   const strokeWidth = 8
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference - (percentage / 100) * circumference
 
   return (
-    <div className="flex items-center gap-6 p-5 rounded-2xl bg-gradient-to-br from-cyan-50 to-white dark:from-cyan-950/30 dark:to-slate-800 border border-cyan-200/50 dark:border-cyan-800/30">
+    <div className="flex items-center gap-5 rounded-xl border border-border bg-card p-4 shadow-soft">
       <div className="relative flex-shrink-0">
         <svg width={size} height={size} className="-rotate-90">
           <circle
@@ -274,7 +271,7 @@ function PTOHeroCard({ balance }: { balance: LeaveBalance }) {
             fill="none"
             stroke="currentColor"
             strokeWidth={strokeWidth}
-            className="text-cyan-100 dark:text-cyan-900/50"
+            className="text-muted"
           />
           <circle
             cx={size / 2}
@@ -288,44 +285,43 @@ function PTOHeroCard({ balance }: { balance: LeaveBalance }) {
             strokeDashoffset={strokeDashoffset}
             className={cn(
               'transition-all duration-700',
-              isEmpty ? 'text-slate-300' : isLow ? 'text-amber-500' : 'text-cyan-500'
+              isEmpty ? 'text-muted-foreground' : isLow ? 'text-warning-500' : 'text-accent'
             )}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={cn(
-            'text-2xl font-bold tabular-nums',
-            isEmpty ? 'text-slate-400' : isLow ? 'text-amber-600' : 'text-cyan-600 dark:text-cyan-400'
+            'text-2xl font-semibold tabular-nums',
+            isEmpty ? 'text-muted-foreground' : isLow ? 'text-warning-600 dark:text-warning-400' : 'text-foreground'
           )}>
             {available}
           </span>
-          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">days</span>
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">days</span>
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+        <h4 className="text-sm font-semibold text-foreground">
           PTO Available
         </h4>
-        <div className="flex items-center gap-4 mt-2 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            <span className="font-medium text-slate-700 dark:text-slate-300">{used}</span> used
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            <span className="font-medium text-foreground">{used}</span> used
           </span>
-          <span className="text-slate-300 dark:text-slate-600">•</span>
-          <span className="text-slate-500 dark:text-slate-400">
-            <span className="font-medium text-slate-700 dark:text-slate-300">{total}</span> total
+          <span>
+            <span className="font-medium text-foreground">{total}</span> total
           </span>
           {balance.pending > 0 && (
-            <>
-              <span className="text-slate-300 dark:text-slate-600">•</span>
-              <span className="text-amber-600 dark:text-amber-400 font-medium">{balance.pending} pending</span>
-            </>
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning-100 px-2 py-0.5 text-[11px] font-semibold text-warning-800 dark:bg-warning-900/30 dark:text-warning-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-warning-500" />
+              {balance.pending} pending
+            </span>
           )}
         </div>
-        <div className="mt-3 h-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-full overflow-hidden">
+        <div className="mt-3 h-2 rounded-full bg-muted overflow-hidden">
           <div
             className={cn(
               'h-full rounded-full transition-all duration-700',
-              isEmpty ? 'bg-slate-300' : isLow ? 'bg-amber-500' : 'bg-cyan-500'
+              isEmpty ? 'bg-muted-foreground/40' : isLow ? 'bg-warning-500' : 'bg-accent'
             )}
             style={{ width: `${percentage}%` }}
           />
@@ -343,39 +339,39 @@ function CompactLeaveCard({ balance }: { balance: LeaveBalance }) {
   const isEmpty = available === 0
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
       <div className={cn(
-        'flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm tabular-nums',
+        'flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-semibold text-sm tabular-nums',
         isEmpty
-          ? 'bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500'
+          ? 'bg-muted text-muted-foreground'
           : isLow
-            ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
-            : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+            ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
+            : 'bg-muted text-foreground'
       )}>
         {available}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
+          <h4 className="text-sm font-medium text-foreground truncate">
             {getLeaveTypeLabel(balance.leaveType)}
           </h4>
           {balance.pending > 0 && (
-            <span className="ml-2 text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400">
+            <span className="ml-2 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300">
               {balance.pending}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all',
-                isEmpty ? 'bg-slate-300' : isLow ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-500'
+                isEmpty ? 'bg-muted-foreground/40' : isLow ? 'bg-warning-500' : 'bg-accent/70'
               )}
               style={{ width: `${percentage}%` }}
             />
           </div>
-          <span className="text-[10px] text-slate-400 tabular-nums whitespace-nowrap">{total}</span>
+          <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{total}</span>
         </div>
       </div>
     </div>
@@ -389,14 +385,14 @@ function TimeOffSection({ balances }: { balances: LeaveBalance[] }) {
 
   if (filtered.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-8 text-center">
-        <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
-          <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+        <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+          <svg className="w-6 h-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         </div>
-        <p className="text-sm font-medium text-slate-500">No leave balances configured</p>
-        <p className="text-xs text-slate-400 mt-1">Contact HR to set up your leave allocation</p>
+        <p className="text-sm font-medium text-foreground">No leave balances configured</p>
+        <p className="text-xs text-muted-foreground mt-1">Contact HR to set up your leave allocation</p>
       </div>
     )
   }
@@ -435,11 +431,11 @@ function PerformanceSection({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Reviews */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">My Reviews</h3>
+          <h3 className="text-sm font-semibold text-foreground">My Reviews</h3>
           {hasReviews && (
-            <Link href="/performance/reviews" className="text-xs font-medium text-cyan-600 dark:text-cyan-400 hover:underline">
+            <Link href="/performance/reviews" className="text-xs font-semibold text-accent hover:underline">
               View all
             </Link>
           )}
@@ -450,19 +446,19 @@ function PerformanceSection({
               <Link
                 key={r.id}
                 href={`/performance/reviews/${r.id}`}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {r.reviewType.replace(/_/g, ' ')}
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">{r.reviewPeriod}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{r.reviewPeriod}</p>
                 </div>
                 <span className={cn(
                   'ml-2 px-2 py-0.5 rounded text-xs font-medium',
                   r.status === 'COMPLETED' || r.status === 'ACKNOWLEDGED'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                    ? 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300'
+                    : 'bg-muted text-muted-foreground'
                 )}>
                   {r.status === 'COMPLETED' || r.status === 'ACKNOWLEDGED' ? `${r.overallRating}/5` : r.status}
                 </span>
@@ -470,23 +466,23 @@ function PerformanceSection({
             ))}
           </div>
         ) : (
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40">
+            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+              <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-sm text-slate-500">No reviews yet</p>
+            <p className="text-sm text-muted-foreground">No reviews yet</p>
           </div>
         )}
       </div>
 
       {/* Violations */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Disciplinary Record</h3>
+          <h3 className="text-sm font-semibold text-foreground">Disciplinary Record</h3>
           {hasViolations && (
-            <Link href="/performance/violations" className="text-xs font-medium text-cyan-600 dark:text-cyan-400 hover:underline">
+            <Link href="/performance/violations" className="text-xs font-semibold text-accent hover:underline">
               View all
             </Link>
           )}
@@ -497,30 +493,30 @@ function PerformanceSection({
               <Link
                 key={v.id}
                 href={`/performance/violations/${v.id}`}
-                className="flex items-center justify-between p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors"
+                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-danger-50 hover:bg-danger-100 transition-colors dark:bg-danger-900/15 dark:hover:bg-danger-900/25"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {v.violationType.replace(/_/g, ' ')}
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {new Date(v.incidentDate).toLocaleDateString()}
                   </p>
                 </div>
-                <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-400">
+                <span className="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-danger-100 text-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
                   {v.severity.replace(/_/g, ' ')}
                 </span>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
-              <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-success-50 dark:bg-success-900/15">
+            <div className="w-8 h-8 rounded-lg bg-success-100 dark:bg-success-900/30 flex items-center justify-center">
+              <svg className="w-4 h-4 text-success-700 dark:text-success-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">Clean record</p>
+            <p className="text-sm font-medium text-success-800 dark:text-success-200">Clean record</p>
           </div>
         )}
       </div>
@@ -546,9 +542,9 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
     <div className="space-y-4">
       {/* Direct Reports */}
       {hasDirectReports && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+        <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <h3 className="text-sm font-semibold text-foreground">
               Direct Reports ({dashboardData.directReports.length})
             </h3>
           </div>
@@ -557,13 +553,13 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
               <Link
                 key={report.id}
                 href={`/employees/${report.id}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors"
               >
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 flex items-center justify-center text-[10px] font-bold text-white dark:text-slate-200">
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-foreground">
                   {report.firstName[0]}{report.lastName[0]}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {report.firstName} {report.lastName}
                   </p>
                 </div>
@@ -572,7 +568,7 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
             {dashboardData.directReports.length > 8 && (
               <Link
                 href="/employees"
-                className="flex items-center justify-center px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="flex items-center justify-center px-3 py-2 rounded-lg bg-muted text-xs font-medium text-muted-foreground hover:bg-muted/70 transition-colors"
               >
                 +{dashboardData.directReports.length - 8}
               </Link>
@@ -586,19 +582,19 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Pending Reviews */}
           {hasPendingReviews && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Reviews to Complete</h3>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Reviews to Complete</h3>
               <div className="space-y-2">
                 {dashboardData.pendingReviews.slice(0, 3).map((review) => (
                   <Link
                     key={review.id}
                     href={`/performance/reviews/${review.id}`}
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-warning-50 hover:bg-warning-100 transition-colors dark:bg-warning-900/15 dark:hover:bg-warning-900/25"
                   >
-                    <div className="w-7 h-7 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                    <div className="w-7 h-7 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center text-[10px] font-bold text-warning-800 dark:text-warning-300">
                       {review.employee.firstName[0]}{review.employee.lastName[0]}
                     </div>
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                    <span className="text-sm font-medium text-foreground truncate">
                       {review.employee.firstName} {review.employee.lastName}
                     </span>
                   </Link>
@@ -609,23 +605,23 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
 
           {/* Leave Requests */}
           {hasPendingLeave && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Leave to Approve</h3>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Leave to Approve</h3>
               <div className="space-y-2">
                 {dashboardData.pendingLeaveRequests.slice(0, 3).map((req) => (
                   <Link
                     key={req.id}
                     href={`/leave/${req.id}`}
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-900/20 hover:bg-cyan-100 dark:hover:bg-cyan-900/30 transition-colors"
+                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-accent/10 hover:bg-accent/15 transition-colors"
                   >
-                    <div className="w-7 h-7 rounded-full bg-cyan-200 dark:bg-cyan-800 flex items-center justify-center text-[10px] font-bold text-cyan-700 dark:text-cyan-300">
+                    <div className="w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center text-[10px] font-bold text-accent">
                       {req.employee.firstName[0]}{req.employee.lastName[0]}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate block">
+                      <span className="text-sm font-medium text-foreground truncate block">
                         {req.employee.firstName}
                       </span>
-                      <span className="text-[11px] text-slate-500">{req.totalDays}d {req.leaveType}</span>
+                      <span className="text-[11px] text-muted-foreground">{req.totalDays}d {req.leaveType}</span>
                     </div>
                   </Link>
                 ))}
@@ -635,8 +631,8 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
 
           {/* Who's Out */}
           {hasUpcomingLeave && (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Who's Out</h3>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Who's Out</h3>
               <div className="space-y-2">
                 {dashboardData.upcomingLeaves.slice(0, 3).map((leave) => {
                   const today = new Date()
@@ -651,23 +647,23 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
                       className={cn(
                         'flex items-center gap-2.5 p-2.5 rounded-xl',
                         isOutNow
-                          ? 'bg-rose-50 dark:bg-rose-900/20'
-                          : 'bg-slate-50 dark:bg-slate-800/50'
+                          ? 'bg-danger-50 dark:bg-danger-900/15'
+                          : 'bg-muted/40'
                       )}
                     >
                       <div className={cn(
                         'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold',
                         isOutNow
-                          ? 'bg-rose-200 dark:bg-rose-800 text-rose-700 dark:text-rose-300'
-                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          ? 'bg-danger-100 dark:bg-danger-900/30 text-danger-800 dark:text-danger-300'
+                          : 'bg-muted text-foreground'
                       )}>
                         {leave.employee.firstName[0]}{leave.employee.lastName[0]}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate block">
+                        <span className="text-sm font-medium text-foreground truncate block">
                           {leave.employee.firstName}
                         </span>
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-muted-foreground">
                           {isOutNow ? 'Out today' : new Date(leave.startDate).toLocaleDateString()}
                         </span>
                       </div>
@@ -689,17 +685,17 @@ function TeamSection({ dashboardData }: { dashboardData: DashboardData }) {
 
 function InboxLoadingSkeleton() {
   return (
-    <div className="flex-1 flex gap-6 min-h-0 animate-in fade-in duration-300">
-      <div className="w-[380px] shrink-0 space-y-3">
+    <div className="grid grid-cols-1 gap-4 flex-1 min-h-0 lg:grid-cols-[360px,minmax(0,1fr)] animate-in fade-in duration-300">
+      <div className="space-y-3">
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="h-28 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse"
+            className="h-24 rounded-xl bg-muted animate-pulse"
             style={{ animationDelay: `${i * 100}ms` }}
           />
         ))}
       </div>
-      <div className="flex-1 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      <div className="rounded-2xl bg-muted animate-pulse" />
     </div>
   )
 }
@@ -890,9 +886,10 @@ export function HubDashboard({ employeeId }: HubDashboardProps) {
 
   // Check if user is a manager
   const isManager = dashboardData?.directReports && dashboardData.directReports.length > 0
+  const isAllClear = activeTab === 'inbox' && inboxSubTab === 'pending' && meta?.totalCount === 0
 
   return (
-    <div className="h-[calc(100vh-theme(spacing.32))] flex flex-col -mt-4">
+    <div className="flex flex-1 min-h-0 flex-col">
       <CreateRequestModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
@@ -905,13 +902,12 @@ export function HubDashboard({ employeeId }: HubDashboardProps) {
         </Alert>
       ) : null}
 
-      {/* Header with title and tabs */}
-      <div className="shrink-0 flex items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">My Hub</h1>
+      {/* Header */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-lg font-semibold text-foreground">My Hub</h1>
 
-          {/* Main tabs - simplified to just Inbox and Overview */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+          <div className="inline-flex items-center gap-1 rounded-xl bg-muted p-1">
             <TabButton
               active={activeTab === 'inbox'}
               onClick={() => setActiveTab('inbox')}
@@ -927,57 +923,56 @@ export function HubDashboard({ employeeId }: HubDashboardProps) {
             </TabButton>
           </div>
 
-          {/* Zero inbox indicator */}
-          {activeTab === 'inbox' && inboxSubTab === 'pending' && meta?.totalCount === 0 ? (
-            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-sm font-semibold">All clear</span>
+          {isAllClear ? (
+            <div className="inline-flex items-center gap-2 rounded-xl bg-success-50 px-3 py-1.5 text-xs font-semibold text-success-700 dark:bg-success-900/20 dark:text-success-300">
+              <span className="h-2 w-2 rounded-full bg-success-500" />
+              All clear
             </div>
           ) : null}
         </div>
+
+        {activeTab === 'inbox' ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-0.5">
+              <SubTabButton
+                active={inboxSubTab === 'pending'}
+                onClick={() => setInboxSubTab('pending')}
+                count={meta?.totalCount}
+              >
+                Pending
+              </SubTabButton>
+              <SubTabButton
+                active={inboxSubTab === 'completed'}
+                onClick={() => setInboxSubTab('completed')}
+                count={completedMeta?.totalCount}
+              >
+                Completed
+              </SubTabButton>
+            </div>
+
+            <Button onClick={() => setCreateModalOpen(true)} variant="outline" size="sm">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              New request
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 pt-4">
         {activeTab === 'inbox' ? (
           <div key={`inbox-${inboxSubTab}`} className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* Inbox sub-tabs and actions */}
-            <div className="shrink-0 flex items-center justify-between mb-4">
-              <div className="flex items-center gap-1 p-0.5 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                <SubTabButton
-                  active={inboxSubTab === 'pending'}
-                  onClick={() => setInboxSubTab('pending')}
-                  count={meta?.totalCount}
-                >
-                  Pending
-                </SubTabButton>
-                <SubTabButton
-                  active={inboxSubTab === 'completed'}
-                  onClick={() => setInboxSubTab('completed')}
-                  count={completedMeta?.totalCount}
-                >
-                  Completed
-                </SubTabButton>
-              </div>
-              <Button onClick={() => setCreateModalOpen(true)} variant="outline" size="sm">
-                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                New Request
-              </Button>
-            </div>
-
             {/* Inbox content */}
             {isInboxLoading ? (
               <InboxLoadingSkeleton />
             ) : inboxSubTab === 'pending' ? (
-              <div className="flex gap-6 flex-1 min-h-0">
-                <div className="w-[380px] shrink-0 flex flex-col min-h-0">
+              <div className="grid grid-cols-1 gap-4 flex-1 min-h-0 lg:grid-cols-[360px,minmax(0,1fr)]">
+                <div className="flex flex-col min-h-0">
                   <InboxItemList items={items} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
                 </div>
-                <div className="flex-1 min-h-0">
+                <div className="min-h-0">
                   <InboxActionPane
                     item={selected}
                     onAction={handleAction}
@@ -987,11 +982,11 @@ export function HubDashboard({ employeeId }: HubDashboardProps) {
                 </div>
               </div>
             ) : (
-              <div className="flex gap-6 flex-1 min-h-0">
-                <div className="w-[380px] shrink-0 flex flex-col min-h-0">
+              <div className="grid grid-cols-1 gap-4 flex-1 min-h-0 lg:grid-cols-[360px,minmax(0,1fr)]">
+                <div className="flex flex-col min-h-0">
                   <CompletedItemList items={completedList} selectedId={selectedCompleted?.id ?? null} onSelect={setCompletedSelectedId} />
                 </div>
-                <div className="flex-1 min-h-0">
+                <div className="min-h-0">
                   <CompletedActionPane item={selectedCompleted} />
                 </div>
               </div>
@@ -1001,71 +996,70 @@ export function HubDashboard({ employeeId }: HubDashboardProps) {
           <div key="overview" className="h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
             {overviewLoading ? (
               <div className="space-y-6 animate-pulse">
-                <div className="h-32 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+                <div className="h-32 rounded-2xl bg-muted" />
                 <div className="grid grid-cols-4 gap-3">
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-20 rounded-xl bg-slate-100 dark:bg-slate-800" />
+                    <div key={i} className="h-20 rounded-xl bg-muted" />
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="h-40 rounded-2xl bg-slate-100 dark:bg-slate-800" />
-                  <div className="h-40 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+                  <div className="h-40 rounded-2xl bg-muted" />
+                  <div className="h-40 rounded-2xl bg-muted" />
                 </div>
               </div>
             ) : employee ? (
-              <div className="h-full overflow-y-auto space-y-8 pb-8 pr-2 -mr-2">
-                {/* Profile Section */}
-                <section>
-                  <SectionHeader>Profile</SectionHeader>
-                  <ProfileCard
-                    employee={employee}
-                    editingField={editingField}
-                    editValue={editValue}
-                    saving={saving}
-                    onStartEdit={startEditing}
-                    onEditChange={setEditValue}
-                    onSave={handleSaveField}
-                    onCancel={() => { setEditingField(null); setEditValue('') }}
-                  />
-                </section>
+              <div className="h-full overflow-y-auto pr-2 -mr-2">
+                <div className="grid grid-cols-1 gap-4 pb-6 xl:grid-cols-12">
+                  <div className="xl:col-span-5 flex flex-col gap-4">
+                    <section className="space-y-2">
+                      <SectionHeader>Profile</SectionHeader>
+                      <ProfileCard
+                        employee={employee}
+                        editingField={editingField}
+                        editValue={editValue}
+                        saving={saving}
+                        onStartEdit={startEditing}
+                        onEditChange={setEditValue}
+                        onSave={handleSaveField}
+                        onCancel={() => { setEditingField(null); setEditValue('') }}
+                      />
+                    </section>
 
-                {/* Time Off Section */}
-                <section>
-                  <SectionHeader
-                    action={
-                      <Link
-                        href="/leave/request"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"
+                    <section className="space-y-2">
+                      <SectionHeader
+                        action={
+                          <Button href="/leave/request" size="sm" variant="secondary">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Request leave
+                          </Button>
+                        }
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Request Leave
-                      </Link>
-                    }
-                  >
-                    Time Off
-                  </SectionHeader>
-                  <TimeOffSection balances={leaveBalances} />
-                </section>
+                        Time off
+                      </SectionHeader>
+                      <TimeOffSection balances={leaveBalances} />
+                    </section>
+                  </div>
 
-                {/* Performance Section */}
-                <section>
-                  <SectionHeader>Performance</SectionHeader>
-                  <PerformanceSection reviews={myReviews} violations={myViolations} />
-                </section>
+                  <div className="xl:col-span-7 flex flex-col gap-4">
+                    <section className="space-y-2">
+                      <SectionHeader>Performance</SectionHeader>
+                      <PerformanceSection reviews={myReviews} violations={myViolations} />
+                    </section>
 
-                {/* Team Section - only for managers */}
-                {isManager && dashboardData ? (
-                  <section>
-                    <SectionHeader>Team</SectionHeader>
-                    <TeamSection dashboardData={dashboardData} />
-                  </section>
-                ) : null}
+                    {isManager && dashboardData ? (
+                      <section className="space-y-2">
+                        <SectionHeader>Team</SectionHeader>
+                        <TeamSection dashboardData={dashboardData} />
+                      </section>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-12 text-center">
-                <p className="text-slate-500">Could not load your profile</p>
+              <div className="rounded-xl border border-dashed border-border bg-card p-12 text-center">
+                <p className="text-sm text-muted-foreground">Could not load your profile</p>
               </div>
             )}
           </div>

@@ -94,7 +94,7 @@ function AddViolationContent() {
     async function load() {
       try {
         const [empRes, meData] = await Promise.all([
-          EmployeesApi.list({ take: 200 }),
+          EmployeesApi.list({ take: 200, status: 'ACTIVE' }),
           ensureMe().catch(() => null),
         ])
         setEmployees(empRes.items.filter((e) => e.id !== meData?.id))

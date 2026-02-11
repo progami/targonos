@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ZoomIn,
   ZoomOut,
@@ -240,12 +241,14 @@ const OrgNodeCard = ({
   searchMatch,
   onHover,
   onClick,
+  onOpenEmployee,
 }: {
   node: OrgNode
   highlighted: boolean
   searchMatch: boolean
   onHover: (node: OrgNode | null) => void
   onClick: (node: OrgNode) => void
+  onOpenEmployee: (employeeId: string) => void
 }) => {
   const color = node.color ? node.color : COLORS.teal
   const x = node.x - NODE_W / 2
@@ -276,15 +279,52 @@ const OrgNodeCard = ({
       onMouseEnter={() => onHover(node)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick(node)}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        onOpenEmployee(node.id)
+      }}
     >
       <rect x={x + 2} y={y + 2} width={NODE_W} height={NODE_H} rx={10} fill="rgba(0,0,0,0.05)" />
       <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={10} fill={COLORS.white} stroke={isActive ? color : '#E2E8F0'} strokeWidth={isActive ? 2 : 1} style={{ transition: 'all 0.2s ease' }} />
       <rect x={x} y={y} width={4} height={NODE_H} fill={barColor} style={{ clipPath: 'inset(0 0 0 0 round 10px 0 0 10px)' }} />
-      <circle cx={x + 26} cy={y + 26} r={14} fill={`${barColor}18`} />
-      <text x={x + 26} y={y + 30} textAnchor="middle" fontSize={10} fontWeight="700" fill={barColor} style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <circle
+        cx={x + 26}
+        cy={y + 26}
+        r={14}
+        fill={`${barColor}18`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenEmployee(node.id)
+        }}
+        style={{ cursor: 'pointer' }}
+      />
+      <text
+        x={x + 26}
+        y={y + 30}
+        textAnchor="middle"
+        fontSize={10}
+        fontWeight="700"
+        fill={barColor}
+        style={{ fontFamily: 'system-ui, -apple-system, sans-serif', cursor: 'pointer' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenEmployee(node.id)
+        }}
+      >
         {node.avatar?.slice(0, 2)}
       </text>
-      <text x={x + 48} y={y + 18} fontSize={11} fontWeight="600" fill={COLORS.navy} style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <text
+        x={x + 48}
+        y={y + 18}
+        fontSize={11}
+        fontWeight="600"
+        fill={COLORS.navy}
+        style={{ fontFamily: 'system-ui, -apple-system, sans-serif', cursor: 'pointer' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenEmployee(node.id)
+        }}
+      >
         {node.name?.length > 13 ? `${node.name.slice(0, 12)}…` : node.name}
       </text>
       {roleLines.map((line, i) => (
@@ -297,6 +337,29 @@ const OrgNodeCard = ({
           {node.directReports} direct report{node.directReports > 1 ? 's' : ''}
         </text>
       )}
+      <g
+        style={{ cursor: 'pointer' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenEmployee(node.id)
+        }}
+      >
+        <title>Open profile</title>
+        <circle
+          cx={x + NODE_W - 14}
+          cy={y + NODE_H - 14}
+          r={9}
+          fill={isActive ? `${color}15` : COLORS.light}
+        />
+        <path
+          d={`M ${x + NODE_W - 16} ${y + NODE_H - 18} L ${x + NODE_W - 12} ${y + NODE_H - 14} L ${x + NODE_W - 16} ${y + NODE_H - 10}`}
+          fill="none"
+          stroke={isActive ? color : COLORS.slate}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </g>
       {node.type === 'Contract' && (
         <g>
           <circle cx={x + NODE_W - 12} cy={y + 12} r={8} fill={`${COLORS.amber}20`} />
@@ -337,6 +400,7 @@ const DetailPanel = ({
   getDirectReports,
   projects,
   deptColors,
+  onOpenEmployee,
 }: {
   employee: OrgEmployee | null
   onClose: () => void
@@ -344,6 +408,7 @@ const DetailPanel = ({
   getDirectReports: (employee: OrgEmployee) => OrgEmployee[]
   projects: OrgProject[]
   deptColors: Record<string, string>
+  onOpenEmployee: (employeeId: string) => void
 }) => {
   if (!employee) return null
   const manager = getManager(employee)
@@ -367,7 +432,13 @@ const DetailPanel = ({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 17, fontWeight: 700, color: COLORS.navy }}>{employee.name}</span>
+              <button
+                type="button"
+                onClick={() => onOpenEmployee(employee.id)}
+                style={{ fontSize: 17, fontWeight: 700, color: COLORS.navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              >
+                {employee.name}
+              </button>
               {employee.isYou && <span style={{ fontSize: 10, padding: '3px 7px', background: COLORS.teal, color: COLORS.white, borderRadius: 5, fontWeight: 700 }}>YOU</span>}
             </div>
             <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>{employee.role}</div>
@@ -397,7 +468,11 @@ const DetailPanel = ({
         {manager ? (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 10, color: COLORS.slate, marginBottom: 6 }}>Reports to</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: COLORS.light, borderRadius: 8 }}>
+            <button
+              type="button"
+              onClick={() => onOpenEmployee(manager.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: COLORS.light, borderRadius: 8, border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+            >
               <div style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: `${COLORS.teal}15`, color: COLORS.teal, flexShrink: 0 }}>
                 {manager.avatar?.slice(0, 2)}
               </div>
@@ -405,7 +480,7 @@ const DetailPanel = ({
                 <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.navy }}>{manager.name}</div>
                 <div style={{ fontSize: 10, color: COLORS.slate }}>{manager.role}</div>
               </div>
-            </div>
+            </button>
           </div>
         ) : (
           <div style={{ fontSize: 12, color: COLORS.slate, marginBottom: 14, padding: '10px', background: COLORS.light, borderRadius: 8, textAlign: 'center' }}>
@@ -418,12 +493,17 @@ const DetailPanel = ({
           {directReports.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {directReports.slice(0, 4).map(report => (
-                <div key={report.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  key={report.id}
+                  type="button"
+                  onClick={() => onOpenEmployee(report.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, border: 'none', background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                >
                   <div style={{ width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, background: `${COLORS.teal}15`, color: COLORS.teal, flexShrink: 0 }}>
                     {report.avatar?.slice(0, 2)}
                   </div>
                   <span style={{ fontSize: 11, color: COLORS.navy }}>{report.name}</span>
-                </div>
+                </button>
               ))}
               {directReports.length > 4 && <div style={{ fontSize: 11, color: COLORS.teal, fontWeight: 600, paddingLeft: 32 }}>+{directReports.length - 4} more</div>}
             </div>
@@ -460,9 +540,10 @@ const DetailPanel = ({
 }
 
 export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props) {
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<'organization' | 'project'>('organization')
-  const [scale, setScale] = useState(0.85)
-  const [pan, setPan] = useState({ x: 60, y: 30 })
+  const [scale, setScale] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [hovered, setHovered] = useState<OrgNode | null>(null)
@@ -470,8 +551,43 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
   const [search, setSearch] = useState('')
   const [mounted, setMounted] = useState(false)
   const [levelScope, setLevelScope] = useState<LevelScope>('all')
+  const canvasRef = useRef<HTMLDivElement | null>(null)
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
+  const initialViewAppliedRef = useRef(false)
+  const pendingFitToViewRef = useRef(false)
 
   useEffect(() => { setMounted(true) }, [])
+
+  const openEmployee = useCallback(
+    (employeeId: string) => {
+      router.push(`/employees/${employeeId}`)
+    },
+    [router]
+  )
+
+  useEffect(() => {
+    const node = canvasRef.current
+    if (!node) return
+
+    let rafId = 0
+    const update = () => {
+      const rect = node.getBoundingClientRect()
+      setCanvasSize({ w: rect.width, h: rect.height })
+    }
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(update)
+    }
+
+    scheduleUpdate()
+    const observer = new ResizeObserver(() => scheduleUpdate())
+    observer.observe(node)
+    return () => {
+      cancelAnimationFrame(rafId)
+      observer.disconnect()
+    }
+  }, [])
 
   const normalizedEmployees = useMemo<OrgEmployee[]>(() => {
     return employees.map((emp) => {
@@ -986,22 +1102,143 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
     return []
   }
 
+  const fitToView = useCallback(() => {
+    const w = canvasSize.w
+    const h = canvasSize.h
+    if (!w || !h) return
+    if (nodes.length === 0) return
+
+    const padding = 48
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    for (const node of nodes) {
+      const nodeW = NODE_W
+      const nodeH = node.isHeader ? HEADER_H : NODE_H
+      const left = node.x - nodeW / 2
+      const right = node.x + nodeW / 2
+      const top = node.y
+      const bottom = node.y + nodeH
+      if (left < minX) minX = left
+      if (right > maxX) maxX = right
+      if (top < minY) minY = top
+      if (bottom > maxY) maxY = bottom
+    }
+
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+    if (contentW <= 0 || contentH <= 0) return
+
+    const scaleX = (w - padding * 2) / contentW
+    const scaleY = (h - padding * 2) / contentH
+    const nextScale = Math.max(0.3, Math.min(1.0, Math.min(scaleX, scaleY)))
+
+    const scaledW = contentW * nextScale
+    const scaledH = contentH * nextScale
+    const extraX = (w - scaledW) / 2
+    const extraY = (h - scaledH) / 2
+
+    setScale(nextScale)
+    setPan({
+      x: extraX - minX * nextScale,
+      y: extraY - minY * nextScale,
+    })
+  }, [canvasSize.h, canvasSize.w, nodes])
+
   const resetView = () => {
-    setScale(0.85)
-    setPan({ x: 60, y: 30 })
+    fitToView()
   }
 
+  useEffect(() => {
+    if (!pendingFitToViewRef.current) return
+    fitToView()
+    pendingFitToViewRef.current = false
+  }, [fitToView])
+
+  useEffect(() => {
+    if (initialViewAppliedRef.current) return
+    if (viewMode !== 'organization') return
+    if (!canvasSize.w || !canvasSize.h) return
+    if (nodes.length === 0) return
+
+    const target = (() => {
+      const byId = currentEmployeeId
+        ? nodes.find((n) => !n.isHeader && n.id === currentEmployeeId)
+        : undefined
+      if (byId) return byId
+
+      let best: OrgNode | null = null
+      for (const n of nodes) {
+        if (n.isHeader) continue
+        if (!best) {
+          best = n
+          continue
+        }
+        if (n.y < best.y) {
+          best = n
+          continue
+        }
+        if (n.y === best.y && n.x < best.x) {
+          best = n
+        }
+      }
+      return best
+    })()
+
+    if (!target) return
+
+    // Calculate content bounds to determine optimal initial zoom
+    const padding = 64
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    for (const n of nodes) {
+      const nodeW = NODE_W
+      const nodeH = n.isHeader ? HEADER_H : NODE_H
+      const left = n.x - nodeW / 2
+      const right = n.x + nodeW / 2
+      const top = n.y
+      const bottom = n.y + nodeH
+      if (left < minX) minX = left
+      if (right > maxX) maxX = right
+      if (top < minY) minY = top
+      if (bottom > maxY) maxY = bottom
+    }
+
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+
+    if (contentW > 0 && contentH > 0) {
+      const scaleX = (canvasSize.w - padding * 2) / contentW
+      const scaleY = (canvasSize.h - padding * 2) / contentH
+      const nextScale = Math.max(0.5, Math.min(1.5, Math.min(scaleX, scaleY)))
+
+      const scaledW = contentW * nextScale
+      const scaledH = contentH * nextScale
+      const extraX = (canvasSize.w - scaledW) / 2
+      const extraY = (canvasSize.h - scaledH) / 2
+
+      setScale(nextScale)
+      setPan({
+        x: extraX - minX * nextScale,
+        y: extraY - minY * nextScale,
+      })
+    }
+    initialViewAppliedRef.current = true
+  }, [canvasSize.h, canvasSize.w, currentEmployeeId, nodes, viewMode])
+
   return (
-    <div style={{ position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ borderBottom: '1px solid #E2E8F0', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={COLORS.white} strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="6" r="2.5" /><circle cx="6" cy="17" r="2.5" /><circle cx="18" cy="17" r="2.5" /><path d="M12 8.5V12M12 12L6 14.5M12 12L18 14.5" /></svg>
-            </div>
             <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Targon Global</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Org chart</h1>
               <p style={{ fontSize: 12, color: COLORS.slate, margin: 0 }}>{normalizedEmployees.length} people · {deptCount} teams</p>
             </div>
           </div>
@@ -1009,7 +1246,17 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
             {[{ id: 'organization', label: 'Organization', icon: Users }, { id: 'project', label: 'Projects', icon: FolderKanban }].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setViewMode(tab.id as 'organization' | 'project'); resetView(); setSelected(null) }}
+                onClick={() => {
+                  const nextMode = tab.id as 'organization' | 'project'
+                  if (viewMode === nextMode) {
+                    resetView()
+                    setSelected(null)
+                    return
+                  }
+                  pendingFitToViewRef.current = true
+                  setViewMode(nextMode)
+                  setSelected(null)
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1038,7 +1285,14 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                 {levelOptions.map(option => (
                   <button
                     key={String(option.value)}
-                    onClick={() => { setLevelScope(option.value); resetView() }}
+                    onClick={() => {
+                      if (levelScope === option.value) {
+                        resetView()
+                        return
+                      }
+                      pendingFitToViewRef.current = true
+                      setLevelScope(option.value)
+                    }}
                     style={{
                       padding: '6px 10px',
                       border: 'none',
@@ -1079,6 +1333,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
 
       {/* Canvas */}
       <div
+        ref={canvasRef}
         style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab' }}
         onMouseDown={(e) => { setDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }) }}
         onMouseMove={(e) => { if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }) }}
@@ -1100,6 +1355,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                 searchMatch={searchMatches.has(node.id)}
                 onHover={setHovered}
                 onClick={(n) => setSelected(n)}
+                onOpenEmployee={openEmployee}
               />
             ))}
           </g>
@@ -1121,7 +1377,6 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
         </div>
 
         <div style={{ position: 'absolute', bottom: 16, left: 16, padding: '6px 12px', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 11, color: COLORS.slate, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span>{viewMode === 'organization' ? '🔗' : '📁'}</span>
           {viewMode === 'organization' ? 'Hover to trace reporting chain' : 'Grouped by project'}
         </div>
 
@@ -1138,6 +1393,7 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
           getDirectReports={getDirectReports}
           projects={normalizedProjects}
           deptColors={deptColors}
+          onOpenEmployee={openEmployee}
         />
       )}
 
@@ -1156,7 +1412,9 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
                 onClick={() => {
                   setSelected(node)
-                  setPan({ x: 400 - node.x * scale, y: 200 - node.y * scale })
+                  const centerX = canvasSize.w ? canvasSize.w / 2 : 400
+                  const centerY = canvasSize.h ? canvasSize.h / 2 : 200
+                  setPan({ x: centerX - node.x * scale, y: centerY - node.y * scale })
                   setSearch('')
                 }}
               >
@@ -1167,7 +1425,15 @@ export function OrgChartRevamp({ employees, projects, currentEmployeeId }: Props
                   <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.navy, marginBottom: 2 }}>{node.name}</div>
                   <div style={{ fontSize: 11, color: COLORS.slate }}>{node.role}</div>
                 </div>
-                <ChevronRight size={14} color={COLORS.slate} style={{ flexShrink: 0 }} />
+                <ChevronRight
+                  size={14}
+                  color={COLORS.slate}
+                  style={{ flexShrink: 0 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEmployee(node.id)
+                  }}
+                />
               </button>
             ))}
           </div>

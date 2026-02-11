@@ -30,10 +30,11 @@ export function PageHeader({ title, kicker, description, actions, className, var
           {title}
         </h1>
         {description && <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{description}</div>}
+        {/* Gradient underline */}
+        <div className="mt-3 h-px w-24 bg-gradient-to-r from-brand-teal-400/50 to-transparent dark:from-brand-cyan/40" />
       </div>
 
       {actions && <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">{actions}</div>}
     </div>
   );
 }
-

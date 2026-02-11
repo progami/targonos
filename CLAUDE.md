@@ -1,5 +1,7 @@
 # Claude Code Instructions
 
+**ACTUALLY READ EVERY FILE THAT IS RELATED TO A QUERY BEFORE ANSWERING IT - NEVER ASSUME**
+
 ## Database
 
 All apps share `portal_db` on localhost:5432 with separate schemas per app. Connection strings are in each app's `.env.local` file.
@@ -7,13 +9,14 @@ All apps share `portal_db` on localhost:5432 with separate schemas per app. Conn
 | App | Schema |
 |-----|--------|
 | talos | dev_talos_us, dev_talos_uk |
-| atlas | dev_hrms |
+| atlas | dev_atlas |
 | xplan | dev_xplan |
 | kairos | chronos |
-| sso | dev_auth |
+| sso | auth |
 | plutus | (no DB - uses QuickBooks API) |
 
 Talos also has main schemas: `main_talos_us`, `main_talos_uk`.
+Atlas also has main schema: `atlas`.
 
 Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
@@ -24,7 +27,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ## Testing
 
-- Test via Chrome browser at `https://dev-os.targonglobal.com/<app>`
+- Test via Chrome browser at `https://os.targonglobal.com/<app>`
 - Do not test on localhost
 - **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
@@ -33,7 +36,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ### Branch Naming
 
-Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
+Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `sso/`, `plutus/`
 
 Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
 

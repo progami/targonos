@@ -139,6 +139,14 @@ export const PUT = withAuthAndParams(async (request, params, _session) => {
       where: { id },
       data: {
         skuCode: body.skuCode,
+        ...(Object.prototype.hasOwnProperty.call(body, 'skuGroup')
+          ? {
+              skuGroup:
+                typeof body.skuGroup === 'string' && body.skuGroup.trim().length > 0
+                  ? body.skuGroup.trim().toUpperCase()
+                  : null,
+            }
+          : {}),
         asin: body.asin,
         description: body.description,
         packSize: body.packSize,

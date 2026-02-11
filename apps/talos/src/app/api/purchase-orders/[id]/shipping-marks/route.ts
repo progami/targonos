@@ -3,12 +3,14 @@ import { withAuthAndParams, ApiResponses } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { generatePurchaseOrderShippingMarks } from '@/lib/services/po-stage-service'
 import type { UserContext } from '@/lib/services/po-stage-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
+import { getTenantPrisma } from '@/lib/tenant/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-export const GET = withAuthAndParams(async (_request, params, session) => {
+export const POST = withAuthAndParams(async (_request, params, session) => {
   const id =
     typeof params?.id === 'string'
       ? params.id
@@ -20,9 +22,18 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     return ApiResponses.badRequest('Purchase order ID is required')
   }
 
-  const canView = await hasPermission(session.user.id, 'po.view')
-  if (!canView) {
+  const canGenerate = await hasPermission(session.user.id, 'po.edit')
+  if (!canGenerate) {
     return ApiResponses.forbidden('Insufficient permissions')
+  }
+
+  const prisma = await getTenantPrisma()
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const userContext: UserContext = {
@@ -43,4 +54,3 @@ export const GET = withAuthAndParams(async (_request, params, session) => {
     return ApiResponses.handleError(error)
   }
 })
-

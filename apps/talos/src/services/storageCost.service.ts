@@ -19,7 +19,7 @@ interface RecordStorageCostParams {
  warehouseName: string
  skuCode: string
  skuDescription: string
- batchLot: string
+ lotRef: string
  transactionDate: Date
 }
 
@@ -51,7 +51,7 @@ const asIsoDateString = (value: unknown): string | null => {
 }
 
 /**
- * Record a storage cost entry for a specific batch in a given week
+ * Record a storage cost entry for a specific lot in a given week
  * This function is called on every inventory transaction to ensure
  * storage costs are captured when inventory first appears in a week
  */
@@ -60,7 +60,7 @@ export async function recordStorageCostEntry({
  warehouseName,
  skuCode,
  skuDescription,
- batchLot,
+ lotRef,
  transactionDate,
 }: RecordStorageCostParams) {
  const prisma = await getTenantPrisma()
@@ -71,7 +71,7 @@ export async function recordStorageCostEntry({
  where: {
  warehouseCode,
  skuCode,
- batchLot,
+ lotRef,
  transactionType: TransactionType.RECEIVE,
  storageCartonsPerPallet: { not: null },
  },
@@ -96,7 +96,7 @@ export async function recordStorageCostEntry({
  where: {
  warehouseCode,
  skuCode,
- batchLot,
+ lotRef,
  transactionDate: { lt: weekStartingDate },
  },
  })
@@ -109,7 +109,7 @@ export async function recordStorageCostEntry({
  where: {
  warehouseCode,
  skuCode,
- batchLot,
+ lotRef,
  transactionDate: {
  gte: weekStartingDate,
  lte: weekEndingDate,
@@ -219,10 +219,10 @@ export async function recordStorageCostEntry({
 
  const existing = await prisma.storageLedger.findUnique({
  where: {
- warehouseCode_skuCode_batchLot_weekEndingDate: {
+ warehouseCode_skuCode_lotRef_weekEndingDate: {
  warehouseCode,
  skuCode,
- batchLot,
+ lotRef,
  weekEndingDate,
  },
  },
@@ -383,7 +383,7 @@ export async function recordStorageCostEntry({
    warehouseName,
    skuCode,
    skuDescription,
-   batchLot,
+   lotRef,
    weekEndingDate,
    openingBalance,
    weeklyReceive,
@@ -416,7 +416,7 @@ async function upsertFinancialLedgerEntryForStorage(
   warehouseName: string
   skuCode: string
   skuDescription: string
-  batchLot: string
+  lotRef: string
   weekEndingDate: Date
   palletDays: number
   storageRatePerPalletDay: unknown
@@ -460,7 +460,7 @@ async function upsertFinancialLedgerEntryForStorage(
    warehouseName: entry.warehouseName,
    skuCode: entry.skuCode,
    skuDescription: entry.skuDescription,
-   batchLot: entry.batchLot,
+   lotRef: entry.lotRef,
    storageLedgerId: entry.id,
    effectiveAt: entry.weekEndingDate,
    createdAt: entry.createdAt,
@@ -476,7 +476,7 @@ async function upsertFinancialLedgerEntryForStorage(
    warehouseName: entry.warehouseName,
    skuCode: entry.skuCode,
    skuDescription: entry.skuDescription,
-   batchLot: entry.batchLot,
+   lotRef: entry.lotRef,
    storageLedgerId: entry.id,
    effectiveAt: entry.weekEndingDate,
    createdByName: entry.createdByName,
@@ -485,16 +485,16 @@ async function upsertFinancialLedgerEntryForStorage(
 }
 
 /**
- * Ensure all batches with positive inventory have storage ledger entries for a given week
- * This is run as a weekly batch process to catch any missed entries
+ * Ensure all lots with positive inventory have storage ledger entries for a given week
+ * This is run as a weekly scheduled process to catch any missed entries
  */
 export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
  const prisma = await getTenantPrisma()
  const weekEndingDate = endOfWeek(date, { weekStartsOn: 1 })
 
- // Get all batches with positive inventory balances
+ // Get all lots with positive inventory balances
  const aggregates = await prisma.inventoryTransaction.groupBy({
-  by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'batchLot'],
+  by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
   _sum: { cartonsIn: true, cartonsOut: true },
   where: {
   transactionDate: { lte: date },
@@ -508,19 +508,19 @@ export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
 
  for (const agg of aggregates) {
  try {
- const netCartons = Number(agg._sum.cartonsIn || 0) - Number(agg._sum.cartonsOut || 0)
+ const netCartons = Number(agg._sum.cartonsIn ?? 0) - Number(agg._sum.cartonsOut ?? 0)
  if (netCartons <= 0) {
- skipped++
- continue
+  skipped++
+  continue
  }
 
  // Check if entry already exists
  const exists = await prisma.storageLedger.findUnique({
  where: {
- warehouseCode_skuCode_batchLot_weekEndingDate: {
+ warehouseCode_skuCode_lotRef_weekEndingDate: {
  warehouseCode: agg.warehouseCode,
  skuCode: agg.skuCode,
- batchLot: agg.batchLot,
+ lotRef: agg.lotRef,
  weekEndingDate
  }
  }
@@ -532,7 +532,7 @@ export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
  warehouseName: agg.warehouseName,
  skuCode: agg.skuCode,
  skuDescription: agg.skuDescription,
- batchLot: agg.batchLot,
+ lotRef: agg.lotRef,
  transactionDate: date,
  })
 
@@ -547,7 +547,7 @@ export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
  }
  } catch (error) {
  const message = error instanceof Error ? error.message : 'Unknown error'
- const errorMsg = `${agg.warehouseCode}/${agg.skuCode}/${agg.batchLot}: ${message}`
+ const errorMsg = `${agg.warehouseCode}/${agg.skuCode}/${agg.lotRef}: ${message}`
  errors.push(errorMsg)
  console.error('Storage entry creation failed:', errorMsg)
  }
@@ -595,7 +595,7 @@ export async function recalculateStorageCosts(
  warehouseName: true,
  skuCode: true,
  skuDescription: true,
- batchLot: true,
+ lotRef: true,
  weekEndingDate: true
  }
  })
@@ -610,7 +610,7 @@ export async function recalculateStorageCosts(
  warehouseName: entry.warehouseName,
  skuCode: entry.skuCode,
  skuDescription: entry.skuDescription,
- batchLot: entry.batchLot,
+ lotRef: entry.lotRef,
  transactionDate: entry.weekEndingDate,
  })
 

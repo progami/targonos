@@ -10,6 +10,7 @@ import {
   SHEET_TOOLBAR_SEGMENTED,
 } from '@/components/sheet-toolbar';
 import { usePersistentState } from '@/hooks/usePersistentState';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type SheetViewMode = 'tabular' | 'visual';
 
@@ -64,22 +65,22 @@ export function SheetViewToggle({ value, slug }: SheetViewToggleProps) {
         {options.map((option) => {
           const isActive = value === option.value;
           return (
-            <button
-              key={option.value}
-              type="button"
-              className={clsx(
-                SHEET_TOOLBAR_BUTTON,
-                isActive
-                  ? 'bg-cyan-600 text-white dark:bg-cyan-500'
-                  : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
-              )}
-              onClick={() => handleSelect(option.value)}
-              aria-pressed={isActive}
-              disabled={isPending && isActive}
-              title={option.helper}
-            >
-              {option.label}
-            </button>
+            <Tooltip key={option.value} content={option.helper} position="bottom">
+              <button
+                type="button"
+                className={clsx(
+                  SHEET_TOOLBAR_BUTTON,
+                  isActive
+                    ? 'bg-cyan-600 text-white dark:bg-cyan-500'
+                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
+                )}
+                onClick={() => handleSelect(option.value)}
+                aria-pressed={isActive}
+                disabled={isPending && isActive}
+              >
+                {option.label}
+              </button>
+            </Tooltip>
           );
         })}
       </div>

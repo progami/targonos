@@ -234,23 +234,27 @@ export default function PasswordsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      const username = formData.username.trim()
+      const url = formData.url.trim()
+      const notes = formData.notes.trim()
+
       if (editingId) {
         await PasswordsApi.update(editingId, {
           title: formData.title,
-          username: formData.username || null,
+          username: username.length > 0 ? username : null,
           password: formData.password,
-          url: formData.url || null,
+          url: url.length > 0 ? url : null,
           department: formData.department,
-          notes: formData.notes || null,
+          notes: notes.length > 0 ? notes : null,
         })
       } else {
         await PasswordsApi.create({
           title: formData.title,
-          username: formData.username || null,
+          username: username.length > 0 ? username : null,
           password: formData.password,
-          url: formData.url || null,
+          url: url.length > 0 ? url : null,
           department: formData.department,
-          notes: formData.notes || null,
+          notes: notes.length > 0 ? notes : null,
         })
       }
       setModalOpen(false)
@@ -281,17 +285,17 @@ export default function PasswordsPage() {
       {
         accessorKey: 'title',
         header: 'Title',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 flex items-center justify-center">
-              <LockClosedIcon className="h-4 w-4 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground truncate">{row.original.title}</p>
-            </div>
-          </div>
-        ),
-        enableSorting: true,
+	        cell: ({ row }) => (
+	          <div className="flex items-center gap-3">
+	            <div className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 flex items-center justify-center">
+	              <LockClosedIcon className="h-4 w-4 text-white" />
+	            </div>
+	            <div className="min-w-0 max-w-[220px]">
+	              <p className="font-semibold text-foreground truncate">{row.original.title}</p>
+	            </div>
+	          </div>
+	        ),
+	        enableSorting: true,
       },
       {
         accessorFn: (row) => row.username ?? '',

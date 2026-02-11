@@ -70,14 +70,18 @@ export class ApiResponses {
     }
 
     if (error && typeof error === 'object') {
-      const candidate = error as { name?: unknown; details?: unknown }
+      const candidate = error as { name?: unknown; message?: unknown; details?: unknown }
       if (
         candidate.name === 'StageGateError' &&
         candidate.details &&
         typeof candidate.details === 'object' &&
         !Array.isArray(candidate.details)
       ) {
-        return this.validationError(candidate.details as Record<string, string | string[]>)
+        const message =
+          typeof candidate.message === 'string' && candidate.message.trim().length > 0
+            ? candidate.message.trim()
+            : 'Validation failed'
+        return this.validationError(candidate.details as Record<string, string | string[]>, message)
       }
     }
 
@@ -109,7 +113,8 @@ export class ApiResponses {
    * Validation error response with field details
    */
   static validationError(
-    errors: Record<string, string | string[]>
+    errors: Record<string, string | string[]>,
+    message: string = 'Validation failed'
   ): NextResponse<{ error: string; details: Record<string, string> }> {
     const normalizedErrors: Record<string, string> = {}
     for (const [key, value] of Object.entries(errors)) {
@@ -126,7 +131,7 @@ export class ApiResponses {
 
     return NextResponse.json(
       {
-        error: 'Validation failed',
+        error: message,
         details: normalizedErrors,
       },
       { status: 400 }

@@ -29,7 +29,7 @@ export function aggregateInventoryTransactions(
   const balances = new Map<string, BalanceAccumulator>()
 
   for (const transaction of transactions) {
-    const key = [transaction.warehouseCode, transaction.skuCode, transaction.batchLot].join('::')
+    const key = [transaction.warehouseCode, transaction.skuCode, transaction.lotRef].join('::')
     let current = balances.get(key)
 
     if (!current) {
@@ -39,7 +39,7 @@ export function aggregateInventoryTransactions(
         warehouseName: transaction.warehouseName,
         skuCode: transaction.skuCode,
         skuDescription: transaction.skuDescription,
-        batchLot: transaction.batchLot,
+        lotRef: transaction.lotRef,
         currentCartons: 0,
         currentUnits: 0,
         currentPallets: 0,
@@ -155,15 +155,15 @@ export function aggregateInventoryTransactions(
     })
   }
 
-  const batchesWithInventory = balanceArray.filter(balance => balance.currentCartons > 0).length
+  const lotsWithInventory = balanceArray.filter(balance => balance.currentCartons > 0).length
 
   return {
     balances: balanceArray,
     summary: {
       totalSkuCount: new Set(balanceArray.map(balance => balance.skuCode)).size,
-      totalBatchCount: balanceArray.length,
-      batchesWithInventory,
-      batchesOutOfStock: balanceArray.length - batchesWithInventory
+      totalLotCount: balanceArray.length,
+      lotsWithInventory,
+      lotsOutOfStock: balanceArray.length - lotsWithInventory
     }
   }
 }

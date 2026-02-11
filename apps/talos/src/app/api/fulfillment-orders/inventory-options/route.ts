@@ -34,9 +34,10 @@ export const GET = withAuth(async (request, session) => {
   }
 
   const grouped = await prisma.inventoryTransaction.groupBy({
-    by: ['skuCode', 'batchLot'],
+    by: ['skuCode', 'lotRef'],
     where: { warehouseCode: warehouse.code },
     _sum: { cartonsIn: true, cartonsOut: true },
+    _max: { unitsPerCarton: true },
   })
 
   const available = grouped
@@ -47,7 +48,8 @@ export const GET = withAuth(async (request, session) => {
       const totalOut = typeof cartonsOut === 'number' ? cartonsOut : 0
       return {
         skuCode: row.skuCode,
-        batchLot: row.batchLot,
+        lotRef: row.lotRef,
+        unitsPerCarton: row._max.unitsPerCarton,
         availableCartons: totalIn - totalOut,
       }
     })
@@ -58,7 +60,6 @@ export const GET = withAuth(async (request, session) => {
   }
 
   const skuCodes = Array.from(new Set(available.map(row => row.skuCode)))
-  const batchCodes = Array.from(new Set(available.map(row => row.batchLot)))
 
   const skus = await prisma.sku.findMany({
     where: { skuCode: { in: skuCodes }, isActive: true },
@@ -66,17 +67,6 @@ export const GET = withAuth(async (request, session) => {
   })
 
   const skuByCode = new Map(skus.map(sku => [sku.skuCode, sku]))
-  const skuIds = skus.map(sku => sku.id)
-
-  const batches = await prisma.skuBatch.findMany({
-    where: {
-      skuId: { in: skuIds },
-      batchCode: { in: batchCodes },
-    },
-    select: { id: true, skuId: true, batchCode: true, unitsPerCarton: true },
-  })
-
-  const batchByKey = new Map(batches.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch]))
 
   const outputBySkuCode = new Map<
     string,
@@ -85,9 +75,8 @@ export const GET = withAuth(async (request, session) => {
       skuCode: string
       description: string
       unitsPerCarton: number | null
-      batches: Array<{
-        id: string
-        batchCode: string
+      lots: Array<{
+        lotRef: string
         unitsPerCarton: number | null
         availableCartons: number
       }>
@@ -98,39 +87,38 @@ export const GET = withAuth(async (request, session) => {
     const sku = skuByCode.get(row.skuCode)
     if (!sku) continue
 
-    const batch = batchByKey.get(`${sku.id}::${row.batchLot}`)
-    if (!batch) continue
-
     if (!outputBySkuCode.has(sku.skuCode)) {
       outputBySkuCode.set(sku.skuCode, {
         id: sku.id,
         skuCode: sku.skuCode,
         description: sku.description,
         unitsPerCarton: sku.unitsPerCarton,
-        batches: [],
+        lots: [],
       })
     }
 
     const entry = outputBySkuCode.get(sku.skuCode)
     if (!entry) continue
-    entry.batches.push({
-      id: batch.id,
-      batchCode: batch.batchCode,
-      unitsPerCarton: batch.unitsPerCarton,
+
+    const unitsPerCarton =
+      typeof row.unitsPerCarton === 'number' ? row.unitsPerCarton : entry.unitsPerCarton
+
+    entry.lots.push({
+      lotRef: row.lotRef,
+      unitsPerCarton,
       availableCartons: row.availableCartons,
     })
   }
 
-  const skusWithBatches = Array.from(outputBySkuCode.values())
+  const skusWithLots = Array.from(outputBySkuCode.values())
     .map(sku => ({
       ...sku,
-      batches: sku.batches.sort((a, b) => a.batchCode.localeCompare(b.batchCode)),
+      lots: sku.lots.sort((a, b) => a.lotRef.localeCompare(b.lotRef)),
     }))
     .sort((a, b) => a.skuCode.localeCompare(b.skuCode))
 
   return ApiResponses.success({
     warehouse,
-    skus: skusWithBatches,
+    skus: skusWithLots,
   })
 })
-

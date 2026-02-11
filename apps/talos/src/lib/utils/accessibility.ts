@@ -6,7 +6,7 @@
  * Generate a unique, stable ID for form fields
  * @param prefix - The prefix for the ID (e.g., 'receive', 'ship')
  * @param rowIndex - The row index for dynamic rows (1-based for user clarity)
- * @param fieldName - The name of the field (e.g., 'sku', 'batch')
+ * @param fieldName - The name of the field (e.g., 'sku', 'lot')
  * @returns A unique ID string
  */
 export function generateFieldId(prefix: string, rowIndex: number | null, fieldName: string): string {

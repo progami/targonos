@@ -12,11 +12,15 @@ import {
 } from '@targon/prisma-talos'
 import { ValidationError, ConflictError, NotFoundError } from '@/lib/api'
 import {
-  resolveBatchLot,
   SYSTEM_FALLBACK_ID,
   SYSTEM_FALLBACK_NAME,
   toPublicOrderNumber,
 } from '@/lib/services/purchase-order-utils'
+import {
+  buildGoodsReceiptReference,
+  getNextGoodsReceiptSequence,
+  resolveOrderReferenceSeed,
+} from '@/lib/services/supply-chain-reference-service'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
@@ -36,7 +40,7 @@ export interface UserContext {
 export interface GrnLineInput {
   purchaseOrderLineId: string
   quantity: number
-  batchLot?: string | null
+  lotRef?: string | null
   storageCartonsPerPallet?: number | null
   shippingCartonsPerPallet?: number | null
   attachments?: Record<string, unknown> | null
@@ -128,12 +132,22 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
     }
 
     const receivedAt = input.receivedAt ?? new Date()
+    const orderReferenceSeed = resolveOrderReferenceSeed({
+      orderNumber: purchaseOrder.orderNumber,
+      poNumber: purchaseOrder.poNumber,
+      skuGroup: purchaseOrder.skuGroup,
+    })
+    const nextGrnSequence = await getNextGoodsReceiptSequence(tx, orderReferenceSeed.skuGroup)
+    const generatedGrnReference = buildGoodsReceiptReference(
+      nextGrnSequence,
+      orderReferenceSeed.skuGroup
+    )
 
     const note = await tx.grn.create({
       data: {
         purchaseOrderId: input.purchaseOrderId,
         status: GrnStatus.DRAFT,
-        referenceNumber: input.referenceNumber ?? null,
+        referenceNumber: generatedGrnReference,
         receivedAt,
         receivedById: user.id ?? null,
         receivedByName: user.name ?? null,
@@ -151,47 +165,14 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
                 throw new ValidationError('Line does not belong to the purchase order')
               }
 
-              const poBatchLot = resolveBatchLot({
-                rawBatchLot: poLine.batchLot,
-                orderNumber: purchaseOrder.orderNumber,
-                warehouseCode: purchaseOrder.warehouseCode,
-                skuCode: poLine.skuCode,
-                transactionDate: receivedAt,
-              })
-
-              if (line.batchLot) {
-                const providedBatchLot = resolveBatchLot({
-                  rawBatchLot: line.batchLot,
-                  orderNumber: purchaseOrder.orderNumber,
-                  warehouseCode: purchaseOrder.warehouseCode,
-                  skuCode: poLine.skuCode,
-                  transactionDate: receivedAt,
-                })
-
-                if (providedBatchLot !== poBatchLot) {
-                  throw new ValidationError(
-                    `Batch mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
-                  )
-                }
+              const expectedLotRef = poLine.lotRef
+              if (!expectedLotRef) {
+                throw new ValidationError(`Lot reference missing for SKU ${poLine.skuCode}`)
               }
 
-              const sku = await tx.sku.findFirst({
-                where: { skuCode: poLine.skuCode },
-                select: { id: true },
-              })
-
-              if (!sku) {
-                throw new ValidationError(`SKU not found: ${poLine.skuCode}`)
-              }
-
-              const batchRecord = await tx.skuBatch.findFirst({
-                where: { skuId: sku.id, batchCode: poBatchLot },
-                select: { id: true },
-              })
-
-              if (!batchRecord) {
+              if (line.lotRef && line.lotRef !== expectedLotRef) {
                 throw new ValidationError(
-                  `Batch ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
+                  `Lot ref mismatch for SKU ${poLine.skuCode}. Expected ${expectedLotRef}.`
                 )
               }
 
@@ -199,7 +180,7 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
                 purchaseOrderLineId: line.purchaseOrderLineId,
                 skuCode: poLine.skuCode,
                 skuDescription: poLine.skuDescription,
-                batchLot: poBatchLot,
+                lotRef: expectedLotRef,
                 quantity: line.quantity,
                 storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
                 shippingCartonsPerPallet: line.shippingCartonsPerPallet ?? null,
@@ -273,7 +254,7 @@ export async function postGrn(id: string, _user: UserContext) {
     warehouseName: string
     skuCode: string
     skuDescription: string
-    batchLot: string
+    lotRef: string
     transactionDate: Date
   }> = []
 
@@ -396,7 +377,7 @@ export async function postGrn(id: string, _user: UserContext) {
       warehouseName: string
       skuCode: string
       skuDescription: string
-      batchLot: string
+      lotRef: string
       cartonsIn: number
       cartonsOut: number
       storagePalletsIn: number
@@ -420,71 +401,51 @@ export async function postGrn(id: string, _user: UserContext) {
         throw new ValidationError(`SKU not found: ${poLine.skuCode}`)
       }
 
-      const poBatchLot = resolveBatchLot({
-        rawBatchLot: poLine.batchLot,
-        orderNumber: po.orderNumber,
-        warehouseCode: po.warehouseCode,
-        skuCode: poLine.skuCode,
-        transactionDate,
-      })
-
-      if (line.batchLot) {
-        const providedBatchLot = resolveBatchLot({
-          rawBatchLot: line.batchLot,
-          orderNumber: po.orderNumber,
-          warehouseCode: po.warehouseCode,
-          skuCode: poLine.skuCode,
-          transactionDate,
-        })
-
-        if (providedBatchLot !== poBatchLot) {
-          throw new ValidationError(
-            `Batch mismatch for SKU ${poLine.skuCode}. Expected ${poBatchLot}.`
-          )
-        }
+      const lotRef = poLine.lotRef
+      if (!lotRef) {
+        throw new ValidationError(`Lot reference missing for SKU ${poLine.skuCode}`)
       }
 
-      const batchRecord = await tx.skuBatch.findFirst({
-        where: { skuId: sku.id, batchCode: poBatchLot },
+      if (line.lotRef && line.lotRef !== lotRef) {
+        throw new ValidationError(`Lot ref mismatch for SKU ${poLine.skuCode}. Expected ${lotRef}.`)
+      }
+
+      const config = await tx.warehouseSkuStorageConfig.findFirst({
+        where: { warehouseId: warehouse.id, skuId: sku.id },
         select: {
-          id: true,
-          unitsPerCarton: true,
-          cartonDimensionsCm: true,
-          cartonWeightKg: true,
-          packagingType: true,
           storageCartonsPerPallet: true,
           shippingCartonsPerPallet: true,
         },
       })
 
-      if (!batchRecord) {
-        throw new ValidationError(
-          `Batch ${poBatchLot} is not configured for SKU ${poLine.skuCode}. Create it in Config → Products → Batches.`
-        )
-      }
-
-      const unitsPerCarton = batchRecord.unitsPerCarton ?? sku.unitsPerCarton ?? 1
+      const unitsPerCarton = poLine.unitsPerCarton
 
       const storageCartonsPerPallet =
-        line.storageCartonsPerPallet ?? batchRecord.storageCartonsPerPallet ?? null
+        line.storageCartonsPerPallet ??
+        poLine.storageCartonsPerPallet ??
+        config?.storageCartonsPerPallet ??
+        null
       const shippingCartonsPerPallet =
-        line.shippingCartonsPerPallet ?? batchRecord.shippingCartonsPerPallet ?? null
+        line.shippingCartonsPerPallet ??
+        poLine.shippingCartonsPerPallet ??
+        config?.shippingCartonsPerPallet ??
+        null
 
       if (isInbound && (!storageCartonsPerPallet || storageCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Storage cartons per pallet is required for SKU ${poLine.skuCode} batch ${poBatchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Storage cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
       if (isInbound && (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${poLine.skuCode} batch ${poBatchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Shipping cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
       if (!isInbound && (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${poLine.skuCode} batch ${poBatchLot}. Configure it on the batch in Config → Products → Batches.`
+          `Shipping cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
@@ -494,14 +455,14 @@ export async function postGrn(id: string, _user: UserContext) {
           warehouseName: po.warehouseName,
           warehouseAddress: null,
           skuCode: poLine.skuCode,
-          skuDescription: poLine.skuDescription ?? sku?.description ?? '',
+          skuDescription: poLine.skuDescription ?? sku.description,
           unitDimensionsCm: sku?.unitDimensionsCm ?? null,
           unitWeightKg: sku?.unitWeightKg ?? null,
-          cartonDimensionsCm: batchRecord.cartonDimensionsCm ?? sku?.cartonDimensionsCm ?? null,
-          cartonWeightKg: batchRecord.cartonWeightKg ?? sku?.cartonWeightKg ?? null,
-          packagingType: batchRecord.packagingType ?? sku?.packagingType ?? null,
+          cartonDimensionsCm: poLine.cartonDimensionsCm ?? sku.cartonDimensionsCm,
+          cartonWeightKg: poLine.cartonWeightKg ?? sku.cartonWeightKg,
+          packagingType: poLine.packagingType ?? sku.packagingType,
           unitsPerCarton,
-          batchLot: poBatchLot,
+          lotRef,
           transactionType,
           referenceId: existingNote.referenceNumber ?? toPublicOrderNumber(po.orderNumber),
           cartonsIn: isInbound ? line.quantity : 0,
@@ -537,7 +498,7 @@ export async function postGrn(id: string, _user: UserContext) {
           warehouseName: true,
           skuCode: true,
           skuDescription: true,
-          batchLot: true,
+          lotRef: true,
           cartonsIn: true,
           cartonsOut: true,
           storagePalletsIn: true,
@@ -561,7 +522,7 @@ export async function postGrn(id: string, _user: UserContext) {
       warehouseName: t.warehouseName,
       skuCode: t.skuCode,
       skuDescription: t.skuDescription,
-      batchLot: t.batchLot,
+      lotRef: t.lotRef,
       transactionDate: t.transactionDate,
     }))
 
@@ -657,7 +618,7 @@ export async function postGrn(id: string, _user: UserContext) {
             warehouseName: row.warehouseName,
             skuCode: txRow.skuCode,
             skuDescription: txRow.skuDescription,
-            batchLot: txRow.batchLot,
+            lotRef: txRow.lotRef,
             inventoryTransactionId: row.transactionId,
             purchaseOrderId: txRow.purchaseOrderId,
             purchaseOrderLineId: txRow.purchaseOrderLineId,
@@ -706,12 +667,12 @@ export async function postGrn(id: string, _user: UserContext) {
         warehouseName: t.warehouseName,
         skuCode: t.skuCode,
         skuDescription: t.skuDescription,
-        batchLot: t.batchLot,
+        lotRef: t.lotRef,
         transactionDate: t.transactionDate,
       }).catch(storageError => {
         const message = storageError instanceof Error ? storageError.message : 'Unknown error'
         console.error(
-          `Storage cost recording failed for ${t.warehouseCode}/${t.skuCode}/${t.batchLot}:`,
+          `Storage cost recording failed for ${t.warehouseCode}/${t.skuCode}/${t.lotRef}:`,
           message
         )
       })

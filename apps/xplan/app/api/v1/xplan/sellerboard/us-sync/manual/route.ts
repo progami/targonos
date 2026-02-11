@@ -1,90 +1,100 @@
 import { NextResponse } from 'next/server';
-import { withXPlanAuth } from '@/lib/api/auth';
-import { canAccessStrategy, getStrategyActor } from '@/lib/strategy-access';
 import prisma from '@/lib/prisma';
-import { syncSellerboardUsActualSales, syncSellerboardUsDashboard } from '@/lib/integrations/sellerboard';
+import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
+import { requireXPlanStrategyAccess } from '@/lib/api/strategy-guard';
+import {
+  syncSellerboardUsActualSales,
+  syncSellerboardUsDashboard,
+} from '@/lib/integrations/sellerboard';
 
 export const runtime = 'nodejs';
 
-export const POST = withXPlanAuth(async (request: Request, session) => {
-  const actor = getStrategyActor(session);
+export const POST = withXPlanAuth(
+  async (request: Request, session) => {
+    const url = new URL(request.url);
+    const strategyId = url.searchParams.get('strategyId');
 
-  const url = new URL(request.url);
-  const rawStrategyId = url.searchParams.get('strategyId');
-  const strategyId = rawStrategyId ? rawStrategyId.trim() : '';
-  if (!strategyId) {
-    return NextResponse.json({ error: 'Missing strategyId' }, { status: 400 });
-  }
+    const { response } = await requireXPlanStrategyAccess(strategyId, session);
+    if (response) return response;
 
-  const hasAccess = await canAccessStrategy(strategyId, actor);
-  if (!hasAccess) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const strategy = await prisma.strategy.findUnique({
-    where: { id: strategyId },
-    select: { region: true },
-  });
-  if (!strategy) {
-    return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
-  }
-  if (strategy.region !== 'US') {
-    return NextResponse.json({ error: 'Strategy region mismatch' }, { status: 400 });
-  }
-
-  const ordersReportUrl = process.env.SELLERBOARD_US_ORDERS_REPORT_URL?.trim();
-  if (!ordersReportUrl) {
-    return NextResponse.json(
-      { error: 'Missing SELLERBOARD_US_ORDERS_REPORT_URL' },
-      { status: 500 },
+    const actorEmail = (session as any).user?.email ?? null;
+    console.log(
+      `[sellerboard-sync/manual] actor=${actorEmail ?? 'unknown'} strategyId=${strategyId} region=US`,
     );
-  }
 
-  const dashboardReportUrl = process.env.SELLERBOARD_US_DASHBOARD_REPORT_URL?.trim();
-  if (!dashboardReportUrl) {
-    return NextResponse.json(
-      { error: 'Missing SELLERBOARD_US_DASHBOARD_REPORT_URL' },
-      { status: 500 },
-    );
-  }
-
-  const startedAt = Date.now();
-
-  try {
-    const actualSalesStartedAt = Date.now();
-    const actualSalesResult = await syncSellerboardUsActualSales({
-      reportUrl: ordersReportUrl,
-      strategyId,
+    const strategy = await prisma.strategy.findUnique({
+      where: { id: strategyId! },
+      select: { region: true },
     });
-    const actualSales = {
-      ok: true,
-      durationMs: Date.now() - actualSalesStartedAt,
-      ...actualSalesResult,
-      oldestPurchaseDateUtc: actualSalesResult.oldestPurchaseDateUtc?.toISOString() ?? null,
-      newestPurchaseDateUtc: actualSalesResult.newestPurchaseDateUtc?.toISOString() ?? null,
-    };
+    if (!strategy) {
+      return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
+    }
+    if (strategy.region !== 'US') {
+      return NextResponse.json({ error: 'Strategy region mismatch' }, { status: 400 });
+    }
 
-    const dashboardStartedAt = Date.now();
-    const dashboardResult = await syncSellerboardUsDashboard({
-      reportUrl: dashboardReportUrl,
-      strategyId,
-    });
-    const dashboard = {
-      ok: true,
-      durationMs: Date.now() - dashboardStartedAt,
-      ...dashboardResult,
-      oldestDateUtc: dashboardResult.oldestDateUtc?.toISOString() ?? null,
-      newestDateUtc: dashboardResult.newestDateUtc?.toISOString() ?? null,
-    };
+    const ordersReportUrl = process.env.SELLERBOARD_US_ORDERS_REPORT_URL?.trim();
+    if (!ordersReportUrl) {
+      return NextResponse.json(
+        { error: 'Missing SELLERBOARD_US_ORDERS_REPORT_URL' },
+        { status: 500 },
+      );
+    }
 
-    return NextResponse.json({
-      ok: true,
-      durationMs: Date.now() - startedAt,
-      actualSales,
-      dashboard,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
-});
+    const dashboardReportUrl = process.env.SELLERBOARD_US_DASHBOARD_REPORT_URL?.trim();
+    if (!dashboardReportUrl) {
+      return NextResponse.json(
+        { error: 'Missing SELLERBOARD_US_DASHBOARD_REPORT_URL' },
+        { status: 500 },
+      );
+    }
+
+    const startedAt = Date.now();
+
+    try {
+      const actualSalesStartedAt = Date.now();
+      const actualSalesResult = await syncSellerboardUsActualSales({
+        reportUrl: ordersReportUrl,
+        strategyId: strategyId!,
+      });
+      const actualSales = {
+        ok: true,
+        durationMs: Date.now() - actualSalesStartedAt,
+        ...actualSalesResult,
+        oldestPurchaseDateUtc: actualSalesResult.oldestPurchaseDateUtc?.toISOString() ?? null,
+        newestPurchaseDateUtc: actualSalesResult.newestPurchaseDateUtc?.toISOString() ?? null,
+      };
+
+      const dashboardStartedAt = Date.now();
+      const dashboardResult = await syncSellerboardUsDashboard({
+        reportUrl: dashboardReportUrl,
+        strategyId: strategyId!,
+      });
+      const dashboard = {
+        ok: true,
+        durationMs: Date.now() - dashboardStartedAt,
+        ...dashboardResult,
+        oldestDateUtc: dashboardResult.oldestDateUtc?.toISOString() ?? null,
+        newestDateUtc: dashboardResult.newestDateUtc?.toISOString() ?? null,
+      };
+
+      console.log(
+        `[sellerboard-sync/manual] ok actor=${actorEmail ?? 'unknown'} strategyId=${strategyId} region=US durationMs=${
+          Date.now() - startedAt
+        } actualUpdates=${actualSales.updates} dashboardUpdates=${dashboard.updates}`,
+      );
+
+      return NextResponse.json({
+        ok: true,
+        durationMs: Date.now() - startedAt,
+        actualSales,
+        dashboard,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[POST /sellerboard/us-sync/manual] sync error:', error);
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+  },
+  { rateLimit: RATE_LIMIT_PRESETS.expensive },
+);

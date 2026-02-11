@@ -16,13 +16,16 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
 import { CheckCircleIcon } from '@/components/ui/Icons'
-import { TasksApi, EmployeesApi, type Employee } from '@/lib/api-client'
+import { TasksApi, EmployeesApi, LeavesApi, type Employee, type LeaveBalance } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { ensureMe, useMeStore } from '@/lib/store/me'
+import { EXIT_REASON_OPTIONS } from '@/lib/domain/employee/constants'
+import { getLeaveTypeLabel } from '@/components/employee/profile/utils'
 
 type ChecklistTask = {
   title: string
   description: string
+  actionUrl?: string
 }
 
 const ONBOARDING_TASKS: ChecklistTask[] = [
@@ -33,13 +36,41 @@ const ONBOARDING_TASKS: ChecklistTask[] = [
   { title: 'Day-1 readiness', description: 'Calendar, equipment, workspace' },
 ]
 
-const OFFBOARDING_TASKS: ChecklistTask[] = [
-  { title: 'Confirm last day & handover', description: 'Manager sign-off and handover plan' },
-  { title: 'Reassign open work', description: 'Transfer tasks and responsibilities' },
-  { title: 'Disable access', description: 'Remove Portal and Atlas access' },
-  { title: 'Recover assets', description: 'Laptop, badge, keys returned' },
-  { title: 'Archive & close', description: 'Final documents and status update' },
-]
+function getOffboardingTasks(employee: Employee): ChecklistTask[] {
+  const email = employee.email
+  const encodedEmail = encodeURIComponent(email)
+  const employeeName = `${employee.firstName} ${employee.lastName}`
+
+  return [
+    {
+      title: 'Confirm last day & handover',
+      description: `Manager sign-off on ${employeeName}'s last working day and handover plan. Ensure all responsibilities are documented and transitioned.`,
+    },
+    {
+      title: 'Reassign open work',
+      description: `Transfer ${employeeName}'s tasks, projects, and responsibilities to remaining team members.`,
+    },
+    {
+      title: 'Suspend Google Workspace account',
+      description: `Suspend ${employeeName}'s Google account (${email}) in Google Admin Console. Do NOT delete — suspend first to preserve data.`,
+      actionUrl: `https://admin.google.com/ac/users/${encodedEmail}`,
+    },
+    {
+      title: 'Revoke Portal & Atlas access',
+      description: `Remove ${employeeName}'s SSO entitlements in the Portal admin. Ensure they can no longer authenticate to Atlas or other internal apps.`,
+      actionUrl: `/sso/admin`,
+    },
+    {
+      title: 'Recover assets',
+      description: `Collect all company property from ${employeeName}: laptop, badge, keys, parking pass, and any other equipment.`,
+    },
+    {
+      title: 'Archive & close',
+      description: `Upload final documents (separation agreement, NDA, clearance form) to ${employeeName}'s profile and confirm all offboarding steps are complete.`,
+      actionUrl: `/atlas/employees/${employee.id}`,
+    },
+  ]
+}
 
 type WorkflowType = 'onboarding' | 'offboarding'
 
@@ -65,15 +96,21 @@ export function OnboardingOffboardingModal({
   const [targetDate, setTargetDate] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  // Offboarding-specific state
+  const [exitReason, setExitReason] = useState('')
+  const [lastWorkingDay, setLastWorkingDay] = useState('')
+  const [exitNotes, setExitNotes] = useState('')
+  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([])
+  const [leaveLoading, setLeaveLoading] = useState(false)
+
   // Progress state
   const [phase, setPhase] = useState<'form' | 'creating' | 'done'>('form')
   const [taskStatuses, setTaskStatuses] = useState<TaskStatus[]>([])
   const [createdCount, setCreatedCount] = useState(0)
 
   const isOnboarding = workflowType === 'onboarding'
-  const tasks = isOnboarding ? ONBOARDING_TASKS : OFFBOARDING_TASKS
+  const tasks = isOnboarding ? ONBOARDING_TASKS : getOffboardingTasks(employee)
   const title = isOnboarding ? 'Start Onboarding' : 'Start Offboarding'
-  const accentColor = isOnboarding ? 'cyan' : 'rose'
 
   // Load employees when modal opens
   useEffect(() => {
@@ -84,13 +121,16 @@ export function OnboardingOffboardingModal({
     setTaskStatuses(tasks.map(() => 'pending'))
     setCreatedCount(0)
     setError(null)
+    setExitReason('')
+    setLastWorkingDay('')
+    setExitNotes('')
+    setLeaveBalances([])
 
     async function loadEmployees() {
       try {
         setLoadingEmployees(true)
         const [meData, data] = await Promise.all([ensureMe(), EmployeesApi.listManageable()])
         setEmployees(data.items)
-        // Default owner to current user
         setOwnerId(meData.id)
       } catch (e) {
         console.error('Failed to load employees:', e)
@@ -99,7 +139,17 @@ export function OnboardingOffboardingModal({
       }
     }
     loadEmployees()
-  }, [open, tasks])
+
+    // Load leave balances for offboarding
+    if (!isOnboarding) {
+      setLeaveLoading(true)
+      LeavesApi.getBalance({ employeeId: employee.id })
+        .then((res) => setLeaveBalances(res.balances))
+        .catch(() => setLeaveBalances([]))
+        .finally(() => setLeaveLoading(false))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const employeeOptions: { value: string; label: string }[] = []
   if (me) {
@@ -118,14 +168,13 @@ export function OnboardingOffboardingModal({
 
     const prefix = isOnboarding ? 'Onboarding' : 'Offboarding'
     const employeeName = `${employee.firstName} ${employee.lastName}`
-    const dueDate = targetDate.trim() || null
+    const dueDate = targetDate.trim() || lastWorkingDay.trim() || null
     const assignedToId = ownerId.trim() || null
 
     let count = 0
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i]
 
-      // Mark current task as creating
       setTaskStatuses((prev) => {
         const next = [...prev]
         next[i] = 'creating'
@@ -136,6 +185,7 @@ export function OnboardingOffboardingModal({
         await TasksApi.create({
           title: `${prefix}: ${t.title} — ${employeeName}`,
           description: t.description,
+          actionUrl: t.actionUrl,
           category: 'GENERAL',
           dueDate,
           assignedToId,
@@ -144,14 +194,12 @@ export function OnboardingOffboardingModal({
         count++
         setCreatedCount(count)
 
-        // Mark task as done
         setTaskStatuses((prev) => {
           const next = [...prev]
           next[i] = 'done'
           return next
         })
 
-        // Small delay for visual effect
         await new Promise((r) => setTimeout(r, 150))
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to create task')
@@ -160,12 +208,28 @@ export function OnboardingOffboardingModal({
       }
     }
 
+    // Save offboarding metadata to the employee record
+    if (!isOnboarding && (exitReason || lastWorkingDay || exitNotes)) {
+      try {
+        await EmployeesApi.update(employee.id, {
+          ...(exitReason ? { exitReason } : {}),
+          ...(lastWorkingDay ? { lastWorkingDay } : {}),
+          ...(exitNotes ? { exitNotes } : {}),
+        })
+      } catch {
+        // Non-blocking — tasks were already created
+      }
+    }
+
     setPhase('done')
-  }, [employee, isOnboarding, ownerId, targetDate, tasks])
+  }, [employee, exitNotes, exitReason, isOnboarding, lastWorkingDay, ownerId, targetDate, tasks])
 
   const handleClose = () => {
     setOwnerId('')
     setTargetDate('')
+    setExitReason('')
+    setLastWorkingDay('')
+    setExitNotes('')
     setError(null)
     setPhase('form')
     onClose()
@@ -173,7 +237,7 @@ export function OnboardingOffboardingModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle
             className={cn(
@@ -245,6 +309,73 @@ export function OnboardingOffboardingModal({
               </div>
             </div>
 
+            {/* Offboarding-specific fields */}
+            {!isOnboarding && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Exit Reason</Label>
+                    <NativeSelect
+                      value={exitReason}
+                      onChange={(e) => setExitReason(e.target.value)}
+                    >
+                      <option value="">Select reason...</option>
+                      {EXIT_REASON_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Last Working Day</Label>
+                    <Input
+                      type="date"
+                      value={lastWorkingDay}
+                      onChange={(e) => setLastWorkingDay(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Exit Notes</Label>
+                  <Input
+                    value={exitNotes}
+                    onChange={(e) => setExitNotes(e.target.value)}
+                    placeholder="Optional notes about the separation..."
+                  />
+                </div>
+
+                {/* Leave Balance Summary */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Leave Balance Summary</Label>
+                  {leaveLoading ? (
+                    <p className="text-xs text-slate-400">Loading balances...</p>
+                  ) : leaveBalances.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {leaveBalances
+                        .filter((b) => b.leaveType !== 'UNPAID')
+                        .map((b) => (
+                          <div
+                            key={b.leaveType}
+                            className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-sm"
+                          >
+                            <span className="text-slate-600 dark:text-slate-300">
+                              {getLeaveTypeLabel(b.leaveType)}
+                            </span>
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {b.allocated - b.used}/{b.allocated}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">No leave balances found</p>
+                  )}
+                </div>
+              </>
+            )}
+
             {/* Task preview */}
             <div className="space-y-1">
               <Label className="text-xs text-slate-500">Tasks to create</Label>
@@ -257,7 +388,14 @@ export function OnboardingOffboardingModal({
                         isOnboarding ? 'bg-cyan-400' : 'bg-rose-400'
                       )}
                     />
-                    <span className="text-sm text-slate-600 dark:text-slate-300">{t.title}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm text-slate-600 dark:text-slate-300">{t.title}</span>
+                      {t.actionUrl && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
+                          link
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -33,7 +33,7 @@ async function checkStorageLedger() {
         console.log(`${index + 1}. Week ending: ${entry.weekEndingDate.toISOString().split('T')[0]}`)
         console.log(`   Warehouse: ${entry.warehouseName} (${entry.warehouseCode})`)
         console.log(`   SKU: ${entry.skuCode} - ${entry.skuDescription}`)
-        console.log(`   Batch: ${entry.batchLot}`)
+        console.log(`   Lot Ref: ${entry.lotRef}`)
         console.log(`   Closing Balance: ${entry.closingBalance} cartons`)
         console.log(`   Closing Pallets: ${entry.closingPallets} pallets`)
         console.log(`   Pallet Days: ${entry.palletDays} pallet-days`)
@@ -73,7 +73,7 @@ async function checkStorageLedger() {
       referenceId: true,
       warehouseCode: true,
       skuCode: true,
-      batchLot: true,
+      lotRef: true,
       transactionDate: true,
       createdAt: true
       }

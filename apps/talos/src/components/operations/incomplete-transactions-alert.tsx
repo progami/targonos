@@ -24,7 +24,7 @@ export function IncompleteTransactionsAlert() {
 
  const fetchIncompleteTransactions = async () => {
  try {
- const response = await fetch('/api/inventory/incomplete');
+ const response = await fetch(withBasePath('/api/inventory/incomplete'), { credentials: 'include' });
  if (response.ok) {
  const data = await response.json();
  setIncompleteTransactions(data);

@@ -1,6 +1,6 @@
 import type { Session } from 'next-auth';
 import { NextResponse } from 'next/server';
-import { getAppEntitlement } from '@targon/auth';
+import { hasCapability } from '@targon/auth';
 
 import { auth } from '@/lib/auth';
 
@@ -17,9 +17,8 @@ export function withKairosAuth<TContext = unknown>(handler: KairosAuthedHandler<
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const roles = (session as any).roles;
-    const entitlement = getAppEntitlement(roles, 'kairos');
-    if (!entitlement) {
+    const canEnter = hasCapability({ session, appId: 'kairos', capability: 'enter' });
+    if (!canEnter) {
       return NextResponse.json({ error: 'No access to Kairos' }, { status: 403 });
     }
 

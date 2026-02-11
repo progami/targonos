@@ -1,10 +1,27 @@
 import { getApiBaseUrl, refreshAccessToken } from './client';
 import { createLogger } from '@targon/logger';
+import { getCached, setCache, invalidateCache } from './cache';
+import { loadServerQboConnection, saveServerQboConnection } from './connection-store';
 
 const logger = createLogger({ name: 'qbo-api' });
 
 // Default timeout for QBO API calls (60 seconds)
 const QBO_TIMEOUT_MS = 60000;
+
+/**
+ * Escape a string for safe interpolation into a SOQL LIKE query.
+ * Escapes single quotes, backslashes, and percent signs.
+ */
+function escapeSoql(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/%/g, '\\%');
+}
+
+export class QboAuthError extends Error {
+  name = 'QboAuthError';
+}
 
 /**
  * Fetch with timeout support
@@ -26,6 +43,65 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRYABLE_STATUS_CODES = new Set([429, 503]);
+
+/**
+ * Fetch with retry logic and exponential backoff.
+ * Retries on HTTP 429, 503, and network errors.
+ * Does NOT retry on 401/403 (auth) or 400 (client) errors.
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = QBO_TIMEOUT_MS,
+): Promise<Response> {
+  for (let attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+
+      if (response.ok) {
+        return response;
+      }
+
+      if (!RETRYABLE_STATUS_CODES.has(response.status)) {
+        return response;
+      }
+
+      if (attempt < RETRY_MAX_ATTEMPTS) {
+        const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        logger.warn('Retryable HTTP error from QBO, retrying', {
+          status: response.status,
+          attempt: attempt + 1,
+          maxAttempts: RETRY_MAX_ATTEMPTS,
+          delayMs,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      if (attempt < RETRY_MAX_ATTEMPTS) {
+        const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        logger.warn('Network error from QBO, retrying', {
+          error: error instanceof Error ? error.message : String(error),
+          attempt: attempt + 1,
+          maxAttempts: RETRY_MAX_ATTEMPTS,
+          delayMs,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  // Unreachable, but TypeScript needs it
+  throw new Error('fetchWithRetry: exceeded max retries');
 }
 
 export interface QboConnection {
@@ -61,6 +137,10 @@ export interface QboPurchase {
         name: string;
       };
     };
+    ItemBasedExpenseLineDetail?: {
+      ItemRef?: { value: string; name: string };
+      AccountRef?: { value: string; name: string };
+    };
   }>;
   MetaData?: {
     CreateTime: string;
@@ -88,6 +168,10 @@ export interface QboBill {
         value: string;
         name: string;
       };
+    };
+    ItemBasedExpenseLineDetail?: {
+      ItemRef?: { value: string; name: string };
+      AccountRef?: { value: string; name: string };
     };
   }>;
   MetaData?: {
@@ -164,13 +248,13 @@ export async function fetchJournalEntries(
 
   const conditions: string[] = [];
   if (params.startDate) {
-    conditions.push(`TxnDate >= '${params.startDate}'`);
+    conditions.push(`TxnDate >= '${escapeSoql(params.startDate)}'`);
   }
   if (params.endDate) {
-    conditions.push(`TxnDate <= '${params.endDate}'`);
+    conditions.push(`TxnDate <= '${escapeSoql(params.endDate)}'`);
   }
   if (params.docNumberContains) {
-    conditions.push(`DocNumber LIKE '%${params.docNumberContains}%'`);
+    conditions.push(`DocNumber LIKE '%${escapeSoql(params.docNumberContains)}%'`);
   }
 
   let query = `SELECT * FROM JournalEntry`;
@@ -185,7 +269,7 @@ export async function fetchJournalEntries(
 
   logger.info('Fetching journal entries from QBO', { query });
 
-  const response = await fetchWithTimeout(queryUrl, {
+  const response = await fetchWithRetry(queryUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -210,7 +294,7 @@ export async function fetchJournalEntries(
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
     try {
-      const countResponse = await fetchWithTimeout(
+      const countResponse = await fetchWithRetry(
         countUrl,
         {
           headers: {
@@ -225,12 +309,12 @@ export async function fetchJournalEntries(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = journalEntries.length;
         }
+      } else {
+        logger.warn('Journal entry count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Journal entry count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -275,7 +359,7 @@ export async function createJournalEntry(
 
   logger.info('Creating journal entry in QBO', { txnDate: input.txnDate, docNumber: input.docNumber });
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -295,12 +379,19 @@ export async function createJournalEntry(
   return { journalEntry: data.JournalEntry, updatedConnection };
 }
 
+export interface QboVendor {
+  Id: string;
+  DisplayName: string;
+  Active?: boolean;
+}
+
 export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
     Bill?: QboBill[];
-    Account: QboAccount[];
+    Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
+    Vendor?: QboVendor[];
     totalCount?: number;
     startPosition?: number;
     maxResults?: number;
@@ -311,6 +402,7 @@ export interface QboQueryResponse {
 export interface FetchPurchasesOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
 }
@@ -318,8 +410,48 @@ export interface FetchPurchasesOptions {
 export interface FetchBillsOptions {
   startDate?: string;
   endDate?: string;
+  docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
+}
+
+const tokenRefreshPromisesByRealmId = new Map<string, Promise<QboConnection>>();
+
+async function refreshConnectionSingleFlight(connection: QboConnection): Promise<QboConnection> {
+  const existing = tokenRefreshPromisesByRealmId.get(connection.realmId);
+  if (existing) return existing;
+
+  const refreshPromise = (async () => {
+    const storedConnection = await loadServerQboConnection();
+    if (storedConnection && storedConnection.realmId === connection.realmId) {
+      const storedExpiresAt = new Date(storedConnection.expiresAt);
+      const now = new Date();
+      // Another request/process may have already refreshed and persisted the rotated refresh token.
+      if (storedExpiresAt.getTime() - now.getTime() >= 5 * 60 * 1000) {
+        return storedConnection;
+      }
+      connection = storedConnection;
+    }
+
+    const newTokens = await refreshAccessToken(connection.refreshToken);
+    const updatedConnection: QboConnection = {
+      ...connection,
+      accessToken: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,
+      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
+    };
+
+    // Refresh tokens are rotated on each refresh; persist immediately so we don't lose the new refresh token
+    // if a request fails before its caller writes the updated connection.
+    await saveServerQboConnection(updatedConnection);
+
+    return updatedConnection;
+  })().finally(() => {
+    tokenRefreshPromisesByRealmId.delete(connection.realmId);
+  });
+
+  tokenRefreshPromisesByRealmId.set(connection.realmId, refreshPromise);
+  return refreshPromise;
 }
 
 /**
@@ -334,14 +466,14 @@ export async function getValidToken(
   // If token expires in less than 5 minutes, refresh it
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     logger.info('Access token expired or expiring soon, refreshing...');
-    const newTokens = await refreshAccessToken(connection.refreshToken);
-    const updatedConnection: QboConnection = {
-      ...connection,
-      accessToken: newTokens.accessToken,
-      refreshToken: newTokens.refreshToken,
-      expiresAt: new Date(Date.now() + newTokens.expiresIn * 1000).toISOString(),
-    };
-    return { accessToken: newTokens.accessToken, updatedConnection };
+    try {
+      const updatedConnection = await refreshConnectionSingleFlight(connection);
+      return { accessToken: updatedConnection.accessToken, updatedConnection };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('QBO token refresh failed', { realmId: connection.realmId, error: message });
+      throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
+    }
   }
 
   return { accessToken: connection.accessToken };
@@ -357,17 +489,20 @@ export async function fetchPurchases(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   // Build query
   let query = `SELECT * FROM Purchase`;
   const conditions: string[] = [];
 
   if (startDate) {
-    conditions.push(`TxnDate >= '${startDate}'`);
+    conditions.push(`TxnDate >= '${escapeSoql(startDate)}'`);
   }
   if (endDate) {
-    conditions.push(`TxnDate <= '${endDate}'`);
+    conditions.push(`TxnDate <= '${escapeSoql(endDate)}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${escapeSoql(docNumberContains)}%'`);
   }
 
   if (conditions.length > 0) {
@@ -381,7 +516,7 @@ export async function fetchPurchases(
 
   logger.info('Fetching purchases from QBO', { query });
 
-  const response = await fetchWithTimeout(queryUrl, {
+  const response = await fetchWithRetry(queryUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -410,7 +545,7 @@ export async function fetchPurchases(
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
     try {
-      const countResponse = await fetchWithTimeout(
+      const countResponse = await fetchWithRetry(
         countUrl,
         {
           headers: {
@@ -424,12 +559,12 @@ export async function fetchPurchases(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = purchases.length;
         }
+      } else {
+        logger.warn('Purchase count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Purchase count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -443,16 +578,19 @@ export async function fetchBills(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, maxResults = 100, startPosition = 1 } = options;
+  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
 
   let query = `SELECT * FROM Bill`;
   const conditions: string[] = [];
 
   if (startDate) {
-    conditions.push(`TxnDate >= '${startDate}'`);
+    conditions.push(`TxnDate >= '${escapeSoql(startDate)}'`);
   }
   if (endDate) {
-    conditions.push(`TxnDate <= '${endDate}'`);
+    conditions.push(`TxnDate <= '${escapeSoql(endDate)}'`);
+  }
+  if (docNumberContains) {
+    conditions.push(`DocNumber LIKE '%${escapeSoql(docNumberContains)}%'`);
   }
 
   if (conditions.length > 0) {
@@ -466,7 +604,7 @@ export async function fetchBills(
 
   logger.info('Fetching bills from QBO', { query });
 
-  const response = await fetchWithTimeout(queryUrl, {
+  const response = await fetchWithRetry(queryUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -494,7 +632,7 @@ export async function fetchBills(
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
     try {
-      const countResponse = await fetchWithTimeout(
+      const countResponse = await fetchWithRetry(
         countUrl,
         {
           headers: {
@@ -508,16 +646,222 @@ export async function fetchBills(
         const countData = await countResponse.json();
         if (countData.QueryResponse?.totalCount !== undefined) {
           totalCount = countData.QueryResponse.totalCount;
-        } else {
-          totalCount = bills.length;
         }
+      } else {
+        logger.warn('Bill count query failed', { status: countResponse.status });
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn('Bill count query error', { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
   return { bills, totalCount, updatedConnection };
+}
+
+/**
+ * Fetch a single Bill by ID
+ */
+export async function fetchBillById(
+  connection: QboConnection,
+  billId: string,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+
+  const response = await fetchWithRetry(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to fetch bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+/**
+ * Update a Bill's line item account references.
+ */
+export async function updateBillLineAccounts(
+  connection: QboConnection,
+  billId: string,
+  syncToken: string,
+  lineUpdates: Array<{ lineId: string; accountId: string; accountName: string }>,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const fetchUrl = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+  const fetchResponse = await fetchWithRetry(fetchUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!fetchResponse.ok) {
+    const errorText = await fetchResponse.text();
+    logger.error('Failed to fetch bill for update', { billId, status: fetchResponse.status, error: errorText });
+    throw new Error(`Failed to fetch bill for update: ${fetchResponse.status} ${errorText}`);
+  }
+
+  const fetchData = (await fetchResponse.json()) as { Bill: QboBill };
+  const bill = fetchData.Bill;
+
+  const updateMap = new Map(lineUpdates.map((u) => [u.lineId, u]));
+  const updatedLines = (bill.Line ?? []).map((line) => {
+    const update = updateMap.get(line.Id);
+    if (update && line.AccountBasedExpenseLineDetail) {
+      return {
+        ...line,
+        AccountBasedExpenseLineDetail: {
+          ...line.AccountBasedExpenseLineDetail,
+          AccountRef: {
+            value: update.accountId,
+            name: update.accountName,
+          },
+        },
+      };
+    }
+    return line;
+  });
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const payload = {
+    ...bill,
+    SyncToken: syncToken,
+    Line: updatedLines,
+  };
+
+  logger.info('Updating bill line accounts in QBO', { billId, lineUpdates });
+
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to update bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+/**
+ * Update a Bill's memo (PrivateNote) and line descriptions.
+ * Fetches the current bill, applies updates, and sends a full update to QBO.
+ */
+export async function updateBill(
+  connection: QboConnection,
+  billId: string,
+  updates: {
+    privateNote?: string;
+    lineDescriptions?: Array<{ lineId: string; description: string }>;
+  },
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const fetchUrl = `${baseUrl}/v3/company/${connection.realmId}/bill/${billId}`;
+  const fetchResponse = await fetchWithRetry(fetchUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!fetchResponse.ok) {
+    const errorText = await fetchResponse.text();
+    logger.error('Failed to fetch bill for update', { billId, status: fetchResponse.status, error: errorText });
+    throw new Error(`Failed to fetch bill for update: ${fetchResponse.status} ${errorText}`);
+  }
+
+  const fetchData = (await fetchResponse.json()) as { Bill: QboBill };
+  const bill = fetchData.Bill;
+
+  const descMap = new Map(
+    (updates.lineDescriptions ?? []).map((u) => [u.lineId, u.description]),
+  );
+
+  const updatedLines = (bill.Line ?? []).map((line) => {
+    const newDesc = descMap.get(line.Id);
+    if (newDesc !== undefined) {
+      return { ...line, Description: newDesc };
+    }
+    return line;
+  });
+
+  const payload = {
+    ...bill,
+    Line: updatedLines,
+    PrivateNote: updates.privateNote !== undefined ? updates.privateNote : bill.PrivateNote,
+  };
+
+  logger.info('Updating bill in QBO', { billId, updates });
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill', { billId, status: response.status, error: errorText });
+    throw new Error(`Failed to update bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+export async function updateBillWithPayload(
+  connection: QboConnection,
+  payload: Record<string, unknown>,
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const updateUrl = `${baseUrl}/v3/company/${connection.realmId}/bill?operation=update`;
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update bill with payload', { status: response.status, error: errorText });
+    throw new Error(`Failed to update bill with payload: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
 }
 
 /**
@@ -532,7 +876,7 @@ export async function fetchJournalEntryById(
 
   const url = `${baseUrl}/v3/company/${connection.realmId}/journalentry/${journalEntryId}`;
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -565,7 +909,7 @@ export async function fetchPurchaseById(
 
   const url = `${baseUrl}/v3/company/${connection.realmId}/purchase/${purchaseId}`;
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -617,7 +961,7 @@ export async function updatePurchase(
 
   logger.info('Updating purchase in QBO', { purchaseId, updates });
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -637,6 +981,8 @@ export async function updatePurchase(
   return { purchase: data.Purchase, updatedConnection };
 }
 
+const ACCOUNTS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 /**
  * Fetch Chart of Accounts from QBO
  */
@@ -646,10 +992,18 @@ export async function fetchAccounts(
     includeInactive?: boolean;
   },
 ): Promise<{ accounts: QboAccount[]; updatedConnection?: QboConnection }> {
+  const includeInactive = options?.includeInactive === true;
+  const cacheKey = `accounts:${connection.realmId}:${includeInactive ? 'all' : 'active'}`;
+
+  const cached = getCached<QboAccount[]>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached accounts', { realmId: connection.realmId, includeInactive, count: cached.length });
+    return { accounts: cached };
+  }
+
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const includeInactive = options?.includeInactive === true;
   const query = includeInactive
     ? `SELECT * FROM Account MAXRESULTS 1000`
     : `SELECT * FROM Account WHERE Active = true MAXRESULTS 1000`;
@@ -657,7 +1011,7 @@ export async function fetchAccounts(
 
   logger.info('Fetching accounts from QBO', { includeInactive });
 
-  const response = await fetchWithTimeout(queryUrl, {
+  const response = await fetchWithRetry(queryUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -672,7 +1026,11 @@ export async function fetchAccounts(
 
   const data = (await response.json()) as QboQueryResponse;
   const accounts = data.QueryResponse.Account;
-  return { accounts: accounts ? accounts : [], updatedConnection };
+  const result = accounts ? accounts : [];
+
+  setCache(cacheKey, result, ACCOUNTS_CACHE_TTL_MS);
+
+  return { accounts: result, updatedConnection };
 }
 
 export async function fetchAccountsByFullyQualifiedName(
@@ -682,12 +1040,12 @@ export async function fetchAccountsByFullyQualifiedName(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const query = `SELECT * FROM Account WHERE FullyQualifiedName = '${fullyQualifiedName.replace(/'/g, "\\'")}' MAXRESULTS 10`;
+  const query = `SELECT * FROM Account WHERE FullyQualifiedName = '${escapeSoql(fullyQualifiedName)}' MAXRESULTS 10`;
   const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
 
   logger.info('Fetching account by fully qualified name from QBO', { fullyQualifiedName });
 
-  const response = await fetchWithTimeout(queryUrl, {
+  const response = await fetchWithRetry(queryUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
@@ -732,7 +1090,7 @@ export async function createAccount(
 
   logger.info('Creating account in QBO', { name: input.name, accountType: input.accountType, parentId: input.parentId });
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -749,6 +1107,10 @@ export async function createAccount(
   }
 
   const data = (await response.json()) as { Account: QboAccount };
+
+  // Invalidate accounts cache so next fetch picks up the new account
+  invalidateCache(`accounts:${connection.realmId}`);
+
   return { account: data.Account, updatedConnection };
 }
 
@@ -773,7 +1135,7 @@ export async function updateAccountActive(
 
   logger.info('Updating account in QBO', { accountId, active });
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -791,4 +1153,107 @@ export async function updateAccountActive(
 
   const data = await response.json();
   return { account: data.Account, updatedConnection };
+}
+
+/**
+ * Create a Bill in QBO.
+ */
+export async function createBill(
+  connection: QboConnection,
+  input: {
+    txnDate: string;
+    vendorId: string;
+    privateNote?: string;
+    lines: Array<{
+      amount: number;
+      accountId: string;
+      description?: string;
+    }>;
+  },
+): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/bill`;
+
+  const payload = {
+    TxnDate: input.txnDate,
+    VendorRef: { value: input.vendorId },
+    PrivateNote: input.privateNote,
+    Line: input.lines.map((line) => ({
+      DetailType: 'AccountBasedExpenseLineDetail',
+      Amount: line.amount,
+      Description: line.description,
+      AccountBasedExpenseLineDetail: {
+        AccountRef: { value: line.accountId },
+      },
+    })),
+  };
+
+  logger.info('Creating bill in QBO', { txnDate: input.txnDate, vendorId: input.vendorId });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to create bill', { status: response.status, error: errorText });
+    throw new Error(`Failed to create bill: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Bill: QboBill };
+  return { bill: data.Bill, updatedConnection };
+}
+
+const VENDORS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Fetch Vendors from QBO
+ */
+export async function fetchVendors(
+  connection: QboConnection,
+): Promise<{ vendors: QboVendor[]; updatedConnection?: QboConnection }> {
+  const cacheKey = `vendors:${connection.realmId}`;
+
+  const cached = getCached<QboVendor[]>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached vendors', { realmId: connection.realmId, count: cached.length });
+    return { vendors: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM Vendor WHERE Active = true MAXRESULTS 1000`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching vendors from QBO');
+
+  const response = await fetchWithRetry(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch vendors', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch vendors: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as QboQueryResponse;
+  const vendors = data.QueryResponse.Vendor;
+  const result = vendors ? vendors : [];
+
+  setCache(cacheKey, result, VENDORS_CACHE_TTL_MS);
+
+  return { vendors: result, updatedConnection };
 }

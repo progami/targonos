@@ -7,6 +7,8 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Building, Save, Loader2 } from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { withBasePath } from '@/lib/utils/base-path'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 interface Warehouse {
  id: string
@@ -122,7 +124,7 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
 
  const fetchWarehouse = async () => {
  try {
- const response = await fetch('/api/warehouses')
+ const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include' })
  if (!response.ok) throw new Error('Failed to fetch warehouses')
  
  const warehouses = await response.json()
@@ -217,9 +219,9 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  } = {
 	name: formData.name,
  kind: formData.kind,
- address: formattedAddress || null,
- contactEmail: formData.contactEmail.trim() || null,
-	contactPhone: formData.contactPhone || null
+ address: formattedAddress.trim().length > 0 ? formattedAddress : null,
+ contactEmail: formData.contactEmail.trim().length > 0 ? formData.contactEmail.trim() : null,
+	contactPhone: formData.contactPhone.trim().length > 0 ? formData.contactPhone.trim() : null
  }
 
  // Only update code if it changed
@@ -227,15 +229,15 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  (updateData as Record<string, unknown>).code = formData.code.toUpperCase()
  }
 
- const response = await fetch(`/api/warehouses?id=${id}`, {
+ const response = await fetchWithCSRF(withBasePath(`/api/warehouses?id=${id}`), {
  method: 'PATCH',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify(updateData)
+ body: JSON.stringify(updateData),
  })
 
  if (!response.ok) {
  const error = await response.json()
- throw new Error(error.error || 'Failed to update warehouse')
+ const message = typeof error?.error === 'string' ? error.error : 'Failed to update warehouse'
+ throw new Error(message)
  }
 
  alert('Warehouse updated successfully!')

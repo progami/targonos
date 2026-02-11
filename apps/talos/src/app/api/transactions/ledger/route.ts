@@ -100,19 +100,19 @@ export const GET = withAuth(async (request, session) => {
  ]
  })
 
- // Group transactions by warehouse + sku + batch
+ // Group transactions by warehouse + sku + lot
  const balances = new Map<string, number>()
  const skuInfo = new Map<string, {
  warehouse: string
  warehouseCode: string
  skuCode: string
  description: string
- batchLot: string
+ lotRef: string
  }>()
  
  // Calculate running balances
  const transactionsWithBalance = allTransactions.map(transaction => {
- const key = `${transaction.warehouseCode}-${transaction.skuCode}-${transaction.batchLot}`
+ const key = `${transaction.warehouseCode}-${transaction.skuCode}-${transaction.lotRef}`
  const currentBalance = balances.get(key) || 0
  const newBalance = currentBalance + transaction.cartonsIn - transaction.cartonsOut
  balances.set(key, newBalance)
@@ -123,7 +123,7 @@ export const GET = withAuth(async (request, session) => {
  warehouseCode: transaction.warehouseCode,
  skuCode: transaction.skuCode,
  description: transaction.skuDescription,
- batchLot: transaction.batchLot
+ lotRef: transaction.lotRef
  })
  
  // Process attachments efficiently
@@ -165,14 +165,14 @@ export const GET = withAuth(async (request, session) => {
  warehouseCode: balance.warehouseCode,
  skuCode: balance.skuCode,
  description: balance.skuDescription,
- batchLot: balance.batchLot,
+ lotRef: balance.lotRef,
  currentCartons: balance.currentCartons,
  currentPallets: balance.currentPallets,
  }))
  .sort((a, b) => {
  if (a.warehouse !== b.warehouse) return a.warehouse.localeCompare(b.warehouse)
  if (a.skuCode !== b.skuCode) return a.skuCode.localeCompare(b.skuCode)
- return a.batchLot.localeCompare(b.batchLot)
+ return a.lotRef.localeCompare(b.lotRef)
  })
 
  return NextResponse.json({

@@ -7,7 +7,7 @@ import '@/lib/utils/patch-fetch'
 import FetchPatch from '@/components/fetch-patch'
 import AppShell from '@/components/layout/app-shell'
 
-const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || ''
+const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? process.env.BASE_PATH ?? ''
 
 const inter = Inter({
   subsets: ['latin'],

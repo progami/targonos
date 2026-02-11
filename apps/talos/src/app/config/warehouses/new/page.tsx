@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 const formatAddress = (address: {
   addressLine1: string
@@ -103,9 +104,8 @@ export default function NewWarehousePage() {
         postalCode: formData.postalCode,
       })
 
-      const response = await fetch('/api/warehouses', {
+      const response = await fetchWithCSRF('/api/warehouses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: normalizedCode,
           name: formData.name,

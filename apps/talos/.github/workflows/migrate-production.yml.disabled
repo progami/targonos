@@ -88,9 +88,9 @@ EOF
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script: |
-            cd /home/ubuntu/wms-targon
+            cd /home/talos/app
             git pull origin main
             npm ci
             npx prisma generate
-            pm2 reload wms-app-ubuntu
+            pm2 reload talos-app
             echo "✅ Application reloaded with new schema"

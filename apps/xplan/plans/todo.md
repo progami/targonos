@@ -9,3 +9,5 @@
 5. COMPLETED - cntrl z not working on batch table
 
 6. COMPLETED - ops planning table not honoring multi select - uses browser select as well
+
+7. COMPLETED - add audit logging for strategy deletes (actor + strategyId) + improve nginx access logs with forwarded IP headers

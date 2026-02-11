@@ -126,13 +126,13 @@ async function createPurchaseOrders() {
         const unitsPerCarton = sku.unitsPerCarton ?? 1
         const unitsOrdered = cartonsOrdered * unitsPerCarton
         const unitCostDecimal = new Prisma.Decimal(unitCost)
-        return {
-          skuCode: sku.skuCode,
-          skuDescription: sku.description,
-          batchLot: `LOT-${batchSuffix ?? index + 1}`,
-          unitsOrdered,
-          unitsPerCarton,
-          quantity: cartonsOrdered,
+	        return {
+	          skuCode: sku.skuCode,
+	          skuDescription: sku.description,
+	          lotRef: `Lot-${batchSuffix ?? index + 1}-SETUP-${sku.skuCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}`,
+	          unitsOrdered,
+	          unitsPerCarton,
+	          quantity: cartonsOrdered,
           unitCost: unitCostDecimal,
           totalCost: unitCostDecimal.mul(unitsOrdered),
         }

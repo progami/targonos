@@ -22,7 +22,8 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
     accessError = `You don't have access to ${appName}. Contact an administrator if you need access.`
   }
 
-  const rolesClaim = (session as any).roles as Record<string, any> | undefined
+  const authzApps = (session as any).authz?.apps as Record<string, any> | undefined
+  const rolesClaim = authzApps ?? ((session as any).roles as Record<string, any> | undefined)
   const normalizedRolesClaim = (() => {
     if (!rolesClaim) return rolesClaim
 
@@ -41,15 +42,25 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
 
     return normalized
   })()
+  const globalRolesFromAuthz = Array.isArray((session as any).authz?.globalRoles)
+    ? ((session as any).authz.globalRoles as unknown[])
+    : []
+  const globalRolesFromSession = Array.isArray((session as any).globalRoles)
+    ? ((session as any).globalRoles as unknown[])
+    : []
+  const isPlatformAdmin = [...globalRolesFromAuthz, ...globalRolesFromSession]
+    .map((value) => String(value).trim().toLowerCase())
+    .includes('platform_admin')
+
   const allowedAppIds = normalizedRolesClaim ? Object.keys(normalizedRolesClaim) : []
-  const assignedApps = filterAppsForUser(allowedAppIds)
+  const assignedApps = isPlatformAdmin
+    ? ALL_APPS.filter((app) => app.lifecycle !== 'archive')
+    : filterAppsForUser(allowedAppIds)
 
-  const previewApps = ALL_APPS.filter((app) => {
-    if (app.lifecycle !== 'dev') return false
-    return !assignedApps.some((assigned) => assigned.id === app.id)
-  })
-
-  const apps = [...assignedApps, ...previewApps]
+  const apps = ALL_APPS.filter((app) => (
+    app.lifecycle !== 'archive'
+    && (app.lifecycle !== 'dev' || isPlatformAdmin)
+  ))
 
   // Resolve URLs on the server side so the client never sees placeholder slugs or stale hosts
   const appsWithUrls = apps.map(app => ({
@@ -68,6 +79,7 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
       apps={appsWithUrls}
       accessApps={assignedAppsWithUrls}
       roles={normalizedRolesClaim}
+      isPlatformAdmin={isPlatformAdmin}
       accessError={accessError}
     />
   )

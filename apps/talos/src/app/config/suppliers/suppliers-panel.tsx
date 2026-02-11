@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { PortalModal } from '@/components/ui/portal-modal'
 import { Textarea } from '@/components/ui/textarea'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 import { usePageState } from '@/lib/store/page-state'
 import { Loader2, Plus, Search, Trash2, Users } from '@/lib/lucide-icons'
 
@@ -113,7 +114,9 @@ export default function SuppliersPanel({
   const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/suppliers?${buildQuery()}`, { credentials: 'include' })
+      const response = await fetch(withBasePath(`/api/suppliers?${buildQuery()}`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         throw new Error(payload?.error ?? 'Failed to load suppliers')

@@ -59,7 +59,7 @@ export const GET = withAuth(async (request, session) => {
  where.OR = [
  { skuCode: { contains: search, mode: 'insensitive' } },
  { skuDescription: { contains: search, mode: 'insensitive' } },
- { batchLot: { contains: search, mode: 'insensitive' } },
+ { lotRef: { contains: search, mode: 'insensitive' } },
  { warehouseName: { contains: search, mode: 'insensitive' } }
  ]
  }
@@ -75,7 +75,7 @@ export const GET = withAuth(async (request, session) => {
  warehouseName: true,
  skuCode: true,
  skuDescription: true,
- batchLot: true,
+ lotRef: true,
  weekEndingDate: true,
  closingBalance: true,
  averageBalance: true,

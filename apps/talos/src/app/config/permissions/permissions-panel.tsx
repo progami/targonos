@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Check,
   ChevronDown,
+  Factory,
   Search,
   Shield,
   ShieldCheck,
@@ -15,6 +16,7 @@ import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useSession } from '@/hooks/usePortalSession'
 
 const PAGE_KEY = '/config/permissions'
 
@@ -36,7 +38,20 @@ interface UserWithPermissions {
   permissions: Permission[]
 }
 
+interface ProductAssignmentRecord {
+  email: string
+  skuCode: string
+  createdAt: string
+  createdByEmail: string
+}
+
+interface ProductAssignmentSkuOption {
+  skuCode: string
+  description: string
+}
+
 export default function PermissionsPanel() {
+  const { data: session } = useSession()
   const pageState = usePageState(PAGE_KEY)
   const [users, setUsers] = useState<UserWithPermissions[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
@@ -45,6 +60,14 @@ export default function PermissionsPanel() {
   const setSearchTerm = pageState.setSearch
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
   const [savingPermission, setSavingPermission] = useState<string | null>(null)
+  const [assignmentEmail, setAssignmentEmail] = useState('')
+  const [assignmentSkuCode, setAssignmentSkuCode] = useState('')
+  const [assignmentSkus, setAssignmentSkus] = useState<ProductAssignmentSkuOption[]>([])
+  const [assignmentSkusLoading, setAssignmentSkusLoading] = useState(false)
+  const [assignments, setAssignments] = useState<ProductAssignmentRecord[]>([])
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false)
+  const [assignmentSaving, setAssignmentSaving] = useState(false)
+  const [assignmentDeletingSkuCode, setAssignmentDeletingSkuCode] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -72,6 +95,106 @@ export default function PermissionsPanel() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const loadAssignmentSkus = useCallback(async () => {
+    try {
+      setAssignmentSkusLoading(true)
+      const response = await fetchWithCSRF('/api/skus')
+      if (!response.ok) {
+        throw new Error('Failed to load products')
+      }
+
+      const payload = await response.json().catch(() => null)
+      const rows = Array.isArray(payload) ? payload : []
+      const mapped = rows
+        .map((row): ProductAssignmentSkuOption | null => {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+          const record = row as Record<string, unknown>
+          const skuCode = record.skuCode
+          const description = record.description
+          if (typeof skuCode !== 'string' || !skuCode.trim()) return null
+          return {
+            skuCode: skuCode,
+            description: typeof description === 'string' ? description : '',
+          }
+        })
+        .filter((row): row is ProductAssignmentSkuOption => row !== null)
+        .sort((a, b) => a.skuCode.localeCompare(b.skuCode))
+
+      setAssignmentSkus(mapped)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load products')
+    } finally {
+      setAssignmentSkusLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadAssignmentSkus()
+  }, [loadAssignmentSkus])
+
+  const loadAssignments = useCallback(async (email: string) => {
+    if (!email.trim()) {
+      setAssignments([])
+      return
+    }
+
+    try {
+      setAssignmentsLoading(true)
+      const response = await fetchWithCSRF(
+        `/api/po-product-assignments?email=${encodeURIComponent(email.trim())}`
+      )
+      if (!response.ok) {
+        throw new Error('Failed to load product assignments')
+      }
+
+      const payload = await response.json().catch(() => null)
+      const rows = Array.isArray(payload?.assignments) ? payload.assignments : []
+      const mapped = rows
+        .map((row): ProductAssignmentRecord | null => {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+          const record = row as Record<string, unknown>
+          const candidateEmail = record.email
+          const skuCode = record.skuCode
+          const createdAt = record.createdAt
+          const createdByEmail = record.createdByEmail
+          if (typeof candidateEmail !== 'string' || !candidateEmail.trim()) return null
+          if (typeof skuCode !== 'string' || !skuCode.trim()) return null
+          if (typeof createdAt !== 'string' || !createdAt.trim()) return null
+          if (typeof createdByEmail !== 'string' || !createdByEmail.trim()) return null
+
+          return {
+            email: candidateEmail,
+            skuCode,
+            createdAt,
+            createdByEmail,
+          }
+        })
+        .filter((row): row is ProductAssignmentRecord => row !== null)
+
+      setAssignments(mapped)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load product assignments')
+    } finally {
+      setAssignmentsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (assignmentEmail.trim()) {
+      void loadAssignments(assignmentEmail)
+      return
+    }
+    setAssignments([])
+  }, [assignmentEmail, loadAssignments])
+
+  useEffect(() => {
+    if (assignmentEmail.trim()) return
+    if (users.length === 0) return
+    const first = users[0]
+    if (!first?.email) return
+    setAssignmentEmail(first.email)
+  }, [assignmentEmail, users])
 
   const handleTogglePermission = async (
     userId: string,
@@ -105,6 +228,75 @@ export default function PermissionsPanel() {
     }
   }
 
+  const handleAddAssignment = useCallback(async () => {
+    const email = assignmentEmail.trim()
+    const skuCode = assignmentSkuCode.trim()
+
+    if (!email) {
+      toast.error('Assignee email is required')
+      return
+    }
+    if (!skuCode) {
+      toast.error('SKU is required')
+      return
+    }
+
+    try {
+      setAssignmentSaving(true)
+      const response = await fetchWithCSRF('/api/po-product-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, skuCode }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Failed to add assignment')
+      }
+
+      toast.success('Product assignment added')
+      setAssignmentSkuCode('')
+      await loadAssignments(email)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add assignment')
+    } finally {
+      setAssignmentSaving(false)
+    }
+  }, [assignmentEmail, assignmentSkuCode, loadAssignments])
+
+  const handleRemoveAssignment = useCallback(
+    async (skuCode: string) => {
+      const email = assignmentEmail.trim()
+      if (!email) return
+
+      try {
+        setAssignmentDeletingSkuCode(skuCode)
+        const response = await fetchWithCSRF('/api/po-product-assignments', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, skuCode }),
+        })
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          throw new Error(
+            typeof payload?.error === 'string'
+              ? payload.error
+              : 'Failed to remove assignment'
+          )
+        }
+
+        toast.success('Product assignment removed')
+        await loadAssignments(email)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to remove assignment')
+      } finally {
+        setAssignmentDeletingSkuCode(null)
+      }
+    },
+    [assignmentEmail, loadAssignments]
+  )
+
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     return users.filter((user) => {
@@ -135,6 +327,11 @@ export default function PermissionsPanel() {
     }
     return labels[category] || category
   }
+
+  const sessionEmail = (session?.user?.email ?? '').toLowerCase()
+  const isCurrentUserSuperAdmin = users.some(
+    (user) => user.email.toLowerCase() === sessionEmail && user.isSuperAdmin
+  ) || permissions.length > 0
 
   return (
     <div className="space-y-6">
@@ -327,6 +524,119 @@ export default function PermissionsPanel() {
           </div>
         )}
       </div>
+
+      {isCurrentUserSuperAdmin && (
+        <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 px-6 py-5">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Factory className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-xl font-semibold text-foreground">
+                  Manufacturing Product Assignments
+                </h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Assign products to users for cross-region Manufacturing PO visibility.
+              </p>
+            </div>
+            <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 font-medium">
+              {assignments.length} assignments
+            </Badge>
+          </div>
+
+          <div className="space-y-4 px-6 py-5">
+            <div className="grid gap-3 md:grid-cols-[1.2fr,1fr,auto] md:items-end">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Assignee Email
+                </label>
+                <input
+                  value={assignmentEmail}
+                  onChange={(event) => setAssignmentEmail(event.target.value)}
+                  list="assignment-user-email-options"
+                  placeholder="name@company.com"
+                  className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900"
+                />
+                <datalist id="assignment-user-email-options">
+                  {users.map((user) => (
+                    <option key={user.id} value={user.email} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Product (SKU)
+                </label>
+                <select
+                  value={assignmentSkuCode}
+                  onChange={(event) => setAssignmentSkuCode(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 text-sm text-foreground focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900"
+                >
+                  <option value="">Select SKU</option>
+                  {assignmentSkus.map((sku) => (
+                    <option key={sku.skuCode} value={sku.skuCode}>
+                      {sku.skuCode} {sku.description ? `- ${sku.description}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <Button
+                type="button"
+                onClick={() => void handleAddAssignment()}
+                disabled={assignmentSaving || assignmentSkusLoading}
+              >
+                {assignmentSaving ? 'Adding...' : 'Add Assignment'}
+              </Button>
+            </div>
+
+            {assignmentsLoading ? (
+              <div className="text-sm text-muted-foreground">Loading assignments...</div>
+            ) : assignments.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 px-4 py-6 text-sm text-muted-foreground">
+                No product assignments found for this email.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">SKU</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Assigned By</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Assigned At</th>
+                      <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {assignments.map((assignment) => (
+                      <tr key={`${assignment.email}-${assignment.skuCode}`}>
+                        <td className="px-3 py-2 font-mono text-xs text-foreground">
+                          {assignment.skuCode}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{assignment.createdByEmail}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {new Date(assignment.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleRemoveAssignment(assignment.skuCode)}
+                            disabled={assignmentDeletingSkuCode === assignment.skuCode}
+                          >
+                            {assignmentDeletingSkuCode === assignment.skuCode ? 'Removing...' : 'Remove'}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

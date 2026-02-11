@@ -1,13 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkbookLayout } from '@/components/workbook-layout'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { YearSegment } from '@/lib/calculations/calendar'
 import { SHEETS } from '@/lib/sheets'
 import type { WorkbookSheetStatus } from '@/lib/workbook'
 
 const pushMock = vi.fn()
 let searchParamsInstance: URLSearchParams
-let mockedPathname = '/2-product-setup'
+let mockedPathname = '/1-setup'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -37,14 +38,16 @@ function renderLayout(activeYear: number | null, activeSlug: WorkbookSheetStatus
   mockedPathname = `/${activeSlug}`
 
   render(
-    <WorkbookLayout
-      sheets={sheetStatus}
-      activeSlug={activeSlug}
-      planningYears={planningYears}
-      activeYear={activeYear}
-    >
-      <div>content</div>
-    </WorkbookLayout>,
+    <TooltipProvider>
+      <WorkbookLayout
+        sheets={sheetStatus}
+        activeSlug={activeSlug}
+        planningYears={planningYears}
+        activeYear={activeYear}
+      >
+        <div>content</div>
+      </WorkbookLayout>
+    </TooltipProvider>,
   )
 }
 
@@ -58,25 +61,27 @@ describe('WorkbookLayout year navigation', () => {
     pushMock.mockReset()
   })
 
-  it('renders year controls on year-aware sheets and allows switching via select', () => {
+  it('renders year controls on year-aware sheets and allows switching via button', () => {
     renderLayout(2025)
 
-    const yearSelects = screen.getAllByRole('combobox', { name: 'Select year' })
-    fireEvent.change(yearSelects[0]!, { target: { value: '2026' } })
+    const yearGroups = screen.getAllByRole('group', { name: 'Select year' })
+    expect(yearGroups.length).toBeGreaterThan(0)
+    const btns2026 = screen.getAllByRole('button', { name: /2026/ })
+    fireEvent.click(btns2026[0]!)
     expect(pushMock).toHaveBeenCalledWith('/4-sales-planning?year=2026')
   })
 
   it('renders year controls on ops planning', () => {
     renderLayout(2025, '3-ops-planning')
 
-    const yearSelects = screen.getAllByRole('combobox', { name: 'Select year' })
-    fireEvent.change(yearSelects[0]!, { target: { value: '2026' } })
+    const btns2026 = screen.getAllByRole('button', { name: /2026/ })
+    fireEvent.click(btns2026[0]!)
     expect(pushMock).toHaveBeenCalledWith('/3-ops-planning?year=2026')
   })
 
   it('hides year controls on time-agnostic sheets', () => {
-    renderLayout(2026, '2-product-setup')
+    renderLayout(2026, '1-setup')
 
-    expect(screen.queryByRole('combobox', { name: 'Select year' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Select year' })).not.toBeInTheDocument()
   })
 })

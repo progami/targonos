@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: '/amazon/fba-fee-discrepancies',
+        destination: '/talos/amazon/fba-fee-discrepancies',
+        permanent: false,
+      },
+    ]
+  },
   images: {
     // NOTE: Some production setups (reverse proxies / missing optional deps)
     // can break the default image optimizer route (/_next/image).

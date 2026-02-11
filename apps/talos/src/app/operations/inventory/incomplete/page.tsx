@@ -73,13 +73,13 @@ export default function InventoryIncompletePage() {
   const [trackingDraft, setTrackingDraft] = useState<Record<string, string>>({})
   const [pickupDraft, setPickupDraft] = useState<Record<string, string>>({})
 
-  const loadTransactions = useCallback(async () => {
-    try {
-      const response = await fetch('/api/inventory/incomplete', { credentials: 'include' })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error ?? 'Failed to load incomplete transactions')
-      }
+	  const loadTransactions = useCallback(async () => {
+	    try {
+	      const response = await fetch(withBasePath('/api/inventory/incomplete'), { credentials: 'include' })
+	      if (!response.ok) {
+	        const payload = await response.json().catch(() => null)
+	        throw new Error(payload?.error ?? 'Failed to load incomplete transactions')
+	      }
 
       const data = (await response.json()) as IncompleteTransaction[]
       setTransactions(data)

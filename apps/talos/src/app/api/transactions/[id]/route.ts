@@ -164,7 +164,7 @@ export const GET = withAuthAndParams(async (request, params, _session) => {
  id: true,
  transactionDate: true,
  transactionType: true,
- batchLot: true,
+ lotRef: true,
  referenceId: true,
  cartonsIn: true,
  cartonsOut: true,
@@ -369,7 +369,7 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
  id: transaction.id,
  type: transaction.transactionType,
  sku: transaction.skuCode,
- batch: transaction.batchLot,
+ lotRef: transaction.lotRef,
  quantity: transaction.cartonsIn || transaction.cartonsOut
  }
  })

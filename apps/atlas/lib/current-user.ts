@@ -1,6 +1,5 @@
 import { headers } from 'next/headers'
 import { decodePortalSession, getCandidateSessionCookieNames, type PortalJwtPayload } from '@targon/auth'
-import { Prisma } from '@targon/prisma-atlas'
 import { prisma } from './prisma'
 import { createTemporaryEmployeeId, formatEmployeeId } from './employee-identifiers'
 
@@ -50,6 +49,14 @@ function splitNameFromSession(sessionName: string | undefined, email: string): {
   if (guessed.length === 0) return { firstName: 'Employee', lastName: '' }
   if (guessed.length === 1) return { firstName: guessed[0]!, lastName: '' }
   return { firstName: guessed[0]!, lastName: guessed.slice(1).join(' ') }
+}
+
+function getPrismaErrorCode(error: unknown): string | null {
+  if (!error) return null
+  if (typeof error !== 'object') return null
+  const maybeCode = (error as Record<string, unknown>).code
+  if (typeof maybeCode !== 'string') return null
+  return maybeCode
 }
 
 async function ensureEmployeeProfile(session: PortalJwtPayload): Promise<CurrentEmployee | null> {
@@ -151,7 +158,8 @@ async function ensureEmployeeProfile(session: PortalJwtPayload): Promise<Current
         })
       })
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const errorCode = getPrismaErrorCode(error)
+      if (errorCode === 'P2002') {
         const fetched = await prisma.employee.findUnique({
           where: { email },
           select: {

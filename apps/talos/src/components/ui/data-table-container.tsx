@@ -23,7 +23,7 @@ export function DataTableContainer({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border border-border bg-card shadow-soft',
+        'flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft',
         className
       )}
     >
@@ -40,7 +40,7 @@ export function DataTableContainer({
           {headerContent && <div className="flex items-center gap-2">{headerContent}</div>}
         </div>
       )}
-      <div className="overflow-x-auto">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">{children}</div>
     </div>
   )
 }
@@ -85,7 +85,7 @@ export function DataTableHeaderCell({
   return (
     <th
       className={cn(
-        'px-3 py-2 font-semibold whitespace-nowrap',
+        'sticky top-0 z-10 bg-muted/40 px-3 py-2 font-semibold whitespace-nowrap align-top',
         alignClass,
         className
       )}

@@ -7,13 +7,14 @@ All apps share `portal_db` on localhost:5432 with separate schemas per app. Conn
 | App | Schema |
 |-----|--------|
 | talos | dev_talos_us, dev_talos_uk |
-| atlas | dev_hrms |
+| atlas | dev_atlas |
 | xplan | dev_xplan |
 | kairos | chronos |
-| sso | dev_auth |
-| plutus | (no DB - uses QuickBooks API) |
+| sso | auth |
+| plutus | plutus |
 
 Talos also has main schemas: `main_talos_us`, `main_talos_uk`.
+Atlas also has main schema: `atlas`.
 
 Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
@@ -30,7 +31,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ### Branch Naming
 
-Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `hrms/`, `sso/`, `plutus/`
+Use app name as prefix: `atlas/`, `xplan/`, `talos/`, `kairos/`, `sso/`, `plutus/`
 
 Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/improve-loading`
 

@@ -37,9 +37,8 @@ export const LMB_PARENT_ACCOUNTS = [
   'Mfg Accessories',
   'Inventory Shrinkage',
   'Inventory Variance',
-  'Storage 3PL',
+  'Product Expenses',
   'Warehousing',
-  'Land Freight',
 
   // Warehousing Sub-accounts (Plutus)
   '3PL',
@@ -75,19 +74,18 @@ export const LMB_BRAND_ACCOUNT_PREFIXES = [
   'Manufacturing -',
   'Freight -',
   'Duty -',
-  'Land Freight -',
-  'Storage 3PL -',
   'Mfg Accessories -',
   'Inventory Shrinkage -',
+  'Product Expenses -',
 
   // Other Income sub-accounts
   'Amazon FBA Inventory Reimbursement -',
 
   // Inventory Asset sub-accounts (Plutus)
-  'Inv Manufacturing -',
-  'Inv Freight -',
-  'Inv Duty -',
-  'Inv Mfg Accessories -',
+  'Manufacturing -',
+  'Freight -',
+  'Duty -',
+  'Mfg Accessories -',
 ] as const;
 
 /**
@@ -98,25 +96,43 @@ export const LMB_ACCOUNT_PREFIXES = [
   'Plutus ',
 ] as const;
 
+function splitAccountPath(accountPath: string): { full: string; leaf: string } {
+  const full = accountPath.trim();
+  const parts = full.split(':');
+  const leaf = (parts[parts.length - 1] ?? '').trim();
+  return { full, leaf };
+}
+
 /**
  * Check if an account name is an LMB/Plutus default account
  */
-export function isLmbDefaultAccount(accountName: string): boolean {
+export function isLmbDefaultAccount(accountPath: string): boolean {
+  const { full, leaf } = splitAccountPath(accountPath);
+
+  // Special-case: Warehousing buckets use brand leaf names (e.g. "Warehousing:3PL:US-Dust Sheets")
+  if (
+    full.startsWith('Warehousing:3PL:') ||
+    full.startsWith('Warehousing:Amazon FC:') ||
+    full.startsWith('Warehousing:AWD:')
+  ) {
+    return true;
+  }
+
   // Check exact matches first
-  if (LMB_PARENT_ACCOUNTS.includes(accountName as typeof LMB_PARENT_ACCOUNTS[number])) {
+  if (LMB_PARENT_ACCOUNTS.includes(leaf as typeof LMB_PARENT_ACCOUNTS[number])) {
     return true;
   }
 
   // Check brand sub-account prefixes (e.g., "Amazon Sales - UK-Dust Sheets")
   for (const prefix of LMB_BRAND_ACCOUNT_PREFIXES) {
-    if (accountName.startsWith(prefix)) {
+    if (leaf.startsWith(prefix)) {
       return true;
     }
   }
 
   // Check general LMB prefixes
   for (const prefix of LMB_ACCOUNT_PREFIXES) {
-    if (accountName.startsWith(prefix)) {
+    if (leaf.startsWith(prefix)) {
       return true;
     }
   }
@@ -127,6 +143,6 @@ export function isLmbDefaultAccount(accountName: string): boolean {
 /**
  * Categorize account as 'lmb' (LMB/Plutus created) or 'qbo' (QBO/user created)
  */
-export function getAccountSource(accountName: string): 'lmb' | 'qbo' {
-  return isLmbDefaultAccount(accountName) ? 'lmb' : 'qbo';
+export function getAccountSource(accountPath: string): 'lmb' | 'qbo' {
+  return isLmbDefaultAccount(accountPath) ? 'lmb' : 'qbo';
 }

@@ -121,7 +121,9 @@ export default function CostLedgerPage() {
         params.append('warehouseCode', filters.warehouse)
       }
 
-      const response = await fetch(`/api/finance/cost-ledger?${params}`)
+      const response = await fetch(withBasePath(`/api/finance/cost-ledger?${params}`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         const errorData = await response
           .json()
@@ -270,7 +272,9 @@ export default function CostLedgerPage() {
         params.append('warehouseCode', filters.warehouse)
       }
 
-      const response = await fetch(`/api/finance/export/cost-ledger?${params}`)
+      const response = await fetch(withBasePath(`/api/finance/export/cost-ledger?${params}`), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         toast.error('Failed to export cost ledger')
         return

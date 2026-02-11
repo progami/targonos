@@ -65,7 +65,7 @@ export function aggregateCostLedger(
       transactionType: entry.context?.transactionType || 'UNKNOWN',
       warehouse: entry.context?.warehouseName || entry.warehouseCode || 'Unknown Warehouse',
       sku: entry.context?.skuCode || 'Unknown SKU',
-      batchLot: entry.context?.batchLot || '',
+      lotRef: entry.context?.lotRef || '',
       costCategory: entry.costCategory,
       quantity: parseNumeric(entry.quantity),
       unitRate: parseNumeric(entry.unitRate),

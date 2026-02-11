@@ -21,7 +21,7 @@ export const GET = withAuth(async (request, session) => {
  const startDate = searchParams.get('startDate')
  const endDate = searchParams.get('endDate')
  const skuCode = searchParams.get('skuCode')
- const batchLot = searchParams.get('batchLot')
+ const lotRef = searchParams.get('lotRef')
  const fullExport = searchParams.get('full') === 'true'
 
  // Build where clause
@@ -69,9 +69,9 @@ export const GET = withAuth(async (request, session) => {
  }
  }
 
- if (batchLot) {
- where.batchLot = {
- contains: batchLot,
+ if (lotRef) {
+ where.lotRef = {
+ contains: lotRef,
  mode: 'insensitive'
  }
  }
@@ -155,7 +155,7 @@ export const GET = withAuth(async (request, session) => {
  warehouseCode: string
  skuCode: string
  skuDescription: string
- batchLot: string
+ lotRef: string
  currentCartons: number
  lastActivity: Date
  }
@@ -163,13 +163,13 @@ export const GET = withAuth(async (request, session) => {
  const balances = new Map<string, BalanceSnapshot>()
  
  for (const transaction of transactions) {
- const key = `${transaction.warehouseCode}-${transaction.skuCode}-${transaction.batchLot}`
+ const key = `${transaction.warehouseCode}-${transaction.skuCode}-${transaction.lotRef}`
  const current = balances.get(key) || {
  warehouseName: transaction.warehouseName,
  warehouseCode: transaction.warehouseCode,
  skuCode: transaction.skuCode,
  skuDescription: transaction.skuDescription,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  currentCartons: 0,
  lastActivity: transaction.transactionDate
  }
@@ -185,13 +185,13 @@ export const GET = withAuth(async (request, session) => {
  .sort((a, b) => {
  if (a.warehouseName !== b.warehouseName) return a.warehouseName.localeCompare(b.warehouseName)
  if (a.skuCode !== b.skuCode) return a.skuCode.localeCompare(b.skuCode)
- return a.batchLot.localeCompare(b.batchLot)
+ return a.lotRef.localeCompare(b.lotRef)
  })
  .map(item => ({
  'Warehouse': item.warehouseName,
  'SKU Code': item.skuCode,
  'Description': item.skuDescription,
- 'Batch': item.batchLot,
+ 'Lot Ref': item.lotRef,
  'Cartons': item.currentCartons,
  'Last Activity': formatDateGMT(item.lastActivity)
  }))

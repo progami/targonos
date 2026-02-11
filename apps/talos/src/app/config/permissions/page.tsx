@@ -9,6 +9,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Shield } from '@/lib/lucide-icons'
 import PermissionsPanel from './permissions-panel'
 import { redirectToPortal } from '@/lib/portal'
+import { withBasePath } from '@/lib/utils/base-path'
 
 const SUPER_ADMIN_EMAILS = ['jarrar@targonglobal.com']
 
@@ -24,8 +25,7 @@ export default function PermissionsPage() {
     if (status === 'loading') return
 
     if (!session) {
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-      redirectToPortal('/login', `${window.location.origin}${basePath}/config/permissions`)
+      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/permissions')}`)
       return
     }
 

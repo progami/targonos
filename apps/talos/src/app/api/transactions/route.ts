@@ -15,7 +15,6 @@ import { businessLogger, perfLogger } from '@/lib/logger/index'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import { parseLocalDateTime } from '@/lib/utils/date-helpers'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
-import { resolveBatchLot } from '@/lib/services/purchase-order-utils'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { isRecord, asString, asNumber, asBoolean } from '@/lib/utils/type-coercion'
 import {
@@ -36,7 +35,7 @@ function toFinancialCategory(costCategory: CostCategory) {
 type MutableTransactionLine = {
   skuCode?: string
   skuId?: string
-  batchLot?: string
+  lotRef?: string
   cartons?: number
   pallets?: number
   storageCartonsPerPallet?: number
@@ -50,7 +49,7 @@ type MutableTransactionLine = {
 
 type ValidatedTransactionLine = {
   skuCode: string
-  batchLot: string
+  lotRef: string
   cartons: number
   pallets?: number
   storageCartonsPerPallet?: number | null
@@ -92,10 +91,12 @@ function normalizeTransactionLine(input: unknown): MutableTransactionLine {
     return {}
   }
 
+  const lotRef = asString(input.lotRef)
+
   return {
     skuCode: asString(input.skuCode),
     skuId: asString(input.skuId),
-    batchLot: asString(input.batchLot),
+    lotRef,
     cartons: asNumber(input.cartons),
     pallets: asNumber(input.pallets),
     storageCartonsPerPallet: asNumber(input.storageCartonsPerPallet),
@@ -145,7 +146,7 @@ export const GET = withAuth(async (request, _session) => {
         id: true,
         transactionDate: true,
         transactionType: true,
-        batchLot: true,
+        lotRef: true,
         referenceId: true,
         cartonsIn: true,
         cartonsOut: true,
@@ -258,12 +259,12 @@ export const POST = withAuth(async (request, session) => {
       trackingNumber,
       attachments,
       notes,
-      warehouseId: bodyWarehouseId,
-      skuId,
-      batchLot,
-      cartonsIn,
-      cartonsOut,
-      storagePalletsIn,
+	      warehouseId: bodyWarehouseId,
+	      skuId,
+	      lotRef,
+	      cartonsIn,
+	      cartonsOut,
+	      storagePalletsIn,
       shippingPalletsOut,
       supplier,
       receiveType,
@@ -277,9 +278,12 @@ export const POST = withAuth(async (request, session) => {
     const sanitizedReferenceNumber = referenceNumber ? sanitizeForDisplay(referenceNumber) : null
     const sanitizedReferenceId = referenceId ? sanitizeForDisplay(referenceId) : null
     const sanitizedShipName = shipName ? sanitizeForDisplay(shipName) : null
-    const sanitizedTrackingNumber = trackingNumber ? sanitizeForDisplay(trackingNumber) : null
-    const sanitizedNotes = notes ? sanitizeForDisplay(notes) : null
-    const sanitizedSupplier = supplier ? sanitizeForDisplay(supplier) : null
+	    const sanitizedTrackingNumber = trackingNumber ? sanitizeForDisplay(trackingNumber) : null
+	    const sanitizedNotes = notes ? sanitizeForDisplay(notes) : null
+	    const sanitizedSupplier = supplier ? sanitizeForDisplay(supplier) : null
+	    const resolvedLotRefInput =
+	      typeof lotRef === 'string' && lotRef.trim().length > 0 ? lotRef : null
+	    const sanitizedLotRef = resolvedLotRefInput ? sanitizeForDisplay(resolvedLotRefInput) : null
 
     // Handle both 'type' and 'transactionType' fields for backward compatibility
     const txType = type ?? transactionType
@@ -329,20 +333,20 @@ export const POST = withAuth(async (request, session) => {
 
     const rawItemsInput = Array.isArray(items) ? items : Array.isArray(lineItems) ? lineItems : []
 
-    const hasInlineSkuCreation = rawItemsInput.some(item => {
-      if (!isRecord(item)) return false
-      return Boolean(asBoolean(item.isNewSku)) || item.skuData != null || item.batchData != null
-    })
+	    const hasInlineSkuCreation = rawItemsInput.some(item => {
+	      if (!isRecord(item)) return false
+	      return Boolean(asBoolean(item.isNewSku)) || item.skuData != null
+	    })
 
-    if (hasInlineSkuCreation) {
-      return NextResponse.json(
-        {
-          error:
-            'Creating new SKUs/batches from transactions is disabled. Create SKUs and batches in Config → Products first.',
-        },
-        { status: 400 }
-      )
-    }
+	    if (hasInlineSkuCreation) {
+	      return NextResponse.json(
+	        {
+	          error:
+	            'Creating new SKUs from transactions is disabled. Create SKUs in Config → Products first.',
+	        },
+	        { status: 400 }
+	      )
+	    }
 
     let itemsArray: MutableTransactionLine[] = rawItemsInput.map(normalizeTransactionLine)
 
@@ -354,22 +358,21 @@ export const POST = withAuth(async (request, session) => {
       )
     }
 
-    const attachmentList: AttachmentPayload[] = Array.isArray(attachments)
-      ? attachments
-          .map(normalizeAttachmentInput)
-          .filter((item): item is AttachmentPayload => item !== null)
-      : []
-    const batchValidationCache = new Map<string, boolean>()
+	    const attachmentList: AttachmentPayload[] = Array.isArray(attachments)
+	      ? attachments
+	          .map(normalizeAttachmentInput)
+	          .filter((item): item is AttachmentPayload => item !== null)
+	      : []
 
-    if (['ADJUST_IN', 'ADJUST_OUT'].includes(txType)) {
-      if (!skuId || !batchLot) {
-        return NextResponse.json(
-          {
-            error: 'Missing required fields for adjustment: skuId and batchLot',
-          },
-          { status: 400 }
-        )
-      }
+	    if (['ADJUST_IN', 'ADJUST_OUT'].includes(txType)) {
+	      if (!skuId || !sanitizedLotRef) {
+	        return NextResponse.json(
+	          {
+	            error: 'Missing required fields for adjustment: skuId and lotRef',
+	          },
+	          { status: 400 }
+	        )
+	      }
 
       const sku = await prisma.sku.findUnique({
         where: { id: skuId },
@@ -380,15 +383,15 @@ export const POST = withAuth(async (request, session) => {
         return NextResponse.json({ error: 'SKU not found' }, { status: 404 })
       }
 
-      itemsArray = [
-        {
-          skuCode: sku.skuCode,
-          batchLot,
-          cartons: cartonsIn ?? cartonsOut ?? 0,
-          pallets: storagePalletsIn ?? shippingPalletsOut ?? 0,
-        },
-      ]
-    }
+	      itemsArray = [
+	        {
+	          skuCode: sku.skuCode,
+	          lotRef: sanitizedLotRef,
+	          cartons: cartonsIn ?? cartonsOut ?? 0,
+	          pallets: storagePalletsIn ?? shippingPalletsOut ?? 0,
+	        },
+	      ]
+	    }
 
     // Validate required fields for non-adjustment transactions
     if (['RECEIVE', 'SHIP'].includes(txType)) {
@@ -513,49 +516,15 @@ export const POST = withAuth(async (request, session) => {
         }
       }
 
-      // Validate item structure
-      if (!item.skuCode || !item.batchLot || typeof item.cartons !== 'number') {
-        return NextResponse.json(
-          {
-            error: `Invalid item structure. Each item must have skuCode, batchLot, and cartons`,
-          },
-          { status: 400 }
-        )
-      }
-
-      // For RECEIVE, auto-fill missing units-per-carton from batch defaults (SkuBatch)
-      if (txType === 'RECEIVE') {
-        const needsUnitsPerCarton = !item.unitsPerCarton || item.unitsPerCarton <= 0
-
-        if (needsUnitsPerCarton) {
-          const normalizedSkuCode = sanitizeForDisplay(item.skuCode)
-          const normalizedBatchCode = sanitizeForDisplay(item.batchLot)
-
-          const defaults = await prisma.skuBatch.findFirst({
-            where: {
-              sku: {
-                skuCode: {
-                  equals: normalizedSkuCode ?? item.skuCode,
-                  mode: 'insensitive',
-                },
-              },
-              batchCode: {
-                equals: normalizedBatchCode ?? item.batchLot,
-                mode: 'insensitive',
-              },
-            },
-            select: {
-              unitsPerCarton: true,
-            },
-          })
-
-          if (defaults) {
-            if (needsUnitsPerCarton && defaults.unitsPerCarton) {
-              item.unitsPerCarton = defaults.unitsPerCarton
-            }
-          }
-        }
-      }
+	      // Validate item structure
+	      if (!item.skuCode || !item.lotRef || typeof item.cartons !== 'number') {
+	        return NextResponse.json(
+	          {
+	            error: `Invalid item structure. Each item must have skuCode, lotRef, and cartons`,
+	          },
+	          { status: 400 }
+	        )
+	      }
 
       // Validate cartons is a positive integer
       if (!Number.isInteger(item.cartons) || item.cartons <= 0) {
@@ -589,44 +558,44 @@ export const POST = withAuth(async (request, session) => {
         }
       }
 
-      // Validate and sanitize batch/lot
-      if (!item.batchLot || item.batchLot.trim() === '') {
-        return NextResponse.json(
-          {
-            error: `Batch is required for SKU ${item.skuCode}`,
-          },
-          { status: 400 }
-        )
-      }
+	      // Validate and sanitize lot ref
+	      if (!item.lotRef || item.lotRef.trim() === '') {
+	        return NextResponse.json(
+	          {
+	            error: `Lot ref is required for SKU ${item.skuCode}`,
+	          },
+	          { status: 400 }
+	        )
+	      }
 
-      const sanitizedBatchLot = sanitizeForDisplay(item.batchLot)
-      const sanitizedSkuCode = sanitizeForDisplay(item.skuCode)
-      item.batchLot = sanitizedBatchLot ?? item.batchLot
-      item.skuCode = sanitizedSkuCode ?? item.skuCode
-    }
+	      const sanitizedLotRef = sanitizeForDisplay(item.lotRef)
+	      const sanitizedSkuCode = sanitizeForDisplay(item.skuCode)
+	      item.lotRef = sanitizedLotRef ?? item.lotRef
+	      item.skuCode = sanitizedSkuCode ?? item.skuCode
+	    }
 
-    // Check for duplicate SKU/batch combinations in the request
-    const itemKeys = new Set<string>()
-    for (const item of itemsArray) {
-      const key = `${item.skuCode}-${item.batchLot}`
-      if (itemKeys.has(key)) {
-        return NextResponse.json(
-          {
-            error: `Duplicate SKU/Batch combination found: ${item.skuCode} - ${item.batchLot}`,
-          },
-          { status: 400 }
-        )
-      }
-      itemKeys.add(key)
-    }
+	    // Check for duplicate SKU/lot combinations in the request
+	    const itemKeys = new Set<string>()
+	    for (const item of itemsArray) {
+	      const key = `${item.skuCode}-${item.lotRef}`
+	      if (itemKeys.has(key)) {
+	        return NextResponse.json(
+	          {
+	            error: `Duplicate SKU/Lot combination found: ${item.skuCode} - ${item.lotRef}`,
+	          },
+	          { status: 400 }
+	        )
+	      }
+	      itemKeys.add(key)
+	    }
 
-    const validatedItems: ValidatedTransactionLine[] = itemsArray.map(item => ({
-      skuCode: item.skuCode!,
-      batchLot: item.batchLot!,
-      cartons: item.cartons!,
-      pallets: item.pallets ?? undefined,
-      storageCartonsPerPallet: item.storageCartonsPerPallet ?? null,
-      shippingCartonsPerPallet: item.shippingCartonsPerPallet ?? null,
+	    const validatedItems: ValidatedTransactionLine[] = itemsArray.map(item => ({
+	      skuCode: item.skuCode!,
+	      lotRef: item.lotRef!,
+	      cartons: item.cartons!,
+	      pallets: item.pallets ?? undefined,
+	      storageCartonsPerPallet: item.storageCartonsPerPallet ?? null,
+	      shippingCartonsPerPallet: item.shippingCartonsPerPallet ?? null,
       storagePalletsIn: item.storagePalletsIn ?? undefined,
       shippingPalletsOut: item.shippingPalletsOut ?? undefined,
       unitsPerCarton: item.unitsPerCarton ?? undefined,
@@ -642,18 +611,8 @@ export const POST = withAuth(async (request, session) => {
       return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 })
     }
 
-    for (const item of validatedItems) {
-      item.batchLot = resolveBatchLot({
-        rawBatchLot: item.batchLot,
-        orderNumber: refNumber,
-        warehouseCode: warehouse.code,
-        skuCode: item.skuCode,
-        transactionDate: transactionDateObj,
-      })
-    }
-
-    // Verify all SKUs exist and check inventory for SHIP transactions
-    for (const item of validatedItems) {
+	    // Verify all SKUs exist and check inventory for SHIP transactions
+	    for (const item of validatedItems) {
       const sku = await prisma.sku.findFirst({
         where: { skuCode: item.skuCode },
         select: { id: true, skuCode: true, isActive: true },
@@ -677,56 +636,34 @@ export const POST = withAuth(async (request, session) => {
         )
       }
 
-      const cacheKey = `${sku.id}::${item.batchLot}`
-      if (!batchValidationCache.has(cacheKey)) {
-        const batchRecord = await prisma.skuBatch.findFirst({
-          where: {
-            skuId: sku.id,
-            batchCode: item.batchLot,
-          },
-          select: { id: true },
-        })
+	      // For SHIP and ADJUST_OUT transactions, verify inventory availability
+	      if (['SHIP', 'ADJUST_OUT'].includes(txType)) {
+	        // Calculate current balance using DB aggregation (avoid pulling full history)
+	        const totals = await prisma.inventoryTransaction.aggregate({
+	          where: {
+	            warehouseCode: warehouse.code,
+	            skuCode: sku.skuCode,
+	            lotRef: item.lotRef,
+	            transactionDate: { lte: transactionDateObj },
+	          },
+	          _sum: {
+	            cartonsIn: true,
+	            cartonsOut: true,
+	          },
+	        })
 
-        if (!batchRecord) {
-          return NextResponse.json(
-            {
-              error: `Batch ${item.batchLot} is not configured for SKU ${item.skuCode}. Create it in Config → Products → Batches.`,
-            },
-            { status: 400 }
-          )
-        }
+	        const currentCartons = (totals._sum.cartonsIn ?? 0) - (totals._sum.cartonsOut ?? 0)
 
-        batchValidationCache.set(cacheKey, true)
-      }
-
-        // For SHIP and ADJUST_OUT transactions, verify inventory availability
-       if (['SHIP', 'ADJUST_OUT'].includes(txType)) {
-         // Calculate current balance using DB aggregation (avoid pulling full history)
-         const totals = await prisma.inventoryTransaction.aggregate({
-           where: {
-             warehouseCode: warehouse.code,
-             skuCode: sku.skuCode,
-             batchLot: item.batchLot,
-             transactionDate: { lte: transactionDateObj },
-           },
-           _sum: {
-             cartonsIn: true,
-             cartonsOut: true,
-           },
-         })
- 
-         const currentCartons = (totals._sum.cartonsIn ?? 0) - (totals._sum.cartonsOut ?? 0)
- 
-         if (currentCartons < item.cartons) {
-           return NextResponse.json(
-             {
-               error: `Insufficient inventory for SKU ${item.skuCode} batch ${item.batchLot}. Available: ${currentCartons}, Requested: ${item.cartons}`,
-             },
-             { status: 400 }
-           )
-         }
-       }
-    }
+	        if (currentCartons < item.cartons) {
+	          return NextResponse.json(
+	            {
+	              error: `Insufficient inventory for SKU ${item.skuCode} lot ${item.lotRef}. Available: ${currentCartons}, Requested: ${item.cartons}`,
+	            },
+	            { status: 400 }
+	          )
+	        }
+	      }
+	    }
 
     // Start performance tracking
     const startTime = Date.now()
@@ -743,26 +680,18 @@ export const POST = withAuth(async (request, session) => {
 
       const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
 
-      const batchLots = [...new Set(validatedItems.map(item => item.batchLot))]
-      const batchRecords = await tx.skuBatch.findMany({
-        where: {
-          skuId: { in: skus.map(sku => sku.id) },
-          batchCode: { in: batchLots },
-        },
-        select: {
-          skuId: true,
-          batchCode: true,
-          unitsPerCarton: true,
-          cartonDimensionsCm: true,
-          cartonWeightKg: true,
-          packagingType: true,
-          storageCartonsPerPallet: true,
-          shippingCartonsPerPallet: true,
-        },
-      })
-      const batchMap = new Map(
-        batchRecords.map(batch => [`${batch.skuId}::${batch.batchCode}`, batch])
-      )
+	      const configs = await tx.warehouseSkuStorageConfig.findMany({
+	        where: {
+	          warehouseId: warehouse.id,
+	          skuId: { in: skus.map(sku => sku.id) },
+	        },
+	        select: {
+	          skuId: true,
+	          storageCartonsPerPallet: true,
+	          shippingCartonsPerPallet: true,
+	        },
+	      })
+	      const configMap = new Map(configs.map(config => [config.skuId, config]))
 
       let totalStoragePalletsIn = 0
       let totalShippingPalletsOut = 0
@@ -773,56 +702,53 @@ export const POST = withAuth(async (request, session) => {
           throw new Error(`SKU not found: ${item.skuCode}`)
         }
 
-        const batchRecord = batchMap.get(`${sku.id}::${item.batchLot}`)
-        if (!batchRecord) {
-          throw new Error(`Batch ${item.batchLot} not found for SKU ${item.skuCode}`)
-        }
+	        const config = configMap.get(sku.id) ?? null
 
-        const resolvedStorageCartonsPerPallet =
-          item.storageCartonsPerPallet ?? batchRecord.storageCartonsPerPallet ?? null
-        let resolvedShippingCartonsPerPallet =
-          item.shippingCartonsPerPallet ?? batchRecord.shippingCartonsPerPallet ?? null
+	        const resolvedStorageCartonsPerPallet =
+	          item.storageCartonsPerPallet ?? config?.storageCartonsPerPallet ?? null
+	        let resolvedShippingCartonsPerPallet =
+	          item.shippingCartonsPerPallet ?? config?.shippingCartonsPerPallet ?? null
 
-        if (
-          txType === 'RECEIVE' &&
-          (!resolvedStorageCartonsPerPallet || resolvedStorageCartonsPerPallet <= 0)
-        ) {
-          throw new ValidationError(
-            `Storage cartons per pallet is required for SKU ${item.skuCode} batch ${item.batchLot}. Configure it on the batch in Config → Products → Batches.`
-          )
-        }
+	        if (
+	          txType === 'RECEIVE' &&
+	          (!resolvedStorageCartonsPerPallet || resolvedStorageCartonsPerPallet <= 0)
+	        ) {
+	          throw new ValidationError(
+	            `Storage cartons per pallet is required for SKU ${item.skuCode}. Configure it in Config → Warehouses.`
+	          )
+	        }
 
-        if (
-          txType === 'RECEIVE' &&
-          (!resolvedShippingCartonsPerPallet || resolvedShippingCartonsPerPallet <= 0)
-        ) {
-          throw new ValidationError(
-            `Shipping cartons per pallet is required for SKU ${item.skuCode} batch ${item.batchLot}. Configure it on the batch in Config → Products → Batches.`
-          )
-        }
+	        if (
+	          txType === 'RECEIVE' &&
+	          (!resolvedShippingCartonsPerPallet || resolvedShippingCartonsPerPallet <= 0)
+	        ) {
+	          throw new ValidationError(
+	            `Shipping cartons per pallet is required for SKU ${item.skuCode}. Configure it in Config → Warehouses.`
+	          )
+	        }
 
         if (txType === 'SHIP') {
           const hasPalletOverride =
             item.shippingPalletsOut !== undefined || item.pallets !== undefined
-          if (
-            !hasPalletOverride &&
-            (!resolvedShippingCartonsPerPallet || resolvedShippingCartonsPerPallet <= 0)
-          ) {
-            throw new ValidationError(
-              `Shipping cartons per pallet is required for SKU ${item.skuCode} batch ${item.batchLot}. Configure it on the batch in Config → Products → Batches.`
-            )
-          }
+	          if (
+	            !hasPalletOverride &&
+	            (!resolvedShippingCartonsPerPallet || resolvedShippingCartonsPerPallet <= 0)
+	          ) {
+	            throw new ValidationError(
+	              `Shipping cartons per pallet is required for SKU ${item.skuCode}. Configure it in Config → Warehouses.`
+	            )
+	          }
 
-          const originalReceive = await tx.inventoryTransaction.findFirst({
-            where: {
-              warehouseCode: warehouse.code,
-              skuCode: sku.skuCode,
-              batchLot: item.batchLot,
-              transactionType: 'RECEIVE',
-            },
-            orderBy: { transactionDate: 'asc' },
-            select: { shippingCartonsPerPallet: true },
-          })
+	          const originalReceive = await tx.inventoryTransaction.findFirst({
+	            where: {
+	              warehouseCode: warehouse.code,
+	              skuCode: sku.skuCode,
+	              lotRef: item.lotRef,
+	              transactionType: 'RECEIVE',
+	            },
+	            orderBy: { transactionDate: 'asc' },
+	            select: { shippingCartonsPerPallet: true },
+	          })
 
           if (originalReceive?.shippingCartonsPerPallet) {
             resolvedShippingCartonsPerPallet = originalReceive.shippingCartonsPerPallet
@@ -850,13 +776,16 @@ export const POST = withAuth(async (request, session) => {
           totalShippingPalletsOut += finalShippingPalletsOut
         }
 
-        // Use the provided reference number (commercial invoice) directly
-        const referenceId = refNumber
-        const unitsPerCarton = batchRecord.unitsPerCarton ?? sku.unitsPerCarton ?? 1
-        const pickupDateCandidate = pickupDate ? parseLocalDateTime(pickupDate) : transactionDateObj
-        const pickupDateObj = Number.isNaN(pickupDateCandidate.getTime())
-          ? transactionDateObj
-          : pickupDateCandidate
+	        // Use the provided reference number (commercial invoice) directly
+	        const referenceId = refNumber
+	        const unitsPerCarton =
+	          typeof item.unitsPerCarton === 'number' && item.unitsPerCarton > 0
+	            ? item.unitsPerCarton
+	            : sku.unitsPerCarton
+	        const pickupDateCandidate = pickupDate ? parseLocalDateTime(pickupDate) : transactionDateObj
+	        const pickupDateObj = Number.isNaN(pickupDateCandidate.getTime())
+	          ? transactionDateObj
+	          : pickupDateCandidate
 
         const transaction = await tx.inventoryTransaction.create({
           data: {
@@ -866,16 +795,16 @@ export const POST = withAuth(async (request, session) => {
             warehouseAddress: warehouse.address,
             // SKU snapshot data
             skuCode: sku.skuCode,
-            skuDescription: sku.description,
-            unitDimensionsCm: sku.unitDimensionsCm,
-            unitWeightKg: sku.unitWeightKg,
-            cartonDimensionsCm: batchRecord.cartonDimensionsCm ?? sku.cartonDimensionsCm,
-            cartonWeightKg: batchRecord.cartonWeightKg ?? sku.cartonWeightKg,
-            packagingType: batchRecord.packagingType ?? sku.packagingType,
-            batchLot: item.batchLot,
-            transactionType: txType as TransactionType,
-            referenceId: referenceId,
-            cartonsIn: ['RECEIVE', 'ADJUST_IN'].includes(txType) ? item.cartons : 0,
+	            skuDescription: sku.description,
+	            unitDimensionsCm: sku.unitDimensionsCm,
+	            unitWeightKg: sku.unitWeightKg,
+	            cartonDimensionsCm: sku.cartonDimensionsCm,
+	            cartonWeightKg: sku.cartonWeightKg,
+	            packagingType: sku.packagingType,
+	            lotRef: item.lotRef,
+	            transactionType: txType as TransactionType,
+	            referenceId: referenceId,
+	            cartonsIn: ['RECEIVE', 'ADJUST_IN'].includes(txType) ? item.cartons : 0,
             cartonsOut: ['SHIP', 'ADJUST_OUT'].includes(txType) ? item.cartons : 0,
             storagePalletsIn: finalStoragePalletsIn,
             shippingPalletsOut: finalShippingPalletsOut,
@@ -913,12 +842,12 @@ export const POST = withAuth(async (request, session) => {
                  : null
              })(),
             transactionDate: transactionDateObj,
-            pickupDate: pickupDateObj,
-            createdById: session.user.id,
-            createdByName: createdByName,
-            unitsPerCarton,
-          },
-        })
+	            pickupDate: pickupDateObj,
+	            createdById: session.user.id,
+	            createdByName: createdByName,
+	            unitsPerCarton,
+	          },
+	        })
 
         transactions.push(transaction)
       }
@@ -1023,13 +952,13 @@ export const POST = withAuth(async (request, session) => {
               unitRate: row.unitRate,
               amount: row.totalCost,
               warehouseCode: row.warehouseCode,
-              warehouseName: row.warehouseName,
-              skuCode: txRow.skuCode,
-              skuDescription: txRow.skuDescription,
-              batchLot: txRow.batchLot,
-              inventoryTransactionId: row.transactionId,
-              effectiveAt: row.createdAt,
-              createdAt: row.createdAt,
+	            warehouseName: row.warehouseName,
+	            skuCode: txRow.skuCode,
+	            skuDescription: txRow.skuDescription,
+	            lotRef: txRow.lotRef,
+	            inventoryTransactionId: row.transactionId,
+	            effectiveAt: row.createdAt,
+	            createdAt: row.createdAt,
               createdByName: row.createdByName,
             }
           })
@@ -1047,25 +976,25 @@ export const POST = withAuth(async (request, session) => {
     })
 
     // Record storage cost entries for each transaction
-    await Promise.all(
-      result.map(t =>
-        recordStorageCostEntry({
-          warehouseCode: t.warehouseCode,
-          warehouseName: t.warehouseName,
-          skuCode: t.skuCode,
-          skuDescription: t.skuDescription,
-          batchLot: t.batchLot,
-          transactionDate: t.transactionDate,
-        }).catch(storageError => {
+	    await Promise.all(
+	      result.map(t =>
+	        recordStorageCostEntry({
+	          warehouseCode: t.warehouseCode,
+	          warehouseName: t.warehouseName,
+	          skuCode: t.skuCode,
+	          skuDescription: t.skuDescription,
+	          lotRef: t.lotRef,
+	          transactionDate: t.transactionDate,
+	        }).catch(storageError => {
           // Don't fail transaction processing if storage cost recording fails
           const message = storageError instanceof Error ? storageError.message : 'Unknown error'
-          console.error(
-            `Storage cost recording failed for ${t.warehouseCode}/${t.skuCode}/${t.batchLot}:`,
-            message
-          )
-        })
-      )
-    )
+	          console.error(
+	            `Storage cost recording failed for ${t.warehouseCode}/${t.skuCode}/${t.lotRef}:`,
+	            message
+	          )
+	        })
+	      )
+	    )
 
     const duration = Date.now() - startTime
 

@@ -74,7 +74,7 @@ export default function EditEmployeePage() {
       try {
         const [data, employeesRes, deptsRes, permsRes] = await Promise.all([
           EmployeesApi.get(id),
-          EmployeesApi.list({ take: 200 }),
+          EmployeesApi.list({ take: 200, status: 'ACTIVE' }),
           DepartmentsApi.list(),
           EmployeesApi.getPermissions(id),
         ])

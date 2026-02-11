@@ -36,6 +36,7 @@ type ConnectionsState = {
 
 const STORAGE_KEY = scopedStorageKey("hermes.connections");
 migrateLegacyLocalStorageKey({ legacy: "hermes.connections", next: STORAGE_KEY });
+migrateLegacyLocalStorageKey({ legacy: "hermes.connections:", next: STORAGE_KEY });
 
 export const useConnectionsStore = create<ConnectionsState>()(
   persist(

@@ -2,11 +2,57 @@
  * Utility functions for handling base path in the application
  */
 
+function normalizeBasePath(rawBasePath: string): string {
+ const trimmed = rawBasePath.trim()
+ if (!trimmed || trimmed === '/') return ''
+
+ const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+ const withoutTrailingSlash = withLeadingSlash.endsWith('/') ? withLeadingSlash.slice(0, -1) : withLeadingSlash
+ const collapsedSlashes = withoutTrailingSlash.replace(/\/{2,}/g, '/')
+
+ const segments = collapsedSlashes.split('/').filter(Boolean)
+ if (segments.length > 0 && segments.length % 2 === 0) {
+  const halfLen = segments.length / 2
+  const firstHalf = segments.slice(0, halfLen).join('/')
+  const secondHalf = segments.slice(halfLen).join('/')
+  if (firstHalf === secondHalf) {
+   return `/${firstHalf}`
+  }
+ }
+
+ return collapsedSlashes
+}
+
+function inferBasePathFromPathname(pathname: string): string {
+ const trimmed = pathname.trim()
+ if (!trimmed.startsWith('/')) return ''
+
+ const [firstSegment] = trimmed.split('/').filter(Boolean)
+ if (firstSegment === 'talos') return '/talos'
+
+ return ''
+}
+
 /**
  * Get the base path from environment or default to empty string
  */
 export function getBasePath(): string {
- return process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || ''
+ const rawBasePath =
+  typeof window === 'undefined'
+   ? (process.env.BASE_PATH ?? process.env.NEXT_PUBLIC_BASE_PATH ?? '')
+   : (process.env.NEXT_PUBLIC_BASE_PATH ?? '')
+
+ const normalized = normalizeBasePath(rawBasePath)
+ if (normalized) return normalized
+
+ // If Talos is accessed via `/talos/*` but BASE_PATH is not set (rewrite mode),
+ // infer it so client-side fetches hit the same origin path.
+ if (typeof window !== 'undefined') {
+  const inferred = inferBasePathFromPathname(window.location.pathname ?? '')
+  return normalizeBasePath(inferred)
+ }
+
+ return ''
 }
 
 /**
@@ -20,6 +66,10 @@ export function withBasePath(path: string): string {
  
  // Ensure path starts with /
  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+ if (normalizedPath === basePath || normalizedPath.startsWith(`${basePath}/`)) {
+  return normalizedPath
+ }
  
  // Avoid double slashes
  return `${basePath}${normalizedPath}`

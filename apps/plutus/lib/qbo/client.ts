@@ -3,14 +3,34 @@ import { createLogger } from '@targon/logger';
 
 const logger = createLogger({ name: 'qbo-client' });
 
-export const qboConfig = {
-  clientId: process.env.QBO_CLIENT_ID!,
-  clientSecret: process.env.QBO_CLIENT_SECRET!,
-  redirectUri: process.env.QBO_REDIRECT_URI!,
-  environment: (process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production') as 'sandbox' | 'production',
-};
+type QboEnvironment = 'sandbox' | 'production';
+
+export interface QboClientConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  environment: QboEnvironment;
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value === '') {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+export function getQboClientConfig(): QboClientConfig {
+  return {
+    clientId: requireEnv('QBO_CLIENT_ID'),
+    clientSecret: requireEnv('QBO_CLIENT_SECRET'),
+    redirectUri: requireEnv('QBO_REDIRECT_URI'),
+    environment: (process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production') as QboEnvironment,
+  };
+}
 
 export function createOAuthClient(): OAuthClient {
+  const qboConfig = getQboClientConfig();
   return new OAuthClient({
     clientId: qboConfig.clientId,
     clientSecret: qboConfig.clientSecret,
@@ -41,6 +61,7 @@ export async function exchangeCodeForTokens(
   authorizationCode: string,
   realmId: string,
 ): Promise<TokenExchangeResult> {
+  const qboConfig = getQboClientConfig();
   const oauthClient = createOAuthClient();
 
   // Construct the full URL that Intuit expects
@@ -61,10 +82,9 @@ export async function exchangeCodeForTokens(
 
 export async function refreshAccessToken(refreshToken: string): Promise<TokenExchangeResult> {
   const oauthClient = createOAuthClient();
-  oauthClient.setToken({ refresh_token: refreshToken });
 
   logger.info('Refreshing QBO access token');
-  const authResponse = await oauthClient.refresh();
+  const authResponse = await oauthClient.refreshUsingToken(refreshToken);
   const token = authResponse.getJson();
 
   return {
@@ -77,7 +97,8 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenExc
 }
 
 export function getApiBaseUrl(): string {
-  return qboConfig.environment === 'sandbox'
+  const environment = process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production';
+  return environment === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
     : 'https://quickbooks.api.intuit.com';
 }

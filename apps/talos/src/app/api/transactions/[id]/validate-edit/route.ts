@@ -36,7 +36,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  details: {
  currentInventory?: {
  skuCode: string;
- batchLot: string;
+ lotRef: string;
  quantity: number;
  allocated: number;
  available: number;
@@ -59,7 +59,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const allTransactionsForInventory = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode
  },
  orderBy: {
@@ -78,19 +78,19 @@ export const GET = withAuthAndParams(async (request, params, session) => {
 
  result.details.currentInventory = {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot || '',
+ lotRef: transaction.lotRef,
  quantity: currentQuantity,
  allocated: 0, // We don't track allocations in this simple system
  available: currentQuantity
  }
 
- // For RECEIVE transactions, check if any items have been shipped
- if (transaction.transactionType === 'RECEIVE') {
- // Find any SHIP or ADJUST_OUT transactions for this SKU/batch/warehouse combo
- const outgoingTransactions = await prisma.inventoryTransaction.findMany({
+	 // For RECEIVE transactions, check if any items have been shipped
+	 if (transaction.transactionType === 'RECEIVE') {
+	 // Find any SHIP or ADJUST_OUT transactions for this SKU/lot/warehouse combo
+	 const outgoingTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode,
  transactionType: { in: ['SHIP', 'ADJUST_OUT'] },
  transactionDate: {
@@ -106,7 +106,7 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  const totalOut = outgoingTransactions.reduce((sum, t) => sum + t.cartonsOut, 0)
  result.canDelete = false // Never allow delete if goods have moved
  result.canEdit = true // Allow editing non-quantity fields (will be enforced in edit endpoint)
- result.reason = `Cannot delete: ${totalOut} cartons from this batch have been shipped/adjusted. You must delete the ${outgoingTransactions.length} dependent transaction(s) first.`
+ result.reason = `Cannot delete: ${totalOut} cartons from this lot have been shipped/adjusted. You must delete the ${outgoingTransactions.length} dependent transaction(s) first.`
  
  result.details.dependentTransactions = outgoingTransactions.map(t => ({
  id: t.id,
@@ -117,13 +117,13 @@ export const GET = withAuthAndParams(async (request, params, session) => {
  }
  }
 
- // For SHIP or ADJUST_OUT transactions, check if deletion would create negative inventory
- if (transaction.transactionType === 'SHIP' || transaction.transactionType === 'ADJUST_OUT') {
- // Get all transactions for this SKU/batch/warehouse in chronological order
- const allTransactions = await prisma.inventoryTransaction.findMany({
+	 // For SHIP or ADJUST_OUT transactions, check if deletion would create negative inventory
+	 if (transaction.transactionType === 'SHIP' || transaction.transactionType === 'ADJUST_OUT') {
+	 // Get all transactions for this SKU/lot/warehouse in chronological order
+	 const allTransactions = await prisma.inventoryTransaction.findMany({
  where: {
  skuCode: transaction.skuCode,
- batchLot: transaction.batchLot,
+ lotRef: transaction.lotRef,
  warehouseCode: transaction.warehouseCode
  },
  orderBy: [

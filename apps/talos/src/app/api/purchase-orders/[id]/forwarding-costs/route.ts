@@ -1,6 +1,7 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { CostCategory, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
@@ -49,6 +50,14 @@ export const GET = withAuthAndParams(async (_request: NextRequest, params, sessi
   const canView = await hasPermission(session.user.id, 'po.view')
   if (!canView) {
     return ApiResponses.forbidden('Insufficient permissions')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const costs = await prisma.purchaseOrderForwardingCost.findMany({
@@ -122,6 +131,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
 
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {

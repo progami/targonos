@@ -1,20 +1,19 @@
 import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { OpsPlanningWorkspace } from '@/components/sheets/ops-planning-workspace';
-import { ProductSetupWorkspace } from '@/components/sheets/product-setup-workspace';
-import { StrategiesWorkspace } from '@/components/sheets/strategies-workspace';
+import { SetupWorkspace } from '@/components/sheets/setup-workspace';
 import {
   SalesPlanningGrid,
   SalesPlanningFocusControl,
   SalesPlanningFocusProvider,
 } from '@/components/sheets/sales-planning-grid';
 import { SalesPlanningVisual } from '@/components/sheets/sales-planning-visual';
-import { SellerboardSyncControl } from '@/components/sheets/sellerboard-us-sync-control';
 import {
   ProfitAndLossGrid,
   ProfitAndLossFiltersProvider,
   ProfitAndLossHeaderControls,
 } from '@/components/sheets/fin-planning-pl-grid';
+import { SellerboardSyncControl } from '@/components/sheets/sellerboard-sync-control';
 import { CashFlowGrid } from '@/components/sheets/fin-planning-cash-grid';
 import { SheetViewToggle, type SheetViewMode } from '@/components/sheet-view-toggle';
 import { SHEET_TOOLBAR_GROUP, SHEET_TOOLBAR_LABEL } from '@/components/sheet-toolbar';
@@ -109,6 +108,8 @@ import { weekLabelForWeekNumber, type PlanningWeekConfig } from '@/lib/calculati
 import { formatDateDisplay, toIsoDate } from '@/lib/utils/dates';
 import {
   sellerboardReportTimeZoneForRegion,
+  currencyForRegion,
+  localeForRegion,
   parseStrategyRegion,
   weekStartsOnForRegion,
   type StrategyRegion,
@@ -172,9 +173,9 @@ function formatPercentDecimal(value: number | null | undefined, fractionDigits =
   return Number(value).toFixed(fractionDigits);
 }
 
-function formatCurrency(value: number | null | undefined): string {
+function formatCurrency(value: number | null | undefined, formatter: Intl.NumberFormat): string {
   if (value == null || Number.isNaN(value)) return '';
-  return `$${formatNumeric(value)}`;
+  return formatter.format(Number(value));
 }
 
 function formatPercent(value: number | null | undefined, fractionDigits = 1): string {
@@ -557,6 +558,16 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
+    const defaultStrategy = await prismaAny.strategy.findFirst({
+      where: {
+        isDefault: true,
+        ...buildStrategyAccessWhere(actor),
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (defaultStrategy) return defaultStrategy.id;
+
     const firstStrategy = await prismaAny.strategy.findFirst({
       where: buildStrategyAccessWhere(actor),
       orderBy: { updatedAt: 'desc' },
@@ -585,6 +596,16 @@ async function resolveStrategyId(
       });
       if (exists) return searchParamStrategy;
     }
+
+    const defaultStrategy = await prismaAny.strategy.findFirst({
+      where: {
+        isDefault: true,
+        ...where,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    if (defaultStrategy) return defaultStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where,
@@ -1316,6 +1337,7 @@ type FinancialData = Awaited<ReturnType<typeof loadFinancialData>>;
 
 async function getOpsPlanningView(
   strategyId: string,
+  strategyRegion: StrategyRegion,
   planning?: PlanningCalendar,
   activeSegment?: YearSegment | null,
 ): Promise<{
@@ -1327,6 +1349,10 @@ async function getOpsPlanningView(
   calculator: OpsPlanningCalculatorPayload;
   timelineMonths: { start: string; end: string; label: string }[];
 }> {
+  const currencyFormatter = new Intl.NumberFormat(localeForRegion(strategyRegion), {
+    style: 'currency',
+    currency: currencyForRegion(strategyRegion),
+  });
   const context = await loadOperationsContext(strategyId, planning?.calendar);
   const { rawPurchaseOrders } = context;
 
@@ -1369,9 +1395,9 @@ async function getOpsPlanningView(
     id: derived.id,
     orderCode: derived.orderCode,
     productName,
-    landedUnitCost: formatCurrency(derived.landedUnitCost),
-    poValue: formatCurrency(derived.plannedPoValue),
-    paidAmount: formatCurrency(derived.paidAmount),
+    landedUnitCost: formatCurrency(derived.landedUnitCost, currencyFormatter),
+    poValue: formatCurrency(derived.plannedPoValue, currencyFormatter),
+    paidAmount: formatCurrency(derived.paidAmount, currencyFormatter),
     paidPercent: formatPercent(derived.paidPercent),
     productionStart: formatDate(derived.productionStart),
     productionComplete: formatDate(derived.productionComplete),
@@ -2159,11 +2185,11 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   const resolvedStrategyId = await resolveStrategyId(parsedSearch.strategy, actor);
 
   if (!resolvedStrategyId) {
-    if (config.slug !== '1-strategies') {
+    if (config.slug !== '1-setup') {
       const nextParams = toQueryString(parsedSearch);
       nextParams.delete('strategy');
       const query = nextParams.toString();
-      redirect(`/1-strategies${query ? `?${query}` : ''}`);
+      redirect(`/1-setup${query ? `?${query}` : ''}`);
     }
   } else if (requestedStrategyId && requestedStrategyId !== resolvedStrategyId) {
     const nextParams = toQueryString(parsedSearch);
@@ -2239,7 +2265,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   );
 
   switch (config.slug) {
-    case '1-strategies': {
+    case '1-setup': {
       // Type assertion for strategy model (Prisma types are generated but not resolved correctly at build time)
       const prismaAnyLocal = prisma as unknown as Record<string, any>;
 
@@ -2249,7 +2275,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         salesWeeks: true,
       };
 
-      const orderBy = [{ updatedAt: 'desc' }];
+      const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
 
       const strategySelect = {
         id: true,
@@ -2262,6 +2288,14 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyAssignees: {
+          select: {
+            id: true,
+            assigneeId: true,
+            assigneeEmail: true,
+          },
+          orderBy: { assigneeEmail: 'asc' },
+        },
         createdAt: true,
         updatedAt: true,
         _count: { select: countsSelect },
@@ -2318,6 +2352,11 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: string | null;
         assigneeId: string | null;
         assigneeEmail: string | null;
+        strategyAssignees: Array<{
+          id: string;
+          assigneeId: string;
+          assigneeEmail: string;
+        }>;
         createdAt: string;
         updatedAt: string;
         _count: {
@@ -2338,39 +2377,38 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         createdByEmail: s.createdByEmail ?? null,
         assigneeId: s.assigneeId ?? null,
         assigneeEmail: s.assigneeEmail ?? null,
+        strategyAssignees: Array.isArray(s.strategyAssignees) ? s.strategyAssignees : [],
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
         _count: s._count,
       }));
+
+      const productSetupView = strategyId
+        ? await getProductSetupView(strategyId)
+        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [] };
+
       tabularContent = (
-        <StrategiesWorkspace
+        <SetupWorkspace
           strategies={strategies}
           activeStrategyId={resolvedStrategyId}
           viewer={viewer}
+          products={productSetupView.products}
+          operationsParameters={productSetupView.operationsParameters}
+          salesParameters={productSetupView.salesParameters}
+          financeParameters={productSetupView.financeParameters}
         />
       );
-      visualContent = null;
-      break;
-    }
-    case '2-product-setup': {
-      const activeStrategyId = requireStrategyId();
-      const view = await getProductSetupView(activeStrategyId);
-      tabularContent = (
-        <ProductSetupWorkspace
-          strategyId={activeStrategyId}
-          products={view.products}
-          operationsParameters={view.operationsParameters}
-          salesParameters={view.salesParameters}
-          financeParameters={view.financeParameters}
-        />
-      );
-      // Product setup doesn't need visual mode
       visualContent = null;
       break;
     }
     case '3-ops-planning': {
       const activeStrategyId = requireStrategyId();
-      const view = await getOpsPlanningView(activeStrategyId, planningCalendar, activeSegment);
+      const view = await getOpsPlanningView(
+        activeStrategyId,
+        strategyRegion,
+        planningCalendar,
+        activeSegment,
+      );
       tabularContent = (
         <OpsPlanningWorkspace
           strategyId={activeStrategyId}
@@ -2423,8 +2461,8 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       controls.push(
         <SellerboardSyncControl
           key="sellerboard-sync"
-          strategyRegion={strategyRegion}
           strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
         />,
       );
       wrapLayout = (node) => (
@@ -2473,6 +2511,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       const data = await getFinancialData();
       const view = getProfitAndLossView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
       controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
+      controls.push(
+        <SellerboardSyncControl
+          key="sellerboard-sync"
+          strategyId={activeStrategyId}
+          strategyRegion={strategyRegion}
+        />,
+      );
       wrapLayout = (node) => (
         <ProfitAndLossFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}

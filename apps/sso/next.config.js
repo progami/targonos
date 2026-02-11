@@ -7,6 +7,15 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_VERSION: resolvedVersion,
   },
+  async redirects() {
+    return [
+      {
+        source: '/amazon/fba-fee-discrepancies',
+        destination: '/talos/amazon/fba-fee-discrepancies',
+        permanent: false,
+      },
+    ]
+  },
   // Turbopack is the default bundler in Next.js 16
   turbopack: {
     resolveAlias: {
