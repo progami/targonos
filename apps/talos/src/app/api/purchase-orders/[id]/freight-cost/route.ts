@@ -25,9 +25,9 @@ const FreightCostSchema = z.object({
 })
 
 const FreightLineSchema = z.object({
-  costName: z.string().min(1, 'Cost name is required').max(200),
+  costName: z.string().trim().min(1, 'Cost name is required').max(200),
   amount: AmountSchema,
-  notes: z.string().max(500).optional(),
+  notes: z.string().trim().max(500).optional(),
 })
 
 function readParam(params: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -268,12 +268,12 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       purchaseOrderId: id,
       warehouseId: resolvedWarehouseId,
       costRateId: null,
-      costName: parsed.data.costName.trim(),
+      costName: parsed.data.costName,
       quantity: new Prisma.Decimal(1),
       unitRate: new Prisma.Decimal(normalizedAmount),
       totalCost: new Prisma.Decimal(normalizedAmount),
       currency: null,
-      notes: parsed.data.notes?.trim() || null,
+      notes: parsed.data.notes ? parsed.data.notes : null,
       createdById: session.user.id,
       createdByName,
     },
