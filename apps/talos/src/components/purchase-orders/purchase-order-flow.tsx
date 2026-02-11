@@ -6643,12 +6643,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                        <th className="w-10 font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs"></th>
-                        <th className="w-[200px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Action</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Previous</th>
-                        <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">New</th>
-                        <th className="w-[140px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">By</th>
-                        <th className="w-[130px] font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left">Date</th>
+                        <th className="w-8 font-medium text-muted-foreground px-2 py-2 text-xs"></th>
+                        <th className="w-[160px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Action</th>
+                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">Previous</th>
+                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">New</th>
+                        <th className="w-[100px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">By</th>
+                        <th className="w-[120px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Date</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6662,19 +6662,19 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                           return (
                             <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 align-top">
-                              <td className="px-3 py-2">
+                              <td className="px-2 py-2">
                                 <Icon className={`h-4 w-4 ${iconClassName}`} />
                               </td>
-                              <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                              <td className="px-2 py-2 font-medium text-foreground overflow-hidden">
                                 <span className="block truncate" title={title}>
                                   {title}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
                                 {changeRows.length > 0 ? (
                                   <div className="space-y-0.5">
                                     {changeRows.map((row, i) => (
-                                      <div key={i} className="text-xs">
+                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.previous}`}>
                                         <span className="text-muted-foreground/70">{row.field}:</span>{' '}
                                         {row.previous}
                                       </div>
@@ -6682,11 +6682,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </div>
                                 ) : '—'}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
                                 {changeRows.length > 0 ? (
                                   <div className="space-y-0.5">
                                     {changeRows.map((row, i) => (
-                                      <div key={i} className="text-xs">
+                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.current}`}>
                                         <span className="text-muted-foreground/70">{row.field}:</span>{' '}
                                         {row.current}
                                       </div>
@@ -6694,12 +6694,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   </div>
                                 ) : '—'}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground min-w-0">
+                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
                                 <span className="block truncate" title={actor}>
                                   {actor}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
                                 {formatDateTime(entry.createdAt)}
                               </td>
                             </tr>
@@ -6708,25 +6708,25 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       ) : order.approvalHistory && order.approvalHistory.length > 0 ? (
                         order.approvalHistory.map((approval, index) => (
                           <tr key={index} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-2">
                               <Check className="h-4 w-4 text-emerald-600" />
                             </td>
-                            <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                            <td className="px-2 py-2 font-medium text-foreground">
                               {approval.stage}
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground">—</td>
-                            <td className="px-3 py-2 text-muted-foreground">—</td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                              {approval.approvedBy || 'Unknown'}
+                            <td className="px-2 py-2 text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-muted-foreground">—</td>
+                            <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                              <span className="block truncate">{approval.approvedBy || 'Unknown'}</span>
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
                               {approval.approvedAt ? formatDateTime(approval.approvedAt) : '—'}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                          <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
                             No activity recorded yet.
                           </td>
                         </tr>
