@@ -441,6 +441,17 @@ export async function transitionFulfillmentOrderStage(
     if (!order.amazonShipmentId?.trim()) {
       throw new ValidationError('Amazon shipment ID is required to ship an Amazon FBA fulfillment order')
     }
+
+    const statusRaw = order.amazonShipmentStatus
+    if (typeof statusRaw === 'string') {
+      const trimmed = statusRaw.trim()
+      if (trimmed) {
+        const blockedAmazonShipmentStatuses = new Set(['CANCELLED', 'CANCELED', 'DELETED'])
+        if (blockedAmazonShipmentStatuses.has(trimmed.toUpperCase())) {
+          throw new ValidationError(`Cannot ship: Amazon shipment status is ${trimmed}`)
+        }
+      }
+    }
   } else {
     if (!order.destinationName?.trim()) {
       throw new ValidationError('Destination name is required to ship a non-Amazon fulfillment order')
