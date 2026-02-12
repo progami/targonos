@@ -10,11 +10,30 @@ export interface UserContext {
 }
 
 export type PurchaseOrderWithLines = Prisma.PurchaseOrderGetPayload<{
-  include: { lines: true }
+  include: {
+    lines: true
+    grns: {
+      select: {
+        referenceNumber: true
+        receivedAt: true
+        createdAt: true
+      }
+    }
+  }
 }>
 
 export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetPayload<{
-  include: { lines: true; proformaInvoices: true }
+  include: {
+    lines: true
+    proformaInvoices: true
+    grns: {
+      select: {
+        referenceNumber: true
+        receivedAt: true
+        createdAt: true
+      }
+    }
+  }
 }>
 
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
@@ -84,7 +103,16 @@ export async function getPurchaseOrders() {
   return prisma.purchaseOrder.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { lines: true },
+    include: {
+      lines: true,
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -107,7 +135,16 @@ export async function getPurchaseOrdersBySplitGroup(splitGroupId: string) {
       ...where,
     },
     orderBy: { createdAt: 'desc' },
-    include: { lines: true },
+    include: {
+      lines: true,
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -120,7 +157,17 @@ export async function getPurchaseOrderById(id: string) {
       isLegacy: false,
       status: { in: VISIBLE_STATUSES },
     },
-    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+    include: {
+      lines: true,
+      proformaInvoices: { orderBy: [{ createdAt: 'asc' }] },
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -138,11 +185,8 @@ export async function updatePurchaseOrderDetails(
     throw new NotFoundError('Purchase order not found')
   }
 
-  if (
-    order.isLegacy ||
-    (order.status !== PurchaseOrderStatus.ISSUED && order.status !== PurchaseOrderStatus.RFQ)
-  ) {
-    throw new ConflictError('Only purchase orders in ISSUED status can be edited')
+  if (order.isLegacy) {
+    throw new ConflictError('Cannot edit legacy purchase orders')
   }
 
   let expectedDate: Date | null | undefined = order.expectedDate
@@ -252,7 +296,17 @@ export async function updatePurchaseOrderDetails(
       notes,
       manufacturingStartDate,
     },
-    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+    include: {
+      lines: true,
+      proformaInvoices: { orderBy: [{ createdAt: 'asc' }] },
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 
   if (Object.keys(auditNewValue).length > 0) {
