@@ -54,6 +54,11 @@ import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { convertLengthToCm, convertWeightFromKg, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel } from '@/lib/measurements'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
+import {
+  PO_COST_CURRENCIES,
+  normalizePoCostCurrency,
+  type PoCostCurrency,
+} from '@/lib/constants/cost-currency'
 
 // 5-Stage State Machine Types
 type POStageStatus =
@@ -393,6 +398,11 @@ type SupplierAdjustmentEntry = {
   createdAt: string
   createdByName: string
   notes: string | null
+}
+
+function resolveCostCurrency(value: unknown, fallback: PoCostCurrency = 'USD'): PoCostCurrency {
+  const normalized = normalizePoCostCurrency(value)
+  return normalized ?? fallback
 }
 
 
@@ -762,6 +772,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [tenantDestination, setTenantDestination] = useState<string>('')
   const [tenantDisplayCode, setTenantDisplayCode] = useState<string>('')
   const [tenantCurrency, setTenantCurrency] = useState<string>('USD')
+  const defaultCostCurrency = resolveCostCurrency(tenantCurrency)
   const [transitioning, setTransitioning] = useState(false)
   const [creating, setCreating] = useState(false)
   const [orderInfoEditing, setOrderInfoEditing] = useState(false)
@@ -830,7 +841,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     []
   )
   const [freightLineAdding, setFreightLineAdding] = useState(false)
-  const [freightLineDraft, setFreightLineDraft] = useState({ costName: '', amount: '', notes: '' })
+  const [freightLineDraft, setFreightLineDraft] = useState<{
+    costName: string
+    amount: string
+    currency: PoCostCurrency
+    notes: string
+  }>({
+    costName: '',
+    amount: '',
+    currency: 'USD',
+    notes: '',
+  })
   const [freightLineSaving, setFreightLineSaving] = useState(false)
   const [freightLineDeleting, setFreightLineDeleting] = useState<string | null>(null)
 
@@ -847,10 +868,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [supplierAdjustmentDraft, setSupplierAdjustmentDraft] = useState<{
     kind: 'credit' | 'debit'
     amount: string
+    currency: PoCostCurrency
     notes: string
   }>({
     kind: 'credit',
     amount: '',
+    currency: 'USD',
     notes: '',
   })
 
@@ -871,9 +894,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [manualWarehouseCostsLoading, setManualWarehouseCostsLoading] = useState(false)
   const [warehouseCostEditing, setWarehouseCostEditing] = useState<'inbound' | 'storage' | null>(null)
   const [warehouseCostSaving, setWarehouseCostSaving] = useState(false)
-  const [warehouseCostDraft, setWarehouseCostDraft] = useState({
+  const [warehouseCostDraft, setWarehouseCostDraft] = useState<{
+    costName: string
+    amount: string
+    currency: PoCostCurrency
+    notes: string
+  }>({
     costName: '',
     amount: '',
+    currency: 'USD',
     notes: '',
   })
 
@@ -1336,7 +1365,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (supplierAdjustmentEditing) return
 
     if (!supplierAdjustment) {
-      setSupplierAdjustmentDraft({ kind: 'credit', amount: '', notes: '' })
+      setSupplierAdjustmentDraft({
+        kind: 'credit',
+        amount: '',
+        currency: defaultCostCurrency,
+        notes: '',
+      })
       return
     }
 
@@ -1344,9 +1378,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     setSupplierAdjustmentDraft({
       kind,
       amount: Math.abs(supplierAdjustment.amount).toFixed(2),
+      currency: resolveCostCurrency(supplierAdjustment.currency, defaultCostCurrency),
       notes: supplierAdjustment.notes ? supplierAdjustment.notes : '',
     })
-  }, [supplierAdjustment, supplierAdjustmentEditing])
+  }, [supplierAdjustment, supplierAdjustmentEditing, defaultCostCurrency])
 
   const refreshManualWarehouseCosts = useCallback(async () => {
     if (!order?.id) return
@@ -1373,7 +1408,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           category: String(entry.category),
           costName: String(entry.costName),
           amount: Number(entry.amount),
-          currency: String(entry.currency),
+          currency: resolveCostCurrency(entry.currency, defaultCostCurrency),
           createdByName: String(entry.createdByName),
           createdAt: String(entry.createdAt),
           notes: typeof entry.notes === 'string' ? entry.notes : null,
@@ -1384,7 +1419,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setManualWarehouseCostsLoading(false)
     }
-  }, [tenantFetchHeaders, order?.id])
+  }, [tenantFetchHeaders, order?.id, defaultCostCurrency])
 
   useEffect(() => {
     void refreshManualWarehouseCosts()
@@ -1414,6 +1449,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             category,
             costName: warehouseCostDraft.costName.trim(),
             amount,
+            currency: warehouseCostDraft.currency,
             notes: warehouseCostDraft.notes.trim() ? warehouseCostDraft.notes.trim() : undefined,
           }),
           tenantOverride,
@@ -1425,7 +1461,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         }
 
         setWarehouseCostEditing(null)
-        setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+        setWarehouseCostDraft({
+          costName: '',
+          amount: '',
+          currency: defaultCostCurrency,
+          notes: '',
+        })
         void refreshManualWarehouseCosts()
         toast.success(`${category} cost saved`)
       } catch {
@@ -1439,8 +1480,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       refreshManualWarehouseCosts,
       warehouseCostDraft.costName,
       warehouseCostDraft.amount,
+      warehouseCostDraft.currency,
       warehouseCostDraft.notes,
       warehouseCostSaving,
+      defaultCostCurrency,
       tenantOverride,
     ]
   )
@@ -1484,6 +1527,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         body: JSON.stringify({
           kind: supplierAdjustmentDraft.kind,
           amount,
+          currency: supplierAdjustmentDraft.currency,
           notes: supplierAdjustmentDraft.notes.trim()
             ? supplierAdjustmentDraft.notes.trim()
             : undefined,
@@ -1508,6 +1552,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     order,
     refreshSupplierAdjustment,
     supplierAdjustmentDraft.amount,
+    supplierAdjustmentDraft.currency,
     supplierAdjustmentDraft.kind,
     supplierAdjustmentDraft.notes,
     supplierAdjustmentSaving,
@@ -1552,6 +1597,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         body: JSON.stringify({
           costName,
           amount: parsed,
+          currency: freightLineDraft.currency,
           notes: freightLineDraft.notes.trim() ? freightLineDraft.notes.trim() : undefined,
         }),
         tenantOverride,
@@ -1565,7 +1611,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       }
 
       setFreightLineAdding(false)
-      setFreightLineDraft({ costName: '', amount: '', notes: '' })
+      setFreightLineDraft({
+        costName: '',
+        amount: '',
+        currency: defaultCostCurrency,
+        notes: '',
+      })
       void refreshForwardingCosts()
       void refreshCostLedgerSummary()
       toast.success('Freight line added')
@@ -1580,6 +1631,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     order,
     refreshCostLedgerSummary,
     refreshForwardingCosts,
+    defaultCostCurrency,
     tenantOverride,
   ])
 
@@ -5089,7 +5141,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                setFreightLineDraft({ costName: '', amount: '', notes: '' })
+                                setFreightLineDraft({
+                                  costName: '',
+                                  amount: '',
+                                  currency: defaultCostCurrency,
+                                  notes: '',
+                                })
                                 setFreightLineAdding(true)
                               }}
                             >
@@ -5131,11 +5188,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     {row.quantity.toLocaleString()}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    {tenantCurrency}{' '}
+                                    {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
                                     {row.unitRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
-                                    {tenantCurrency}{' '}
+                                    {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
                                     {Number(row.totalCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   {canEditFreightCost && (
@@ -5179,14 +5236,35 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     />
                                   </td>
                                   <td className="px-3 py-2" colSpan={2}>
-                                    <Input
-                                      type="text"
-                                      value={freightLineDraft.notes}
-                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, notes: e.target.value }))}
-                                      disabled={freightLineSaving}
-                                      className="h-8 text-sm"
-                                      placeholder="Notes (optional)"
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      <select
+                                        value={freightLineDraft.currency}
+                                        onChange={e =>
+                                          setFreightLineDraft(prev => ({
+                                            ...prev,
+                                            currency: resolveCostCurrency(e.target.value, defaultCostCurrency),
+                                          }))
+                                        }
+                                        disabled={freightLineSaving}
+                                        className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                      >
+                                        {PO_COST_CURRENCIES.map(currency => (
+                                          <option key={currency} value={currency}>
+                                            {currency}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <Input
+                                        type="text"
+                                        value={freightLineDraft.notes}
+                                        onChange={e =>
+                                          setFreightLineDraft(prev => ({ ...prev, notes: e.target.value }))
+                                        }
+                                        disabled={freightLineSaving}
+                                        className="h-8 text-sm"
+                                        placeholder="Notes (optional)"
+                                      />
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2">
                                     <Input
@@ -5224,7 +5302,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                                         onClick={() => {
                                           setFreightLineAdding(false)
-                                          setFreightLineDraft({ costName: '', amount: '', notes: '' })
+                                          setFreightLineDraft({
+                                            costName: '',
+                                            amount: '',
+                                            currency: defaultCostCurrency,
+                                            notes: '',
+                                          })
                                         }}
                                         disabled={freightLineSaving}
                                       >
@@ -5269,7 +5352,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 className="h-8 px-2 text-xs"
                                 onClick={() => {
                                   setWarehouseCostEditing('inbound')
-                                  setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                  setWarehouseCostDraft({
+                                    costName: '',
+                                    amount: '',
+                                    currency: defaultCostCurrency,
+                                    notes: '',
+                                  })
                                 }}
                                 disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
                               >
@@ -5397,17 +5485,44 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         />
                                       </td>
                                       <td className="px-3 py-2">
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0"
-                                          step="0.01"
-                                          value={warehouseCostDraft.amount}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, amount: e.target.value }))}
-                                          disabled={warehouseCostSaving}
-                                          placeholder="0.00"
-                                          className="h-8 text-sm text-right"
-                                        />
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={warehouseCostDraft.currency}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                currency: resolveCostCurrency(
+                                                  e.target.value,
+                                                  defaultCostCurrency
+                                                ),
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                            className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                          >
+                                            {PO_COST_CURRENCIES.map(currency => (
+                                              <option key={currency} value={currency}>
+                                                {currency}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.01"
+                                            value={warehouseCostDraft.amount}
+                                            onChange={e =>
+                                              setWarehouseCostDraft(prev => ({
+                                                ...prev,
+                                                amount: e.target.value,
+                                              }))
+                                            }
+                                            disabled={warehouseCostSaving}
+                                            placeholder="0.00"
+                                            className="h-8 text-sm text-right"
+                                          />
+                                        </div>
                                       </td>
                                       <td className="px-1 py-2">
                                         <div className="flex items-center gap-1">
@@ -5418,7 +5533,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                                             onClick={() => {
                                               setWarehouseCostEditing(null)
-                                              setWarehouseCostDraft({ costName: '', amount: '', notes: '' })
+                                              setWarehouseCostDraft({
+                                                costName: '',
+                                                amount: '',
+                                                currency: defaultCostCurrency,
+                                                notes: '',
+                                              })
                                             }}
                                             disabled={warehouseCostSaving}
                                           >
@@ -5465,17 +5585,44 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         />
                                       </td>
                                       <td className="px-3 py-2">
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0"
-                                          step="0.01"
-                                          value={supplierAdjustmentDraft.amount}
-                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, amount: e.target.value }))}
-                                          disabled={supplierAdjustmentSaving}
-                                          placeholder="0.00"
-                                          className="h-8 text-sm text-right"
-                                        />
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={supplierAdjustmentDraft.currency}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({
+                                                ...prev,
+                                                currency: resolveCostCurrency(
+                                                  e.target.value,
+                                                  defaultCostCurrency
+                                                ),
+                                              }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                                          >
+                                            {PO_COST_CURRENCIES.map(currency => (
+                                              <option key={currency} value={currency}>
+                                                {currency}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.01"
+                                            value={supplierAdjustmentDraft.amount}
+                                            onChange={e =>
+                                              setSupplierAdjustmentDraft(prev => ({
+                                                ...prev,
+                                                amount: e.target.value,
+                                              }))
+                                            }
+                                            disabled={supplierAdjustmentSaving}
+                                            placeholder="0.00"
+                                            className="h-8 text-sm text-right"
+                                          />
+                                        </div>
                                       </td>
                                       <td className="px-1 py-2">
                                         <div className="flex items-center gap-1">

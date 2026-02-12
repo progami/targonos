@@ -1,8 +1,9 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { PurchaseOrderStatus, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
 
@@ -22,11 +23,19 @@ const AmountSchema = z.preprocess((value) => {
 
 const FreightCostSchema = z.object({
   amount: AmountSchema,
+  currency: z.preprocess(
+    value => normalizePoCostCurrency(value) ?? value,
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
 })
 
 const FreightLineSchema = z.object({
   costName: z.string().trim().min(1, 'Cost name is required').max(200),
   amount: AmountSchema,
+  currency: z.preprocess(
+    value => normalizePoCostCurrency(value) ?? value,
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
   notes: z.string().trim().max(500).optional(),
 })
 
@@ -88,6 +97,11 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
   }
 
   const prisma = await getTenantPrisma()
+  const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
+  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -138,6 +152,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
   }
 
   const normalizedAmount = Number(parsed.data.amount.toFixed(2))
+  const currency = parsed.data.currency ?? tenantCurrency
 
   const createdByName = session.user.name ?? session.user.email ?? null
 
@@ -155,7 +170,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
         quantity: new Prisma.Decimal(1),
         unitRate: new Prisma.Decimal(normalizedAmount),
         totalCost: new Prisma.Decimal(normalizedAmount),
-        currency: null,
+        currency,
         notes: null,
         createdById: session.user.id,
         createdByName,
@@ -211,6 +226,11 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   const prisma = await getTenantPrisma()
+  const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
+  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -261,6 +281,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   const normalizedAmount = Number(parsed.data.amount.toFixed(2))
+  const currency = parsed.data.currency ?? tenantCurrency
   const createdByName = session.user.name ?? session.user.email ?? null
 
   const created = await prisma.purchaseOrderForwardingCost.create({
@@ -272,7 +293,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       quantity: new Prisma.Decimal(1),
       unitRate: new Prisma.Decimal(normalizedAmount),
       totalCost: new Prisma.Decimal(normalizedAmount),
-      currency: null,
+      currency,
       notes: parsed.data.notes ? parsed.data.notes : null,
       createdById: session.user.id,
       createdByName,
