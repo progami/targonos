@@ -70,6 +70,7 @@ export interface UpdatePurchaseOrderInput {
   paymentTerms?: string | null
   counterpartyName?: string | null
   notes?: string | null
+  manufacturingStartDate?: string | null
 }
 
 export async function getPurchaseOrders() {
@@ -157,6 +158,19 @@ export async function updatePurchaseOrderDetails(
     }
   }
 
+  let manufacturingStartDate: Date | null | undefined = order.manufacturingStartDate
+  if (input.manufacturingStartDate !== undefined) {
+    if (input.manufacturingStartDate === null || input.manufacturingStartDate === '') {
+      manufacturingStartDate = null
+    } else {
+      const parsed = new Date(input.manufacturingStartDate)
+      if (Number.isNaN(parsed.getTime())) {
+        throw new ValidationError('Invalid manufacturing start date value')
+      }
+      manufacturingStartDate = parsed
+    }
+  }
+
   const incoterms =
     input.incoterms !== undefined
       ? input.incoterms === null || input.incoterms.trim().length === 0
@@ -221,6 +235,11 @@ export async function updatePurchaseOrderDetails(
   track('incoterms', order.incoterms ?? null, incoterms ?? null)
   track('paymentTerms', order.paymentTerms ?? null, paymentTerms ?? null)
   track('notes', order.notes ?? null, notes ?? null)
+  track(
+    'manufacturingStartDate',
+    order.manufacturingStartDate ? order.manufacturingStartDate.toISOString() : null,
+    manufacturingStartDate ? manufacturingStartDate.toISOString() : null
+  )
 
   const updated = await prisma.purchaseOrder.update({
     where: { id },
@@ -231,6 +250,7 @@ export async function updatePurchaseOrderDetails(
       incoterms,
       paymentTerms,
       notes,
+      manufacturingStartDate,
     },
     include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
   })

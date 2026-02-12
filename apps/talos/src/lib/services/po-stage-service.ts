@@ -164,9 +164,9 @@ function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStat
 // Stage-specific required fields for transition
 export const STAGE_REQUIREMENTS: Record<string, string[]> = {
   // Issued = PO issued to supplier
-  ISSUED: ['expectedDate', 'incoterms', 'paymentTerms'],
+  ISSUED: ['expectedDate', 'incoterms', 'paymentTerms', 'manufacturingStartDate'],
   // Manufacturing = production started
-  MANUFACTURING: ['manufacturingStartDate'],
+  MANUFACTURING: [],
   // Stage 3: Ocean
   OCEAN: [
     'houseBillOfLading',
@@ -700,6 +700,21 @@ async function validateTransitionGate(params: {
           'Units must be divisible by units per carton'
         )
       }
+
+      const totalCost = line.totalCost ? Number(line.totalCost) : null
+      if (totalCost === null || !Number.isFinite(totalCost)) {
+        recordGateIssue(issues, `costs.lines.${line.id}.totalCost`, 'Targeted product cost is required')
+      }
+    }
+
+    const manufacturingStartDate = resolveOrderDate(
+      'manufacturingStartDate',
+      params.stageData,
+      params.order,
+      'Manufacturing start date'
+    )
+    if (!manufacturingStartDate) {
+      recordGateIssue(issues, 'details.manufacturingStartDate', 'Manufacturing start date is required')
     }
   }
 
@@ -763,16 +778,6 @@ async function validateTransitionGate(params: {
 
     if (totalShipNowCartons <= 0) {
       recordGateIssue(issues, 'cargo.lines', 'At least one carton must be dispatched')
-    }
-
-    const manufacturingStartDate = resolveOrderDate(
-      'manufacturingStartDate',
-      params.stageData,
-      params.order,
-      'Manufacturing start date'
-    )
-    if (!manufacturingStartDate) {
-      recordGateIssue(issues, 'details.manufacturingStartDate', 'Manufacturing start date is required')
     }
 
     const artworkDocTypes = activeLines.map(
@@ -3671,6 +3676,7 @@ export function serializePurchaseOrder(
     expectedDate: order.expectedDate?.toISOString() ?? null,
     incoterms: order.incoterms,
     paymentTerms: order.paymentTerms,
+    manufacturingStartDate: order.manufacturingStartDate?.toISOString() ?? null,
     notes: order.notes,
     receiveType: order.receiveType,
     postedAt: order.postedAt ? order.postedAt.toISOString() : null,
