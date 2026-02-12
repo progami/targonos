@@ -738,10 +738,20 @@ export default function SettlementDetailPage() {
     return match.kind === 'match' ? match.invoiceId : null;
   }, [auditData?.invoices, settlement]);
 
+  const previewInvoiceId = useMemo(() => {
+    if (!settlement) return null;
+    if (settlement.plutusStatus === 'Processed' && data?.processing?.invoiceId) {
+      return data.processing.invoiceId;
+    }
+    return recommendedInvoice;
+  }, [data?.processing?.invoiceId, recommendedInvoice, settlement]);
+
+  const previewEnabled = !!previewInvoiceId && (settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed');
+
   const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
-    queryKey: ['plutus-settlement-preview', settlementId, recommendedInvoice],
-    queryFn: () => fetchPreview(settlementId, recommendedInvoice!, settlement!.marketplace.id),
-    enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
+    queryKey: ['plutus-settlement-preview', settlementId, previewInvoiceId, settlement?.plutusStatus],
+    queryFn: () => fetchPreview(settlementId, previewInvoiceId!, settlement!.marketplace.id),
+    enabled: previewEnabled,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1103,7 +1113,7 @@ export default function SettlementDetailPage() {
                   {data?.processing && (
                     <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
                   )}
-                  {settlement?.plutusStatus === 'Pending' && (
+                  {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                     <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
                   )}
                   <TabsTrigger value="history">History</TabsTrigger>
@@ -1408,7 +1418,7 @@ export default function SettlementDetailPage() {
                 </TabsContent>
               )}
 
-              {settlement?.plutusStatus === 'Pending' && (
+              {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                 <TabsContent value="plutus-preview" className="p-4">
                   {(isLoadingAudit || isPreviewLoading) && (
                     <div className="space-y-3">
@@ -1419,7 +1429,7 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {!isLoadingAudit && !auditData?.invoices?.length && (
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data uploaded</div>
@@ -1434,7 +1444,7 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {!isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">No matching invoice found</div>
@@ -1453,6 +1463,11 @@ export default function SettlementDetailPage() {
 
                   {previewData && previewData.cogsJournalEntry && (
                     <div className="space-y-6">
+                      {settlement?.plutusStatus === 'Processed' && (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
+                          Showing read-only Plutus posting preview for the processed invoice. Posted JE IDs are in History.
+                        </div>
+                      )}
                       {/* Header */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -1463,8 +1478,24 @@ export default function SettlementDetailPage() {
                             {previewData.minDate} &rarr; {previewData.maxDate}
                           </div>
                         </div>
-                        <Badge variant={previewData.blocks.length === 0 ? 'success' : 'destructive'}>
-                          {previewData.blocks.length === 0 ? 'Ready to Process' : 'Blocked'}
+                        <Badge
+                          variant={
+                            settlement?.plutusStatus === 'Processed'
+                              ? previewData.blocks.length === 0
+                                ? 'success'
+                                : 'secondary'
+                              : previewData.blocks.length === 0
+                                ? 'success'
+                                : 'destructive'
+                          }
+                        >
+                          {settlement?.plutusStatus === 'Processed'
+                            ? previewData.blocks.length === 0
+                              ? 'Processed'
+                              : 'Processed (Needs Review)'
+                            : previewData.blocks.length === 0
+                              ? 'Ready to Process'
+                              : 'Blocked'}
                         </Badge>
                       </div>
 
