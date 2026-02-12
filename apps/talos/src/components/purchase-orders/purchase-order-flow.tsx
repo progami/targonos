@@ -1982,10 +1982,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   useEffect(() => {
     if (!session) return
 
-    if (isCreate || order?.status === 'ISSUED') {
+    if (isCreate || order) {
       void ensureSkusLoaded()
     }
-  }, [ensureSkusLoaded, isCreate, order?.status, session])
+  }, [ensureSkusLoaded, isCreate, order, session])
 
   const ensureSuppliersLoaded = useCallback(async () => {
     if (suppliersLoading || suppliers.length > 0) return
@@ -2389,6 +2389,17 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setTransitioning(true)
       const stageData: Record<string, unknown> = { ...stageFormData }
 
+      if (activeViewStage === 'WAREHOUSE') {
+        stageData.warehouseCode = receiveFormData.warehouseCode
+        stageData.receiveType = receiveFormData.receiveType
+        stageData.customsEntryNumber = receiveFormData.customsEntryNumber
+        stageData.customsClearedDate = receiveFormData.customsClearedDate
+        stageData.receivedDate = receiveFormData.receivedDate
+        stageData.dutyAmount = receiveFormData.dutyAmount
+        stageData.dutyCurrency = receiveFormData.dutyCurrency
+        stageData.discrepancyNotes = receiveFormData.discrepancyNotes
+      }
+
       if (order.status === 'MANUFACTURING' && targetStatus === 'OCEAN') {
         const activeLines = order.lines.filter(line => line.status !== 'CANCELLED')
         stageData.splitAllocations = activeLines.map(line => ({
@@ -2430,7 +2441,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setGateIssues(null)
       void refreshAuditLogs()
       void refreshCostLedgerSummary()
-      toast.success(`Order moved to ${formatStatusLabel(targetStatus)}`)
+      if (targetStatus === order.status) {
+        toast.success(`${formatStatusLabel(activeViewStage as POStageStatus)} updates saved`)
+      } else {
+        toast.success(`Order moved to ${formatStatusLabel(targetStatus)}`)
+      }
       return true
     } catch (_error) {
       toast.error('Failed to transition order')
@@ -2549,7 +2564,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return null
   }
 
-  const flowStatus: POStageStatus = order ? order.status : 'ISSUED'
   const flowLines = order ? order.lines.filter(line => line.status !== 'CANCELLED') : draftLines
   const totalUnits = flowLines.reduce((sum, line) => sum + (line.unitsOrdered ?? 0), 0)
   const totalCartons = flowLines.reduce((sum, line) => sum + line.quantity, 0)
@@ -2568,15 +2582,14 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const isTerminalStatus = order
     ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
     : false
-  const isReceived = Boolean(order?.postedAt)
-  const isReadOnly = isTerminalStatus || isReceived
-  const canEdit = isCreate ? true : !isReadOnly && order?.status === 'ISSUED'
+  const isReadOnly = isTerminalStatus
+  const canEdit = isCreate ? true : !isReadOnly
   const canEditDispatchAllocation =
-    !isCreate && !isReadOnly && order?.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
+    !isCreate && !isReadOnly && activeViewStage === 'MANUFACTURING'
   const canEditFreightCost =
-    !isCreate && !isTerminalStatus && !isReceived && flowStatus === 'OCEAN' && activeViewStage === 'OCEAN'
+    !isCreate && !isReadOnly && activeViewStage === 'OCEAN'
   const canEditWarehouseCosts =
-    !isCreate && !isTerminalStatus && flowStatus === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+    !isCreate && !isReadOnly && activeViewStage === 'WAREHOUSE'
 
   const showProductCostsStage =
     activeViewStage === 'ISSUED' ||
@@ -3123,6 +3136,20 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {!isCreate && order && !isReadOnly && activeBottomTab === 'details' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await executeTransition(order.status as POStageStatus)
+                      }}
+                      disabled={transitioning}
+                      className="gap-1.5"
+                    >
+                      Save Updates
+                    </Button>
+                  )}
+
                   {nextStage && (
                     <Button
                       size="sm"
@@ -3451,9 +3478,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         ) : (
                           flowLines.map(line => {
 	                            const canEditAttributes =
-	                              !isReadOnly &&
-	                              order.status === activeViewStage &&
-	                              order.status === 'ISSUED'
+	                              !isReadOnly
                             const issuePrefix = `cargo.lines.${line.id}`
                             const issue = (suffix: string): string | null => {
                               const key = `${issuePrefix}.${suffix}`
@@ -3684,8 +3709,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                                  {(() => {
                                     const gateKey = `cargo.lines.${line.id}.piNumber`
                                     const issue = gateIssues ? gateIssues[gateKey] : null
-                                    const canEditPiNumber =
-                                      !isReadOnly && order.status === 'ISSUED' && activeViewStage === 'ISSUED'
+	                                    const canEditPiNumber =
+	                                      !isReadOnly
 
                                     if (canEditPiNumber) {
                                       return (
@@ -3723,7 +3748,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                                  const gateKey = `cargo.lines.${line.id}.quantityReceived`
 	                                  const issue = gateIssues ? gateIssues[gateKey] ?? null : null
 	                                  const canEditReceiving =
-	                                    !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+	                                    !isReadOnly && activeViewStage === 'WAREHOUSE'
 	                                  const received = line.quantityReceived ?? null
 	                                  const delta = received !== null ? received - line.quantity : null
 	                                  const displayedReceived = (line.quantityReceived ?? line.postedQuantity).toLocaleString()
@@ -4506,7 +4531,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   if (!order) return null
                   const stage = activeViewStage as PurchaseOrderDocumentStage
                   const stageKey = stage as keyof typeof STAGE_DOCUMENTS
-                  const canUpload = order.status === stage && !isReadOnly
+                  const canUpload = !isReadOnly
                   const stageDocs = documents.filter(doc => doc.stage === stage)
                   const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
                   const issuedPiNumbers =
@@ -4987,7 +5012,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
                     ) : (
                       <>
-                        {canEdit && order.status === 'ISSUED' && activeViewStage === 'ISSUED' && (
+                        {canEdit && (
                           <div className="mb-3 flex justify-end">
                             <Button
                               type="button"
@@ -5015,9 +5040,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             {flowLines.map(line => {
                               const canEditProductCosts =
                                 canEdit &&
-                                productCostsEditing &&
-                                order.status === 'ISSUED' &&
-                                activeViewStage === 'ISSUED'
+                                productCostsEditing
 
                               const totalCost = line.totalCost !== null ? line.totalCost : null
                               const unitCost =
@@ -6265,8 +6288,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                 {(() => {
                   if (activeViewStage !== 'MANUFACTURING') return null
                   const mfg = order.stageData.manufacturing
-                  const canEditStage =
-                    !isReadOnly && order.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
+                  const canEditStage = !isReadOnly
 
                   const expectedCompletionValue =
                     getStageField('expectedCompletionDate') ?? formatDateOnly(mfg?.expectedCompletionDate ?? null)
@@ -6360,7 +6382,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                 {(() => {
                   if (activeViewStage !== 'OCEAN') return null
                   const ocean = order.stageData.ocean
-                  const canEditStage = !isReadOnly && order.status === 'OCEAN' && activeViewStage === 'OCEAN'
+                  const canEditStage = !isReadOnly
                   const textField = (key: string, existing: string | null | undefined): string =>
                     getStageField(key) ?? (typeof existing === 'string' ? existing : '')
                   const issue = (key: string): string | null => gateIssues?.[`details.${key}`] ?? null
@@ -6614,7 +6636,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                 {(() => {
                   if (activeViewStage !== 'WAREHOUSE') return null
                   const wh = order.stageData.warehouse
-                  const canEditStage = !isReadOnly && order.status === 'WAREHOUSE' && activeViewStage === 'WAREHOUSE'
+                  const canEditStage = !isReadOnly
 
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
