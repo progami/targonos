@@ -791,10 +791,11 @@ export default function SettlementDetailPage() {
   }, [adsAllocation, adsAllocationEnabled, adsAllocationError, isAdsAllocationLoading]);
 
   useEffect(() => {
+    if (!settlement) return;
     if (tab !== 'ads-allocation') return;
     if (showAdsAllocationTab) return;
     setTab('sales');
-  }, [showAdsAllocationTab, tab]);
+  }, [settlement, showAdsAllocationTab, tab]);
 
   type AdsEditLine = { sku: string; weightInput: string };
   const [adsEditLines, setAdsEditLines] = useState<AdsEditLine[]>([]);
