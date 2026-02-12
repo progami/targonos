@@ -14,6 +14,11 @@ type ParsedSpAdvertisedProductCsv = {
   skuCount: number;
 };
 
+type ParseSpAdvertisedProductCsvOptions = {
+  maxRows?: number;
+  allowedCountries?: string[];
+};
+
 function splitCsvLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
@@ -47,6 +52,10 @@ function splitCsvLine(line: string): string[] {
 }
 
 function normalizeHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeCountryValue(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
@@ -121,8 +130,26 @@ function getRequiredColumnIndex(headers: string[], options: { names: string[]; l
   throw new Error(`Missing required column: ${options.label}`);
 }
 
-export function parseSpAdvertisedProductCsv(csvText: string, options?: { maxRows?: number }): ParsedSpAdvertisedProductCsv {
+function getOptionalColumnIndex(headers: string[], options: { names: string[] }): number | null {
+  const normalizedHeaders = headers.map((h) => normalizeHeader(h));
+  const nameSet = new Set(options.names);
+
+  for (let i = 0; i < normalizedHeaders.length; i += 1) {
+    const h = normalizedHeaders[i];
+    if (h && nameSet.has(h)) {
+      return i;
+    }
+  }
+
+  return null;
+}
+
+export function parseSpAdvertisedProductCsv(csvText: string, options?: ParseSpAdvertisedProductCsvOptions): ParsedSpAdvertisedProductCsv {
   const maxRows = options?.maxRows ?? 500_000;
+  const allowedCountriesSet =
+    options?.allowedCountries && options.allowedCountries.length > 0
+      ? new Set(options.allowedCountries.map((c) => normalizeCountryValue(c)).filter((c) => c !== ''))
+      : null;
 
   const lines = csvText
     .split(/\r?\n/)
@@ -138,8 +165,13 @@ export function parseSpAdvertisedProductCsv(csvText: string, options?: { maxRows
   const dateIdx = getRequiredColumnIndex(columns, { names: ['date', 'day'], label: 'Date' });
   const skuIdx = getRequiredColumnIndex(columns, { names: ['advertisedsku'], label: 'Advertised SKU' });
   const spendIdx = getRequiredColumnIndex(columns, { names: ['spend', 'cost'], label: 'Spend' });
+  const countryIdx = getOptionalColumnIndex(columns, { names: ['country'] });
+  if (allowedCountriesSet !== null && countryIdx === null) {
+    throw new Error('Missing required column: Country');
+  }
 
   let rawRowCount = 0;
+  let marketplaceRowCount = 0;
 
   const spendByDaySku = new Map<string, number>();
   const skuSet = new Set<string>();
@@ -157,6 +189,15 @@ export function parseSpAdvertisedProductCsv(csvText: string, options?: { maxRows
     const dateRaw = cols[dateIdx];
     const skuRaw = cols[skuIdx];
     const spendRaw = cols[spendIdx];
+    const countryRaw = countryIdx === null ? '' : cols[countryIdx];
+
+    if (allowedCountriesSet !== null) {
+      const country = normalizeCountryValue(countryRaw ? countryRaw : '');
+      if (!allowedCountriesSet.has(country)) {
+        continue;
+      }
+      marketplaceRowCount += 1;
+    }
 
     const date = parseIsoDay(dateRaw ? dateRaw : '');
     if (minDate === undefined || date < minDate) minDate = date;
@@ -184,6 +225,10 @@ export function parseSpAdvertisedProductCsv(csvText: string, options?: { maxRows
 
   if (rawRowCount === 0) {
     throw new Error('CSV has no data rows');
+  }
+
+  if (allowedCountriesSet !== null && marketplaceRowCount === 0) {
+    throw new Error('CSV has no rows for selected marketplace');
   }
 
   if (minDate === undefined || maxDate === undefined) {
@@ -216,4 +261,3 @@ export function parseSpAdvertisedProductCsv(csvText: string, options?: { maxRows
     skuCount: skuSet.size,
   };
 }
-

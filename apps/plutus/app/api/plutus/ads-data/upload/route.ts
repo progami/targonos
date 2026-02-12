@@ -9,6 +9,7 @@ const REPORT_TYPE = 'SP_ADVERTISED_PRODUCT';
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 const MAX_CSV_ROWS = 500_000;
+const MAX_REPORT_RECENCY_DAYS = 3;
 
 class UploadValidationError extends Error {
   constructor(message: string) {
@@ -41,6 +42,27 @@ function requireMarketplace(value: unknown): 'amazon.com' | 'amazon.co.uk' {
     return trimmed;
   }
   throw new UploadValidationError('marketplace must be amazon.com or amazon.co.uk');
+}
+
+function allowedCountriesForMarketplace(marketplace: 'amazon.com' | 'amazon.co.uk'): string[] {
+  if (marketplace === 'amazon.com') {
+    return ['United States', 'US', 'USA', 'United States of America'];
+  }
+  if (marketplace === 'amazon.co.uk') {
+    return ['United Kingdom', 'UK', 'GB', 'Great Britain'];
+  }
+  const exhaustive: never = marketplace;
+  throw new Error(`Unsupported marketplace: ${exhaustive}`);
+}
+
+function toIsoDayUtc(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function latestAllowedReportMaxDateIso(now: Date): string {
+  const midnightUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  midnightUtc.setUTCDate(midnightUtc.getUTCDate() - MAX_REPORT_RECENCY_DAYS);
+  return toIsoDayUtc(midnightUtc);
 }
 
 function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: string }> {
@@ -101,7 +123,10 @@ export async function POST(req: Request) {
     const { csvText, sourceFilename } = await readCsvText(file);
     let parsed;
     try {
-      parsed = parseSpAdvertisedProductCsv(csvText, { maxRows: MAX_CSV_ROWS });
+      parsed = parseSpAdvertisedProductCsv(csvText, {
+        maxRows: MAX_CSV_ROWS,
+        allowedCountries: allowedCountriesForMarketplace(marketplace),
+      });
     } catch (error) {
       throw new UploadValidationError(error instanceof Error ? error.message : String(error));
     }
@@ -110,6 +135,18 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: `CSV rows include dates outside the declared range (${startDate}–${endDate}). Parsed range: ${parsed.minDate}–${parsed.maxDate}.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const now = new Date();
+    const latestAllowedDate = latestAllowedReportMaxDateIso(now);
+    if (parsed.maxDate > latestAllowedDate) {
+      const todayUtc = toIsoDayUtc(now);
+      return NextResponse.json(
+        {
+          error: `Latest row date ${parsed.maxDate} is too recent. With a ${MAX_REPORT_RECENCY_DAYS}-day buffer, max allowed is ${latestAllowedDate} (today UTC ${todayUtc}).`,
         },
         { status: 400 },
       );
