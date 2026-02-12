@@ -309,6 +309,7 @@ interface PurchaseOrderSummary {
   expectedDate: string | null
   incoterms: string | null
   paymentTerms: string | null
+  manufacturingStartDate: string | null
   receiveType: string | null
   postedAt: string | null
   createdAt: string
@@ -782,6 +783,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     expectedDate: '',
     incoterms: '',
     paymentTerms: '',
+    manufacturingStartDate: '',
     notes: '',
   })
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
@@ -1066,6 +1068,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       expectedDate: formatDateOnly(order.expectedDate),
       incoterms: order.incoterms ?? '',
       paymentTerms: order.paymentTerms ?? '',
+      manufacturingStartDate: formatDateOnly(order.manufacturingStartDate),
       notes: order.notes ?? '',
     })
   }, [order, orderInfoEditing])
@@ -2657,6 +2660,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           paymentTerms: orderInfoDraft.paymentTerms.trim()
             ? orderInfoDraft.paymentTerms.trim()
             : null,
+          manufacturingStartDate: orderInfoDraft.manufacturingStartDate.trim()
+            ? orderInfoDraft.manufacturingStartDate.trim()
+            : null,
           notes: orderInfoDraft.notes.trim() ? orderInfoDraft.notes.trim() : null,
         }),
         tenantOverride,
@@ -3409,7 +3415,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </th>
                           )}
                           {activeViewStage === 'ISSUED' && (
-                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[130px]">
                               PI #
                             </th>
                           )}
@@ -3632,7 +3638,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       const trimmed = e.target.value.trim()
                                       void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
                                     }}
-                                    className={cn('h-7 w-20 px-1 py-0 text-xs', issue('material') && 'border-rose-500')}
+                                    className={cn('h-7 w-16 px-1 py-0 text-xs', issue('material') && 'border-rose-500')}
                                   />
                                 ) : (
                                   <span className="text-xs text-slate-700 dark:text-slate-300">{line.material ?? '—'}</span>
@@ -3695,7 +3701,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                               })
                                             }}
                                             className={cn(
-                                              'h-7 px-2 py-0 text-xs',
+                                              'h-7 w-full px-2 py-0 text-xs',
                                               issue && 'border-rose-500 focus-visible:ring-rose-500'
                                             )}
                                           />
@@ -5893,6 +5899,30 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         </p>
                       )}
                     </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Mfg Start Date
+                      </p>
+                      {orderInfoEditing ? (
+                        <Input
+                          type="date"
+                          value={orderInfoDraft.manufacturingStartDate}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              manufacturingStartDate: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {orderInfoDraft.manufacturingStartDate.trim()
+                            ? orderInfoDraft.manufacturingStartDate
+                            : '—'}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {(orderInfoDraft.notes.trim() || orderInfoEditing) && (
@@ -6133,6 +6163,42 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Mfg Start Date
+                      </p>
+                      {canEdit && orderInfoEditing ? (
+                        <Input
+                          type="date"
+                          data-gate-key="details.manufacturingStartDate"
+                          value={orderInfoDraft.manufacturingStartDate}
+                          onChange={e =>
+                            setOrderInfoDraft(prev => ({
+                              ...prev,
+                              manufacturingStartDate: e.target.value,
+                            }))
+                          }
+                          disabled={orderInfoSaving}
+                          className={
+                            gateIssues?.['details.manufacturingStartDate']
+                              ? 'border-rose-500 focus-visible:ring-rose-500'
+                              : undefined
+                          }
+                        />
+                      ) : (
+                        <p
+                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                          data-gate-key="details.manufacturingStartDate"
+                        >
+                          {order.manufacturingStartDate ? formatDateOnly(order.manufacturingStartDate) : '—'}
+                        </p>
+                      )}
+                      {gateIssues?.['details.manufacturingStartDate'] && (
+                        <p className="text-xs text-rose-600" data-gate-key="details.manufacturingStartDate">
+                          {gateIssues['details.manufacturingStartDate']}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Created
                       </p>
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -6202,16 +6268,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   const canEditStage =
                     !isReadOnly && order.status === 'MANUFACTURING' && activeViewStage === 'MANUFACTURING'
 
-                  const startDateValue =
-                    getStageField('manufacturingStartDate') ??
-                    formatDateOnly(mfg?.manufacturingStartDate ?? mfg?.manufacturingStart ?? null)
                   const expectedCompletionValue =
                     getStageField('expectedCompletionDate') ?? formatDateOnly(mfg?.expectedCompletionDate ?? null)
                   const packagingNotesValue =
                     getStageField('packagingNotes') ??
                     (typeof mfg?.packagingNotes === 'string' ? mfg.packagingNotes : '')
-
-                  const startIssue = gateIssues?.['details.manufacturingStartDate'] ?? null
 
                   return (
                     <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
@@ -6219,36 +6280,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         Manufacturing
                       </h4>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Start Date
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              type="date"
-                              data-gate-key="details.manufacturingStartDate"
-                              value={startDateValue}
-                              onChange={e => setStageField('manufacturingStartDate', e.target.value)}
-                              className={
-                                startIssue ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.manufacturingStartDate"
-                            >
-                              {formatTextOrDash(
-                                formatDateOnly(mfg?.manufacturingStartDate ?? mfg?.manufacturingStart ?? null)
-                              )}
-                            </p>
-                          )}
-                          {startIssue && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.manufacturingStartDate">
-                              {startIssue}
-                            </p>
-                          )}
-                        </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Expected Completion
