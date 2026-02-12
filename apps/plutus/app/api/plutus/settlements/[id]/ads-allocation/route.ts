@@ -5,6 +5,7 @@ import { allocateByWeight } from '@/lib/inventory/money';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,7 @@ const WEIGHT_SOURCE = 'SPONSORED_PRODUCTS_SPEND';
 const WEIGHT_UNIT = 'cents';
 
 type RouteContext = { params: Promise<{ id: string }> };
+type AllocationLine = { sku: string; weight: number; allocatedCents: number };
 
 class AllocationApiError extends Error {
   status: number;
@@ -128,7 +130,7 @@ async function computeAllocation(input: {
   totalAdsCents: number;
 }): Promise<{
   adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: Date };
-  lines: Array<{ sku: string; weight: number; allocatedCents: number }>;
+  lines: AllocationLine[];
 }> {
   if (input.totalAdsCents === 0) {
     return {
@@ -209,6 +211,77 @@ async function computeAllocation(input: {
   };
 }
 
+function numericOrZero(value: number | null): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  return 0;
+}
+
+async function loadSettlementSkuProfitability(input: {
+  settlementProcessingId: string;
+  allocationLines: AllocationLine[];
+}) {
+  const salesBySku = await db.orderSale.groupBy({
+    by: ['sku'],
+    where: {
+      settlementProcessingId: input.settlementProcessingId,
+    },
+    _sum: {
+      quantity: true,
+      principalCents: true,
+      costManufacturingCents: true,
+      costFreightCents: true,
+      costDutyCents: true,
+      costMfgAccessoriesCents: true,
+    },
+  });
+
+  const returnsBySku = await db.orderReturn.groupBy({
+    by: ['sku'],
+    where: {
+      settlementProcessingId: input.settlementProcessingId,
+    },
+    _sum: {
+      quantity: true,
+      principalCents: true,
+      costManufacturingCents: true,
+      costFreightCents: true,
+      costDutyCents: true,
+      costMfgAccessoriesCents: true,
+    },
+  });
+
+  const sales = salesBySku.map((row) => ({
+    sku: row.sku,
+    quantity: numericOrZero(row._sum.quantity),
+    principalCents: numericOrZero(row._sum.principalCents),
+    costManufacturingCents: numericOrZero(row._sum.costManufacturingCents),
+    costFreightCents: numericOrZero(row._sum.costFreightCents),
+    costDutyCents: numericOrZero(row._sum.costDutyCents),
+    costMfgAccessoriesCents: numericOrZero(row._sum.costMfgAccessoriesCents),
+  }));
+
+  const returns = returnsBySku.map((row) => ({
+    sku: row.sku,
+    quantity: numericOrZero(row._sum.quantity),
+    principalCents: numericOrZero(row._sum.principalCents),
+    costManufacturingCents: numericOrZero(row._sum.costManufacturingCents),
+    costFreightCents: numericOrZero(row._sum.costFreightCents),
+    costDutyCents: numericOrZero(row._sum.costDutyCents),
+    costMfgAccessoriesCents: numericOrZero(row._sum.costMfgAccessoriesCents),
+  }));
+
+  return buildSettlementSkuProfitability({
+    sales,
+    returns,
+    allocationLines: input.allocationLines.map((line) => ({
+      sku: line.sku,
+      allocatedCents: line.allocatedCents,
+    })),
+  });
+}
+
 export async function GET(_req: NextRequest, context: RouteContext) {
   try {
     const { id: settlementJournalEntryId } = await context.params;
@@ -239,53 +312,72 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
     const invoiceRange = await loadInvoiceDateRange({ invoiceId, marketplace });
     const totalAdsCents = await loadSettlementAdsTotalCents({ invoiceId, marketplace });
+    let kind: 'saved' | 'computed';
+    let weightSource: string;
+    let weightUnit: string;
+    let adsDataUpload:
+      | null
+      | {
+          id: string;
+          filename: string;
+          startDate: string;
+          endDate: string;
+          uploadedAt: string;
+        };
+    let lines: AllocationLine[];
 
     if (existing) {
-      return NextResponse.json({
-        kind: 'saved' as const,
+      kind = 'saved';
+      weightSource = existing.weightSource;
+      weightUnit = existing.weightUnit;
+      lines = existing.lines
+        .map((l) => ({ sku: l.sku, weight: l.weight, allocatedCents: l.allocatedCents }))
+        .sort((a, b) => a.sku.localeCompare(b.sku));
+      adsDataUpload = existing.adsDataUpload
+        ? {
+            ...existing.adsDataUpload,
+            uploadedAt: existing.adsDataUpload.uploadedAt.toISOString(),
+          }
+        : null;
+    } else {
+      kind = 'computed';
+      weightSource = WEIGHT_SOURCE;
+      weightUnit = WEIGHT_UNIT;
+
+      const computed = await computeAllocation({
         marketplace,
         invoiceId,
         invoiceStartDate: invoiceRange.startDate,
         invoiceEndDate: invoiceRange.endDate,
         totalAdsCents,
-        weightSource: existing.weightSource,
-        weightUnit: existing.weightUnit,
-        adsDataUpload: existing.adsDataUpload
-          ? {
-              ...existing.adsDataUpload,
-              uploadedAt: existing.adsDataUpload.uploadedAt.toISOString(),
-            }
-          : null,
-        lines: existing.lines
-          .map((l) => ({ sku: l.sku, weight: l.weight, allocatedCents: l.allocatedCents }))
-          .sort((a, b) => a.sku.localeCompare(b.sku)),
       });
-    }
 
-    const computed = await computeAllocation({
-      marketplace,
-      invoiceId,
-      invoiceStartDate: invoiceRange.startDate,
-      invoiceEndDate: invoiceRange.endDate,
-      totalAdsCents,
-    });
-
-    return NextResponse.json({
-      kind: 'computed' as const,
-      marketplace,
-      invoiceId,
-      invoiceStartDate: invoiceRange.startDate,
-      invoiceEndDate: invoiceRange.endDate,
-      totalAdsCents,
-      weightSource: WEIGHT_SOURCE,
-      weightUnit: WEIGHT_UNIT,
-      adsDataUpload: computed.adsDataUpload
+      lines = computed.lines;
+      adsDataUpload = computed.adsDataUpload
         ? {
             ...computed.adsDataUpload,
             uploadedAt: computed.adsDataUpload.uploadedAt.toISOString(),
           }
-        : null,
-      lines: computed.lines,
+        : null;
+    }
+
+    const skuProfitability = await loadSettlementSkuProfitability({
+      settlementProcessingId: processing.id,
+      allocationLines: lines,
+    });
+
+    return NextResponse.json({
+      kind,
+      marketplace,
+      invoiceId,
+      invoiceStartDate: invoiceRange.startDate,
+      invoiceEndDate: invoiceRange.endDate,
+      totalAdsCents,
+      weightSource,
+      weightUnit,
+      adsDataUpload,
+      lines,
+      skuProfitability,
     });
   } catch (error) {
     if (error instanceof AllocationApiError) {
