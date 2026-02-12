@@ -154,7 +154,23 @@ export interface QboBill {
   TxnDate: string;
   TotalAmt: number;
   DocNumber?: string;
+  DueDate?: string;
   PrivateNote?: string;
+  ExchangeRate?: number;
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
+  SalesTermRef?: {
+    value: string;
+    name?: string;
+  };
+  CustomField?: Array<{
+    DefinitionId?: string;
+    Name?: string;
+    Type?: string;
+    StringValue?: string;
+  }>;
   VendorRef?: {
     value: string;
     name: string;
@@ -167,6 +183,18 @@ export interface QboBill {
       AccountRef: {
         value: string;
         name: string;
+      };
+      ClassRef?: {
+        value: string;
+        name?: string;
+      };
+      CustomerRef?: {
+        value: string;
+        name?: string;
+      };
+      TaxCodeRef?: {
+        value: string;
+        name?: string;
       };
     };
     ItemBasedExpenseLineDetail?: {
@@ -383,6 +411,63 @@ export interface QboVendor {
   Id: string;
   DisplayName: string;
   Active?: boolean;
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
+  BillAddr?: {
+    Line1?: string;
+    Line2?: string;
+    Line3?: string;
+    Line4?: string;
+    Line5?: string;
+    City?: string;
+    CountrySubDivisionCode?: string;
+    PostalCode?: string;
+    Country?: string;
+  };
+}
+
+export interface QboTerm {
+  Id: string;
+  Name: string;
+  Active?: boolean;
+  Type?: string;
+  DueDays?: number;
+}
+
+export interface QboCurrency {
+  Id: string;
+  Name?: string;
+  Code?: string;
+  Active?: boolean;
+}
+
+export interface QboPreferences {
+  AccountingInfoPrefs?: {
+    ClassTrackingPerTxnLine?: boolean;
+    ClassTrackingPerTxn?: boolean;
+    TrackDepartments?: boolean;
+  };
+  CurrencyPrefs?: {
+    HomeCurrency?: {
+      value: string;
+      name?: string;
+    };
+    MultiCurrencyEnabled?: boolean;
+  };
+  VendorAndPurchasePrefs?: {
+    POCustomField?: {
+      Name?: string;
+      Type?: string;
+      DefinitionId?: string;
+      CustomField?: Array<{
+        Name?: string;
+        Type?: string;
+        DefinitionId?: string;
+      }>;
+    };
+  };
 }
 
 export interface QboQueryResponse {
@@ -392,6 +477,8 @@ export interface QboQueryResponse {
     Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
     Vendor?: QboVendor[];
+    Term?: QboTerm[];
+    Currency?: QboCurrency[];
     totalCount?: number;
     startPosition?: number;
     maxResults?: number;
@@ -1191,11 +1278,26 @@ export async function createBill(
   input: {
     txnDate: string;
     vendorId: string;
+    dueDate?: string;
+    docNumber?: string;
+    salesTermId?: string;
+    currencyCode?: string;
+    exchangeRate?: number;
+    departmentId?: string;
     privateNote?: string;
+    customFields?: Array<{
+      definitionId?: string;
+      name?: string;
+      type: 'StringType' | 'NumberType' | 'BooleanType';
+      value: string | number | boolean;
+    }>;
     lines: Array<{
       amount: number;
       accountId: string;
       description?: string;
+      classId?: string;
+      customerId?: string;
+      taxCodeId?: string;
     }>;
   },
 ): Promise<{ bill: QboBill; updatedConnection?: QboConnection }> {
@@ -1204,19 +1306,74 @@ export async function createBill(
 
   const url = `${baseUrl}/v3/company/${connection.realmId}/bill`;
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     TxnDate: input.txnDate,
     VendorRef: { value: input.vendorId },
-    PrivateNote: input.privateNote,
     Line: input.lines.map((line) => ({
-      DetailType: 'AccountBasedExpenseLineDetail',
-      Amount: line.amount,
-      Description: line.description,
-      AccountBasedExpenseLineDetail: {
-        AccountRef: { value: line.accountId },
-      },
+      ...(() => {
+        const detail: Record<string, unknown> = {
+          AccountRef: { value: line.accountId },
+        };
+        if (line.classId) {
+          detail.ClassRef = { value: line.classId };
+        }
+        if (line.customerId) {
+          detail.CustomerRef = { value: line.customerId };
+        }
+        if (line.taxCodeId) {
+          detail.TaxCodeRef = { value: line.taxCodeId };
+        }
+        return {
+          DetailType: 'AccountBasedExpenseLineDetail',
+          Amount: line.amount,
+          Description: line.description,
+          AccountBasedExpenseLineDetail: detail,
+        };
+      })(),
     })),
   };
+  if (input.privateNote !== undefined && input.privateNote !== '') {
+    payload.PrivateNote = input.privateNote;
+  }
+  if (input.docNumber !== undefined && input.docNumber !== '') {
+    payload.DocNumber = input.docNumber;
+  }
+  if (input.dueDate !== undefined && input.dueDate !== '') {
+    payload.DueDate = input.dueDate;
+  }
+  if (input.salesTermId !== undefined && input.salesTermId !== '') {
+    payload.SalesTermRef = { value: input.salesTermId };
+  }
+  if (input.currencyCode !== undefined && input.currencyCode !== '') {
+    payload.CurrencyRef = { value: input.currencyCode };
+  }
+  if (input.exchangeRate !== undefined) {
+    payload.ExchangeRate = input.exchangeRate;
+  }
+  if (input.departmentId !== undefined && input.departmentId !== '') {
+    payload.DepartmentRef = { value: input.departmentId };
+  }
+  if (Array.isArray(input.customFields) && input.customFields.length > 0) {
+    payload.CustomField = input.customFields.map((field) => {
+      const record: Record<string, unknown> = {
+        Type: field.type,
+      };
+      if (field.definitionId) {
+        record.DefinitionId = field.definitionId;
+      }
+      if (field.name) {
+        record.Name = field.name;
+      }
+      if (field.type === 'StringType') {
+        record.StringValue = String(field.value);
+      } else if (field.type === 'NumberType') {
+        record.NumberValue = Number(field.value);
+      } else if (field.type === 'BooleanType') {
+        record.BooleanValue = Boolean(field.value);
+      }
+      return record;
+    });
+  }
 
   logger.info('Creating bill in QBO', { txnDate: input.txnDate, vendorId: input.vendorId });
 
@@ -1312,6 +1469,9 @@ export async function createPurchase(
 }
 
 const VENDORS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const TERMS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CURRENCIES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const PREFERENCES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Fetch Vendors from QBO
@@ -1355,4 +1515,210 @@ export async function fetchVendors(
   setCache(cacheKey, result, VENDORS_CACHE_TTL_MS);
 
   return { vendors: result, updatedConnection };
+}
+
+export async function fetchTerms(
+  connection: QboConnection,
+): Promise<{ terms: QboTerm[]; updatedConnection?: QboConnection }> {
+  const cacheKey = `terms:${connection.realmId}`;
+  const cached = getCached<QboTerm[]>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached terms', { realmId: connection.realmId, count: cached.length });
+    return { terms: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM Term MAXRESULTS 1000`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching terms from QBO');
+
+  const response = await fetchWithRetry(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch terms', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch terms: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as QboQueryResponse;
+  const terms = (data.QueryResponse.Term ?? []).filter((term) => term.Active !== false);
+  setCache(cacheKey, terms, TERMS_CACHE_TTL_MS);
+  return { terms, updatedConnection };
+}
+
+export async function fetchCurrencies(
+  connection: QboConnection,
+): Promise<{ currencies: QboCurrency[]; updatedConnection?: QboConnection }> {
+  const cacheKey = `currencies:${connection.realmId}`;
+  const cached = getCached<QboCurrency[]>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached currencies', { realmId: connection.realmId, count: cached.length });
+    return { currencies: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM Currency MAXRESULTS 1000`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching currencies from QBO');
+
+  const response = await fetchWithRetry(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch currencies', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch currencies: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as QboQueryResponse;
+  const currencies = (data.QueryResponse.Currency ?? [])
+    .filter((currency) => currency.Active !== false)
+    .sort((a, b) => (a.Code ?? '').localeCompare(b.Code ?? ''));
+
+  setCache(cacheKey, currencies, CURRENCIES_CACHE_TTL_MS);
+  return { currencies, updatedConnection };
+}
+
+export async function fetchPreferences(
+  connection: QboConnection,
+): Promise<{ preferences: QboPreferences; updatedConnection?: QboConnection }> {
+  const cacheKey = `preferences:${connection.realmId}`;
+  const cached = getCached<QboPreferences>(cacheKey);
+  if (cached) {
+    logger.info('Returning cached preferences', { realmId: connection.realmId });
+    return { preferences: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/v3/company/${connection.realmId}/preferences`;
+
+  logger.info('Fetching preferences from QBO');
+
+  const response = await fetchWithRetry(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch preferences', { status: response.status, error: errorText });
+    throw new Error(`Failed to fetch preferences: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { Preferences?: QboPreferences };
+  const preferences = data.Preferences ?? {};
+  setCache(cacheKey, preferences, PREFERENCES_CACHE_TTL_MS);
+  return { preferences, updatedConnection };
+}
+
+function buildMultipartUploadBody(params: {
+  boundary: string;
+  metadata: unknown;
+  fileName: string;
+  contentType: string;
+  base64Content: string;
+}): string {
+  const { boundary, metadata, fileName, contentType, base64Content } = params;
+  const parts: string[] = [];
+
+  parts.push(`--${boundary}\r\n`);
+  parts.push('Content-Disposition: form-data; name="file_metadata_01"; filename="attachment.json"\r\n');
+  parts.push('Content-Type: application/json; charset=UTF-8\r\n');
+  parts.push('Content-Transfer-Encoding: 8bit\r\n\r\n');
+  parts.push(`${JSON.stringify(metadata)}\r\n`);
+
+  parts.push(`--${boundary}\r\n`);
+  parts.push(`Content-Disposition: form-data; name="file_content_01"; filename="${fileName}"\r\n`);
+  parts.push(`Content-Type: ${contentType}\r\n`);
+  parts.push('Content-Transfer-Encoding: base64\r\n\r\n');
+  parts.push(`${base64Content}\r\n`);
+  parts.push(`--${boundary}--\r\n`);
+
+  return parts.join('');
+}
+
+export async function uploadBillAttachment(
+  connection: QboConnection,
+  input: {
+    billId: string;
+    fileName: string;
+    contentType: string;
+    bytes: Uint8Array;
+  },
+): Promise<{ attachableId: string; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const activeConnection = updatedConnection ? updatedConnection : connection;
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/v3/company/${activeConnection.realmId}/upload`;
+
+  const metadata = {
+    AttachableRef: [
+      {
+        EntityRef: {
+          type: 'Bill',
+          value: input.billId,
+        },
+      },
+    ],
+    FileName: input.fileName,
+    ContentType: input.contentType,
+  };
+
+  const boundary = `plutus-upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const body = buildMultipartUploadBody({
+    boundary,
+    metadata,
+    fileName: input.fileName,
+    contentType: input.contentType,
+    base64Content: Buffer.from(input.bytes).toString('base64'),
+  });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to upload bill attachment', {
+      billId: input.billId,
+      fileName: input.fileName,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to upload bill attachment: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    AttachableResponse?: Array<{ Attachable?: { Id?: string } }>;
+  };
+  const attachableId = data.AttachableResponse?.[0]?.Attachable?.Id;
+  if (!attachableId) {
+    throw new Error('Attachment upload succeeded but no Attachable Id returned.');
+  }
+
+  return { attachableId, updatedConnection };
 }
