@@ -214,7 +214,7 @@ export default function AdsDataPage() {
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
             >
-              <input ref={fileInputRef} type="file" accept=".csv,.zip" onChange={onFileChange} className="hidden" />
+              <input ref={fileInputRef} type="file" accept=".csv,.zip,.xlsx" onChange={onFileChange} className="hidden" />
 
               {isUploading ? (
                 <div className="flex flex-col items-center gap-3">
@@ -227,7 +227,7 @@ export default function AdsDataPage() {
                     <Upload className="h-7 w-7" />
                   </div>
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Drop your SP report here</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">CSV or ZIP &middot; Advertised product report</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">CSV, ZIP, or XLSX &middot; Advertised product report</p>
                   <button
                     type="button"
                     onClick={() => {

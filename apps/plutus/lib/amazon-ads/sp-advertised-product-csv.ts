@@ -59,6 +59,18 @@ function normalizeCountryValue(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function dateFromExcelSerial(serial: number): string {
+  if (!Number.isFinite(serial) || !Number.isInteger(serial)) {
+    throw new Error(`Invalid Excel date serial: ${serial}`);
+  }
+  if (serial < 1 || serial > 100_000) {
+    throw new Error(`Invalid Excel date serial: ${serial}`);
+  }
+  const excelEpochUtc = Date.UTC(1899, 11, 30);
+  const millis = excelEpochUtc + serial * 24 * 60 * 60 * 1000;
+  return new Date(millis).toISOString().slice(0, 10);
+}
+
 function parseIsoDay(value: string): string {
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
@@ -72,7 +84,12 @@ function parseIsoDay(value: string): string {
     return `${year}-${month}-${day}`;
   }
 
-  throw new Error(`Invalid date value (expected YYYY-MM-DD or YYYYMMDD): ${trimmed}`);
+  if (/^\d+(\.0+)?$/.test(trimmed)) {
+    const serial = Number(trimmed);
+    return dateFromExcelSerial(serial);
+  }
+
+  throw new Error(`Invalid date value (expected YYYY-MM-DD, YYYYMMDD, or Excel serial): ${trimmed}`);
 }
 
 function parseMoneyToCents(value: string): number {
