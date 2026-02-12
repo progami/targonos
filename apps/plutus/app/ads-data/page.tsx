@@ -110,7 +110,19 @@ export default function AdsDataPage() {
         const json = await res.json();
 
         if (!res.ok) {
-          setUploadError(json.error ?? 'Upload failed');
+          let message = 'Upload failed';
+          if (typeof json === 'object' && json !== null) {
+            const details = (json as Record<string, unknown>).details;
+            if (typeof details === 'string' && details.trim() !== '') {
+              message = details;
+            } else {
+              const errorMessage = (json as Record<string, unknown>).error;
+              if (typeof errorMessage === 'string' && errorMessage.trim() !== '') {
+                message = errorMessage;
+              }
+            }
+          }
+          setUploadError(message);
           return;
         }
 
