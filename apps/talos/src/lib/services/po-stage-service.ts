@@ -25,6 +25,7 @@ import {
   buildPurchaseOrderReference,
   getNextCommercialInvoiceSequence,
   getNextPurchaseOrderSequence,
+  isPurchaseOrderReferenceUsedAcrossTenants,
   normalizeSkuGroup,
   parseOrderReference,
   resolveOrderReferenceSeed,
@@ -1371,6 +1372,10 @@ export async function createPurchaseOrder(
     const generatedOrderReference = parseOrderReference(orderNumber)
     if (!generatedOrderReference) {
       throw new ValidationError('Unable to generate a valid PO reference')
+    }
+    const referenceAlreadyUsed = await isPurchaseOrderReferenceUsedAcrossTenants(orderNumber)
+    if (referenceAlreadyUsed) {
+      continue
     }
 
 	    try {
