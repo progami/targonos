@@ -782,6 +782,20 @@ export default function SettlementDetailPage() {
     refetchOnWindowFocus: false,
   });
 
+  const showAdsAllocationTab = useMemo(() => {
+    if (!adsAllocationEnabled) return false;
+    if (isAdsAllocationLoading) return true;
+    if (adsAllocationError) return true;
+    if (!adsAllocation) return false;
+    return adsAllocation.totalAdsCents !== 0;
+  }, [adsAllocation, adsAllocationEnabled, adsAllocationError, isAdsAllocationLoading]);
+
+  useEffect(() => {
+    if (tab !== 'ads-allocation') return;
+    if (showAdsAllocationTab) return;
+    setTab('sales');
+  }, [showAdsAllocationTab, tab]);
+
   type AdsEditLine = { sku: string; weightInput: string };
   const [adsEditLines, setAdsEditLines] = useState<AdsEditLine[]>([]);
   const [adsDirty, setAdsDirty] = useState(false);
@@ -1127,7 +1141,7 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <TabsList>
                   <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
-                  {data?.processing && (
+                  {showAdsAllocationTab && (
                     <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
                   )}
                   {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
@@ -1199,7 +1213,7 @@ export default function SettlementDetailPage() {
                 )}
               </TabsContent>
 
-              {data?.processing && settlement && (
+              {showAdsAllocationTab && data?.processing && settlement && (
                 <TabsContent value="ads-allocation" className="p-4">
                   {isAdsAllocationLoading && (
                     <div className="space-y-3">
