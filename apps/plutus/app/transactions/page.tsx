@@ -2736,16 +2736,6 @@ export default function TransactionsPage() {
                       New Bill
                     </Button>
                   )}
-                  {tab === 'bill' && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setCreateBillOpen(true)}
-                      className="gap-1.5"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      New Bill
-                    </Button>
-                  )}
                   {tab === 'purchase' && (
                     <Button
                       variant="outline"
