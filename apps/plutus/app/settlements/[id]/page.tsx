@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 
@@ -21,12 +21,14 @@ import {
 } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
+import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -139,6 +141,21 @@ type SettlementProcessingPreview = {
 
 type ConnectionStatus = { connected: boolean; error?: string };
 
+type AdsAllocationLine = { sku: string; weight: number; allocatedCents: number };
+
+type AdsAllocationResponse = {
+  kind: 'saved' | 'computed';
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  totalAdsCents: number;
+  weightSource: string;
+  weightUnit: string;
+  adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
+  lines: AdsAllocationLine[];
+};
+
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
 
@@ -237,6 +254,30 @@ async function postSettlement(settlementId: string, invoiceId: string, marketpla
     return { ok: false as const, data };
   }
   return { ok: true as const, data };
+}
+
+async function fetchAdsAllocation(settlementId: string): Promise<AdsAllocationResponse> {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/ads-allocation`);
+  const data = await res.json();
+  if (!res.ok) {
+    const message = typeof data.details === 'string' ? data.details : data.error ?? 'Failed to load settlement advertising allocation';
+    throw new Error(message);
+  }
+  return data as AdsAllocationResponse;
+}
+
+async function saveAdsAllocation(input: { settlementId: string; lines: Array<{ sku: string; weight: number }> }) {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${input.settlementId}/ads-allocation`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ lines: input.lines }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const message = typeof data.details === 'string' ? data.details : data.error ?? 'Failed to save settlement advertising allocation';
+    throw new Error(message);
+  }
+  return data as { success: true };
 }
 
 /**
@@ -618,7 +659,9 @@ export default function SettlementDetailPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const initialTab = searchParams.get('tab');
-  const [tab, setTab] = useState(initialTab === 'history' ? 'history' : 'sales');
+  const [tab, setTab] = useState(
+    initialTab === 'history' ? 'history' : initialTab === 'ads-allocation' ? 'ads-allocation' : 'sales',
+  );
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
@@ -673,6 +716,137 @@ export default function SettlementDetailPage() {
     queryFn: () => fetchPreview(settlementId, recommendedInvoice!, settlement!.marketplace.id),
     enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
     staleTime: 5 * 60 * 1000,
+  });
+
+  const adsAllocationEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
+
+  const { data: adsAllocation, isLoading: isAdsAllocationLoading, error: adsAllocationError } = useQuery({
+    queryKey: ['plutus-settlement-ads-allocation', settlementId],
+    queryFn: () => fetchAdsAllocation(settlementId),
+    enabled: adsAllocationEnabled,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  type AdsEditLine = { sku: string; weightInput: string };
+  const [adsEditLines, setAdsEditLines] = useState<AdsEditLine[]>([]);
+  const [adsDirty, setAdsDirty] = useState(false);
+
+  useEffect(() => {
+    setAdsDirty(false);
+    setAdsEditLines([]);
+  }, [settlementId]);
+
+  useEffect(() => {
+    if (!adsAllocation) return;
+    if (adsDirty) return;
+
+    setAdsEditLines(
+      adsAllocation.lines.map((l) => ({
+        sku: l.sku,
+        weightInput: adsAllocation.weightUnit === 'cents' ? (l.weight / 100).toFixed(2) : String(l.weight),
+      })),
+    );
+  }, [adsAllocation, adsDirty]);
+
+  function parseMoneyInputToCents(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const amount = Number(trimmed);
+    if (!Number.isFinite(amount)) return null;
+    const cents = Math.round(amount * 100);
+    if (!Number.isInteger(cents) || cents <= 0) return null;
+    return cents;
+  }
+
+  const adsAllocationPreview = useMemo(() => {
+    if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
+      return { ok: false as const, lines: [] as Array<{ sku: string; weightInput: string; allocatedCents: number | null }>, error: null as string | null };
+    }
+
+    if (adsAllocation.weightUnit !== 'cents') {
+      return { ok: false as const, lines: [], error: `Unsupported weight unit: ${adsAllocation.weightUnit}` };
+    }
+
+    const parsed = adsEditLines.map((l) => {
+      const weightCents = parseMoneyInputToCents(l.weightInput);
+      return { sku: l.sku, weightInput: l.weightInput, weightCents };
+    });
+
+    if (parsed.length === 0) {
+      return { ok: false as const, lines: [], error: 'No weights available for allocation.' };
+    }
+
+    const invalid = parsed.find((l) => l.weightCents === null);
+    if (invalid) {
+      return {
+        ok: false as const,
+        lines: parsed.map((l) => ({ sku: l.sku, weightInput: l.weightInput, allocatedCents: null })),
+        error: 'All weights must be positive dollar amounts.',
+      };
+    }
+
+    const weightsSorted = [...parsed].sort((a, b) => a.sku.localeCompare(b.sku));
+    const sign = adsAllocation.totalAdsCents < 0 ? -1 : 1;
+    const absTotal = Math.abs(adsAllocation.totalAdsCents);
+
+    const allocatedAbs = allocateByWeight(
+      absTotal,
+      weightsSorted.map((w) => ({ key: w.sku, weight: w.weightCents! })),
+    );
+
+    const withAlloc = parsed.map((l) => {
+      const centsAbs = allocatedAbs[l.sku];
+      if (centsAbs === undefined) {
+        return { sku: l.sku, weightInput: l.weightInput, allocatedCents: null };
+      }
+      return { sku: l.sku, weightInput: l.weightInput, allocatedCents: sign * centsAbs };
+    });
+
+    let sum = 0;
+    for (const line of withAlloc) {
+      if (line.allocatedCents === null) {
+        return { ok: false as const, lines: withAlloc, error: 'Allocation failed. Fix invalid rows.' };
+      }
+      sum += line.allocatedCents;
+    }
+
+    if (sum !== adsAllocation.totalAdsCents) {
+      return { ok: false as const, lines: withAlloc, error: `Allocated total mismatch (${sum} vs ${adsAllocation.totalAdsCents}).` };
+    }
+
+    return { ok: true as const, lines: withAlloc, error: null };
+  }, [adsAllocation, adsEditLines]);
+
+  const saveAdsAllocationMutation = useMutation({
+    mutationFn: async () => {
+      if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
+        throw new Error('No advertising cost found for this invoice');
+      }
+      if (adsAllocation.weightUnit !== 'cents') {
+        throw new Error(`Unsupported weight unit: ${adsAllocation.weightUnit}`);
+      }
+
+      const lines = adsEditLines
+        .map((l) => {
+          const weight = parseMoneyInputToCents(l.weightInput);
+          if (weight === null) {
+            throw new Error(`Invalid weight for ${l.sku}`);
+          }
+          return { sku: l.sku, weight };
+        })
+        .sort((a, b) => a.sku.localeCompare(b.sku));
+
+      return saveAdsAllocation({ settlementId, lines });
+    },
+    onSuccess: async () => {
+      toast.success('Saved advertising allocation');
+      setAdsDirty(false);
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement-ads-allocation', settlementId] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
   });
 
   if (!isCheckingConnection && connection?.connected === false) {
@@ -813,6 +987,9 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <TabsList>
                   <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
+                  {data?.processing && (
+                    <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
+                  )}
                   {settlement?.plutusStatus === 'Pending' && (
                     <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
                   )}
@@ -881,6 +1058,155 @@ export default function SettlementDetailPage() {
                   </div>
                 )}
               </TabsContent>
+
+              {data?.processing && settlement && (
+                <TabsContent value="ads-allocation" className="p-4">
+                  {isAdsAllocationLoading && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-5 w-64" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  )}
+
+                  {!isAdsAllocationLoading && adsAllocationError && (
+                    <div className="text-sm text-danger-700 dark:text-danger-400">
+                      {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                      <div className="mt-2">
+                        <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                          Upload Ads Data
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Advertising cost allocation (SKU)
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
+                          </div>
+                          {adsAllocation.adsDataUpload && (
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => saveAdsAllocationMutation.mutate()}
+                            disabled={!adsAllocationPreview.ok || adsAllocation.totalAdsCents === 0 || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                          >
+                            {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {adsAllocation.kind === 'saved' ? (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Saved allocation &middot; weights can be edited and re-saved
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Prefilled allocation &middot; review and save to lock it in
+                        </div>
+                      )}
+
+                      {adsAllocation.totalAdsCents === 0 ? (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          No Amazon Advertising Costs found for this invoice in the stored Audit Data.
+                        </div>
+                      ) : (
+                        <>
+                          {adsAllocationPreview.error && (
+                            <div className="text-sm text-danger-700 dark:text-danger-400">
+                              {adsAllocationPreview.error}
+                            </div>
+                          )}
+
+                          {!adsAllocation.adsDataUpload && (
+                            <div className="text-sm text-danger-700 dark:text-danger-400">
+                              Missing Ads Data upload for this invoice range.{' '}
+                              <Link href="/ads-data" className="underline">
+                                Upload Ads Data
+                              </Link>
+                              .
+                            </div>
+                          )}
+
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>SKU</TableHead>
+                                  <TableHead className="text-right">Weight (Spend)</TableHead>
+                                  <TableHead className="text-right">Allocated</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {adsAllocationPreview.lines.map((line) => (
+                                  <TableRow key={line.sku}>
+                                    <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                      {line.sku}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end">
+                                        <div className="w-[140px]">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={line.weightInput}
+                                            onChange={(event) => {
+                                              const next = event.target.value;
+                                              setAdsDirty(true);
+                                              setAdsEditLines((prev) =>
+                                                prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                              );
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.allocatedCents === null
+                                        ? '—'
+                                        : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow>
+                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                    Total
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                    {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                              Manage Ads Data
+                            </Link>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              Weight source: {adsAllocation.weightSource}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
 
               {settlement?.plutusStatus === 'Pending' && (
                 <TabsContent value="plutus-preview" className="p-4">
