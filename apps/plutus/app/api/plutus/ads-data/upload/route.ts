@@ -10,30 +10,37 @@ const REPORT_TYPE = 'SP_ADVERTISED_PRODUCT';
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 const MAX_CSV_ROWS = 500_000;
 
+class UploadValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadValidationError';
+  }
+}
+
 function toUint8Array(buf: ArrayBuffer): Uint8Array {
   return new Uint8Array(buf);
 }
 
 function requireIsoDate(value: unknown, label: string): string {
   if (typeof value !== 'string') {
-    throw new Error(`${label} must be a string`);
+    throw new UploadValidationError(`${label} must be a string`);
   }
   const trimmed = value.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    throw new Error(`${label} must be YYYY-MM-DD`);
+    throw new UploadValidationError(`${label} must be YYYY-MM-DD`);
   }
   return trimmed;
 }
 
 function requireMarketplace(value: unknown): 'amazon.com' | 'amazon.co.uk' {
   if (typeof value !== 'string') {
-    throw new Error('marketplace must be a string');
+    throw new UploadValidationError('marketplace must be a string');
   }
   const trimmed = value.trim();
   if (trimmed === 'amazon.com' || trimmed === 'amazon.co.uk') {
     return trimmed;
   }
-  throw new Error('marketplace must be amazon.com or amazon.co.uk');
+  throw new UploadValidationError('marketplace must be amazon.com or amazon.co.uk');
 }
 
 function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: string }> {
@@ -45,12 +52,12 @@ function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: str
       const unzipped = unzipSync(bytes);
       const csvEntries = Object.entries(unzipped).filter(([name]) => name.toLowerCase().endsWith('.csv'));
       if (csvEntries.length !== 1) {
-        throw new Error(`ZIP must contain exactly one .csv (found ${csvEntries.length})`);
+        throw new UploadValidationError(`ZIP must contain exactly one .csv (found ${csvEntries.length})`);
       }
 
       const entry = csvEntries[0];
       if (!entry) {
-        throw new Error('ZIP is missing CSV entry');
+        throw new UploadValidationError('ZIP is missing CSV entry');
       }
 
       return { csvText: strFromU8(entry[1]), sourceFilename: file.name };
@@ -60,7 +67,11 @@ function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: str
       return { csvText: strFromU8(bytes), sourceFilename: file.name };
     }
 
-    throw new Error('Unsupported file type. Upload a .zip or .csv');
+    if (lowerName.endsWith('.xlsx')) {
+      throw new UploadValidationError('Unsupported file type: .xlsx. Export as CSV and upload .csv or .zip.');
+    }
+
+    throw new UploadValidationError('Unsupported file type. Upload a .csv or .zip');
   })();
 }
 
@@ -88,7 +99,12 @@ export async function POST(req: Request) {
     }
 
     const { csvText, sourceFilename } = await readCsvText(file);
-    const parsed = parseSpAdvertisedProductCsv(csvText, { maxRows: MAX_CSV_ROWS });
+    let parsed;
+    try {
+      parsed = parseSpAdvertisedProductCsv(csvText, { maxRows: MAX_CSV_ROWS });
+    } catch (error) {
+      throw new UploadValidationError(error instanceof Error ? error.message : String(error));
+    }
 
     if (parsed.minDate < startDate || parsed.maxDate > endDate) {
       return NextResponse.json(
@@ -141,6 +157,15 @@ export async function POST(req: Request) {
       rawRowCount: parsed.rawRowCount,
     });
   } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+        },
+        { status: 400 },
+      );
+    }
+
     return NextResponse.json(
       {
         error: 'Failed to upload Ads report',
@@ -150,4 +175,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
