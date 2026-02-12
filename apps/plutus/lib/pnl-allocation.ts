@@ -106,11 +106,12 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     const sku = row.sku.trim();
     if (sku === '') continue;
     if (!isSalesPrincipal(row.description)) continue;
-    if (!Number.isFinite(row.quantity) || row.quantity <= 0) continue;
+    if (!Number.isFinite(row.quantity) || row.quantity === 0) continue;
 
     const brand = brandResolver.getBrandForSku(sku);
+    const units = Math.abs(row.quantity);
     const current = unitsByBrand.get(brand);
-    unitsByBrand.set(brand, (current === undefined ? 0 : current) + row.quantity);
+    unitsByBrand.set(brand, (current === undefined ? 0 : current) + units);
   }
 
   for (const row of rows) {
