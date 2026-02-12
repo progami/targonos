@@ -37,11 +37,44 @@ function findSubAccountByParentId(accounts: QboAccount[], parentAccountId: strin
   return accounts.find((account) => account.ParentRef?.value === parentAccountId && account.Name === name);
 }
 
-function buildReferenceDescription(baseDescription: string, referenceType: 'PO' | 'CI' | 'GRN', reference: string): string {
-  if (baseDescription.trim() === '') {
-    return `${referenceType}: ${reference}`;
+function getBrandSubAccountName(component: BillComponent, brandName: string): string {
+  switch (component) {
+    case 'manufacturing':
+      return `Manufacturing - ${brandName}`;
+    case 'freight':
+      return `Freight - ${brandName}`;
+    case 'duty':
+      return `Duty - ${brandName}`;
+    case 'mfgAccessories':
+      return `Mfg Accessories - ${brandName}`;
+    case 'warehousing3pl':
+    case 'warehouseAmazonFc':
+    case 'warehouseAwd':
+      return brandName;
+    case 'productExpenses':
+      return `Product Expenses - ${brandName}`;
   }
-  return `${baseDescription} | ${referenceType}: ${reference}`;
+}
+
+function getComponentDefaultDescription(component: BillComponent): string {
+  switch (component) {
+    case 'manufacturing':
+      return 'Manufacturing';
+    case 'freight':
+      return 'Freight';
+    case 'duty':
+      return 'Duty';
+    case 'mfgAccessories':
+      return 'Mfg Accessories';
+    case 'warehousing3pl':
+      return '3PL Warehousing';
+    case 'warehouseAmazonFc':
+      return 'Amazon FC Warehousing';
+    case 'warehouseAwd':
+      return 'AWD Warehousing';
+    case 'productExpenses':
+      return 'Product Expenses';
+  }
 }
 
 function mapSetupConfigToTrackedAccountIds(config: {
@@ -56,72 +89,6 @@ function mapSetupConfigToTrackedAccountIds(config: {
     warehousingAwd: config.warehousingAwd,
     productExpenses: config.productExpenses,
   };
-}
-
-export async function GET() {
-  try {
-    const connection = await getQboConnection();
-    if (!connection) {
-      return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
-    }
-
-    let activeConnection = connection;
-    const [vendorsResult, accountsResult, config] = await Promise.all([
-      fetchVendors(activeConnection),
-      fetchAccounts(activeConnection, { includeInactive: false }),
-      db.setupConfig.findFirst(),
-    ]);
-
-    if (vendorsResult.updatedConnection) {
-      activeConnection = vendorsResult.updatedConnection;
-    }
-    if (accountsResult.updatedConnection) {
-      activeConnection = accountsResult.updatedConnection;
-    }
-    if (activeConnection !== connection) {
-      await saveServerQboConnection(activeConnection);
-    }
-
-    const accountComponentMap = buildAccountComponentMap(
-      accountsResult.accounts,
-      mapSetupConfigToTrackedAccountIds({
-        warehousing3pl: config?.warehousing3pl,
-        warehousingAmazonFc: config?.warehousingAmazonFc,
-        warehousingAwd: config?.warehousingAwd,
-        productExpenses: config?.productExpenses,
-      }),
-    );
-
-    const vendors = vendorsResult.vendors
-      .map((vendor) => ({
-        id: vendor.Id,
-        name: vendor.DisplayName,
-      }))
-      .sort((left, right) => left.name.localeCompare(right.name));
-
-    const accounts = accountsResult.accounts
-      .filter((account) => account.Active !== false)
-      .map((account) => ({
-        id: account.Id,
-        name: account.Name,
-        fullyQualifiedName: account.FullyQualifiedName ? account.FullyQualifiedName : account.Name,
-        type: account.AccountType,
-        subType: account.AccountSubType ? account.AccountSubType : null,
-        component: accountComponentMap.get(account.Id) ?? null,
-      }))
-      .sort((left, right) => left.fullyQualifiedName.localeCompare(right.fullyQualifiedName));
-
-    return NextResponse.json({ vendors, accounts });
-  } catch (error) {
-    if (error instanceof QboAuthError) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    logger.error('Failed to load bill creation context', error);
-    return NextResponse.json(
-      { error: 'Failed to load bill creation context', details: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    );
-  }
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -275,12 +242,15 @@ export async function GET() {
     }
 
     const config = await db.setupConfig.findFirst();
-    const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
-      warehousing3pl: config?.warehousing3pl,
-      warehousingAmazonFc: config?.warehousingAmazonFc,
-      warehousingAwd: config?.warehousingAwd,
-      productExpenses: config?.productExpenses,
-    });
+    const accountComponentMap = buildAccountComponentMap(
+      accountsResult.accounts,
+      mapSetupConfigToTrackedAccountIds({
+        warehousing3pl: config?.warehousing3pl,
+        warehousingAmazonFc: config?.warehousingAmazonFc,
+        warehousingAwd: config?.warehousingAwd,
+        productExpenses: config?.productExpenses,
+      }),
+    );
 
     const vendors = vendorsResult.vendors
       .map((vendor) => ({
@@ -573,13 +543,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const description = typeof line.description === 'string' && line.description.trim() !== ''
-        ? line.description.trim()
-        : account.FullyQualifiedName ? account.FullyQualifiedName : account.Name;
-      const finalDescription = referenceType && referenceValue !== ''
-        ? buildReferenceDescription(description, referenceType, referenceValue)
-        : description;
-      const qboLineIndex = qboLines.length;
       qboLines.push({
         amount,
         accountId: resolvedAccountId,
@@ -640,28 +603,28 @@ export async function POST(req: NextRequest) {
       lines: qboLines,
     });
     let finalConnection = activeConnection;
-    if (createResult.updatedConnection) {
-      finalConnection = createResult.updatedConnection;
+    if (updatedConnection) {
+      finalConnection = updatedConnection;
     }
 
     const uploadedAttachments: Array<{ fileName: string; attachableId: string }> = [];
     for (const attachment of attachments) {
-      const uploadResult = await uploadBillAttachment(activeConnection, {
+      const uploadResult = await uploadBillAttachment(finalConnection, {
         billId: bill.Id,
         fileName: attachment.name !== '' ? attachment.name : 'attachment',
         contentType: attachment.type !== '' ? attachment.type : 'application/octet-stream',
         bytes: new Uint8Array(await attachment.arrayBuffer()),
       });
       if (uploadResult.updatedConnection) {
-        activeConnection = uploadResult.updatedConnection;
+        finalConnection = uploadResult.updatedConnection;
       }
       uploadedAttachments.push({
         fileName: attachment.name !== '' ? attachment.name : 'attachment',
         attachableId: uploadResult.attachableId,
       });
     }
-    if (activeConnection !== connection) {
-      await saveServerQboConnection(activeConnection);
+    if (finalConnection !== connection) {
+      await saveServerQboConnection(finalConnection);
     }
 
     let mappingResult: {
