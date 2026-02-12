@@ -398,3 +398,53 @@ model SettlementAdsAllocationLine {
   @@index([settlementAdsAllocationId])
   @@index([sku])
 }
+
+/// CashflowForecastConfig stores the global forecast settings for the 13-week cashflow view.
+model CashflowForecastConfig {
+  id String @id @default(cuid())
+
+  cashAccountIds                String[]
+  weekStartsOn                  Int     @default(1)
+  settlementLookbackDays        Int     @default(180)
+  settlementAverageCount        Int     @default(4)
+  settlementDefaultIntervalDays Int     @default(14)
+  includeProjectedSettlements   Boolean @default(true)
+  includeOpenBills              Boolean @default(true)
+  includeOpenInvoices           Boolean @default(true)
+  includeRecurring              Boolean @default(true)
+  autoRefreshEnabled            Boolean @default(true)
+  autoRefreshTimeLocal          String  @default("06:00")
+  autoRefreshMinSnapshotAgeMinutes Int  @default(720)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// CashflowForecastAdjustment stores user-entered cashflow lines.
+model CashflowForecastAdjustment {
+  id String @id @default(cuid())
+
+  date        String
+  amountCents Int
+  description String
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}
+
+/// CashflowForecastSnapshot stores immutable generated snapshots rendered by the UI.
+model CashflowForecastSnapshot {
+  id String @id @default(cuid())
+
+  asOfDate  String
+  config    Json
+  inputs    Json
+  forecast  Json
+  warnings  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

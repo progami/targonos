@@ -111,6 +111,21 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
+      name: 'dev-plutus-cashflow-refresh',
+      cwd: path.join(DEV_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/cashflow-refresh-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '0'
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
       name: 'dev-hermes',
       cwd: path.join(DEV_DIR, 'apps/hermes'),
       script: 'node_modules/next/dist/bin/next',
@@ -283,6 +298,21 @@ module.exports = {
       interpreter: 'node',
       exec_mode: 'fork',
       env: { NODE_ENV: 'production', PORT: 3012 },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-plutus-cashflow-refresh',
+      cwd: path.join(MAIN_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/cashflow-refresh-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1'
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
