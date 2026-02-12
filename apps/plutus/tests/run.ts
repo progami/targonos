@@ -158,6 +158,14 @@ test('parseSpAdvertisedProductCsv errors when marketplace has no rows', () => {
   assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /CSV has no rows for selected marketplace/);
 });
 
+test('parseSpAdvertisedProductCsv accepts Excel date serials', () => {
+  const csv = ['Date,Country,Advertised SKU,Spend', '46012,United States,sku-a,1.00'].join('\n');
+  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] });
+  assert.equal(parsed.minDate, '2025-12-21');
+  assert.equal(parsed.maxDate, '2025-12-21');
+  assert.equal(parsed.rows[0]?.date, '2025-12-21');
+});
+
 test('ledger blocks missing cost basis', () => {
   const snapshot = createEmptyLedgerSnapshot();
   const { saleCost, blocks } = computeSaleCostFromAverage(snapshot, { orderId: 'O', sku: 'SKU', units: 1 });

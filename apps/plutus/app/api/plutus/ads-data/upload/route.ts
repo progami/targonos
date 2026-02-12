@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { unzipSync, strFromU8 } from 'fflate';
+import * as XLSX from 'xlsx';
 import { db } from '@/lib/db';
 import { parseSpAdvertisedProductCsv } from '@/lib/amazon-ads/sp-advertised-product-csv';
 
@@ -65,6 +66,41 @@ function latestAllowedReportMaxDateIso(now: Date): string {
   return toIsoDayUtc(midnightUtc);
 }
 
+function csvEscapeCell(value: unknown): string {
+  const stringValue = value === null || value === undefined ? '' : String(value);
+  if (stringValue.includes('"')) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('\r')) {
+    return `"${stringValue}"`;
+  }
+  return stringValue;
+}
+
+function xlsxToCsv(bytes: Uint8Array): string {
+  const workbook = XLSX.read(bytes, { type: 'array', cellDates: false });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) {
+    throw new UploadValidationError('XLSX has no sheets');
+  }
+  const firstSheet = workbook.Sheets[firstSheetName];
+  if (!firstSheet) {
+    throw new UploadValidationError('XLSX first sheet is missing');
+  }
+
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, {
+    header: 1,
+    raw: true,
+    defval: '',
+  });
+
+  if (rows.length === 0) {
+    throw new UploadValidationError('XLSX has no rows');
+  }
+
+  return rows.map((row) => row.map((cell) => csvEscapeCell(cell)).join(',')).join('\n');
+}
+
 function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: string }> {
   return (async () => {
     const bytes = toUint8Array(await file.arrayBuffer());
@@ -90,10 +126,10 @@ function readCsvText(file: File): Promise<{ csvText: string; sourceFilename: str
     }
 
     if (lowerName.endsWith('.xlsx')) {
-      throw new UploadValidationError('Unsupported file type: .xlsx. Export as CSV and upload .csv or .zip.');
+      return { csvText: xlsxToCsv(bytes), sourceFilename: file.name };
     }
 
-    throw new UploadValidationError('Unsupported file type. Upload a .csv or .zip');
+    throw new UploadValidationError('Unsupported file type. Upload a .csv, .zip, or .xlsx');
   })();
 }
 
