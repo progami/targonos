@@ -152,6 +152,7 @@ export interface QboBill {
   Id: string;
   SyncToken: string;
   TxnDate: string;
+  Balance?: number;
   TotalAmt: number;
   DocNumber?: string;
   DueDate?: string;
@@ -205,6 +206,60 @@ export interface QboBill {
   MetaData?: {
     CreateTime: string;
     LastUpdatedTime: string;
+  };
+}
+
+export interface QboInvoice {
+  Id: string;
+  SyncToken: string;
+  TxnDate: string;
+  DueDate?: string;
+  Balance?: number;
+  TotalAmt: number;
+  DocNumber?: string;
+  PrivateNote?: string;
+  ExchangeRate?: number;
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
+  CustomerRef?: {
+    value: string;
+    name: string;
+  };
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
+export interface QboRecurringScheduleInfo {
+  IntervalType?: string;
+  NumInterval?: number;
+  DayOfMonth?: number;
+  DayOfWeek?: string;
+  WeekOfMonth?: string;
+  NextDate?: string;
+}
+
+export interface QboRecurringTransaction {
+  Id: string;
+  RecurringInfo?: {
+    Name?: string;
+    Active?: boolean;
+    ScheduleInfo?: QboRecurringScheduleInfo;
+  };
+  Purchase?: QboPurchase;
+  Transfer?: {
+    Amount?: number;
+    FromAccountRef?: {
+      value: string;
+      name?: string;
+    };
+    ToAccountRef?: {
+      value: string;
+      name?: string;
+    };
   };
 }
 
@@ -474,6 +529,8 @@ export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
     Bill?: QboBill[];
+    Invoice?: QboInvoice[];
+    RecurringTransaction?: QboRecurringTransaction[];
     Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
     Vendor?: QboVendor[];
@@ -500,6 +557,18 @@ export interface FetchBillsOptions {
   docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
+}
+
+export interface FetchOpenBillsOptions {
+  maxResults?: number;
+}
+
+export interface FetchOpenInvoicesOptions {
+  maxResults?: number;
+}
+
+export interface FetchRecurringTransactionsOptions {
+  maxResults?: number;
 }
 
 const tokenRefreshPromisesByRealmId = new Map<string, Promise<QboConnection>>();
@@ -743,6 +812,144 @@ export async function fetchBills(
   }
 
   return { bills, totalCount, updatedConnection };
+}
+
+export async function fetchOpenBills(
+  connection: QboConnection,
+  options: FetchOpenBillsOptions = {},
+): Promise<{ bills: QboBill[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = options.maxResults === undefined ? 1000 : options.maxResults;
+  let startPosition = 1;
+  let bills: QboBill[] = [];
+
+  while (true) {
+    const query = `SELECT * FROM Bill WHERE Balance > '0' ORDERBY DueDate STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+    logger.info('Fetching open bills from QBO', { startPosition, maxResults });
+
+    const response = await fetchWithRetry(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch open bills', { status: response.status, error: errorText });
+      throw new Error(`Failed to fetch open bills: ${response.status} ${errorText}`);
+    }
+
+    const data: QboQueryResponse = await response.json();
+    const page = data.QueryResponse.Bill;
+    const pageItems = page ? page : [];
+
+    bills = bills.concat(pageItems);
+
+    if (pageItems.length < maxResults) {
+      break;
+    }
+
+    startPosition += pageItems.length;
+  }
+
+  return { bills, totalCount: bills.length, updatedConnection };
+}
+
+export async function fetchOpenInvoices(
+  connection: QboConnection,
+  options: FetchOpenInvoicesOptions = {},
+): Promise<{ invoices: QboInvoice[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = options.maxResults === undefined ? 1000 : options.maxResults;
+  let startPosition = 1;
+  let invoices: QboInvoice[] = [];
+
+  while (true) {
+    const query = `SELECT * FROM Invoice WHERE Balance > '0' ORDERBY DueDate STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+    logger.info('Fetching open invoices from QBO', { startPosition, maxResults });
+
+    const response = await fetchWithRetry(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch open invoices', { status: response.status, error: errorText });
+      throw new Error(`Failed to fetch open invoices: ${response.status} ${errorText}`);
+    }
+
+    const data: QboQueryResponse = await response.json();
+    const page = data.QueryResponse.Invoice;
+    const pageItems = page ? page : [];
+
+    invoices = invoices.concat(pageItems);
+
+    if (pageItems.length < maxResults) {
+      break;
+    }
+
+    startPosition += pageItems.length;
+  }
+
+  return { invoices, totalCount: invoices.length, updatedConnection };
+}
+
+export async function fetchRecurringTransactions(
+  connection: QboConnection,
+  options: FetchRecurringTransactionsOptions = {},
+): Promise<{ recurringTransactions: QboRecurringTransaction[]; totalCount: number; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = options.maxResults === undefined ? 1000 : options.maxResults;
+  let startPosition = 1;
+  let recurringTransactions: QboRecurringTransaction[] = [];
+
+  while (true) {
+    const query = `SELECT * FROM RecurringTransaction STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+    logger.info('Fetching recurring transactions from QBO', { startPosition, maxResults });
+
+    const response = await fetchWithRetry(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch recurring transactions', { status: response.status, error: errorText });
+      throw new Error(`Failed to fetch recurring transactions: ${response.status} ${errorText}`);
+    }
+
+    const data: QboQueryResponse = await response.json();
+    const page = data.QueryResponse.RecurringTransaction;
+    const pageItems = page ? page : [];
+
+    recurringTransactions = recurringTransactions.concat(pageItems);
+
+    if (pageItems.length < maxResults) {
+      break;
+    }
+
+    startPosition += pageItems.length;
+  }
+
+  return { recurringTransactions, totalCount: recurringTransactions.length, updatedConnection };
 }
 
 /**
