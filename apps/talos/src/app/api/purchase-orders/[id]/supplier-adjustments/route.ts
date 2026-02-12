@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { ApiResponses, withAuthAndParams, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
@@ -17,6 +18,10 @@ function readParam(params: Record<string, unknown> | undefined, key: string): st
 const SupplierAdjustmentSchema = z.object({
   kind: z.enum(['credit', 'debit']),
   amount: z.number().positive(),
+  currency: z.preprocess(
+    value => normalizePoCostCurrency(value) ?? value,
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
   notes: z.string().trim().optional(),
 })
 
@@ -84,6 +89,10 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
 
   const prisma = await getTenantPrisma()
   const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
+  }
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
     select: { id: true, status: true, warehouseCode: true, warehouseName: true },
@@ -125,6 +134,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       : FinancialLedgerCategory.SupplierDebit
   const amount = parsed.data.kind === 'credit' ? decimalAmount.neg() : decimalAmount
   const costName = parsed.data.kind === 'credit' ? 'Supplier Credit Note' : 'Supplier Debit Note'
+  const currency = parsed.data.currency ?? tenantCurrency
 
   const entry = await prisma.financialLedgerEntry.upsert({
     where: {
@@ -140,7 +150,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       category,
       costName,
       amount,
-      currency: tenant.currency,
+      currency,
       warehouseCode,
       warehouseName,
       purchaseOrderId: id,
@@ -152,7 +162,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
       category,
       costName,
       amount,
-      currency: tenant.currency,
+      currency,
       warehouseCode,
       warehouseName,
       createdByName: session.user.name ?? session.user.email ?? 'Unknown',

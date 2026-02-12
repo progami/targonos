@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { ApiResponses, withAuthAndParams, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
@@ -18,6 +19,10 @@ const WarehouseCostSchema = z.object({
   category: z.enum(['Inbound', 'Storage']),
   costName: z.string().trim().min(1),
   amount: z.number().positive(),
+  currency: z.preprocess(
+    value => normalizePoCostCurrency(value) ?? value,
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
   notes: z.string().trim().optional(),
 })
 
@@ -115,6 +120,10 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
   const prisma = await getTenantPrisma()
   const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
+  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -153,6 +162,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
   const rounded = Number(parsed.data.amount.toFixed(2))
   const decimalAmount = new Prisma.Decimal(rounded.toFixed(2))
   const category = CATEGORY_MAP[parsed.data.category]
+  const currency = parsed.data.currency ?? tenantCurrency
 
   const entry = await prisma.financialLedgerEntry.create({
     data: {
@@ -162,7 +172,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       category,
       costName: parsed.data.costName.trim(),
       amount: decimalAmount,
-      currency: tenant.currency,
+      currency,
       warehouseCode,
       warehouseName,
       purchaseOrderId: id,
