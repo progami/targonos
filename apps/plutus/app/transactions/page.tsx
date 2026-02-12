@@ -119,14 +119,6 @@ type TransactionRow = {
 type BrandOption = { id: string; name: string };
 type SkuOption = { id: string; sku: string; productName: string | null; brandId: string };
 type VendorOption = { id: string; name: string };
-type BillCreateAccountOption = {
-  id: string;
-  name: string;
-  fullyQualifiedName: string;
-  type: string;
-  subType: string | null;
-  component: BillComponent | null;
-};
 
 type PurchaseAccountOption = {
   id: string;
@@ -774,6 +766,74 @@ async function saveBillMapping(input: {
       billDate: input.bill.txnDate,
       vendorName: input.bill.entityName,
       totalAmount: input.bill.totalAmount,
+      lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
+  return res.json();
+}
+
+async function savePurchaseMapping(input: {
+  purchase: PurchaseRow;
+  editState: PurchaseEditState;
+}): Promise<unknown> {
+  const payloadLines = Object.values(input.editState.lines).map((lineState) => {
+    if (lineState.mode === 'split') {
+      const splits = lineState.splits.map((split) => {
+        const quantity = parsePositiveInteger(split.quantity);
+        if (quantity === null) {
+          throw new Error('Split quantity must be a positive integer');
+        }
+        return {
+          sku: normalizePurchaseSku(split.sku),
+          region: normalizePurchaseRegion(split.region),
+          quantity,
+        };
+      });
+
+      return {
+        qboLineId: lineState.qboLineId,
+        accountId: lineState.accountId,
+        amountCents: lineState.amountCents,
+        splits,
+      };
+    }
+
+    const quantity = parsePositiveInteger(lineState.quantity);
+    if (quantity === null) {
+      throw new Error('Line quantity must be a positive integer');
+    }
+
+    const normalizedSku = normalizePurchaseSku(lineState.sku);
+    if (normalizedSku === '') {
+      throw new Error('Line sku is required');
+    }
+
+    const normalizedRegion = normalizePurchaseRegion(lineState.region);
+    if (normalizedRegion === '') {
+      throw new Error('Line region is required');
+    }
+
+    return {
+      qboLineId: lineState.qboLineId,
+      accountId: lineState.accountId,
+      amountCents: lineState.amountCents,
+      sku: normalizedSku,
+      region: normalizedRegion,
+      quantity,
+    };
+  });
+
+  const res = await fetch(`${basePath}/api/plutus/purchases/map`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      qboPurchaseId: input.purchase.id,
       lines: payloadLines,
     }),
   });
@@ -2438,6 +2498,7 @@ function EditPurchaseModal({
 }
 
 export default function TransactionsPage() {
+  const queryClient = useQueryClient();
   const tab = useTransactionsStore((s) => s.tab);
   const searchInput = useTransactionsStore((s) => s.searchInput);
   const search = useTransactionsStore((s) => s.search);
@@ -2456,8 +2517,10 @@ export default function TransactionsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editBill, setEditBill] = useState<BillRow | null>(null);
+  const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
   const [createPurchaseOpen, setCreatePurchaseOpen] = useState(false);
+  const [purchaseAccountId, setPurchaseAccountId] = useState('');
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -3097,6 +3160,21 @@ export default function TransactionsPage() {
             onOpenChange={(open) => {
               if (!open) {
                 setEditBill(null);
+              }
+            }}
+          />
+        )}
+
+        {editPurchase && (
+          <EditPurchaseModal
+            key={editPurchase.id}
+            purchase={editPurchase}
+            skus={skus}
+            accounts={purchaseAccounts}
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditPurchase(null);
               }
             }}
           />
