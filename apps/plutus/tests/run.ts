@@ -30,6 +30,7 @@ import {
 } from '../lib/plutus/cashflow/qbo-mappers';
 import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
+import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
@@ -123,6 +124,38 @@ test('parseAmazonTransactionCsv parses required totals', () => {
 test('parseAmazonTransactionCsv throws on invalid totals', () => {
   const csv = ['Order Id,Total', '123-123,abc'].join('\n');
   assert.throws(() => parseAmazonTransactionCsv(csv));
+});
+
+test('parseSpAdvertisedProductCsv filters rows by selected country', () => {
+  const csv = [
+    'Date,Country,Advertised SKU,Spend',
+    '2026-02-01,United States,sku-a,1.00',
+    '2026-02-01,United Kingdom,sku-a,5.00',
+    '2026-02-02,U.S.,sku-a,2.50',
+    '2026-02-03,UK,sku-b,3.00',
+    '2026-02-04,US,sku-b,0.00',
+  ].join('\n');
+
+  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States', 'US'] });
+
+  assert.equal(parsed.rawRowCount, 5);
+  assert.equal(parsed.minDate, '2026-02-01');
+  assert.equal(parsed.maxDate, '2026-02-04');
+  assert.equal(parsed.skuCount, 1);
+  assert.deepEqual(parsed.rows, [
+    { date: '2026-02-01', sku: 'SKU-A', spendCents: 100 },
+    { date: '2026-02-02', sku: 'SKU-A', spendCents: 250 },
+  ]);
+});
+
+test('parseSpAdvertisedProductCsv requires Country when filtering by marketplace', () => {
+  const csv = ['Date,Advertised SKU,Spend', '2026-02-01,sku-a,1.00'].join('\n');
+  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /Missing required column: Country/);
+});
+
+test('parseSpAdvertisedProductCsv errors when marketplace has no rows', () => {
+  const csv = ['Date,Country,Advertised SKU,Spend', '2026-02-01,United Kingdom,sku-a,1.00'].join('\n');
+  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /CSV has no rows for selected marketplace/);
 });
 
 test('ledger blocks missing cost basis', () => {
