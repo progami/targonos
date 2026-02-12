@@ -139,6 +139,8 @@ type SettlementProcessingPreview = {
   pnlJournalEntry: JePreview;
 };
 
+type PreviewBlock = SettlementProcessingPreview['blocks'][number];
+
 type ConnectionStatus = { connected: boolean; error?: string };
 
 type AdsAllocationLine = { sku: string; weight: number; allocatedCents: number };
@@ -225,6 +227,12 @@ function formatBlockDetails(details: Record<string, string | number> | undefined
   const entries = Object.entries(details).filter(([key]) => key !== 'error');
   if (entries.length === 0) return null;
   return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
+}
+
+function isIdempotencyBlock(block: PreviewBlock): boolean {
+  if (block.code === 'ALREADY_PROCESSED') return true;
+  if (block.code === 'ORDER_ALREADY_PROCESSED') return true;
+  return false;
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -755,6 +763,15 @@ export default function SettlementDetailPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const visiblePreviewBlocks = useMemo(() => {
+    if (!previewData) return [] as PreviewBlock[];
+    if (settlement?.plutusStatus !== 'Processed') return previewData.blocks;
+    return previewData.blocks.filter((block) => !isIdempotencyBlock(block));
+  }, [previewData, settlement?.plutusStatus]);
+
+  const isProcessedPreview = settlement?.plutusStatus === 'Processed';
+  const previewIssueCount = visiblePreviewBlocks.length;
+
   const adsAllocationEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
 
   const { data: adsAllocation, isLoading: isAdsAllocationLoading, error: adsAllocationError } = useQuery({
@@ -1222,13 +1239,15 @@ export default function SettlementDetailPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => saveAdsAllocationMutation.mutate()}
-                            disabled={!adsAllocationPreview.ok || adsAllocation.totalAdsCents === 0 || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                          >
-                            {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                          </Button>
+                          {adsAllocation.totalAdsCents !== 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => saveAdsAllocationMutation.mutate()}
+                              disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                            >
+                              {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                            </Button>
+                          )}
                         </div>
                       </div>
 
@@ -1244,7 +1263,7 @@ export default function SettlementDetailPage() {
 
                       {adsAllocation.totalAdsCents === 0 ? (
                         <div className="text-sm text-slate-500 dark:text-slate-400">
-                          No Amazon Advertising Costs found for this invoice in the stored Audit Data.
+                          No Amazon Advertising Costs found for this invoice in the stored Audit Data. Nothing to allocate.
                         </div>
                       ) : (
                         <>
@@ -1480,20 +1499,20 @@ export default function SettlementDetailPage() {
                         </div>
                         <Badge
                           variant={
-                            settlement?.plutusStatus === 'Processed'
-                              ? previewData.blocks.length === 0
+                            isProcessedPreview
+                              ? previewIssueCount === 0
                                 ? 'success'
                                 : 'secondary'
-                              : previewData.blocks.length === 0
+                              : previewIssueCount === 0
                                 ? 'success'
                                 : 'destructive'
                           }
                         >
-                          {settlement?.plutusStatus === 'Processed'
-                            ? previewData.blocks.length === 0
+                          {isProcessedPreview
+                            ? previewIssueCount === 0
                               ? 'Processed'
                               : 'Processed (Needs Review)'
-                            : previewData.blocks.length === 0
+                            : previewIssueCount === 0
                               ? 'Ready to Process'
                               : 'Blocked'}
                         </Badge>
@@ -1528,29 +1547,41 @@ export default function SettlementDetailPage() {
                       </div>
 
                       {/* Blocks */}
-                      {previewData.blocks.length > 0 && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
+                      {previewIssueCount > 0 && (
+                        <div
+                          className={cn(
+                            'rounded-lg p-4',
+                            isProcessedPreview
+                              ? 'border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
+                              : 'border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20',
+                          )}
+                        >
                           <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">
-                              {previewData.blocks.length} blocking issue{previewData.blocks.length === 1 ? '' : 's'}
+                            <AlertTriangle className={cn('h-4 w-4', isProcessedPreview ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')} />
+                            <span className={cn('text-sm font-semibold', isProcessedPreview ? 'text-amber-700 dark:text-amber-300' : 'text-red-700 dark:text-red-300')}>
+                              {previewIssueCount} {isProcessedPreview ? 'review' : 'blocking'} issue{previewIssueCount === 1 ? '' : 's'}
                             </span>
                           </div>
-	                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-	                            {previewData.blocks.map((b, idx) => (
-	                              <li key={idx}>
-	                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-	                                {b.details && 'error' in b.details && (
-	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-	                                )}
-	                                {formatBlockDetails(b.details) && (
-	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-	                                )}
-	                              </li>
-	                            ))}
-	                          </ul>
-	                        </div>
-	                      )}
+                          <ul
+                            className={cn(
+                              'text-sm space-y-1',
+                              isProcessedPreview ? 'text-amber-700 dark:text-amber-200' : 'text-red-700 dark:text-red-200',
+                            )}
+                          >
+                            {visiblePreviewBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
                       {/* COGS Journal Entry */}
                       {previewData.cogsJournalEntry.lines.length > 0 && (
