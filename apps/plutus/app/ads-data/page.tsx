@@ -218,12 +218,17 @@ export default function AdsDataPage() {
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">CSV or ZIP &middot; Advertised product report</p>
                   <button
                     type="button"
-                    disabled={!canUpload}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => {
+                      if (!canUpload) {
+                        setUploadError('Set a valid report start + end date first.');
+                        return;
+                      }
+                      fileInputRef.current?.click();
+                    }}
                     className={`mt-4 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-colors ${
                       canUpload
                         ? 'bg-brand-teal-500 text-white hover:bg-brand-teal-600 dark:bg-brand-cyan dark:text-slate-900 dark:hover:bg-brand-cyan/90'
-                        : 'bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-200 text-slate-500 hover:bg-slate-300 dark:bg-white/10 dark:text-slate-500 dark:hover:bg-white/20'
                     }`}
                   >
                     Choose File
@@ -330,4 +335,3 @@ export default function AdsDataPage() {
     </main>
   );
 }
-
