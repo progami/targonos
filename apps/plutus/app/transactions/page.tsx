@@ -677,6 +677,52 @@ async function createBillFromBuilder(input: {
   return res.json();
 }
 
+async function fetchPurchaseCreateContext(): Promise<PurchaseCreateContextResponse> {
+  const res = await fetch(`${basePath}/api/plutus/purchases/create`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+  return res.json();
+}
+
+async function createPurchaseFromTransactions(input: { state: CreatePurchaseState }): Promise<unknown> {
+  const payloadLines = input.state.lines.map((line) => {
+    const amount = Number(line.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('Each line must have a positive amount');
+    }
+
+    return {
+      accountId: line.accountId,
+      amount,
+      description: line.description.trim() !== '' ? line.description.trim() : undefined,
+    };
+  });
+
+  const normalizedVendorId = input.state.vendorId.trim();
+  const normalizedMemo = input.state.memo.trim();
+
+  const res = await fetch(`${basePath}/api/plutus/purchases/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      txnDate: input.state.txnDate,
+      paymentAccountId: input.state.paymentAccountId,
+      vendorId: normalizedVendorId === '' ? undefined : normalizedVendorId,
+      memo: normalizedMemo === '' ? undefined : normalizedMemo,
+      lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
+  return res.json();
+}
+
 async function saveBillMapping(input: {
   bill: BillRow;
   editState: BillEditState;
@@ -761,10 +807,7 @@ async function syncMappedBillsBulk(qboBillIds: string[]): Promise<{ successCount
   const res = await fetch(`${basePath}/api/plutus/bills/sync-bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      qboPurchaseId: input.purchase.id,
-      lines: payloadLines,
-    }),
+    body: JSON.stringify({ qboBillIds }),
   });
 
   if (!res.ok) {
@@ -1408,6 +1451,255 @@ function CreateBillModal({
           >
             <Save className="h-3.5 w-3.5" />
             {createMutation.isPending ? 'Creating...' : 'Save bill'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreatePurchaseModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [createState, setCreateState] = useState<CreatePurchaseState>(() => makeInitialCreatePurchaseState());
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setCreateState(makeInitialCreatePurchaseState());
+    setCreateError(null);
+  }, [open]);
+
+  const { data: createContext, isLoading: createContextLoading } = useQuery({
+    queryKey: ['plutus-purchase-create-context'],
+    queryFn: fetchPurchaseCreateContext,
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const lineAccountById = useMemo(() => {
+    const map = new Map<string, PurchaseAccountOption>();
+    for (const account of createContext?.lineAccounts ?? []) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [createContext]);
+
+  const createMutation = useMutation({
+    mutationFn: () => createPurchaseFromTransactions({ state: createState }),
+    onSuccess: () => {
+      setCreateError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      setCreateError(error.message);
+    },
+  });
+
+  const canSave = useMemo(() => {
+    if (
+      createState.txnDate.trim() === '' ||
+      createState.paymentAccountId === '' ||
+      createState.lines.length === 0
+    ) {
+      return false;
+    }
+
+    for (const line of createState.lines) {
+      if (!lineAccountById.has(line.accountId)) {
+        return false;
+      }
+
+      const amount = Number(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return false;
+      }
+    }
+
+    return true;
+  }, [createState, lineAccountById]);
+
+  const updateLine = (lineId: string, patch: Partial<CreatePurchaseLineState>) => {
+    setCreateState((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
+    }));
+  };
+
+  const addLine = () => {
+    setCreateState((prev) => ({
+      ...prev,
+      lines: [...prev.lines, makeCreatePurchaseLineState()],
+    }));
+  };
+
+  const removeLine = (lineId: string) => {
+    setCreateState((prev) => {
+      if (prev.lines.length <= 1) return prev;
+      return {
+        ...prev,
+        lines: prev.lines.filter((line) => line.id !== lineId),
+      };
+    });
+  };
+
+  const vendors = createContext?.vendors ?? [];
+  const paymentAccounts = createContext?.paymentAccounts ?? [];
+  const lineAccounts = createContext?.lineAccounts ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create Expense</DialogTitle>
+          <DialogDescription>Create a new QBO purchase transaction for card/bank spend.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
+              <Input
+                type="date"
+                value={createState.txnDate}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, txnDate: event.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payment Account</label>
+              <select
+                value={createState.paymentAccountId}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, paymentAccountId: event.target.value }))}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+              >
+                <option value="">{createContextLoading ? 'Loading accounts…' : 'Select payment account'}</option>
+                {paymentAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.fullyQualifiedName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payee (optional)</label>
+              <select
+                value={createState.vendorId}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+              >
+                <option value="">{createContextLoading ? 'Loading vendors…' : 'No payee'}</option>
+                {vendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Memo (optional)</label>
+              <Input
+                value={createState.memo}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, memo: event.target.value }))}
+                placeholder="Internal note"
+                className="text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
+                  <TableHead className="text-xs">Account</TableHead>
+                  <TableHead className="text-xs">Description</TableHead>
+                  <TableHead className="text-xs w-28">Amount</TableHead>
+                  <TableHead className="text-xs w-20">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {createState.lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell>
+                      <select
+                        value={line.accountId}
+                        onChange={(event) => {
+                          const nextAccountId = event.target.value;
+                          const nextAccount = lineAccountById.get(nextAccountId);
+                          updateLine(line.id, {
+                            accountId: nextAccountId,
+                            description: nextAccount ? nextAccount.fullyQualifiedName : '',
+                          });
+                        }}
+                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                      >
+                        <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
+                        {lineAccounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={line.description}
+                        onChange={(event) => updateLine(line.id, { description: event.target.value })}
+                        placeholder="Line description"
+                        className="h-8 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.amount}
+                        onChange={(event) => updateLine(line.id, { amount: event.target.value })}
+                        placeholder="0.00"
+                        className="h-8 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeLine(line.id)}
+                        disabled={createState.lines.length <= 1}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between">
+            <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              Add Line
+            </Button>
+          </div>
+        </div>
+
+        {createError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={!canSave || createMutation.isPending || createContextLoading}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {createMutation.isPending ? 'Creating...' : 'Create Expense'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2165,6 +2457,7 @@ export default function TransactionsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editBill, setEditBill] = useState<BillRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
+  const [createPurchaseOpen, setCreatePurchaseOpen] = useState(false);
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2788,13 +3081,6 @@ export default function TransactionsPage() {
             </CardContent>
           </Card>
         </div>
-
-        <CreateBillModal
-          brands={brands}
-          skus={skus}
-          open={createBillOpen}
-          onOpenChange={setCreateBillOpen}
-        />
 
         <CreatePurchaseModal
           open={createPurchaseOpen}
