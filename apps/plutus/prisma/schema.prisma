@@ -146,6 +146,7 @@ model SettlementProcessing {
 
   orderSales OrderSale[]
   orderReturns OrderReturn[]
+  adsAllocation SettlementAdsAllocation?
 
   @@unique([marketplace, invoiceId])
   @@unique([qboSettlementJournalEntryId])
@@ -304,4 +305,96 @@ model BillLineMapping {
   updatedAt DateTime @updatedAt
 
   @@unique([billMappingId, qboLineId])
+}
+
+/// AdsDataUpload tracks a manual Amazon Ads report upload.
+/// The date range is user-declared so we can validate coverage for settlement invoice ranges.
+model AdsDataUpload {
+  id         String   @id @default(cuid())
+
+  reportType  String // e.g., "SP_ADVERTISED_PRODUCT"
+  marketplace String // e.g., "amazon.com", "amazon.co.uk"
+  filename    String
+
+  startDate String // YYYY-MM-DD (declared report range)
+  endDate   String // YYYY-MM-DD (declared report range)
+
+  rowCount Int
+  skuCount Int
+  minDate  String // YYYY-MM-DD (min date found in parsed rows)
+  maxDate  String // YYYY-MM-DD (max date found in parsed rows)
+
+  uploadedAt DateTime @default(now())
+
+  rows AdsDataRow[]
+  settlementAdsAllocations SettlementAdsAllocation[]
+
+  @@index([marketplace])
+  @@index([reportType])
+  @@index([marketplace, reportType])
+  @@index([uploadedAt])
+  @@index([marketplace, startDate, endDate])
+}
+
+/// AdsDataRow stores daily spend by SKU (aggregated) for a single AdsDataUpload.
+model AdsDataRow {
+  id String @id @default(cuid())
+
+  uploadId   String
+  date       String // YYYY-MM-DD
+  sku        String
+  spendCents Int
+
+  upload AdsDataUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@unique([uploadId, date, sku])
+  @@index([uploadId])
+  @@index([uploadId, date])
+  @@index([sku])
+}
+
+/// SettlementAdsAllocation stores a SKU-level split of the settlement's lump "Amazon Advertising Costs" amount.
+/// This is used for internal analytics; it should not explode transactions in QBO.
+model SettlementAdsAllocation {
+  id String @id @default(cuid())
+
+  settlementProcessingId String @unique
+
+  weightSource String // e.g., "SPONSORED_PRODUCTS_SPEND"
+  weightUnit   String // e.g., "cents", "units"
+
+  invoiceStartDate String // YYYY-MM-DD
+  invoiceEndDate   String // YYYY-MM-DD
+
+  totalAdsCents Int
+  adsDataUploadId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  settlementProcessing SettlementProcessing @relation(fields: [settlementProcessingId], references: [id], onDelete: Cascade)
+  adsDataUpload        AdsDataUpload?       @relation(fields: [adsDataUploadId], references: [id])
+
+  lines SettlementAdsAllocationLine[]
+
+  @@index([settlementProcessingId])
+  @@index([adsDataUploadId])
+}
+
+model SettlementAdsAllocationLine {
+  id String @id @default(cuid())
+
+  settlementAdsAllocationId String
+  sku           String
+  weight        Int
+  allocatedCents Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  settlementAdsAllocation SettlementAdsAllocation @relation(fields: [settlementAdsAllocationId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementAdsAllocationId, sku])
+  @@index([settlementAdsAllocationId])
+  @@index([sku])
 }
