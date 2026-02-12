@@ -63,7 +63,16 @@ export const GET = async (_request: NextRequest) => {
             }),
       },
       orderBy: { createdAt: 'desc' },
-      include: { lines: true },
+      include: {
+        lines: true,
+        grns: {
+          select: {
+            referenceNumber: true,
+            receivedAt: true,
+            createdAt: true,
+          },
+        },
+      },
     })
 
     for (const order of orders) {

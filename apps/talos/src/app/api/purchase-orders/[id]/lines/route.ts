@@ -171,8 +171,8 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (order.status !== 'ISSUED' && order.status !== 'RFQ') {
-    return ApiResponses.badRequest('Can only add line items to orders in ISSUED status')
+  if (order.status === 'CANCELLED' || order.status === 'REJECTED') {
+    return ApiResponses.badRequest('Cannot add line items to terminal orders')
   }
 
   const payload = await request.json().catch(() => null)

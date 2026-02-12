@@ -100,6 +100,7 @@ export interface PurchaseOrderSummary {
   id: string
   orderNumber: string
   poNumber: string | null
+  grnNumber?: string | null
   tenantCode?: string | null
   matchedSkuCodes?: string[]
   type: PurchaseOrderTypeOption
@@ -223,6 +224,7 @@ function orderMatchesSearch(order: PurchaseOrderSummary, term: string) {
   return (
     matches(order.orderNumber) ||
     matches(order.poNumber) ||
+    matches(order.grnNumber) ||
     matches(order.counterpartyName) ||
     matches(order.incoterms) ||
     matches(order.paymentTerms) ||
@@ -390,11 +392,21 @@ export function PurchaseOrdersPanel({
 
   const columns = useMemo<TableColumn[]>(() => {
     const cols: TableColumn[] = []
+    const getOrderHref = (order: PurchaseOrderSummary) =>
+      order.tenantCode
+        ? `/operations/purchase-orders/${order.id}?tenant=${encodeURIComponent(order.tenantCode)}`
+        : `/operations/purchase-orders/${order.id}`
+
+    const getPoReference = (order: PurchaseOrderSummary) => order.poNumber ?? order.orderNumber
+
+    const isTransitStage = statusFilter === 'OCEAN'
+    const isWarehouseStage = statusFilter === 'WAREHOUSE'
+    const primaryIdentifierLabel = isTransitStage ? 'CI #' : isWarehouseStage ? 'GRN #' : 'PO #'
 
     cols.push({
-      key: 'po-number',
+      key: isTransitStage ? 'primary-ci-number' : isWarehouseStage ? 'primary-grn-number' : 'primary-po-number',
       header: buildColumnHeader(
-        'PO #',
+        primaryIdentifierLabel,
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -420,7 +432,7 @@ export function PurchaseOrdersPanel({
               <Input
                 value={searchFilter}
                 onChange={event => setSearchFilter(event.target.value)}
-                placeholder="Order #, supplier, notes…"
+                placeholder="Reference #, supplier, notes…"
                 className="h-9 px-2 text-sm font-normal normal-case tracking-normal"
                 autoFocus
               />
@@ -429,22 +441,84 @@ export function PurchaseOrdersPanel({
         </Popover>
       ),
       fit: true,
-      thClassName: 'w-[116px]',
+      thClassName: 'w-[126px]',
       tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
-      render: order => (
-        <Link
-          href={
-            order.tenantCode
-              ? `/operations/purchase-orders/${order.id}?tenant=${encodeURIComponent(order.tenantCode)}`
-              : `/operations/purchase-orders/${order.id}`
-          }
-          className="block max-w-full truncate text-primary hover:underline"
-          prefetch={false}
-        >
-          {order.poNumber ?? order.orderNumber}
-        </Link>
-      ),
+      render: order => {
+        const primaryValue = isTransitStage
+          ? order.stageData.ocean.commercialInvoiceNumber
+          : isWarehouseStage
+            ? order.grnNumber
+            : getPoReference(order)
+
+        return (
+          <Link
+            href={getOrderHref(order)}
+            className="block max-w-full truncate text-primary hover:underline"
+            title={typeof primaryValue === 'string' ? primaryValue : undefined}
+            prefetch={false}
+          >
+            {isTransitStage || isWarehouseStage ? formatTextOrDash(primaryValue) : getPoReference(order)}
+          </Link>
+        )
+      },
     })
+
+    if (isTransitStage) {
+      cols.push({
+        key: 'po-number',
+        header: buildColumnHeader('PO #'),
+        fit: true,
+        thClassName: 'w-[126px]',
+        tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
+        render: order => (
+          <Link
+            href={getOrderHref(order)}
+            className="block max-w-full truncate text-primary hover:underline"
+            prefetch={false}
+          >
+            {getPoReference(order)}
+          </Link>
+        ),
+      })
+    }
+
+    if (isWarehouseStage) {
+      cols.push(
+        {
+          key: 'ci-number',
+          header: buildColumnHeader('CI #'),
+          fit: true,
+          thClassName: 'w-[126px]',
+          tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
+          render: order => (
+            <Link
+              href={getOrderHref(order)}
+              className="block max-w-full truncate text-primary hover:underline"
+              title={order.stageData.ocean.commercialInvoiceNumber ?? undefined}
+              prefetch={false}
+            >
+              {formatTextOrDash(order.stageData.ocean.commercialInvoiceNumber)}
+            </Link>
+          ),
+        },
+        {
+          key: 'po-number',
+          header: buildColumnHeader('PO #'),
+          fit: true,
+          thClassName: 'w-[126px]',
+          tdClassName: 'px-3 py-2 font-medium text-foreground min-w-0',
+          render: order => (
+            <Link
+              href={getOrderHref(order)}
+              className="block max-w-full truncate text-primary hover:underline"
+              prefetch={false}
+            >
+              {getPoReference(order)}
+            </Link>
+          ),
+        }
+      )
+    }
 
     if (!typeFilter) {
       cols.push({
@@ -520,112 +594,52 @@ export function PurchaseOrdersPanel({
     switch (statusFilter) {
       case 'ISSUED': {
         cols.push(
-		          {
-		            key: 'cargo-ready',
-		            header: buildColumnHeader('Cargo Ready'),
-	            fit: true,
-	            thClassName: 'w-[112px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-	            render: order => formatDateDisplay(order.expectedDate),
-	          },
-	          {
-	            key: 'incoterms',
-	            header: buildColumnHeader('Incoterms'),
-	            fit: true,
-	            thClassName: 'w-[96px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
-	            render: order => formatTextOrDash(order.incoterms),
-	          },
-	          {
-	            key: 'units',
-	            header: buildColumnHeader('Units'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[88px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
-	            render: order => sumLineUnits(order.lines).toLocaleString(),
-	          },
-	          {
-	            key: 'lines',
-	            header: buildColumnHeader('Lines'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[72px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => order.lines.length.toLocaleString(),
-	          }
-        )
-        break
-      }
-      case 'ISSUED': {
-        cols.push(
-	          {
-	            key: 'cargo-ready',
-	            header: buildColumnHeader('Cargo Ready'),
-	            fit: true,
-	            thClassName: 'w-[112px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-	            render: order => formatDateDisplay(order.expectedDate),
-	          },
-	          {
-	            key: 'pi-number',
-	            header: buildColumnHeader('PI #'),
-	            fit: true,
-	            thClassName: 'w-[140px]',
-	            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
-	            render: order => (
-              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.proformaInvoiceNumber)}
-              </span>
-            ),
+          {
+            key: 'cargo-ready',
+            header: buildColumnHeader('Cargo Ready'),
+            fit: true,
+            thClassName: 'w-[112px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+            render: order => formatDateDisplay(order.expectedDate),
           },
           {
-            key: 'factory',
-            header: buildColumnHeader('Factory'),
-            thClassName: 'w-[clamp(160px,18vw,220px)]',
-            tdClassName: 'px-3 py-2 min-w-0 text-muted-foreground',
-            render: order => (
-              <span
-                className="block max-w-full truncate"
-                title={order.stageData.manufacturing.factoryName ?? undefined}
-              >
-                {formatTextOrDash(order.stageData.manufacturing.factoryName)}
-              </span>
-            ),
+            key: 'incoterms',
+            header: buildColumnHeader('Incoterms'),
+            fit: true,
+            thClassName: 'w-[96px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap font-medium text-foreground',
+            render: order => formatTextOrDash(order.incoterms),
           },
-	          {
-	            key: 'units',
-	            header: buildColumnHeader('Units'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[88px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
-	            render: order => sumLineUnits(order.lines).toLocaleString(),
-	          },
-	          {
-	            key: 'lines',
-	            header: buildColumnHeader('Lines'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[72px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => order.lines.length.toLocaleString(),
-	          }
+          {
+            key: 'units',
+            header: buildColumnHeader('Units'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[88px]',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap font-semibold tabular-nums text-foreground',
+            render: order => sumLineUnits(order.lines).toLocaleString(),
+          },
+          {
+            key: 'lines',
+            header: buildColumnHeader('Lines'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[72px]',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => order.lines.length.toLocaleString(),
+          }
         )
         break
       }
       case 'MANUFACTURING': {
         cols.push(
-	          {
-	            key: 'pi-number',
-	            header: buildColumnHeader('PI #'),
-	            fit: true,
-	            thClassName: 'w-[140px]',
-	            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
-	            render: order => (
+          {
+            key: 'pi-number',
+            header: buildColumnHeader('PI #'),
+            fit: true,
+            thClassName: 'w-[140px]',
+            tdClassName: 'px-3 py-2 min-w-0 whitespace-nowrap font-medium text-foreground',
+            render: order => (
               <span
                 className="block max-w-full truncate"
                 title={order.stageData.manufacturing.proformaInvoiceNumber ?? undefined}
@@ -648,23 +662,23 @@ export function PurchaseOrdersPanel({
               </span>
             ),
           },
-	          {
-	            key: 'expected-completion',
-	            header: buildColumnHeader('Exp. Complete'),
-	            fit: true,
-	            thClassName: 'w-[120px]',
-	            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
-	            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
-	          },
-	          {
-	            key: 'cartons',
-	            header: buildColumnHeader('Cartons'),
-	            align: 'right',
-	            fit: true,
-	            thClassName: 'w-[88px]',
-	            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
-	            render: order => formatNumberDisplay(order.stageData.manufacturing.totalCartons),
-	          }
+          {
+            key: 'expected-completion',
+            header: buildColumnHeader('Exp. Complete'),
+            fit: true,
+            thClassName: 'w-[120px]',
+            tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
+            render: order => formatDateDisplay(order.stageData.manufacturing.expectedCompletionDate),
+          },
+          {
+            key: 'cartons',
+            header: buildColumnHeader('Cartons'),
+            align: 'right',
+            fit: true,
+            thClassName: 'w-[88px]',
+            tdClassName: 'px-3 py-2 text-right whitespace-nowrap tabular-nums text-muted-foreground',
+            render: order => formatNumberDisplay(order.stageData.manufacturing.totalCartons),
+          }
         )
         break
       }
