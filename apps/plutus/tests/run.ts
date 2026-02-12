@@ -20,6 +20,7 @@ import {
   normalizeManufacturingSplits,
 } from '../lib/plutus/bills/split';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
+import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import type { QboAccount, QboBill } from '../lib/qbo/api';
 
 function test(name: string, fn: () => void) {
@@ -232,6 +233,100 @@ test('manufacturing split validation rejects duplicate sku and invalid qty', () 
       { sku: 'sku-b', quantity: 1 },
     ]),
   );
+});
+
+test('settlement ads profitability combines sales returns and ads by sku', () => {
+  const result = buildSettlementSkuProfitability({
+    sales: [
+      {
+        sku: 'sku-a',
+        quantity: 3,
+        principalCents: 3000,
+        costManufacturingCents: 900,
+        costFreightCents: 150,
+        costDutyCents: 90,
+        costMfgAccessoriesCents: 60,
+      },
+      {
+        sku: 'SKU-B',
+        quantity: 1,
+        principalCents: 1000,
+        costManufacturingCents: 250,
+        costFreightCents: 80,
+        costDutyCents: 40,
+        costMfgAccessoriesCents: 30,
+      },
+    ],
+    returns: [
+      {
+        sku: 'SKU A',
+        quantity: 1,
+        principalCents: -1000,
+        costManufacturingCents: 300,
+        costFreightCents: 50,
+        costDutyCents: 30,
+        costMfgAccessoriesCents: 20,
+      },
+    ],
+    allocationLines: [
+      { sku: 'SKU-A', allocatedCents: 600 },
+      { sku: 'SKU-B', allocatedCents: 400 },
+      { sku: 'SKU-C', allocatedCents: 100 },
+    ],
+  });
+
+  assert.equal(result.lines.length, 3);
+  assert.deepEqual(
+    result.lines.map((line) => line.sku),
+    ['SKU-A', 'SKU-B', 'SKU-C'],
+  );
+
+  const skuA = result.lines[0];
+  assert.equal(skuA?.soldUnits, 3);
+  assert.equal(skuA?.returnedUnits, 1);
+  assert.equal(skuA?.netUnits, 2);
+  assert.equal(skuA?.principalCents, 2000);
+  assert.equal(skuA?.cogsCents, 800);
+  assert.equal(skuA?.adsAllocatedCents, 600);
+  assert.equal(skuA?.contributionBeforeAdsCents, 1200);
+  assert.equal(skuA?.contributionAfterAdsCents, 600);
+
+  const skuB = result.lines[1];
+  assert.equal(skuB?.principalCents, 1000);
+  assert.equal(skuB?.cogsCents, 400);
+  assert.equal(skuB?.adsAllocatedCents, 400);
+  assert.equal(skuB?.contributionAfterAdsCents, 200);
+
+  const skuC = result.lines[2];
+  assert.equal(skuC?.principalCents, 0);
+  assert.equal(skuC?.cogsCents, 0);
+  assert.equal(skuC?.adsAllocatedCents, 100);
+  assert.equal(skuC?.contributionAfterAdsCents, -100);
+
+  assert.equal(result.totals.soldUnits, 4);
+  assert.equal(result.totals.returnedUnits, 1);
+  assert.equal(result.totals.netUnits, 3);
+  assert.equal(result.totals.principalCents, 3000);
+  assert.equal(result.totals.cogsCents, 1200);
+  assert.equal(result.totals.adsAllocatedCents, 1100);
+  assert.equal(result.totals.contributionBeforeAdsCents, 1800);
+  assert.equal(result.totals.contributionAfterAdsCents, 700);
+});
+
+test('settlement ads profitability normalizes sku keys and sums duplicate ads lines', () => {
+  const result = buildSettlementSkuProfitability({
+    sales: [],
+    returns: [],
+    allocationLines: [
+      { sku: ' sku-a ', allocatedCents: 101 },
+      { sku: 'SKU A', allocatedCents: 202 },
+    ],
+  });
+
+  assert.equal(result.lines.length, 1);
+  assert.equal(result.lines[0]?.sku, 'SKU-A');
+  assert.equal(result.lines[0]?.adsAllocatedCents, 303);
+  assert.equal(result.totals.adsAllocatedCents, 303);
 });
 
 test('tracked line extraction includes configured and inventory accounts', () => {

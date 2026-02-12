@@ -143,6 +143,29 @@ type ConnectionStatus = { connected: boolean; error?: string };
 
 type AdsAllocationLine = { sku: string; weight: number; allocatedCents: number };
 
+type AdsSkuProfitabilityLine = {
+  sku: string;
+  soldUnits: number;
+  returnedUnits: number;
+  netUnits: number;
+  principalCents: number;
+  cogsCents: number;
+  adsAllocatedCents: number;
+  contributionBeforeAdsCents: number;
+  contributionAfterAdsCents: number;
+};
+
+type AdsSkuProfitabilityTotals = {
+  soldUnits: number;
+  returnedUnits: number;
+  netUnits: number;
+  principalCents: number;
+  cogsCents: number;
+  adsAllocatedCents: number;
+  contributionBeforeAdsCents: number;
+  contributionAfterAdsCents: number;
+};
+
 type AdsAllocationResponse = {
   kind: 'saved' | 'computed';
   marketplace: 'amazon.com' | 'amazon.co.uk';
@@ -154,6 +177,10 @@ type AdsAllocationResponse = {
   weightUnit: string;
   adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
   lines: AdsAllocationLine[];
+  skuProfitability: {
+    lines: AdsSkuProfitabilityLine[];
+    totals: AdsSkuProfitabilityTotals;
+  };
 };
 
 function formatPeriod(start: string | null, end: string | null): string {
@@ -818,6 +845,92 @@ export default function SettlementDetailPage() {
     return { ok: true as const, lines: withAlloc, error: null };
   }, [adsAllocation, adsEditLines]);
 
+  const adsSkuProfitabilityPreview = useMemo(() => {
+    if (!adsAllocation) {
+      return null;
+    }
+
+    const baseBySku = new Map<string, AdsSkuProfitabilityLine>();
+    for (const line of adsAllocation.skuProfitability.lines) {
+      baseBySku.set(line.sku, line);
+    }
+
+    const adsBySku = new Map<string, number>();
+    if (adsAllocationPreview.ok) {
+      for (const line of adsAllocationPreview.lines) {
+        if (line.allocatedCents === null) {
+          continue;
+        }
+        adsBySku.set(line.sku, line.allocatedCents);
+      }
+    } else {
+      for (const line of adsAllocation.skuProfitability.lines) {
+        adsBySku.set(line.sku, line.adsAllocatedCents);
+      }
+    }
+
+    const allSkus = new Set<string>();
+    for (const sku of baseBySku.keys()) {
+      allSkus.add(sku);
+    }
+    for (const sku of adsBySku.keys()) {
+      allSkus.add(sku);
+    }
+
+    const lines: AdsSkuProfitabilityLine[] = [];
+    for (const sku of allSkus.values()) {
+      const base = baseBySku.get(sku);
+      const adsAllocated = adsBySku.get(sku);
+
+      const soldUnits = base ? base.soldUnits : 0;
+      const returnedUnits = base ? base.returnedUnits : 0;
+      const netUnits = base ? base.netUnits : soldUnits - returnedUnits;
+      const principalCents = base ? base.principalCents : 0;
+      const cogsCents = base ? base.cogsCents : 0;
+      const contributionBeforeAdsCents = base ? base.contributionBeforeAdsCents : principalCents - cogsCents;
+      const adsAllocatedCents = adsAllocated !== undefined ? adsAllocated : 0;
+      const contributionAfterAdsCents = contributionBeforeAdsCents - adsAllocatedCents;
+
+      lines.push({
+        sku,
+        soldUnits,
+        returnedUnits,
+        netUnits,
+        principalCents,
+        cogsCents,
+        adsAllocatedCents,
+        contributionBeforeAdsCents,
+        contributionAfterAdsCents,
+      });
+    }
+
+    lines.sort((a, b) => a.sku.localeCompare(b.sku));
+
+    const totals: AdsSkuProfitabilityTotals = {
+      soldUnits: 0,
+      returnedUnits: 0,
+      netUnits: 0,
+      principalCents: 0,
+      cogsCents: 0,
+      adsAllocatedCents: 0,
+      contributionBeforeAdsCents: 0,
+      contributionAfterAdsCents: 0,
+    };
+
+    for (const line of lines) {
+      totals.soldUnits += line.soldUnits;
+      totals.returnedUnits += line.returnedUnits;
+      totals.netUnits += line.netUnits;
+      totals.principalCents += line.principalCents;
+      totals.cogsCents += line.cogsCents;
+      totals.adsAllocatedCents += line.adsAllocatedCents;
+      totals.contributionBeforeAdsCents += line.contributionBeforeAdsCents;
+      totals.contributionAfterAdsCents += line.contributionAfterAdsCents;
+    }
+
+    return { lines, totals };
+  }, [adsAllocation, adsAllocationPreview]);
+
   const saveAdsAllocationMutation = useMutation({
     mutationFn: async () => {
       if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
@@ -1192,6 +1305,93 @@ export default function SettlementDetailPage() {
                               </TableBody>
                             </Table>
                           </div>
+
+                          {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                SKU contribution after ads allocation
+                              </div>
+                              <div className="overflow-x-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>SKU</TableHead>
+                                      <TableHead className="text-right">Sold</TableHead>
+                                      <TableHead className="text-right">Returns</TableHead>
+                                      <TableHead className="text-right">Net Units</TableHead>
+                                      <TableHead className="text-right">Principal</TableHead>
+                                      <TableHead className="text-right">COGS</TableHead>
+                                      <TableHead className="text-right">Ads</TableHead>
+                                      <TableHead className="text-right">Contribution</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {adsSkuProfitabilityPreview.lines.map((line) => (
+                                      <TableRow key={`profit-${line.sku}`}>
+                                        <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                          {line.sku}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.soldUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.returnedUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.netUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell
+                                          className={cn(
+                                            'text-right text-sm font-semibold tabular-nums',
+                                            line.contributionAfterAdsCents < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
+                                          )}
+                                        >
+                                          {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                    <TableRow>
+                                      <TableCell className="text-sm font-semibold text-slate-900 dark:text-white">Total</TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.soldUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.returnedUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.netUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell
+                                        className={cn(
+                                          'text-right text-sm font-semibold tabular-nums',
+                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : 'text-slate-900 dark:text-white',
+                                        )}
+                                      >
+                                        {formatMoney(
+                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
+                                          settlement.marketplace.currency,
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-between">
                             <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
