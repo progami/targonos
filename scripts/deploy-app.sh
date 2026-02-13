@@ -769,6 +769,3 @@ fi
 log "=========================================="
 log "Deployment complete for $app_key to $environment"
 log "=========================================="
-========"
-log "Deployment complete for $app_key to $environment"
-log "=========================================="
