@@ -19,6 +19,10 @@ import {
   extractTrackedLinesFromBill,
   type TrackedBillLine,
 } from '@/lib/plutus/bills/classification';
+import {
+  buildBillMappingPullSyncUpdates,
+  type BillMappingPullSyncCandidate,
+} from '@/lib/plutus/bills/pull-sync';
 
 const logger = createLogger({ name: 'plutus-transactions' });
 
@@ -98,8 +102,12 @@ function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
 
 type MappingRecord = {
   id: string;
+  qboBillId: string;
   poNumber: string;
   brandId: string;
+  billDate: string;
+  vendorName: string;
+  totalAmount: number;
   syncedAt: Date | null;
   lines: Array<{
     qboLineId: string;
@@ -324,6 +332,40 @@ export async function GET(req: NextRequest) {
         include: { lines: true },
       });
       const mappingByBillId = new Map(mappings.map((mapping) => [mapping.qboBillId, mapping]));
+
+      const billsById = new Map(result.bills.map((bill) => [bill.Id, bill]));
+      const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+        mappings as BillMappingPullSyncCandidate[],
+        billsById,
+      );
+
+      if (pullSyncUpdates.length > 0) {
+        const syncedAt = new Date();
+        await db.$transaction(
+          pullSyncUpdates.map((update) =>
+            db.billMapping.update({
+              where: { id: update.id },
+              data: {
+                poNumber: update.poNumber,
+                billDate: update.billDate,
+                vendorName: update.vendorName,
+                totalAmount: update.totalAmount,
+                syncedAt,
+              },
+            }),
+          ),
+        );
+
+        for (const update of pullSyncUpdates) {
+          const existing = mappingByBillId.get(update.qboBillId);
+          if (!existing) continue;
+          existing.poNumber = update.poNumber;
+          existing.billDate = update.billDate;
+          existing.vendorName = update.vendorName;
+          existing.totalAmount = update.totalAmount;
+          existing.syncedAt = syncedAt;
+        }
+      }
 
       transactions = result.bills.map((bill) => {
         const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
