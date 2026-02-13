@@ -643,7 +643,6 @@ function buildDemoUser(): AuthenticatedUser {
     xplan: { role: 'viewer', departments: ['Product'] },
     hermes: { role: 'viewer', departments: ['Account / Listing'] },
     plutus: { role: 'viewer', departments: ['Finance'] },
-    argus: { role: 'viewer', departments: ['Account / Listing'] },
   }
 
   return {
