@@ -84,5 +84,8 @@ cookies.txt
 LMB/
 LMB.zip
 
+# Local dev config
+**/local.apps.json
+
 # Claude Code
 .claude/
