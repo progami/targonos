@@ -63,7 +63,7 @@ const parseRateListAttachment = (value: Prisma.JsonValue | null): RateListAttach
 }
 
 // Validation schemas with sanitization
-const _createWarehouseSchema = z.object({
+const createWarehouseSchema = z.object({
   code: warehouseCodeSchema,
   name: z
     .string()
@@ -166,9 +166,43 @@ export const GET = withAuth(async (req, _session) => {
   return ApiResponses.success(warehousesWithCounts)
 })
 
-// POST /api/warehouses - Create warehouse (DISABLED)
-export const POST = withRole(['admin', 'staff'], async () => {
-  return ApiResponses.forbidden('Warehouse creation is disabled. Contact an administrator.')
+// POST /api/warehouses - Create warehouse
+export const POST = withRole(['admin', 'staff'], async (request, _session) => {
+  const prisma = await getTenantPrisma()
+  const body = await request.json()
+  const validatedData = createWarehouseSchema.parse(body)
+
+  // Check for duplicate code or name (case-insensitive)
+  const existing = await prisma.warehouse.findFirst({
+    where: {
+      OR: [
+        { code: { equals: validatedData.code, mode: 'insensitive' } },
+        { name: { equals: validatedData.name, mode: 'insensitive' } },
+      ],
+    },
+  })
+
+  if (existing) {
+    if (existing.code.toLowerCase() === validatedData.code.toLowerCase()) {
+      return ApiResponses.badRequest('Warehouse code already in use')
+    }
+    return ApiResponses.badRequest('Warehouse name already in use')
+  }
+
+  const warehouse = await prisma.warehouse.create({
+    data: {
+      code: validatedData.code,
+      name: validatedData.name,
+      address: validatedData.address,
+      latitude: validatedData.latitude,
+      longitude: validatedData.longitude,
+      contactEmail: validatedData.contactEmail,
+      contactPhone: validatedData.contactPhone,
+      kind: validatedData.kind,
+    },
+  })
+
+  return ApiResponses.success(warehouse)
 })
 
 // PATCH /api/warehouses - Update warehouse

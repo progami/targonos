@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   Building2,
   Edit,
+  Plus,
   Search,
 } from '@/lib/lucide-icons'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
@@ -146,6 +147,12 @@ export default function WarehousesPanel() {
               />
             </div>
           </div>
+          <Button asChild size="sm" className="gap-2">
+            <Link href="/config/warehouses/new">
+              <Plus className="h-4 w-4" />
+              Add Warehouse
+            </Link>
+          </Button>
         </div>
 
         {loading ? (
