@@ -176,6 +176,7 @@ type AdsAllocationResponse = {
   invoiceStartDate: string;
   invoiceEndDate: string;
   totalAdsCents: number;
+  totalSource: 'AUDIT_DATA' | 'ADS_REPORT' | 'NONE' | 'SAVED';
   weightSource: string;
   weightUnit: string;
   adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
@@ -1299,6 +1300,16 @@ export default function SettlementDetailPage() {
                           <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                             Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
                           </div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Total source:{' '}
+                            {adsAllocation.totalSource === 'AUDIT_DATA'
+                              ? 'Audit Data (Amazon Advertising Costs rows)'
+                              : adsAllocation.totalSource === 'ADS_REPORT'
+                                ? 'Ads Data spend fallback'
+                                : adsAllocation.totalSource === 'SAVED'
+                                  ? 'Saved allocation'
+                                  : 'No source data'}
+                          </div>
                           {adsAllocation.adsDataUpload && (
                             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                               Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
@@ -1331,7 +1342,7 @@ export default function SettlementDetailPage() {
 
                       {adsAllocation.totalAdsCents === 0 ? (
                         <div className="text-sm text-slate-500 dark:text-slate-400">
-                          No Amazon Advertising Costs found for this invoice in the stored Audit Data. Nothing to allocate.
+                          No advertising cost found for this invoice in stored Audit Data or Ads Data. Nothing to allocate.
                         </div>
                       ) : (
                         <>

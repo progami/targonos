@@ -24,6 +24,7 @@ const poMemoPatterns = [
   /^P(?:\s*\/\s*)?O\s*(?:#|:|-)\s*(.+)$/i,
   /^P(?:\s*\/\s*)?O\s+(.+)$/i,
 ];
+const directPoCodePattern = /^P(?:\s*\/\s*)?O-[A-Za-z0-9].*$/i;
 
 export function extractPoNumberFromBill(bill: Pick<QboBill, 'PrivateNote' | 'CustomField'>): string {
   const customFieldPo = extractPoNumberFromCustomFields(bill.CustomField);
@@ -65,6 +66,10 @@ function extractPoNumberFromPrivateNote(privateNote: string | undefined): string
     .filter((line) => line !== '');
 
   for (const line of lines) {
+    if (directPoCodePattern.test(line)) {
+      return line;
+    }
+
     for (const pattern of poMemoPatterns) {
       const match = line.match(pattern);
       if (!match) continue;
