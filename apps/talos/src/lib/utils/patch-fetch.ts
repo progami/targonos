@@ -1,4 +1,4 @@
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || ''
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '/talos'
 
 function shouldPrefix(input: RequestInfo | URL): input is string {
  return typeof input === 'string' && input.startsWith('/api/')

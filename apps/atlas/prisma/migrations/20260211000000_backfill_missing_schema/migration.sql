@@ -3,13 +3,15 @@
 --
 -- Every statement uses IF NOT EXISTS / DO-EXCEPTION guards so this migration is
 -- idempotent and safe to run on databases that already have these objects.
+--
+-- NOTE: The Notification table and NotificationType enum are created in
+-- 20251221000000_create_notification_table (before the migrations that reference it).
 
 -- ============================================================
 -- 1. ENUMS
 -- ============================================================
 
 DO $$ BEGIN CREATE TYPE "ProjectStatus" AS ENUM ('PLANNING','ACTIVE','ON_HOLD','COMPLETED','CANCELLED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN CREATE TYPE "NotificationType" AS ENUM ('POLICY_CREATED','POLICY_UPDATED','POLICY_ARCHIVED','ANNOUNCEMENT','SYSTEM','PROFILE_INCOMPLETE','REVIEW_SUBMITTED','REVIEW_ACKNOWLEDGED','DISCIPLINARY_CREATED','DISCIPLINARY_UPDATED','HIERARCHY_CHANGED','STANDING_CHANGED','VIOLATION_PENDING_HR','VIOLATION_PENDING_ADMIN','VIOLATION_APPROVED','VIOLATION_REJECTED','VIOLATION_ACKNOWLEDGED','REVIEW_PENDING_HR','REVIEW_PENDING_ADMIN','REVIEW_APPROVED','REVIEW_REJECTED','APPEAL_PENDING_HR','APPEAL_PENDING_ADMIN','APPEAL_DECIDED','LEAVE_REQUESTED','LEAVE_PENDING_HR','LEAVE_PENDING_SUPER_ADMIN','LEAVE_APPROVED','LEAVE_REJECTED','LEAVE_CANCELLED','RESOURCE_CREATED','QUARTERLY_REVIEW_CREATED','QUARTERLY_REVIEW_REMINDER','QUARTERLY_REVIEW_OVERDUE','QUARTERLY_REVIEW_ESCALATED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "CoreValue" AS ENUM ('ATTENTION_TO_DETAIL','HONESTY','INTEGRITY','COURAGE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "ValueBreach" AS ENUM ('BREACH_OF_DETAIL','BREACH_OF_HONESTY','BREACH_OF_INTEGRITY','BREACH_OF_COURAGE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "EmployeeStanding" AS ENUM ('GREEN','YELLOW','RED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -25,6 +27,7 @@ DO $$ BEGIN CREATE TYPE "DisciplinaryActionType" AS ENUM ('VERBAL_WARNING','WRIT
 DO $$ BEGIN CREATE TYPE "DisciplinaryStatus" AS ENUM ('PENDING_HR_REVIEW','PENDING_SUPER_ADMIN','PENDING_ACKNOWLEDGMENT','OPEN','UNDER_INVESTIGATION','ACTION_TAKEN','ACTIVE','APPEALED','APPEAL_PENDING_HR','APPEAL_PENDING_SUPER_ADMIN','CLOSED','DISMISSED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "PasswordDepartment" AS ENUM ('OPS','SALES_MARKETING','LEGAL','HR','FINANCE'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE "ContractorStatus" AS ENUM ('ACTIVE','ON_HOLD','COMPLETED','TERMINATED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE "ExitReason" AS ENUM ('RESIGNATION','TERMINATION','LAYOFF','MUTUAL_AGREEMENT','CONTRACT_END','RETIREMENT','OTHER'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
 -- 2. EMPLOYEE TABLE - missing columns
@@ -50,6 +53,11 @@ DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "departmentLocalOverride" BOOLEAN 
 DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "positionLocalOverride" BOOLEAN NOT NULL DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "region" "EmployeeRegion" NOT NULL DEFAULT 'PAKISTAN'; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
+-- Offboarding fields
+DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "exitReason" "ExitReason"; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "lastWorkingDay" TIMESTAMP(3); EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "Employee" ADD COLUMN "exitNotes" TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
 -- Unique index on googleId
 CREATE UNIQUE INDEX IF NOT EXISTS "Employee_googleId_key" ON "Employee"("googleId");
 -- Self-referential FK for reportsToId
@@ -63,14 +71,23 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
--- 3. POLICY TABLE - missing columns (region, unique constraints)
+-- 3. POLICY TABLE - missing columns and unique constraints
 -- ============================================================
 DO $$ BEGIN ALTER TABLE "Policy" ADD COLUMN "region" "Region" NOT NULL DEFAULT 'ALL'; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "Policy" ADD COLUMN "version" TEXT NOT NULL DEFAULT '1.0'; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS "Policy_region_idx" ON "Policy"("region");
 
+-- Required unique constraints from schema
+CREATE UNIQUE INDEX IF NOT EXISTS "Policy_category_region_key" ON "Policy"("category", "region");
+CREATE UNIQUE INDEX IF NOT EXISTS "Policy_effectiveDate_key" ON "Policy"("effectiveDate");
+
 -- ============================================================
--- 4. TABLES - create if not exists
+-- 4. TASK TABLE - missing column
+-- ============================================================
+DO $$ BEGIN ALTER TABLE "Task" ADD COLUMN "actionUrl" TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+-- ============================================================
+-- 5. TABLES - create if not exists
 -- ============================================================
 
 -- EmployeeDepartment
@@ -122,31 +139,6 @@ CREATE INDEX IF NOT EXISTS "ProjectMember_projectId_idx" ON "ProjectMember"("pro
 CREATE INDEX IF NOT EXISTS "ProjectMember_employeeId_idx" ON "ProjectMember"("employeeId");
 DO $$ BEGIN ALTER TABLE "ProjectMember" ADD CONSTRAINT "ProjectMember_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "ProjectMember" ADD CONSTRAINT "ProjectMember_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "Employee"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
--- Notification
-CREATE TABLE IF NOT EXISTS "Notification" (
-  "id" TEXT NOT NULL,
-  "type" "NotificationType" NOT NULL,
-  "title" TEXT NOT NULL,
-  "message" TEXT NOT NULL,
-  "link" TEXT,
-  "employeeId" TEXT,
-  "relatedId" TEXT,
-  "relatedType" TEXT,
-  "isRead" BOOLEAN NOT NULL DEFAULT false,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
-);
-CREATE INDEX IF NOT EXISTS "Notification_type_idx" ON "Notification"("type");
-CREATE INDEX IF NOT EXISTS "Notification_isRead_idx" ON "Notification"("isRead");
-CREATE INDEX IF NOT EXISTS "Notification_createdAt_idx" ON "Notification"("createdAt");
-CREATE INDEX IF NOT EXISTS "Notification_employeeId_idx" ON "Notification"("employeeId");
-DO $$ BEGIN ALTER TABLE "Notification" ADD CONSTRAINT "Notification_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "Employee"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
--- Add FK from NotificationReadReceipt -> Notification (if missing)
-DO $$ BEGIN ALTER TABLE "NotificationReadReceipt" ADD CONSTRAINT "NotificationReadReceipt_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
--- Add FK from NotificationEmailDispatch -> Notification (if missing)
-DO $$ BEGIN ALTER TABLE "NotificationEmailDispatch" ADD CONSTRAINT "NotificationEmailDispatch_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- QuarterlyReviewCycle
 CREATE TABLE IF NOT EXISTS "QuarterlyReviewCycle" (
