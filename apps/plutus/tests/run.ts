@@ -29,6 +29,7 @@ import {
   mapRecurringTransactionsToEvents,
 } from '../lib/plutus/cashflow/qbo-mappers';
 import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
+import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
@@ -164,6 +165,48 @@ test('parseSpAdvertisedProductCsv accepts Excel date serials', () => {
   assert.equal(parsed.minDate, '2025-12-21');
   assert.equal(parsed.maxDate, '2025-12-21');
   assert.equal(parsed.rows[0]?.date, '2025-12-21');
+});
+
+test('computePnlAllocation uses absolute sales quantities for weights', () => {
+  const rows = [
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand B',
+      net: 10,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Commission',
+      net: -9,
+    },
+  ];
+
+  const allocation = computePnlAllocation(rows, {
+    getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
+  });
+
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -600);
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, -300);
 });
 
 test('ledger blocks missing cost basis', () => {
