@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes, argus" >&2
+  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -189,14 +189,6 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/hermes"
     pm2_name="${PM2_PREFIX}-hermes"
     prisma_cmd=""
-    build_cmd="pnpm --filter $workspace build"
-    ;;
-  argus)
-    workspace="@targon/argus"
-    app_dir="$REPO_DIR/apps/argus"
-    pm2_name="${PM2_PREFIX}-argus"
-    prisma_cmd="pnpm --filter $workspace prisma:generate"
-    migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)
@@ -634,11 +626,6 @@ if [[ -n "$migrate_cmd" ]]; then
           run_migrations="true"
         fi
         ;;
-      argus)
-        # Always run migrate deploy for Argus. It is quick when up-to-date and
-        # prevents schema drift if a previous deploy skipped migrations.
-        run_migrations="true"
-        ;;
     esac
   fi
 
@@ -761,15 +748,6 @@ log "Step 7: Starting $pm2_name"
 start_and_verify_pm2_process "$pm2_name" "$app_dir" "$deploy_runtime_sha"
 log "$pm2_name started and verified"
 
-if [[ "$app_key" == "argus" ]]; then
-  argus_workers=("${PM2_PREFIX}-argus-scheduler" "${PM2_PREFIX}-argus-capture")
-  for worker in "${argus_workers[@]}"; do
-    log "Step 7: Starting $worker"
-    start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
-    log "$worker started and verified"
-  done
-fi
-
 if [[ "$app_key" == "hermes" ]]; then
   hermes_workers=("${PM2_PREFIX}-hermes-orders-sync" "${PM2_PREFIX}-hermes-request-review")
   for worker in "${hermes_workers[@]}"; do
@@ -789,5 +767,8 @@ else
 fi
 
 log "=========================================="
+log "Deployment complete for $app_key to $environment"
+log "=========================================="
+========"
 log "Deployment complete for $app_key to $environment"
 log "=========================================="
