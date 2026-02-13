@@ -33,6 +33,7 @@ import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
+import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
 function test(name: string, fn: () => void) {
@@ -209,6 +210,13 @@ test('computePnlAllocation uses absolute sales quantities for weights', () => {
   assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, -300);
 });
 
+test('isBlockingProcessingCode treats cost basis and allocation as warnings', () => {
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), false);
+  assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
+  assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), false);
+  assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
+});
+
 test('ledger blocks missing cost basis', () => {
   const snapshot = createEmptyLedgerSnapshot();
   const { saleCost, blocks } = computeSaleCostFromAverage(snapshot, { orderId: 'O', sku: 'SKU', units: 1 });
@@ -252,6 +260,61 @@ test('ledger computes proportional manufacturing COGS', () => {
   assert.equal(replay.blocks.length, 0);
   assert.equal(replay.computedCosts.length, 1);
   assert.equal(replay.computedCosts[0]?.costByComponentCents.manufacturing, 200);
+});
+
+test('ledger defers SKU cost lines until units arrive', () => {
+  const parsedBills = {
+    events: [
+      { kind: 'cost' as const, date: '2026-02-01', poNumber: 'PO-1', component: 'mfgAccessories' as const, costCents: 500, sku: 'SKU' },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU', units: 10, costCents: 1000 },
+    ],
+    poUnitsBySku: new Map<string, Map<string, number>>(),
+  };
+
+  const replay = replayInventoryLedger({
+    parsedBills,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [{ date: '2026-02-03', orderId: 'O', sku: 'SKU', units: 5 }],
+  });
+
+  assert.equal(replay.blocks.some((block) => block.code === 'LATE_COST_ON_HAND_ZERO'), false);
+  assert.equal(replay.blocks.length, 0);
+  assert.equal(replay.computedCosts.length, 1);
+  assert.equal(replay.computedCosts[0]?.costByComponentCents.manufacturing, 500);
+  assert.equal(replay.computedCosts[0]?.costByComponentCents.mfgAccessories, 250);
+
+  const state = replay.snapshot.bySku.get('SKU');
+  assert.equal(state?.deferredValueByComponentCents.mfgAccessories, 0);
+});
+
+test('ledger defers PO-allocated cost lines until units arrive', () => {
+  const poUnitsBySku = new Map<string, Map<string, number>>();
+  poUnitsBySku.set('PO-1', new Map([['SKU-A', 1], ['SKU-B', 2]]));
+
+  const parsedBills = {
+    events: [
+      { kind: 'cost' as const, date: '2026-02-01', poNumber: 'PO-1', component: 'freight' as const, costCents: 300 },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU-A', units: 1, costCents: 100 },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU-B', units: 2, costCents: 200 },
+    ],
+    poUnitsBySku,
+  };
+
+  const replay = replayInventoryLedger({
+    parsedBills,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [],
+  });
+
+  assert.equal(replay.blocks.length, 0);
+  const stateA = replay.snapshot.bySku.get('SKU-A');
+  const stateB = replay.snapshot.bySku.get('SKU-B');
+  assert.equal(stateA?.valueByComponentCents.freight, 100);
+  assert.equal(stateB?.valueByComponentCents.freight, 200);
+  assert.equal(stateA?.deferredValueByComponentCents.freight, 0);
+  assert.equal(stateB?.deferredValueByComponentCents.freight, 0);
 });
 
 test('bill mappings allocate non-sku costs by PO units', () => {

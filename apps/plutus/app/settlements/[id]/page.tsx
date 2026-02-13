@@ -30,6 +30,7 @@ import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
 import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -233,6 +234,10 @@ function isIdempotencyBlock(block: PreviewBlock): boolean {
   if (block.code === 'ALREADY_PROCESSED') return true;
   if (block.code === 'ORDER_ALREADY_PROCESSED') return true;
   return false;
+}
+
+function isBlockingPreviewBlock(block: PreviewBlock): boolean {
+  return isBlockingProcessingCode(block.code);
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -476,6 +481,14 @@ function ProcessSettlementDialog({
   }
 
   const selectedMeta = invoicesWithMeta.find((i) => i.invoiceId === selectedInvoice);
+  const previewBlockingBlocks = useMemo(() => {
+    if (!preview) return [] as PreviewBlock[];
+    return preview.blocks.filter((block) => isBlockingPreviewBlock(block));
+  }, [preview]);
+  const previewWarningBlocks = useMemo(() => {
+    if (!preview) return [] as PreviewBlock[];
+    return preview.blocks.filter((block) => !isBlockingPreviewBlock(block));
+  }, [preview]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -618,8 +631,20 @@ function ProcessSettlementDialog({
                       Hash {preview.processingHash.slice(0, 10)} &middot; {preview.minDate} &rarr; {preview.maxDate}
                     </div>
                   </div>
-                  <Badge variant={preview.blocks.length === 0 ? 'success' : 'destructive'}>
-                    {preview.blocks.length === 0 ? 'Ready' : 'Blocked'}
+                  <Badge
+                    variant={
+                      previewBlockingBlocks.length > 0
+                        ? 'destructive'
+                        : previewWarningBlocks.length > 0
+                          ? 'secondary'
+                          : 'success'
+                    }
+                  >
+                    {previewBlockingBlocks.length > 0
+                      ? 'Blocked'
+                      : previewWarningBlocks.length > 0
+                        ? 'Ready (Warnings)'
+                        : 'Ready'}
                   </Badge>
                 </div>
 
@@ -646,31 +671,50 @@ function ProcessSettlementDialog({
                   </Card>
                 </div>
 
-	                {preview.blocks.length > 0 && (
-	                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-	                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
-	                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-	                      {preview.blocks.map((b, idx) => (
-	                        <li key={idx}>
-	                          <span className="font-mono">{b.code}</span>: {b.message}
-	                          {b.details && 'error' in b.details && (
-	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-	                          )}
+		                {previewBlockingBlocks.length > 0 && (
+		                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+		                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
+		                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+		                      {previewBlockingBlocks.map((b, idx) => (
+		                        <li key={idx}>
+		                          <span className="font-mono">{b.code}</span>: {b.message}
+		                          {b.details && 'error' in b.details && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          )}
 	                          {formatBlockDetails(b.details) && (
 	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
 	                          )}
 	                        </li>
 	                      ))}
-	                    </ul>
-	                  </div>
-	                )}
+		                    </ul>
+		                  </div>
+		                )}
 
-                {preview.blocks.length === 0 && (
-                  <Button onClick={() => void handlePost()} disabled={isPosting}>
-                    {isPosting ? 'Posting...' : 'Post to QBO'}
-                  </Button>
-                )}
-              </div>
+		                {previewWarningBlocks.length > 0 && (
+		                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
+		                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">Warnings (non-blocking)</div>
+		                    <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
+		                      {previewWarningBlocks.map((b, idx) => (
+		                        <li key={idx}>
+		                          <span className="font-mono">{b.code}</span>: {b.message}
+		                          {b.details && 'error' in b.details && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          )}
+		                          {formatBlockDetails(b.details) && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+		                          )}
+		                        </li>
+		                      ))}
+		                    </ul>
+		                  </div>
+		                )}
+
+	                {previewBlockingBlocks.length === 0 && (
+	                  <Button onClick={() => void handlePost()} disabled={isPosting}>
+	                    {isPosting ? 'Posting...' : 'Post to QBO'}
+	                  </Button>
+	                )}
+	              </div>
             )}
           </div>
         )}
@@ -769,8 +813,17 @@ export default function SettlementDetailPage() {
     return previewData.blocks.filter((block) => !isIdempotencyBlock(block));
   }, [previewData, settlement?.plutusStatus]);
 
+  const previewBlockingBlocks = useMemo(() => {
+    return visiblePreviewBlocks.filter((block) => isBlockingPreviewBlock(block));
+  }, [visiblePreviewBlocks]);
+  const previewWarningBlocks = useMemo(() => {
+    return visiblePreviewBlocks.filter((block) => !isBlockingPreviewBlock(block));
+  }, [visiblePreviewBlocks]);
+
   const isProcessedPreview = settlement?.plutusStatus === 'Processed';
-  const previewIssueCount = visiblePreviewBlocks.length;
+  const previewBlockingCount = previewBlockingBlocks.length;
+  const previewWarningCount = previewWarningBlocks.length;
+  const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
 
   const adsAllocationEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
 
@@ -1518,18 +1571,22 @@ export default function SettlementDetailPage() {
                               ? previewIssueCount === 0
                                 ? 'success'
                                 : 'secondary'
-                              : previewIssueCount === 0
-                                ? 'success'
-                                : 'destructive'
+                              : previewBlockingCount > 0
+                                ? 'destructive'
+                                : previewWarningCount > 0
+                                  ? 'secondary'
+                                  : 'success'
                           }
                         >
                           {isProcessedPreview
                             ? previewIssueCount === 0
                               ? 'Processed'
                               : 'Processed (Needs Review)'
-                            : previewIssueCount === 0
-                              ? 'Ready to Process'
-                              : 'Blocked'}
+                            : previewBlockingCount > 0
+                              ? 'Blocked'
+                              : previewWarningCount > 0
+                                ? 'Ready (Warnings)'
+                                : 'Ready to Process'}
                         </Badge>
                       </div>
 
@@ -1562,28 +1619,71 @@ export default function SettlementDetailPage() {
                       </div>
 
                       {/* Blocks */}
-                      {previewIssueCount > 0 && (
+                      {isProcessedPreview && previewIssueCount > 0 && (
                         <div
                           className={cn(
                             'rounded-lg p-4',
-                            isProcessedPreview
-                              ? 'border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
-                              : 'border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20',
+                            'border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
                           )}
                         >
                           <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className={cn('h-4 w-4', isProcessedPreview ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')} />
-                            <span className={cn('text-sm font-semibold', isProcessedPreview ? 'text-amber-700 dark:text-amber-300' : 'text-red-700 dark:text-red-300')}>
-                              {previewIssueCount} {isProcessedPreview ? 'review' : 'blocking'} issue{previewIssueCount === 1 ? '' : 's'}
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                              {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
                             </span>
                           </div>
                           <ul
-                            className={cn(
-                              'text-sm space-y-1',
-                              isProcessedPreview ? 'text-amber-700 dark:text-amber-200' : 'text-red-700 dark:text-red-200',
-                            )}
+                            className="text-sm space-y-1 text-amber-700 dark:text-amber-200"
                           >
                             {visiblePreviewBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isProcessedPreview && previewBlockingCount > 0 && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">
+                              {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+                            {previewBlockingBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
+                            </span>
+                          </div>
+                          <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
+                            {previewWarningBlocks.map((b, idx) => (
                               <li key={idx}>
                                 <span className="font-mono text-xs">{b.code}</span>: {b.message}
                                 {b.details && 'error' in b.details && (

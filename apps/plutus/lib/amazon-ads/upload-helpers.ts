@@ -35,17 +35,19 @@ function xlsxToCsv(bytes: Uint8Array): string {
     throw new Error('XLSX first sheet is missing');
   }
 
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, {
+  const rows = XLSX.utils.sheet_to_json(firstSheet, {
     header: 1,
     raw: true,
     defval: '',
-  });
+  }) as unknown[][];
 
   if (rows.length === 0) {
     throw new Error('XLSX has no rows');
   }
 
-  return rows.map((row) => row.map((cell) => csvEscapeCell(cell)).join(',')).join('\n');
+  return rows
+    .map((row: unknown[]) => row.map((cell: unknown) => csvEscapeCell(cell)).join(','))
+    .join('\n');
 }
 
 export function requireIsoDate(value: unknown, label: string): string {
@@ -127,4 +129,3 @@ export function parseAdsCsvForMarketplace(csvText: string, marketplace: AdsMarke
     allowedCountries: allowedCountriesForMarketplace(marketplace),
   });
 }
-
