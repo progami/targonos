@@ -16,6 +16,10 @@ import {
   extractTrackedLinesFromBill,
 } from '../lib/plutus/bills/classification';
 import {
+  buildBillMappingPullSyncUpdates,
+  extractPoNumberFromBill,
+} from '../lib/plutus/bills/pull-sync';
+import {
   allocateManufacturingSplitAmounts,
   normalizeManufacturingSplits,
 } from '../lib/plutus/bills/split';
@@ -557,6 +561,82 @@ test('tracked line extraction includes configured and inventory accounts', () =>
   assert.equal(tracked.length, 2);
   assert.equal(tracked[0]?.component, 'manufacturing');
   assert.equal(tracked[1]?.component, 'warehousing3pl');
+});
+
+test('extractPoNumberFromBill prefers PO custom field over memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'PO: OLD-PO',
+    CustomField: [
+      { Name: 'PO Number', StringValue: 'NEW-PO' },
+      { Name: 'Ignored', StringValue: 'X' },
+    ],
+  });
+
+  assert.equal(po, 'NEW-PO');
+});
+
+test('extractPoNumberFromBill reads PO from memo when no custom field exists', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'Some note\nPO: US-PO-123\nMore text',
+  });
+
+  assert.equal(po, 'US-PO-123');
+});
+
+test('buildBillMappingPullSyncUpdates skips unsynced mappings', () => {
+  const updates = buildBillMappingPullSyncUpdates(
+    [
+      {
+        id: 'mapping-1',
+        qboBillId: 'bill-1',
+        poNumber: 'PO-OLD',
+        billDate: '2026-01-01',
+        vendorName: 'Vendor A',
+        totalAmount: 100,
+        syncedAt: null,
+      },
+    ],
+    new Map([
+      ['bill-1', { Id: 'bill-1', TxnDate: '2026-01-02', TotalAmt: 100, SyncToken: '0', CustomField: [{ Name: 'PO Number', StringValue: 'PO-NEW' }] }],
+    ] as const),
+  );
+
+  assert.equal(updates.length, 0);
+});
+
+test('buildBillMappingPullSyncUpdates detects PO and metadata drift', () => {
+  const updates = buildBillMappingPullSyncUpdates(
+    [
+      {
+        id: 'mapping-1',
+        qboBillId: 'bill-1',
+        poNumber: 'PO-OLD',
+        billDate: '2026-01-01',
+        vendorName: 'Vendor A',
+        totalAmount: 100,
+        syncedAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+    ],
+    new Map([
+      [
+        'bill-1',
+        {
+          Id: 'bill-1',
+          TxnDate: '2026-01-02',
+          TotalAmt: 101,
+          SyncToken: '0',
+          VendorRef: { value: 'v-1', name: 'Vendor B' },
+          PrivateNote: 'PO: PO-NEW',
+        },
+      ],
+    ] as const),
+  );
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0]?.poNumber, 'PO-NEW');
+  assert.equal(updates[0]?.billDate, '2026-01-02');
+  assert.equal(updates[0]?.vendorName, 'Vendor B');
+  assert.equal(updates[0]?.totalAmount, 101);
 });
 
 test('cashflow week bucketing ignores events earlier in the as-of week', () => {
