@@ -20,6 +20,20 @@ export type ProcessingBlock =
       details?: Record<string, string | number>;
     };
 
+const NON_BLOCKING_PROCESSING_CODES = new Set([
+  'PNL_ALLOCATION_ERROR',
+  'LATE_COST_ON_HAND_ZERO',
+  'MISSING_COST_BASIS',
+]);
+
+export function isBlockingProcessingCode(code: string): boolean {
+  return !NON_BLOCKING_PROCESSING_CODES.has(code);
+}
+
+export function isBlockingProcessingBlock(block: { code: string }): boolean {
+  return isBlockingProcessingCode(block.code);
+}
+
 export type ProcessingSale = {
   orderId: string;
   sku: string;
