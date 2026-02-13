@@ -142,15 +142,6 @@ const BASE_APPS: AppBase[] = [
     devPath: '/hermes',
     devUrl: 'http://localhost:3014',
   },
-  {
-    id: 'argus',
-    name: 'Argus',
-    description: 'Listings watcher (ASIN + search snapshots, screenshots, diffs).',
-    url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
-    category: 'Account / Listing',
-    devPath: '/argus',
-    devUrl: 'http://localhost:3016',
-  },
 ]
 
 let manifestCache: AppManifest | null | undefined
