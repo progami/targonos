@@ -583,6 +583,14 @@ test('extractPoNumberFromBill reads PO from memo when no custom field exists', (
   assert.equal(po, 'US-PO-123');
 });
 
+test('extractPoNumberFromBill preserves direct PO code in memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'PO-19-PDS',
+  });
+
+  assert.equal(po, 'PO-19-PDS');
+});
+
 test('buildBillMappingPullSyncUpdates skips unsynced mappings', () => {
   const updates = buildBillMappingPullSyncUpdates(
     [
