@@ -12,6 +12,10 @@ import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
 import { buildAccountComponentMap, extractTrackedLinesFromBill } from '@/lib/plutus/bills/classification';
 import {
+  buildBillMappingPullSyncUpdates,
+  type BillMappingPullSyncCandidate,
+} from '@/lib/plutus/bills/pull-sync';
+import {
   allocateManufacturingSplitAmounts,
   buildManufacturingDescription,
   isPositiveInteger,
@@ -72,6 +76,40 @@ export async function GET(req: NextRequest) {
       include: { lines: true },
     });
     const mappingsByBillId = new Map(mappings.map((m) => [m.qboBillId, m]));
+
+    const billsById = new Map(billsResult.bills.map((bill) => [bill.Id, bill]));
+    const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+      mappings as BillMappingPullSyncCandidate[],
+      billsById,
+    );
+
+    if (pullSyncUpdates.length > 0) {
+      const syncedAt = new Date();
+      await db.$transaction(
+        pullSyncUpdates.map((update) =>
+          db.billMapping.update({
+            where: { id: update.id },
+            data: {
+              poNumber: update.poNumber,
+              billDate: update.billDate,
+              vendorName: update.vendorName,
+              totalAmount: update.totalAmount,
+              syncedAt,
+            },
+          }),
+        ),
+      );
+
+      for (const update of pullSyncUpdates) {
+        const existing = mappingsByBillId.get(update.qboBillId);
+        if (!existing) continue;
+        existing.poNumber = update.poNumber;
+        existing.billDate = update.billDate;
+        existing.vendorName = update.vendorName;
+        existing.totalAmount = update.totalAmount;
+        existing.syncedAt = syncedAt;
+      }
+    }
 
     // Build response
     const bills = billsResult.bills.map((bill) => {

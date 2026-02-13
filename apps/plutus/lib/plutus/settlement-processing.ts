@@ -28,6 +28,10 @@ import {
 } from './settlement-validation';
 
 import { buildCogsJournalLines, buildPnlJournalLines } from './journal-builder';
+import {
+  buildBillMappingPullSyncUpdates,
+  type BillMappingPullSyncCandidate,
+} from './bills/pull-sync';
 
 import type {
   ProcessingBlock,
@@ -390,21 +394,8 @@ export async function computeSettlementPreview(input: {
 
   const mappedBillIds = new Set(plutusMappings.map((m) => m.qboBillId));
 
-  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
-  if (plutusMappings.length > 0) {
-    try {
-      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_PARSE_ERROR',
-        message: 'Failed to build inventory events from bill mappings',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
-    }
-  }
-
   // QBO Bills -> Inventory events (only inventory-account lines are used)
+  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let parsedBillsFromQbo: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let allBills: QboBill[] = [];
 
@@ -432,6 +423,56 @@ export async function computeSettlementPreview(input: {
       details: { error: error instanceof Error ? error.message : String(error) },
     });
     allBills = [];
+  }
+
+  if (plutusMappings.length > 0 && allBills.length > 0) {
+    const billsById = new Map(allBills.map((bill) => [bill.Id, bill]));
+    const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+      plutusMappings as BillMappingPullSyncCandidate[],
+      billsById,
+    );
+
+    if (pullSyncUpdates.length > 0) {
+      const syncedAt = new Date();
+      await db.$transaction(
+        pullSyncUpdates.map((update) =>
+          db.billMapping.update({
+            where: { id: update.id },
+            data: {
+              poNumber: update.poNumber,
+              billDate: update.billDate,
+              vendorName: update.vendorName,
+              totalAmount: update.totalAmount,
+              syncedAt,
+            },
+          }),
+        ),
+      );
+
+      const mappingByBillId = new Map(plutusMappings.map((mapping) => [mapping.qboBillId, mapping]));
+      for (const update of pullSyncUpdates) {
+        const existing = mappingByBillId.get(update.qboBillId);
+        if (!existing) continue;
+        existing.poNumber = update.poNumber;
+        existing.billDate = update.billDate;
+        existing.vendorName = update.vendorName;
+        existing.totalAmount = update.totalAmount;
+        existing.syncedAt = syncedAt;
+      }
+    }
+  }
+
+  if (plutusMappings.length > 0) {
+    try {
+      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
+    } catch (error) {
+      blocks.push({
+        code: 'BILLS_PARSE_ERROR',
+        message: 'Failed to build inventory events from bill mappings',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
+    }
   }
 
   try {
