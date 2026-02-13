@@ -37,6 +37,7 @@ import type {
   SettlementProcessingPreview,
   SettlementProcessingResult,
 } from './settlement-types';
+import { isBlockingProcessingBlock } from './settlement-types';
 
 // Re-export all public types so existing imports from this file continue to work
 export type {
@@ -674,6 +675,19 @@ export async function computeSettlementPreview(input: {
         if (!missingCostBasisSkus.has(sale.sku)) {
           throw new Error(`Missing computed cost basis but no ledger block emitted: ${sale.orderId} ${sale.sku}`);
         }
+        computedSales.push({
+          orderId: sale.orderId,
+          sku: sale.sku,
+          date: sale.date,
+          quantity: sale.units,
+          principalCents: sale.principalCents,
+          costByComponentCents: {
+            manufacturing: 0,
+            freight: 0,
+            duty: 0,
+            mfgAccessories: 0,
+          },
+        });
         continue;
       }
       computedSales.push({
@@ -747,7 +761,8 @@ export async function processSettlement(input: {
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
 
-  if (computed.preview.blocks.length > 0) {
+  const blockingBlocks = computed.preview.blocks.filter((block) => isBlockingProcessingBlock(block));
+  if (blockingBlocks.length > 0) {
     return { result: { ok: false, preview: computed.preview }, updatedConnection: computed.updatedConnection };
   }
 
