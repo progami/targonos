@@ -104,12 +104,16 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-const PARAM_DISPLAY_MAP: Record<string, { label: string; isOcean: boolean }> = {
-  'Production Stage Default (weeks)': { label: 'Lead Time', isOcean: false },
-  'Ocean Stage Default (weeks)': { label: 'Ocean Stage', isOcean: true },
-  'Amazon Payout Delay (weeks)': { label: 'Payout Delay', isOcean: false },
-  'Stockout Warning (weeks)': { label: 'Stockout Warn', isOcean: false },
-};
+const KEY_PARAM_ENTRIES: Array<{ match: string; label: string; suffix: string; isAccent: boolean }> = [
+  { match: 'production stage default', label: 'Lead Time', suffix: ' weeks', isAccent: false },
+  { match: 'source stage default', label: 'Source Stage', suffix: ' weeks', isAccent: false },
+  { match: 'ocean stage default', label: 'Ocean Stage', suffix: ' weeks', isAccent: true },
+  { match: 'final stage default', label: 'Final Stage', suffix: ' weeks', isAccent: false },
+  { match: 'amazon payout delay', label: 'Payout Delay', suffix: ' weeks', isAccent: false },
+  { match: 'stockout warning', label: 'Stockout Warn', suffix: ' weeks', isAccent: false },
+  { match: 'starting cash', label: 'Starting Cash', suffix: '', isAccent: false },
+  { match: 'weekly fixed costs', label: 'Fixed Costs', suffix: '', isAccent: false },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -188,13 +192,18 @@ export function StrategyGroupCard({
     if (!displayStrategy) return [];
     const raw = keyParametersByStrategyId[displayStrategy.id];
     if (!raw) return [];
-    return raw
-      .map((param) => {
-        const mapping = PARAM_DISPLAY_MAP[param.label];
-        if (!mapping) return null;
-        return { label: mapping.label, value: param.value, isOcean: mapping.isOcean };
-      })
-      .filter((item): item is { label: string; value: string; isOcean: boolean } => item != null);
+    const result: Array<{ label: string; value: string; isAccent: boolean }> = [];
+    for (const entry of KEY_PARAM_ENTRIES) {
+      const found = raw.find((p) => p.label.toLowerCase().includes(entry.match));
+      if (found) {
+        result.push({
+          label: entry.label,
+          value: found.value + entry.suffix,
+          isAccent: entry.isAccent,
+        });
+      }
+    }
+    return result;
   }, [displayStrategy, keyParametersByStrategyId]);
 
   /* ---- Assignee loading ---- */
@@ -460,7 +469,7 @@ export function StrategyGroupCard({
 
   const scenarioDialogTitle = scenarioDialogMode === 'edit' ? 'Edit scenario' : 'New scenario';
 
-  const isActiveInGroup = (strategyId: string) => strategyId === selectedStrategyId;
+  const isActiveInGroup = (strategyId: string) => strategyId === (displayStrategy?.id ?? null);
 
   return (
     <>
@@ -588,7 +597,7 @@ export function StrategyGroupCard({
                   <p
                     className={cn(
                       'mt-0.5 font-mono text-sm font-semibold',
-                      param.isOcean
+                      param.isAccent
                         ? 'text-cyan-600 dark:text-[#00C2B9]'
                         : 'text-slate-900 dark:text-white',
                     )}
