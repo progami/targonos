@@ -19,6 +19,20 @@ type Strategy = {
   description: string | null;
   region: 'US' | 'UK';
   isDefault: boolean;
+  isPrimary: boolean;
+  strategyGroupId: string;
+  strategyGroup: {
+    id: string;
+    code: string;
+    name: string;
+    region: 'US' | 'UK';
+    createdById: string | null;
+    createdByEmail: string | null;
+    assigneeId: string | null;
+    assigneeEmail: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   createdById?: string | null;
   createdByEmail?: string | null;
   assigneeId?: string | null;
