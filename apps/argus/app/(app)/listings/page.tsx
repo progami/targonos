@@ -1,14 +1,12 @@
 import Link from 'next/link'
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
-
 export default function ListingsPage() {
   return (
     <div className="max-w-4xl mx-auto p-8">
       <h1 className="text-2xl font-bold mb-6">Listings</h1>
       <div className="border rounded-lg p-6 hover:bg-muted/50 transition-colors">
         <Link
-          href={`${basePath}/listings/B09HXC3NL8`}
+          href="/listings/B09HXC3NL8"
           className="block"
         >
           <div className="flex items-start gap-4">
