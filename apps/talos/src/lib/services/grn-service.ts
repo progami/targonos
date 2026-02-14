@@ -119,10 +119,11 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
     }
 
     if (
+      purchaseOrder.status === PurchaseOrderStatus.REJECTED ||
       purchaseOrder.status === PurchaseOrderStatus.CANCELLED ||
       purchaseOrder.status === PurchaseOrderStatus.CLOSED
     ) {
-      throw new ConflictError('Cannot record a note against a closed or cancelled purchase order')
+      throw new ConflictError('Cannot record a note against a closed purchase order')
     }
 
     if (!purchaseOrder.warehouseCode || !purchaseOrder.warehouseName) {
@@ -281,8 +282,12 @@ export async function postGrn(id: string, _user: UserContext) {
     if (!po) {
       throw new NotFoundError('Purchase order missing for GRN')
     }
-    if (po.status === PurchaseOrderStatus.CANCELLED || po.status === PurchaseOrderStatus.CLOSED) {
-      throw new ConflictError('Cannot post a note for a closed or cancelled purchase order')
+    if (
+      po.status === PurchaseOrderStatus.REJECTED ||
+      po.status === PurchaseOrderStatus.CANCELLED ||
+      po.status === PurchaseOrderStatus.CLOSED
+    ) {
+      throw new ConflictError('Cannot post a note for a closed purchase order')
     }
 
     const warehouse = await tx.warehouse.findFirst({

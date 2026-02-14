@@ -36,6 +36,14 @@ export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetP
   }
 }>
 
+function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
+  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
+  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
+    return PurchaseOrderStatus.CLOSED
+  }
+  return status
+}
+
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.RFQ,
   PurchaseOrderStatus.ISSUED,
@@ -43,6 +51,7 @@ const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.OCEAN,
   PurchaseOrderStatus.WAREHOUSE,
   PurchaseOrderStatus.SHIPPED,
+  PurchaseOrderStatus.CLOSED,
   PurchaseOrderStatus.REJECTED,
   PurchaseOrderStatus.CANCELLED,
 ]
@@ -56,6 +65,7 @@ export function serializePurchaseOrder(
 ) {
   return {
     ...order,
+    status: normalizeWorkflowStatus(order.status),
     expectedDate: order.expectedDate?.toISOString() ?? null,
     postedAt: order.postedAt?.toISOString() ?? null,
     voidedFromStatus: metadata?.voidedFromStatus ?? null,
@@ -187,6 +197,10 @@ export async function updatePurchaseOrderDetails(
 
   if (order.isLegacy) {
     throw new ConflictError('Cannot edit legacy purchase orders')
+  }
+
+  if (normalizeWorkflowStatus(order.status) === PurchaseOrderStatus.CLOSED) {
+    throw new ConflictError('Cannot edit closed purchase orders')
   }
 
   let expectedDate: Date | null | undefined = order.expectedDate

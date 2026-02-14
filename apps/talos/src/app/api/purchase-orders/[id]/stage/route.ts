@@ -52,15 +52,22 @@ const OptionalInt = z.preprocess((value) => {
   return cleaned
 }, z.number().int().optional())
 
-	 const StageTransitionSchema = z.object({
-		  targetStatus: z.enum([
-		    'ISSUED',
-		    'MANUFACTURING',
-		    'OCEAN',
-		    'WAREHOUSE',
-		    'REJECTED',
-		    'CANCELLED',
-		  ] as const),
+function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
+  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
+  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
+    return PurchaseOrderStatus.CLOSED
+  }
+  return status
+}
+
+const StageTransitionSchema = z.object({
+  targetStatus: z.enum([
+    'ISSUED',
+    'MANUFACTURING',
+    'OCEAN',
+    'WAREHOUSE',
+    'CLOSED',
+  ] as const),
   stageData: z
     .object({
       // ===========================================
@@ -247,12 +254,10 @@ export const GET = withAuthAndParams(
       return crossTenantGuard
     }
 
-    const validNextStages = getValidNextStages(
-      order.status as PurchaseOrderStatus
-    )
+    const validNextStages = getValidNextStages(order.status as PurchaseOrderStatus)
 
     return ApiResponses.success({
-      currentStatus: order.status === PurchaseOrderStatus.RFQ ? PurchaseOrderStatus.ISSUED : order.status,
+      currentStatus: normalizeWorkflowStatus(order.status as PurchaseOrderStatus),
       validNextStages,
     })
   }
