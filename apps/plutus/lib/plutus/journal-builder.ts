@@ -8,7 +8,7 @@ export function buildCogsJournalLines(
   brandNames: string[],
   mapping: Record<string, string | undefined>,
   accounts: QboAccount[],
-  invoiceId: string,
+  _invoiceId: string,
   blocks: ProcessingBlock[],
 ): JournalEntryLinePreview[] {
   const cogsLines: JournalEntryLinePreview[] = [];
@@ -85,32 +85,40 @@ export function buildCogsJournalLines(
         cogsLines.push({
           accountId: cogsAccount.id,
           accountName: cogsAccount.name,
+          accountFullyQualifiedName: cogsAccount.fullyQualifiedName,
+          accountNumber: cogsAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invoiceId} ${component} COGS`,
+          description: `${cogsLabel} COGS`,
         });
         cogsLines.push({
           accountId: invAccount.id,
           accountName: invAccount.name,
+          accountFullyQualifiedName: invAccount.fullyQualifiedName,
+          accountNumber: invAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${invoiceId} ${component} inventory`,
+          description: `${invLabel} inventory`,
         });
       } else {
         // Return: Debit Inventory, Credit COGS
         cogsLines.push({
           accountId: invAccount.id,
           accountName: invAccount.name,
+          accountFullyQualifiedName: invAccount.fullyQualifiedName,
+          accountNumber: invAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invoiceId} ${component} inventory (return)`,
+          description: `${invLabel} inventory (return)`,
         });
         cogsLines.push({
           accountId: cogsAccount.id,
           accountName: cogsAccount.name,
+          accountFullyQualifiedName: cogsAccount.fullyQualifiedName,
+          accountNumber: cogsAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${invoiceId} ${component} COGS (return)`,
+          description: `${cogsLabel} COGS (return)`,
         });
       }
     }
@@ -123,11 +131,12 @@ export function buildPnlJournalLines(
   pnlAllocationsByBucket: Record<string, Record<string, number>>,
   mapping: Record<string, string | undefined>,
   accounts: QboAccount[],
-  invoiceId: string,
+  _invoiceId: string,
   blocks: ProcessingBlock[],
   skuBreakdownByBucketBrand?: Record<string, Record<string, Record<string, number>>>,
 ): JournalEntryLinePreview[] {
   const pnlLines: JournalEntryLinePreview[] = [];
+  const accountsById = new Map(accounts.map((account) => [account.Id, account]));
 
   function formatCents(cents: number): string {
     const sign = cents < 0 ? '-' : '';
@@ -220,13 +229,17 @@ export function buildPnlJournalLines(
       const bucketBreakdown = skuBreakdownByBucketBrand ? skuBreakdownByBucketBrand[bucketKey] : undefined;
       const brandSkuBreakdown = bucketBreakdown ? bucketBreakdown[brand] : undefined;
       const skuSuffix = buildSkuBreakdownSuffix(brandSkuBreakdown);
-      const lineDescription = `${invoiceId} ${label} (${brand})${skuSuffix}`;
+      const lineDescription = `${label} (${brand})${skuSuffix}`;
+      const parentAccount = accountsById.get(parentAccountId);
+      const parentAccountName = parentAccount ? parentAccount.Name : label;
 
       if (cents > 0) {
         // Move positive amount from parent -> brand (debit parent, credit brand)
         pnlLines.push({
           accountId: parentAccountId,
-          accountName: label,
+          accountName: parentAccountName,
+          accountFullyQualifiedName: parentAccount?.FullyQualifiedName,
+          accountNumber: parentAccount?.AcctNum,
           postingType: 'Debit',
           amountCents: absCents,
           description: lineDescription,
@@ -234,6 +247,8 @@ export function buildPnlJournalLines(
         pnlLines.push({
           accountId: brandAccount.id,
           accountName: brandAccount.name,
+          accountFullyQualifiedName: brandAccount.fullyQualifiedName,
+          accountNumber: brandAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
           description: lineDescription,
@@ -243,13 +258,17 @@ export function buildPnlJournalLines(
         pnlLines.push({
           accountId: brandAccount.id,
           accountName: brandAccount.name,
+          accountFullyQualifiedName: brandAccount.fullyQualifiedName,
+          accountNumber: brandAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
           description: lineDescription,
         });
         pnlLines.push({
           accountId: parentAccountId,
-          accountName: label,
+          accountName: parentAccountName,
+          accountFullyQualifiedName: parentAccount?.FullyQualifiedName,
+          accountNumber: parentAccount?.AcctNum,
           postingType: 'Credit',
           amountCents: absCents,
           description: lineDescription,

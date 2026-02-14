@@ -63,6 +63,8 @@ export type KnownLedgerEvent = {
 export type JournalEntryLinePreview = {
   accountId: string;
   accountName: string;
+  accountFullyQualifiedName?: string;
+  accountNumber?: string;
   postingType: 'Debit' | 'Credit';
   amountCents: number;
   description: string;

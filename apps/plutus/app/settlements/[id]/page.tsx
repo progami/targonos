@@ -110,6 +110,8 @@ type AuditDataResponse = {
 type JeLinePreview = {
   accountId: string;
   accountName: string;
+  accountFullyQualifiedName?: string;
+  accountNumber?: string;
   postingType: 'Debit' | 'Credit';
   amountCents: number;
   description: string;
@@ -1757,11 +1759,6 @@ export default function SettlementDetailPage() {
 
                   {previewData && previewData.cogsJournalEntry && (
                     <div className="space-y-6">
-                      {settlement?.plutusStatus === 'Processed' && (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
-                          Showing read-only Plutus settlement preview for the processed invoice. Use COGS JE and P&amp;L JE buttons above.
-                        </div>
-                      )}
                       {/* Header */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -1954,7 +1951,19 @@ export default function SettlementDetailPage() {
                                 {previewData.cogsJournalEntry.lines.map((line, idx) => (
                                   <TableRow key={idx}>
                                     <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      {line.accountName}
+                                      <div className="flex flex-col">
+                                        <span>{line.accountName}</span>
+                                        {line.accountNumber ? (
+                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">#{line.accountNumber}</span>
+                                        ) : (
+                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">ID {line.accountId}</span>
+                                        )}
+                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                                            {line.accountFullyQualifiedName}
+                                          </span>
+                                        )}
+                                      </div>
                                     </TableCell>
                                     <TableCell className="text-sm text-slate-500 dark:text-slate-400">
                                       {line.description}
@@ -1996,7 +2005,19 @@ export default function SettlementDetailPage() {
                                 {previewData.pnlJournalEntry.lines.map((line, idx) => (
                                   <TableRow key={idx}>
                                     <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      {line.accountName}
+                                      <div className="flex flex-col">
+                                        <span>{line.accountName}</span>
+                                        {line.accountNumber ? (
+                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">#{line.accountNumber}</span>
+                                        ) : (
+                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">ID {line.accountId}</span>
+                                        )}
+                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                                            {line.accountFullyQualifiedName}
+                                          </span>
+                                        )}
+                                      </div>
                                     </TableCell>
                                     <TableCell className="text-sm text-slate-500 dark:text-slate-400">
                                       {line.description}
