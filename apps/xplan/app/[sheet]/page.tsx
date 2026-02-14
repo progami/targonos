@@ -666,8 +666,18 @@ async function getProductSetupView(strategyId: string) {
         findMany: (args?: unknown) => Promise<BusinessParameter[]>;
       }
     | undefined;
+  const leadStageDelegate = prismaAny.leadStageTemplate as
+    | {
+        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
+      }
+    | undefined;
+  const leadOverrideDelegate = prismaAny.leadTimeOverride as
+    | {
+        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
+      }
+    | undefined;
 
-  const [products, businessParameters] = await Promise.all([
+  const [products, businessParameters, leadStages, leadOverrides] = await Promise.all([
     safeFindMany<Product[]>(
       productDelegate,
       { where: { strategyId }, orderBy: { name: 'asc' } },
@@ -679,6 +689,18 @@ async function getProductSetupView(strategyId: string) {
       { where: { strategyId }, orderBy: { label: 'asc' } },
       [],
       'businessParameter',
+    ),
+    safeFindMany<LeadStageTemplate[]>(
+      leadStageDelegate,
+      { orderBy: { sequence: 'asc' } },
+      [],
+      'leadStageTemplate',
+    ),
+    safeFindMany<LeadTimeOverride[]>(
+      leadOverrideDelegate,
+      { where: { product: { strategyId } } },
+      [],
+      'leadTimeOverride',
     ),
   ]);
 
@@ -743,11 +765,37 @@ async function getProductSetupView(strategyId: string) {
       name: product.name,
     }));
 
+  const leadStageTemplateViews = mapLeadStageTemplates(leadStages).map((stage) => ({
+    id: stage.id,
+    label: stage.label,
+    defaultWeeks: stage.defaultWeeks,
+    sequence: stage.sequence,
+  }));
+
+  const leadProfiles = buildLeadTimeProfiles(
+    mapLeadStageTemplates(leadStages),
+    mapLeadOverrides(leadOverrides),
+    productRows.map((p) => p.id),
+  );
+
+  const leadTimeProfiles: Record<string, { productionWeeks: number; sourceWeeks: number; oceanWeeks: number; finalWeeks: number }> = {};
+  for (const [productId, profile] of leadProfiles) {
+    leadTimeProfiles[productId] = profile;
+  }
+
+  const leadTimeOverrideIds = leadOverrides.map((o) => ({
+    productId: o.productId,
+    stageTemplateId: o.stageTemplateId,
+  }));
+
   return {
     products: productRows,
     operationsParameters,
     salesParameters,
     financeParameters,
+    leadStageTemplates: leadStageTemplateViews,
+    leadTimeProfiles,
+    leadTimeOverrideIds,
   };
 }
 
@@ -2460,7 +2508,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
 
       const productSetupView = strategyId
         ? await getProductSetupView(strategyId)
-        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [] };
+        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] };
 
       tabularContent = (
         <SetupWorkspace
@@ -2471,6 +2519,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           operationsParameters={productSetupView.operationsParameters}
           salesParameters={productSetupView.salesParameters}
           financeParameters={productSetupView.financeParameters}
+          leadStageTemplates={productSetupView.leadStageTemplates}
+          leadTimeProfiles={productSetupView.leadTimeProfiles}
+          leadTimeOverrideIds={productSetupView.leadTimeOverrideIds}
         />
       );
       visualContent = null;
