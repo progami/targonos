@@ -112,12 +112,12 @@ export function findRequiredSubAccountId(
   accounts: QboAccount[],
   parentAccountId: string,
   subAccountName: string,
-): { id: string; name: string } {
+): { id: string; name: string; fullyQualifiedName?: string; acctNum?: string } {
   const account = accounts.find((a) => a.ParentRef?.value === parentAccountId && a.Name === subAccountName);
   if (!account) {
     throw new Error(`Missing brand sub-account in QBO: ${subAccountName}`);
   }
-  return { id: account.Id, name: account.Name };
+  return { id: account.Id, name: account.Name, fullyQualifiedName: account.FullyQualifiedName, acctNum: account.AcctNum };
 }
 
 export function matchRefundsToSales(
