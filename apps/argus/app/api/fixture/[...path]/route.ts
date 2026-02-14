@@ -33,11 +33,14 @@ export async function GET(
     return new NextResponse('Forbidden', { status: 403 })
   }
 
-  const data = await readFile(filePath)
   const ext = extname(segments[segments.length - 1]).toLowerCase()
   const contentType = MIME_TYPES[ext] ?? 'application/octet-stream'
+  const isText = ['.html', '.css', '.js', '.json', '.svg'].includes(ext)
+  const body = isText
+    ? await readFile(filePath, 'utf-8')
+    : (await readFile(filePath)).buffer as ArrayBuffer
 
-  return new NextResponse(data, {
+  return new NextResponse(body, {
     headers: {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=31536000, immutable',
