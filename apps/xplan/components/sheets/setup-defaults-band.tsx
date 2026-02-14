@@ -99,6 +99,7 @@ export interface SetupDefaultsBandProps {
   operationsParameters: BusinessParameter[];
   salesParameters: BusinessParameter[];
   financeParameters: BusinessParameter[];
+  visibleGroup?: 'ops' | 'sales' | 'finance';
   className?: string;
 }
 
@@ -107,6 +108,7 @@ export function SetupDefaultsBand({
   operationsParameters,
   salesParameters,
   financeParameters,
+  visibleGroup,
   className,
 }: SetupDefaultsBandProps) {
   const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -341,16 +343,21 @@ export function SetupDefaultsBand({
   const salesItems = items.filter((item) => item.group === 'sales');
   const financeItems = items.filter((item) => item.group === 'finance');
 
+  const showOps = !visibleGroup || visibleGroup === 'ops';
+  const showSalesInline = !visibleGroup || visibleGroup === 'ops';
+  const showSalesStandalone = visibleGroup === 'sales';
+  const showFinance = !visibleGroup || visibleGroup === 'finance';
+
   return (
     <section className={cn('space-y-3', className)}>
       <h3 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
-        Strategy Defaults
+        {visibleGroup === 'ops' ? 'Operations Defaults' : visibleGroup === 'sales' ? 'Sales Defaults' : visibleGroup === 'finance' ? 'Financial Defaults' : 'Strategy Defaults'}
       </h3>
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
         <div className="divide-y">
           {/* Operations row */}
-          <div className="px-4 py-3">
+          {showOps && <div className="px-4 py-3">
             <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Lead Time Defaults
             </div>
@@ -398,6 +405,57 @@ export function SetupDefaultsBand({
                 );
               })}
               {/* Stockout inline with ops */}
+              {showSalesInline && salesItems.map((item) => {
+                const key = item.id || item.label;
+                const isError = item.status === 'error' || item.status === 'blocked';
+                const isDirty = item.status === 'dirty';
+                const isSaving = item.status === 'saving';
+
+                return (
+                  <div key={key} className="space-y-1">
+                    <label htmlFor={`def-${key}`} className="text-2xs text-muted-foreground truncate block">
+                      {item.shortLabel}
+                      {item.suffix ? <span className="ml-0.5 opacity-60">({item.suffix})</span> : null}
+                    </label>
+                    <div className="relative">
+                      <Input
+                        id={`def-${key}`}
+                        value={item.value}
+                        onChange={(event) => handleValueChange(key, event.target.value)}
+                        onBlur={handleBlur}
+                        inputMode="decimal"
+                        aria-invalid={isError}
+                        disabled={isSaving}
+                        className={clsx(
+                          'h-7 w-full text-right text-sm font-medium tabular-nums',
+                          isError
+                            ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-900/20 dark:text-rose-100'
+                            : isDirty
+                              ? 'border-amber-300 bg-amber-50 text-slate-900 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-slate-100'
+                              : 'bg-background dark:bg-background',
+                        )}
+                      />
+                      {isSaving ? (
+                        <div className="absolute inset-y-0 right-2 flex items-center">
+                          <svg className="h-3 w-3 animate-spin text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>}
+
+          {/* Sales standalone row */}
+          {showSalesStandalone && <div className="px-4 py-3">
+            <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Sales Defaults
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {salesItems.map((item) => {
                 const key = item.id || item.label;
                 const isError = item.status === 'error' || item.status === 'blocked';
@@ -441,10 +499,10 @@ export function SetupDefaultsBand({
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Finance row */}
-          <div className="px-4 py-3">
+          {showFinance && <div className="px-4 py-3">
             <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Financial Defaults
             </div>
@@ -492,7 +550,7 @@ export function SetupDefaultsBand({
                 );
               })}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
     </section>
