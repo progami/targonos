@@ -258,6 +258,7 @@ export function SetupWorkspace({
           operationsParameters={operationsParameters}
           salesParameters={salesParameters}
           financeParameters={financeParameters}
+          visibleGroup="ops"
         />
       )}
 
@@ -267,6 +268,7 @@ export function SetupWorkspace({
           operationsParameters={operationsParameters}
           salesParameters={salesParameters}
           financeParameters={financeParameters}
+          visibleGroup="sales"
         />
       )}
 
@@ -276,6 +278,7 @@ export function SetupWorkspace({
           operationsParameters={operationsParameters}
           salesParameters={salesParameters}
           financeParameters={financeParameters}
+          visibleGroup="finance"
         />
       )}
     </div>
