@@ -252,6 +252,19 @@ function formatBlockDetails(details: Record<string, string | number> | undefined
   return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
 }
 
+function getPreviewBlockMessage(block: PreviewBlock): string {
+  if (block.code === 'PNL_ALLOCATION_ERROR') {
+    return 'No sales units found in this invoice, so SKU-less fees cannot be auto-allocated.';
+  }
+  return block.message;
+}
+
+function showPreviewBlockErrorDetails(block: PreviewBlock): boolean {
+  if (!(block.details && 'error' in block.details)) return false;
+  if (block.code === 'PNL_ALLOCATION_ERROR') return false;
+  return true;
+}
+
 function isIdempotencyBlock(block: PreviewBlock): boolean {
   if (block.code === 'ALREADY_PROCESSED') return true;
   if (block.code === 'ORDER_ALREADY_PROCESSED') return true;
@@ -734,13 +747,13 @@ function ProcessSettlementDialog({
 		                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
 		                      {previewBlockingBlocks.map((b, idx) => (
 		                        <li key={idx}>
-		                          <span className="font-mono">{b.code}</span>: {b.message}
-		                          {b.details && 'error' in b.details && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          <span className="font-mono">{b.code}</span>: {getPreviewBlockMessage(b)}
+		                          {showPreviewBlockErrorDetails(b) && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
 		                          )}
-	                          {formatBlockDetails(b.details) && (
-	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-	                          )}
+		                          {formatBlockDetails(b.details) && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+		                          )}
 	                        </li>
 	                      ))}
 		                    </ul>
@@ -749,13 +762,13 @@ function ProcessSettlementDialog({
 
 		                {previewWarningBlocks.length > 0 && (
 		                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
-		                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">Warnings (non-blocking)</div>
+		                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">Warnings</div>
 		                    <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
 		                      {previewWarningBlocks.map((b, idx) => (
 		                        <li key={idx}>
-		                          <span className="font-mono">{b.code}</span>: {b.message}
-		                          {b.details && 'error' in b.details && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          <span className="font-mono">{b.code}</span>: {getPreviewBlockMessage(b)}
+		                          {showPreviewBlockErrorDetails(b) && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
 		                          )}
 		                          {formatBlockDetails(b.details) && (
 		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
@@ -1898,9 +1911,9 @@ export default function SettlementDetailPage() {
                           >
                             {visiblePreviewIssueDetails.map((b, idx) => (
                               <li key={idx}>
-                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                {getPreviewBlockMessage(b)}
+                                {showPreviewBlockErrorDetails(b) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
                                 )}
                                 {formatBlockDetails(b.details) && (
                                   <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
@@ -1938,9 +1951,9 @@ export default function SettlementDetailPage() {
                           <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
                             {visiblePreviewBlockingDetails.map((b, idx) => (
                               <li key={idx}>
-                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                {getPreviewBlockMessage(b)}
+                                {showPreviewBlockErrorDetails(b) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
                                 )}
                                 {formatBlockDetails(b.details) && (
                                   <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
@@ -1962,7 +1975,7 @@ export default function SettlementDetailPage() {
                           <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                             <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
+                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'}
                             </span>
                           </div>
                           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1978,9 +1991,9 @@ export default function SettlementDetailPage() {
                           <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
                             {visiblePreviewWarningDetails.map((b, idx) => (
                               <li key={idx}>
-                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                {getPreviewBlockMessage(b)}
+                                {showPreviewBlockErrorDetails(b) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
                                 )}
                                 {formatBlockDetails(b.details) && (
                                   <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
