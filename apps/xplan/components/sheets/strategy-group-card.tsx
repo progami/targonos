@@ -185,16 +185,18 @@ export function StrategyGroupCard({
   }, [strategies]);
 
   const keyParameters = useMemo(() => {
-    if (!displayStrategy) return KEY_PARAM_SLOTS.map((s) => ({ label: s.label, value: '\u2014', isAccent: s.isAccent }));
-    const raw = keyParametersByStrategyId[displayStrategy.id];
-    return KEY_PARAM_SLOTS.map((slot) => {
-      const found = raw?.find((p) => p.label.toLowerCase().includes(slot.match));
+    const raw = displayStrategy ? keyParametersByStrategyId[displayStrategy.id] : undefined;
+    if (!raw?.length) return [];
+    const slots = KEY_PARAM_SLOTS.map((slot) => {
+      const found = raw.find((p) => p.label.toLowerCase().includes(slot.match));
       return {
         label: slot.label,
         value: found ? found.value + slot.suffix : '\u2014',
         isAccent: slot.isAccent,
       };
     });
+    const hasAny = slots.some((s) => s.value !== '\u2014');
+    return hasAny ? slots : [];
   }, [displayStrategy, keyParametersByStrategyId]);
 
   /* ---- Assignee loading ---- */
@@ -562,14 +564,15 @@ export function StrategyGroupCard({
             <button
               type="button"
               onClick={openCreateScenarioDialog}
-              className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-muted-foreground transition hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50/50 dark:border-[#0b3a52] dark:hover:border-[#00C2B9] dark:hover:text-[#00C2B9] dark:hover:bg-cyan-900/10"
+              className="flex w-32 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 p-3 text-muted-foreground transition hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50/50 dark:border-[#0b3a52] dark:hover:border-[#00C2B9] dark:hover:text-[#00C2B9] dark:hover:bg-cyan-900/10"
             >
               <Plus className="h-5 w-5" />
+              <span className="text-xs">Add Scenario</span>
             </button>
           </div>
 
           {/* ---- Key Parameters section ---- */}
-          <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
+          {keyParameters.length > 0 ? <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Key Parameters
@@ -596,7 +599,7 @@ export function StrategyGroupCard({
                 </div>
               ))}
             </div>
-          </div>
+          </div> : null}
         </div>
       </div>
 
