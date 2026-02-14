@@ -1475,30 +1475,6 @@ export default function SettlementDetailPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {data?.processing && (
-                              <>
-                                <Button variant="outline" size="sm" asChild>
-                                  <a
-                                    href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    COGS JE
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </Button>
-                                <Button variant="outline" size="sm" asChild>
-                                  <a
-                                    href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    P&amp;L JE
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </Button>
-                              </>
-                            )}
                             {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
                               <Button
                                 size="sm"
