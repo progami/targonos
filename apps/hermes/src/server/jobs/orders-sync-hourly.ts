@@ -24,6 +24,7 @@ import { getOrders } from "../sp-api/orders";
 import {
   extractOrdersFromGetOrdersResponse,
   enqueueRequestReviewsForOrders,
+  listShippedOrdersMissingDispatch,
   upsertOrders,
   type ScheduleConfig,
 } from "../orders/ingest";
@@ -117,6 +118,7 @@ async function syncConnection(connectionId: string, marketplaceIds: string[]) {
   const overlapMinutes = getInt("HERMES_ORDERS_SYNC_OVERLAP_MINUTES", 5);
   const maxPages = getInt("HERMES_ORDERS_SYNC_MAX_PAGES_PER_RUN", 50);
   const maxResultsPerPage = Math.max(1, Math.min(getInt("HERMES_ORDERS_SYNC_MAX_RESULTS_PER_PAGE", 100), 100));
+  const repairLimit = Math.max(1, getInt("HERMES_ORDERS_SYNC_MISSING_DISPATCH_LIMIT", 2000));
 
   const dryRun = getBool("HERMES_DRY_RUN", false);
   const enqueue = dryRun ? false : getBool("HERMES_ORDERS_SYNC_ENQUEUE_REVIEW_REQUESTS", true);
@@ -214,6 +216,26 @@ async function syncConnection(connectionId: string, marketplaceIds: string[]) {
         `[orders-sync] ${connectionId}: done pages=${pages} fetched=${fetched} upserted=${upserted} enq=${enqueueStats.enqueued} exists=${enqueueStats.alreadyExists} expired=${enqueueStats.skippedExpired}`
       );
       break;
+    }
+  }
+
+  if (enqueue) {
+    const missing = await listShippedOrdersMissingDispatch({
+      connectionId,
+      limit: repairLimit,
+    });
+    if (missing.length > 0) {
+      const recovered = await enqueueRequestReviewsForOrders({
+        connectionId,
+        orders: missing,
+        schedule,
+      });
+      enqueueStats.enqueued += recovered.enqueued;
+      enqueueStats.skippedExpired += recovered.skippedExpired;
+      enqueueStats.alreadyExists += recovered.alreadyExists;
+      console.log(
+        `[orders-sync] ${connectionId}: recovered_missing=${missing.length} enq=${recovered.enqueued} exists=${recovered.alreadyExists} expired=${recovered.skippedExpired}`
+      );
     }
   }
 }
