@@ -171,7 +171,11 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (order.status === 'CANCELLED' || order.status === 'REJECTED') {
+  if (
+    order.status === 'CLOSED' ||
+    order.status === 'CANCELLED' ||
+    order.status === 'REJECTED'
+  ) {
     return ApiResponses.badRequest('Cannot add line items to terminal orders')
   }
 

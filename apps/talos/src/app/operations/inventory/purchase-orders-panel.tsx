@@ -35,8 +35,7 @@ export type PurchaseOrderStatusOption =
   | 'OCEAN'
   | 'WAREHOUSE'
   | 'SHIPPED'
-  | 'REJECTED'
-  | 'CANCELLED'
+  | 'CLOSED'
 export type PurchaseOrderLineStatusOption = 'PENDING' | 'POSTED' | 'CANCELLED'
 
 export interface PurchaseOrderLineSummary {
@@ -301,8 +300,7 @@ export function PurchaseOrdersPanel({
         if (order.status === 'MANUFACTURING') acc.manufacturingCount += 1
         if (order.status === 'OCEAN') acc.oceanCount += 1
         if (order.status === 'WAREHOUSE') acc.warehouseCount += 1
-        if (order.status === 'REJECTED') acc.rejectedCount += 1
-        if (order.status === 'CANCELLED') acc.cancelledCount += 1
+        if (order.status === 'CLOSED') acc.closedCount += 1
         return acc
       },
       {
@@ -310,8 +308,7 @@ export function PurchaseOrdersPanel({
         manufacturingCount: 0,
         oceanCount: 0,
         warehouseCount: 0,
-        rejectedCount: 0,
-        cancelledCount: 0,
+        closedCount: 0,
       }
     )
   }, [orders])
@@ -865,8 +862,7 @@ export function PurchaseOrdersPanel({
         )
         break
       }
-      case 'REJECTED':
-      case 'CANCELLED': {
+      case 'CLOSED': {
         cols.push(
           {
             key: 'notes',
@@ -958,10 +954,7 @@ export function PurchaseOrdersPanel({
               <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span> Warehouse
             </span>
             <span>
-              <span className="font-semibold text-foreground">{statusCounts.rejectedCount}</span> Rejected
-            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.cancelledCount}</span> Cancelled
+              <span className="font-semibold text-foreground">{statusCounts.closedCount}</span> Closed
             </span>
             {hasActiveFilters && (
               <Button type="button" variant="outline" size="sm" className="h-8" onClick={clearFilters}>

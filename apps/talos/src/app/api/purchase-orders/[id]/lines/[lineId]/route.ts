@@ -195,7 +195,10 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
-  const allowCommercialEdits = order.status !== 'CANCELLED' && order.status !== 'REJECTED'
+  const allowCommercialEdits =
+    order.status !== 'CLOSED' &&
+    order.status !== 'CANCELLED' &&
+    order.status !== 'REJECTED'
   const allowIssuedPackagingEdits = allowCommercialEdits
   const allowPiNumberEdits = allowCommercialEdits
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
@@ -584,7 +587,11 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     return crossTenantGuard
   }
 
-  if (order.status === 'CANCELLED' || order.status === 'REJECTED') {
+  if (
+    order.status === 'CLOSED' ||
+    order.status === 'CANCELLED' ||
+    order.status === 'REJECTED'
+  ) {
     return ApiResponses.badRequest('Cannot delete line items from terminal orders')
   }
 
