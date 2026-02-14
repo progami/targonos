@@ -8,6 +8,7 @@
     "xplan": { "lifecycle": "active" },
     "plutus": { "lifecycle": "active" },
     "hermes": { "lifecycle": "active" },
+    "argus": { "lifecycle": "active" },
     "legal-suite": { "lifecycle": "archived" },
     "jason": { "lifecycle": "archived" }
   }

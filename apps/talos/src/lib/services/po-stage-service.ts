@@ -192,9 +192,8 @@ export const STAGE_REQUIREMENTS: Record<string, string[]> = {
 }
 
 export const STAGE_DOCUMENT_REQUIREMENTS: Partial<Record<PurchaseOrderStatus, string[]>> = {
-  MANUFACTURING: ['inspection_report'],
-  OCEAN: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
-  WAREHOUSE: ['grn', 'custom_declaration'],
+  MANUFACTURING: ['inspection_report', 'packing_list', 'bill_of_lading', 'commercial_invoice'],
+  OCEAN: ['grs_tc', 'grn', 'custom_declaration'],
 }
 
 // Field labels for error messages
@@ -811,6 +810,22 @@ async function validateTransitionGate(params: {
       issues,
     })
 
+    const artworkDocTypes = activeLines.map(
+      line => `box_artwork_${line.skuCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+    )
+    await requireDocuments({
+      prisma: params.prisma,
+      purchaseOrderId: params.order.id,
+      stage: PurchaseOrderDocumentStage.ISSUED,
+      documentTypes: artworkDocTypes,
+      issues,
+      issueKeyPrefix: 'documents',
+      issueLabel: (docType) => {
+        const skuCode = docType.replace(/^box_artwork_/, '').toUpperCase()
+        return `Box artwork (${skuCode})`
+      },
+    })
+
     for (const line of activeLines) {
       const commodityCode = typeof line.commodityCode === 'string' ? line.commodityCode.trim() : ''
       if (!commodityCode) {
@@ -938,20 +953,19 @@ async function validateTransitionGate(params: {
       recordGateIssue(issues, 'cargo.lines', 'At least one carton must be dispatched')
     }
 
-    const artworkDocTypes = activeLines.map(
-      line => `box_artwork_${line.skuCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-    )
     await requireDocuments({
       prisma: params.prisma,
       purchaseOrderId: params.order.id,
       stage: PurchaseOrderDocumentStage.MANUFACTURING,
-      documentTypes: [...artworkDocTypes, 'inspection_report'],
+      documentTypes: ['inspection_report', 'packing_list', 'bill_of_lading', 'commercial_invoice'],
       issues,
       issueKeyPrefix: 'documents',
       issueLabel: (docType) => {
         if (docType === 'inspection_report') return 'Inspection report'
-        const skuCode = docType.replace(/^box_artwork_/, '').toUpperCase()
-        return `Box artwork (${skuCode})`
+        if (docType === 'packing_list') return 'Packing list'
+        if (docType === 'bill_of_lading') return 'Bill of lading'
+        if (docType === 'commercial_invoice') return 'Commercial invoice'
+        return docType.replace(/_/g, ' ')
       },
     })
   }
@@ -996,10 +1010,15 @@ async function validateTransitionGate(params: {
       prisma: params.prisma,
       purchaseOrderId: params.order.id,
       stage: PurchaseOrderDocumentStage.OCEAN,
-      documentTypes: ['commercial_invoice', 'bill_of_lading', 'packing_list', 'grs_tc'],
+      documentTypes: ['grs_tc', 'grn', 'custom_declaration'],
       issues,
       issueKeyPrefix: 'documents',
-      issueLabel: (docType) => (docType === 'grs_tc' ? 'GRS TC' : docType.replace(/_/g, ' ')),
+      issueLabel: (docType) => {
+        if (docType === 'grs_tc') return 'GRS TC'
+        if (docType === 'custom_declaration') return 'Customs & Border Patrol Clearance Proof'
+        if (docType === 'grn') return 'GRN'
+        return docType.replace(/_/g, ' ')
+      },
     })
 
     const hasForwardingCost = await params.prisma.purchaseOrderForwardingCost.findFirst({
@@ -2669,19 +2688,6 @@ export async function receivePurchaseOrderInventory(params: {
       amount: rounded.abs(),
     }
   })()
-
-  await requireDocuments({
-    prisma,
-    purchaseOrderId: order.id,
-    stage: PurchaseOrderDocumentStage.WAREHOUSE,
-    documentTypes: ['grn', 'custom_declaration'],
-    issues,
-    issueKeyPrefix: 'documents',
-    issueLabel: (docType) =>
-      docType === 'custom_declaration'
-        ? 'Customs & Border Patrol Clearance Proof'
-        : 'GRN',
-  })
 
   if (warehouse) {
     const forwardingCost = await prisma.purchaseOrderForwardingCost.findFirst({

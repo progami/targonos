@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useEffect, useMemo } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
@@ -9,14 +9,18 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import { PageTabs } from '@/components/ui/page-tabs'
 import { PageLoading } from '@/components/ui/loading-spinner'
+import { Input } from '@/components/ui/input'
 import {
+  Eye,
   FileText,
   Plus,
+  Search,
   Send,
   Factory,
   Ship,
   Warehouse,
   XCircle,
+  X,
 } from '@/lib/lucide-icons'
 import { PurchaseOrdersPanel } from '../inventory/purchase-orders-panel'
 import { redirectToPortal } from '@/lib/portal'
@@ -107,6 +111,10 @@ function OrdersPageContent() {
     }
   }, [session, status, router])
 
+  const [stageCounts, setStageCounts] = useState<Record<string, number>>({})
+  const [globalSearch, setGlobalSearch] = useState('')
+  const [lifecycleTrigger, setLifecycleTrigger] = useState(0)
+
   const handleStatusChange = (newStatus: string) => {
     // Persist to Zustand
     pageState.setActiveTab(newStatus)
@@ -116,6 +124,10 @@ function OrdersPageContent() {
     router.push(`/operations/purchase-orders?${params.toString()}`)
   }
 
+  const handleCountsLoaded = useCallback((counts: Record<string, number>) => {
+    setStageCounts(counts)
+  }, [])
+
   // Memoize status tabs to use with PageTabs
   const statusTabs = useMemo(
     () =>
@@ -123,8 +135,9 @@ function OrdersPageContent() {
         value: config.value,
         label: config.label,
         icon: config.icon,
+        count: stageCounts[config.value],
       })),
-    []
+    [stageCounts]
   )
 
   if (status === 'loading') {
@@ -152,6 +165,40 @@ function OrdersPageContent() {
       />
       <PageContent className="overflow-hidden">
         <div className="flex min-h-0 flex-col gap-6">
+          {/* Global search */}
+          <div className="flex items-center gap-2">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                value={globalSearch}
+                onChange={e => setGlobalSearch(e.target.value)}
+                placeholder="Search by PO#, CI#, GRN#, supplier…"
+                className="h-9 pl-9 pr-8 text-sm"
+              />
+              {globalSearch.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setGlobalSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {globalSearch.trim().length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 shrink-0"
+                onClick={() => setLifecycleTrigger(prev => prev + 1)}
+              >
+                <Eye className="h-4 w-4" />
+                View Lifecycle
+              </Button>
+            )}
+          </div>
+
           {/* Status Tabs */}
           <PageTabs
             tabs={statusTabs}
@@ -165,6 +212,9 @@ function OrdersPageContent() {
               onPosted={() => {}}
               statusFilter={currentStatus}
               typeFilter="PURCHASE"
+              onCountsLoaded={handleCountsLoaded}
+              globalSearch={globalSearch.trim() || undefined}
+              lifecycleTrigger={lifecycleTrigger}
             />
           </div>
         </div>
