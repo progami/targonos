@@ -15,6 +15,7 @@
     "format:write": "prettier --write \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
     "qbo": "tsx scripts/qbo.ts",
     "autopost:check": "tsx scripts/autopost-check.ts",
+    "settlements:us:rematch": "tsx scripts/us-settlement-rematch.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:push": "prisma db push --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",

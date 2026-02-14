@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Plus, Check, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Check, Pencil, Trash2, Star } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
@@ -28,14 +28,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 type Assignee = {
   id: string;
@@ -49,6 +41,20 @@ type Strategy = {
   description: string | null;
   region: 'US' | 'UK';
   isDefault: boolean;
+  isPrimary: boolean;
+  strategyGroupId: string;
+  strategyGroup: {
+    id: string;
+    code: string;
+    name: string;
+    region: 'US' | 'UK';
+    createdById: string | null;
+    createdByEmail: string | null;
+    assigneeId: string | null;
+    assigneeEmail: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   createdById?: string | null;
   createdByEmail?: string | null;
   assigneeId?: string | null;
@@ -67,6 +73,14 @@ type Strategy = {
   };
 };
 
+type StrategyGroupView = {
+  id: string;
+  code: string;
+  name: string;
+  region: 'US' | 'UK';
+  strategies: Strategy[];
+};
+
 interface StrategiesWorkspaceProps {
   strategies: Strategy[];
   activeStrategyId?: string | null;
@@ -75,6 +89,15 @@ interface StrategiesWorkspaceProps {
     email: string | null;
     isSuperAdmin: boolean;
   };
+}
+
+function normalizeGroupCode(raw: string) {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
 }
 
 export function StrategiesWorkspace({
@@ -86,24 +109,39 @@ export function StrategiesWorkspace({
   const searchParams = useSearchParams();
   const [strategies, setStrategies] = useState<Strategy[]>(initialStrategies);
 
-  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | null>(null);
-  const [dialogStrategyId, setDialogStrategyId] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formDescription, setFormDescription] = useState('');
-  const [formRegion, setFormRegion] = useState<'US' | 'UK'>('US');
-  const [formAssigneeIds, setFormAssigneeIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [groupCode, setGroupCode] = useState('');
+  const [groupRegion, setGroupRegion] = useState<'US' | 'UK'>('US');
+  const [groupScenarioName, setGroupScenarioName] = useState('Base case');
+  const [groupScenarioDescription, setGroupScenarioDescription] = useState('');
+  const [groupAssigneeIds, setGroupAssigneeIds] = useState<string[]>([]);
+
+  const [scenarioDialogMode, setScenarioDialogMode] = useState<'create' | 'edit' | null>(null);
+  const [scenarioGroupId, setScenarioGroupId] = useState<string | null>(null);
+  const [scenarioStrategyId, setScenarioStrategyId] = useState<string | null>(null);
+  const [scenarioName, setScenarioName] = useState('');
+  const [scenarioDescription, setScenarioDescription] = useState('');
+  const [scenarioAssigneeIds, setScenarioAssigneeIds] = useState<string[]>([]);
+  const [scenarioPrimary, setScenarioPrimary] = useState(false);
 
   const [pendingSwitch, setPendingSwitch] = useState<{ id: string; name: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Strategy | null>(null);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [directoryConfigured, setDirectoryConfigured] = useState(true);
 
+  useEffect(() => {
+    setStrategies(initialStrategies);
+  }, [initialStrategies]);
+
   const selectedStrategyId = activeStrategyId ?? searchParams?.get('strategy') ?? null;
   const selectedStrategyName =
     strategies.find((strategy) => strategy.id === selectedStrategyId)?.name ?? null;
+
   const lastEditedFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('en-US', {
@@ -129,6 +167,46 @@ export function StrategiesWorkspace({
     return map;
   }, [strategies, viewer.email, viewer.id, viewer.isSuperAdmin]);
 
+  const groups = useMemo<StrategyGroupView[]>(() => {
+    const grouped = new Map<string, StrategyGroupView>();
+
+    for (const strategy of strategies) {
+      const group = strategy.strategyGroup;
+      if (!group) continue;
+
+      const existing = grouped.get(group.id);
+      if (existing) {
+        existing.strategies.push(strategy);
+        continue;
+      }
+
+      grouped.set(group.id, {
+        id: group.id,
+        code: group.code,
+        name: group.name,
+        region: group.region,
+        strategies: [strategy],
+      });
+    }
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        strategies: [...group.strategies].sort((left, right) => {
+          if (left.isPrimary !== right.isPrimary) {
+            return left.isPrimary ? -1 : 1;
+          }
+          return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+        }),
+      }))
+      .sort((left, right) => {
+        if (left.region !== right.region) {
+          return left.region.localeCompare(right.region);
+        }
+        return left.name.localeCompare(right.name);
+      });
+  }, [strategies]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -142,12 +220,12 @@ export function StrategiesWorkspace({
         } | null;
 
         if (!response.ok) {
-          const message = data?.error || 'Failed to load assignees';
+          const message = data?.error ?? 'Failed to load assignees';
           throw new Error(message);
         }
 
         if (cancelled) return;
-        setAssignees(Array.isArray(data?.assignees) ? data!.assignees : []);
+        setAssignees(Array.isArray(data?.assignees) ? data.assignees : []);
         setDirectoryConfigured(Boolean(data?.directoryConfigured));
       } catch (error) {
         console.error(error);
@@ -191,134 +269,274 @@ export function StrategiesWorkspace({
     return 'Unassigned';
   };
 
-  const renderLastEditedLabel = (strategy: Strategy) => {
-    return formatDateDisplay(strategy.updatedAt, lastEditedFormatter, '—');
-  };
+  const renderLastEditedLabel = (strategy: Strategy) =>
+    formatDateDisplay(strategy.updatedAt, lastEditedFormatter, '—');
 
-  /* ---- Dialog helpers ---- */
-
-  const openCreateDialog = () => {
-    setDialogMode('create');
-    setDialogStrategyId(null);
-    setFormName('');
-    setFormDescription('');
-    setFormRegion('US');
-    setFormAssigneeIds(viewer.id ? [viewer.id] : []);
-  };
-
-  const openEditDialog = (strategy: Strategy) => {
-    setDialogMode('edit');
-    setDialogStrategyId(strategy.id);
-    setFormName(strategy.name);
-    setFormDescription(strategy.description ?? '');
-    setFormRegion(strategy.region ?? 'US');
-    setFormAssigneeIds(strategyAssigneeIds(strategy));
-  };
-
-  const closeDialog = () => {
-    setDialogMode(null);
-    setDialogStrategyId(null);
-  };
-
-  const toggleAssignee = (id: string) => {
-    setFormAssigneeIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+  const toggleGroupAssignee = (id: string) => {
+    setGroupAssigneeIds((prev) =>
+      prev.includes(id) ? prev.filter((current) => current !== id) : [...prev, id],
     );
   };
 
-  /* ---- Create / Update ---- */
+  const toggleScenarioAssignee = (id: string) => {
+    setScenarioAssigneeIds((prev) =>
+      prev.includes(id) ? prev.filter((current) => current !== id) : [...prev, id],
+    );
+  };
 
-  const handleCreate = async () => {
-    if (!formName.trim()) {
-      toast.error('Enter a strategy name');
+  const openCreateGroupDialog = () => {
+    setIsGroupDialogOpen(true);
+    setGroupName('');
+    setGroupCode('');
+    setGroupRegion('US');
+    setGroupScenarioName('Base case');
+    setGroupScenarioDescription('');
+    setGroupAssigneeIds(viewer.id ? [viewer.id] : []);
+  };
+
+  const closeCreateGroupDialog = () => {
+    setIsGroupDialogOpen(false);
+  };
+
+  const openCreateScenarioDialog = (groupId: string) => {
+    setScenarioDialogMode('create');
+    setScenarioGroupId(groupId);
+    setScenarioStrategyId(null);
+    setScenarioName('');
+    setScenarioDescription('');
+    setScenarioAssigneeIds(viewer.id ? [viewer.id] : []);
+    setScenarioPrimary(false);
+  };
+
+  const openEditScenarioDialog = (strategy: Strategy) => {
+    setScenarioDialogMode('edit');
+    setScenarioGroupId(strategy.strategyGroupId);
+    setScenarioStrategyId(strategy.id);
+    setScenarioName(strategy.name);
+    setScenarioDescription(strategy.description ?? '');
+    setScenarioAssigneeIds(strategyAssigneeIds(strategy));
+    setScenarioPrimary(strategy.isPrimary);
+  };
+
+  const closeScenarioDialog = () => {
+    setScenarioDialogMode(null);
+    setScenarioGroupId(null);
+    setScenarioStrategyId(null);
+  };
+
+  const handleCreateGroup = async () => {
+    const nextGroupName = groupName.trim();
+    const normalizedCode = normalizeGroupCode(groupCode);
+    const nextScenarioName = groupScenarioName.trim();
+
+    if (!nextGroupName) {
+      toast.error('Enter a strategy group name');
+      return;
+    }
+    if (!normalizedCode) {
+      toast.error('Enter a strategy group code');
+      return;
+    }
+    if (!nextScenarioName) {
+      toast.error('Enter an initial scenario name');
       return;
     }
 
     setIsSubmitting(true);
+
     try {
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formName,
-          description: formDescription,
-          region: formRegion,
-          assigneeIds: formAssigneeIds,
+          strategyGroupName: nextGroupName,
+          strategyGroupCode: normalizedCode,
+          region: groupRegion,
+          name: nextScenarioName,
+          description: groupScenarioDescription,
+          assigneeIds: groupAssigneeIds,
+          isPrimary: true,
         }),
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = (data as any)?.error || 'Failed to create strategy';
-        throw new Error(message);
+
+      const data = (await response.json().catch(() => null)) as {
+        strategy?: Strategy;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.strategy) {
+        throw new Error(data?.error ?? 'Failed to create strategy group');
       }
+
+      const createdStrategy = data.strategy;
+
       setStrategies((prev) => [
         ...prev,
         {
-          ...(data as any).strategy,
-          _count: { products: 0, purchaseOrders: 0, salesWeeks: 0 },
+          ...createdStrategy,
+          _count: createdStrategy._count ?? { products: 0, purchaseOrders: 0, salesWeeks: 0 },
         },
       ]);
-      closeDialog();
-      toast.success('Strategy created');
+      closeCreateGroupDialog();
+      toast.success('Strategy group created');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create strategy');
+      toast.error(error instanceof Error ? error.message : 'Failed to create strategy group');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleUpdate = async () => {
-    if (!dialogStrategyId) return;
-    const id = dialogStrategyId;
-    const strategy = strategies.find((s) => s.id === id);
-
-    if (!formName.trim()) {
-      toast.error('Enter a strategy name');
+  const handleCreateScenario = async () => {
+    const nextName = scenarioName.trim();
+    if (!scenarioGroupId) return;
+    if (!nextName) {
+      toast.error('Enter a scenario name');
       return;
     }
 
     setIsSubmitting(true);
+
     try {
-      const canAssign = Boolean(canAssignByStrategyId.get(id));
-      const currentAssigneeIds = strategy ? strategyAssigneeIds(strategy) : [];
-      const assigneeChanged = !hasSameAssignees(formAssigneeIds, currentAssigneeIds);
+      const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategyGroupId: scenarioGroupId,
+          name: nextName,
+          description: scenarioDescription,
+          assigneeIds: scenarioAssigneeIds,
+          isPrimary: scenarioPrimary,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as {
+        strategy?: Strategy;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.strategy) {
+        throw new Error(data?.error ?? 'Failed to create scenario');
+      }
+
+      const createdStrategy = data.strategy;
+
+      setStrategies((prev) => {
+        const next = prev.map((strategy) =>
+          createdStrategy.isPrimary && strategy.strategyGroupId === createdStrategy.strategyGroupId
+            ? { ...strategy, isPrimary: false }
+            : strategy,
+        );
+
+        next.push({
+          ...createdStrategy,
+          _count: createdStrategy._count ?? { products: 0, purchaseOrders: 0, salesWeeks: 0 },
+        });
+
+        return next;
+      });
+
+      closeScenarioDialog();
+      toast.success('Scenario created');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create scenario');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateScenario = async () => {
+    if (!scenarioStrategyId) return;
+
+    const target = strategies.find((strategy) => strategy.id === scenarioStrategyId);
+    if (!target) return;
+
+    const nextName = scenarioName.trim();
+    if (!nextName) {
+      toast.error('Enter a scenario name');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const canAssign = Boolean(canAssignByStrategyId.get(target.id));
+      const currentAssigneeIds = strategyAssigneeIds(target);
+      const assigneeChanged = !hasSameAssignees(scenarioAssigneeIds, currentAssigneeIds);
 
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id,
-          name: formName,
-          description: formDescription,
-          region: formRegion,
-          ...(canAssign && assigneeChanged ? { assigneeIds: formAssigneeIds } : {}),
+          id: target.id,
+          name: nextName,
+          description: scenarioDescription,
+          ...(canAssign && assigneeChanged ? { assigneeIds: scenarioAssigneeIds } : {}),
         }),
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = (data as any)?.error || 'Failed to update strategy';
-        throw new Error(message);
+
+      const data = (await response.json().catch(() => null)) as {
+        strategy?: Strategy;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.strategy) {
+        throw new Error(data?.error ?? 'Failed to update scenario');
       }
+
       setStrategies((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...(data as any).strategy } : s)),
+        prev.map((strategy) => (strategy.id === target.id ? { ...strategy, ...data.strategy } : strategy)),
       );
-      closeDialog();
-      toast.success('Strategy updated');
+
+      closeScenarioDialog();
+      toast.success('Scenario updated');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update strategy');
+      toast.error(error instanceof Error ? error.message : 'Failed to update scenario');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSubmit = () => {
-    if (dialogMode === 'create') void handleCreate();
-    if (dialogMode === 'edit') void handleUpdate();
-  };
+  const handleSetPrimaryScenario = async (strategy: Strategy) => {
+    if (strategy.isPrimary) return;
 
-  /* ---- Other actions ---- */
+    try {
+      const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: strategy.id,
+          isPrimary: true,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as {
+        strategy?: Strategy;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.strategy) {
+        throw new Error(data?.error ?? 'Failed to set primary scenario');
+      }
+
+      setStrategies((prev) =>
+        prev.map((item) => {
+          if (item.strategyGroupId !== strategy.strategyGroupId) return item;
+          if (item.id === strategy.id) {
+            return { ...item, ...data.strategy, isPrimary: true };
+          }
+          return { ...item, isPrimary: false };
+        }),
+      );
+
+      toast.success(`"${strategy.name}" is now the primary scenario`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to set primary scenario');
+    }
+  };
 
   const requestDelete = (id: string) => {
     const strategy = strategies.find((item) => item.id === id);
@@ -345,15 +563,16 @@ export function StrategiesWorkspace({
         if (message) {
           throw new Error(message);
         }
-        throw new Error('Failed to delete strategy');
+        throw new Error('Failed to delete scenario');
       }
 
-      setStrategies((prev) => prev.filter((s) => s.id !== id));
+      setStrategies((prev) => prev.filter((scenario) => scenario.id !== id));
       setPendingDelete(null);
-      toast.success('Strategy deleted');
+      toast.success('Scenario deleted');
+      router.refresh();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete strategy');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete scenario');
     } finally {
       setIsDeleting(false);
     }
@@ -376,229 +595,169 @@ export function StrategiesWorkspace({
   const primaryActionClass =
     'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 enabled:hover:border-cyan-500 enabled:hover:bg-cyan-50 enabled:hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:focus:ring-cyan-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-cyan-300/50 dark:enabled:hover:bg-white/10';
 
+  const scenarioDialogTitle = scenarioDialogMode === 'edit' ? 'Edit scenario' : 'New scenario';
+
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h2 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
-            Planning Strategies
+            Strategy Groups
           </h2>
           <p className="text-sm text-muted-foreground">
-            Click a row to switch strategies. Each strategy has its own products, orders, and
-            forecasts.
+            Each group has one primary scenario and optional what-if scenarios.
           </p>
         </div>
-        <button type="button" onClick={openCreateDialog} className={primaryActionClass}>
+        <button type="button" onClick={openCreateGroupDialog} className={primaryActionClass}>
           <span className="inline-flex items-center gap-1.5">
             <Plus className="h-4 w-4" />
-            New strategy
+            New group
           </span>
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
-        <div className="max-h-[min(440px,calc(100vh-320px))] overflow-auto">
-          <Table className="table-fixed border-collapse">
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="sticky top-0 z-10 h-10 border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Strategy
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-24 border-b border-r bg-muted px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Region
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-56 border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Assignee
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-44 border-b border-r bg-muted px-3 py-2 text-right text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Last edited
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-24 border-b border-r bg-muted px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Products
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-24 border-b border-r bg-muted px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Orders
-                </TableHead>
-                <TableHead className="sticky top-0 z-10 h-10 w-28 border-b border-r bg-muted px-3 py-2 text-right text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {strategies.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
-                    No strategies yet. Create your first planning strategy to get started.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                strategies.map((strategy) => {
-                  const isActive = selectedStrategyId === strategy.id;
+      {groups.length === 0 ? (
+        <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm dark:border-white/10">
+          No strategy groups yet. Create your first group to get started.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <article
+              key={group.id}
+              className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10"
+            >
+              <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-sm font-semibold text-foreground">{group.name}</span>
+                  <Badge variant="secondary" className="uppercase">
+                    {group.region}
+                  </Badge>
+                  <Badge variant="outline" className="font-mono">
+                    {group.code}
+                  </Badge>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openCreateScenarioDialog(group.id)}
+                  className={primaryActionClass}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Plus className="h-4 w-4" />
+                    Add scenario
+                  </span>
+                </button>
+              </header>
 
+              <div className="divide-y">
+                {group.strategies.map((strategy) => {
+                  const isActive = selectedStrategyId === strategy.id;
                   return (
-                    <TableRow
+                    <div
                       key={strategy.id}
-                      onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                       className={cn(
-                        'cursor-pointer',
+                        'flex cursor-pointer flex-wrap items-start justify-between gap-3 px-4 py-3 transition',
                         isActive
-                          ? 'border-l-4 border-l-cyan-500 bg-cyan-50/70 hover:bg-cyan-50/70 dark:border-l-[#00C2B9] dark:bg-cyan-900/20 dark:hover:bg-cyan-900/20'
-                          : 'hover:bg-muted/50',
+                          ? 'bg-cyan-50/70 dark:bg-cyan-900/20'
+                          : 'hover:bg-muted/40 dark:hover:bg-white/5',
                       )}
+                      onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                     >
-                      <TableCell className="border-r px-3 py-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={cn(
-                                  'text-sm font-medium',
-                                  isActive
-                                    ? 'text-cyan-900 dark:text-cyan-100'
-                                    : 'text-foreground',
-                                )}
-                              >
-                                {strategy.name}
-                              </span>
-                              {isActive ? (
-                                <Badge className="ring-2 ring-cyan-300/40 dark:ring-[#00C2B9]/30 px-2.5 py-0.5 text-xs font-bold shadow-sm bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
-                                  Active
-                                </Badge>
-                              ) : null}
-                            </div>
-                            {strategy.description ? (
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {strategy.description}
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2 text-center">
-                        <Badge variant="secondary" className="uppercase">
-                          {strategy.region}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm text-foreground">
-                            {renderAssigneeLabel(strategy)}
-                          </span>
-                          {!Boolean(canAssignByStrategyId.get(strategy.id)) && strategy.createdByEmail ? (
-                            <span className="text-xs text-muted-foreground">
-                              Creator: {strategy.createdByEmail}
-                            </span>
+                      <div className="min-w-0 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{strategy.name}</span>
+                          {strategy.isPrimary ? (
+                            <Badge className="bg-amber-500 text-white hover:bg-amber-500 dark:bg-amber-400 dark:text-slate-900 dark:hover:bg-amber-400">
+                              Primary
+                            </Badge>
+                          ) : null}
+                          {isActive ? (
+                            <Badge className="bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
+                              Active
+                            </Badge>
                           ) : null}
                         </div>
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2 text-right">
-                        <span
-                          className={cn(
-                            'text-xs tabular-nums',
-                            isActive
-                              ? 'font-semibold text-cyan-700 dark:text-cyan-300'
-                              : 'text-muted-foreground',
-                          )}
-                        >
+                        {strategy.description ? (
+                          <p className="text-xs text-muted-foreground">{strategy.description}</p>
+                        ) : null}
+                        <p className="text-xs text-muted-foreground">
+                          {renderAssigneeLabel(strategy)} · {strategy._count.products} products ·{' '}
+                          {strategy._count.purchaseOrders} orders · Edited{' '}
                           {renderLastEditedLabel(strategy)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2 text-center">
-                        <span
-                          className={cn(
-                            'text-sm tabular-nums',
-                            isActive
-                              ? 'font-semibold text-cyan-700 dark:text-cyan-300'
-                              : 'text-muted-foreground',
-                          )}
-                        >
-                          {strategy._count.products}
-                        </span>
-                      </TableCell>
-                      <TableCell className="border-r px-3 py-2 text-center">
-                        <span
-                          className={cn(
-                            'text-sm tabular-nums',
-                            isActive
-                              ? 'font-semibold text-cyan-700 dark:text-cyan-300'
-                              : 'text-muted-foreground',
-                          )}
-                        >
-                          {strategy._count.purchaseOrders}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openEditDialog(strategy)}
-                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => requestDelete(strategy.id)}
-                            className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                        </p>
+                      </div>
 
-      {/* Create / Edit Strategy Dialog */}
-      <Dialog open={dialogMode != null} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+                      <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                        {!strategy.isPrimary ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleSetPrimaryScenario(strategy)}
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
+                            title="Set as primary"
+                          >
+                            <Star className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => openEditScenarioDialog(strategy)}
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
+                          title="Edit scenario"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => requestDelete(strategy.id)}
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
+                          title="Delete scenario"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isGroupDialogOpen} onOpenChange={(open) => !open && closeCreateGroupDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {dialogMode === 'edit' ? 'Edit Strategy' : 'New Strategy'}
-            </DialogTitle>
+            <DialogTitle>New strategy group</DialogTitle>
             <DialogDescription>
-              {dialogMode === 'edit'
-                ? 'Update strategy details.'
-                : 'Create a new planning strategy.'}
+              Create a region-scoped group with its initial primary scenario.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Name */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Name</label>
+              <label className="text-sm font-medium">Group name</label>
               <Input
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="Strategy name (e.g., Q4 2025 Planning)"
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="e.g., PDS"
                 autoFocus
               />
             </div>
 
-            {/* Description */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Description</label>
+              <label className="text-sm font-medium">Group code</label>
               <Input
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Optional"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSubmit();
-                }}
+                value={groupCode}
+                onChange={(event) => setGroupCode(event.target.value)}
+                placeholder="e.g., PDS"
               />
             </div>
 
-            {/* Region */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Region</label>
               <select
-                value={formRegion}
-                onChange={(e) => setFormRegion(e.target.value === 'UK' ? 'UK' : 'US')}
+                value={groupRegion}
+                onChange={(event) => setGroupRegion(event.target.value === 'UK' ? 'UK' : 'US')}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="US">US</option>
@@ -606,7 +765,24 @@ export function StrategiesWorkspace({
               </select>
             </div>
 
-            {/* Assignees — checkbox list */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Primary scenario name</label>
+              <Input
+                value={groupScenarioName}
+                onChange={(event) => setGroupScenarioName(event.target.value)}
+                placeholder="e.g., Base case"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                value={groupScenarioDescription}
+                onChange={(event) => setGroupScenarioDescription(event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Assignees</label>
               {assignees.length === 0 ? (
@@ -616,12 +792,12 @@ export function StrategiesWorkspace({
               ) : (
                 <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-background">
                   {assignees.map((assignee) => {
-                    const checked = formAssigneeIds.includes(assignee.id);
+                    const checked = groupAssigneeIds.includes(assignee.id);
                     return (
                       <button
                         key={assignee.id}
                         type="button"
-                        onClick={() => toggleAssignee(assignee.id)}
+                        onClick={() => toggleGroupAssignee(assignee.id)}
                         className={cn(
                           'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-muted/50',
                           checked && 'bg-cyan-50 dark:bg-cyan-900/20',
@@ -639,9 +815,7 @@ export function StrategiesWorkspace({
                         </span>
                         <span className="truncate">{assignee.email}</span>
                         {assignee.fullName ? (
-                          <span className="truncate text-muted-foreground">
-                            ({assignee.fullName})
-                          </span>
+                          <span className="truncate text-muted-foreground">({assignee.fullName})</span>
                         ) : null}
                       </button>
                     );
@@ -652,15 +826,122 @@ export function StrategiesWorkspace({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog} disabled={isSubmitting}>
+            <Button variant="outline" onClick={closeCreateGroupDialog} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
+            <Button onClick={() => void handleCreateGroup()} disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scenarioDialogMode != null} onOpenChange={(open) => !open && closeScenarioDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{scenarioDialogTitle}</DialogTitle>
+            <DialogDescription>
+              {scenarioDialogMode === 'edit'
+                ? 'Update scenario details.'
+                : 'Create a new what-if scenario in this group.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Scenario name</label>
+              <Input
+                value={scenarioName}
+                onChange={(event) => setScenarioName(event.target.value)}
+                placeholder="Scenario name"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                value={scenarioDescription}
+                onChange={(event) => setScenarioDescription(event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+
+            {scenarioDialogMode === 'create' ? (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Make primary</label>
+                <button
+                  type="button"
+                  onClick={() => setScenarioPrimary((prev) => !prev)}
+                  className={cn(
+                    'flex h-9 w-full items-center rounded-md border px-3 text-sm transition-colors',
+                    scenarioPrimary
+                      ? 'border-cyan-500 bg-cyan-50 text-cyan-800 dark:border-[#00C2B9] dark:bg-cyan-900/20 dark:text-cyan-200'
+                      : 'border-input bg-background text-muted-foreground',
+                  )}
+                >
+                  {scenarioPrimary ? 'Primary on create' : 'Create as what-if'}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Assignees</label>
+              {assignees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {directoryConfigured ? 'Loading assignees...' : 'Directory unavailable'}
+                </p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-background">
+                  {assignees.map((assignee) => {
+                    const checked = scenarioAssigneeIds.includes(assignee.id);
+                    return (
+                      <button
+                        key={assignee.id}
+                        type="button"
+                        onClick={() => toggleScenarioAssignee(assignee.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-muted/50',
+                          checked && 'bg-cyan-50 dark:bg-cyan-900/20',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                            checked
+                              ? 'border-cyan-600 bg-cyan-600 text-white dark:border-[#00C2B9] dark:bg-[#00C2B9] dark:text-slate-900'
+                              : 'border-input',
+                          )}
+                        >
+                          {checked ? <Check className="h-3 w-3" /> : null}
+                        </span>
+                        <span className="truncate">{assignee.email}</span>
+                        {assignee.fullName ? (
+                          <span className="truncate text-muted-foreground">({assignee.fullName})</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeScenarioDialog} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                void (scenarioDialogMode === 'edit' ? handleUpdateScenario() : handleCreateScenario())
+              }
+              disabled={isSubmitting}
+            >
               {isSubmitting
-                ? dialogMode === 'edit'
+                ? scenarioDialogMode === 'edit'
                   ? 'Saving...'
                   : 'Creating...'
-                : dialogMode === 'edit'
+                : scenarioDialogMode === 'edit'
                   ? 'Save'
                   : 'Create'}
             </Button>
@@ -668,7 +949,6 @@ export function StrategiesWorkspace({
         </DialogContent>
       </Dialog>
 
-      {/* Switch strategy confirmation */}
       <AlertDialog
         open={pendingSwitch != null}
         onOpenChange={(open) => {
@@ -677,7 +957,7 @@ export function StrategiesWorkspace({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Switch strategy?</AlertDialogTitle>
+            <AlertDialogTitle>Switch scenario?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingSwitch
                 ? selectedStrategyName
@@ -693,7 +973,6 @@ export function StrategiesWorkspace({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete strategy confirmation */}
       <AlertDialog
         open={pendingDelete != null}
         onOpenChange={(open) => {
@@ -702,7 +981,7 @@ export function StrategiesWorkspace({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete strategy?</AlertDialogTitle>
+            <AlertDialogTitle>Delete scenario?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete
                 ? `This will permanently delete "${pendingDelete.name}" and all its data (${pendingDelete._count.products} products, ${pendingDelete._count.purchaseOrders} purchase orders, ${pendingDelete._count.salesWeeks} sales weeks). This cannot be undone.`

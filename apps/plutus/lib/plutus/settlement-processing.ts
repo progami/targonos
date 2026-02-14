@@ -257,6 +257,7 @@ export async function computeSettlementPreview(input: {
     'amazonAdvertisingCosts',
     'amazonPromotions',
     'amazonFbaInventoryReimbursement',
+    'warehousingAwd',
   ];
 
   const mapping: Record<string, string | undefined> = {};
@@ -525,6 +526,7 @@ export async function computeSettlementPreview(input: {
         amazonAdvertisingCosts: {},
         amazonPromotions: {},
         amazonFbaInventoryReimbursement: {},
+        warehousingAwd: {},
       },
     };
   }
