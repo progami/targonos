@@ -321,6 +321,62 @@ export async function enqueueRequestReviewsForOrders(params: {
   return { enqueued, skippedExpired, alreadyExists };
 }
 
+export async function listShippedOrdersMissingDispatch(params: {
+  connectionId: string;
+  limit?: number;
+}): Promise<HermesOrder[]> {
+  const pool = getPgPool();
+  const limit = typeof params.limit === "number" && params.limit > 0 ? Math.floor(params.limit) : 500;
+
+  const res = await pool.query<{
+    order_id: string;
+    marketplace_id: string;
+    purchase_date: string | null;
+    last_update_date: string | null;
+    order_status: string | null;
+    fulfillment_channel: string | null;
+    earliest_delivery_date: string | null;
+    latest_delivery_date: string | null;
+    latest_ship_date: string | null;
+  }>(
+    `
+    SELECT
+      o.order_id,
+      o.marketplace_id,
+      o.purchase_date::text,
+      o.last_update_date::text,
+      o.order_status,
+      o.fulfillment_channel,
+      o.earliest_delivery_date::text,
+      o.latest_delivery_date::text,
+      o.latest_ship_date::text
+    FROM hermes_orders o
+    LEFT JOIN hermes_dispatches d
+      ON d.connection_id = o.connection_id
+     AND d.order_id = o.order_id
+     AND d.type = 'request_review'
+    WHERE o.connection_id = $1
+      AND o.order_status IN ('Shipped', 'PartiallyShipped')
+      AND d.id IS NULL
+    ORDER BY COALESCE(o.latest_delivery_date, o.earliest_delivery_date, o.latest_ship_date, o.purchase_date) DESC NULLS LAST
+    LIMIT $2;
+    `,
+    [params.connectionId, limit]
+  );
+
+  return res.rows.map((row) => ({
+    orderId: row.order_id,
+    marketplaceId: row.marketplace_id,
+    purchaseDate: row.purchase_date,
+    lastUpdateDate: row.last_update_date,
+    orderStatus: row.order_status,
+    fulfillmentChannel: row.fulfillment_channel,
+    earliestDeliveryDate: row.earliest_delivery_date,
+    latestDeliveryDate: row.latest_delivery_date,
+    latestShipDate: row.latest_ship_date,
+  }));
+}
+
 export async function listRecentOrders(params: {
   connectionId: string;
   limit?: number;
