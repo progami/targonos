@@ -321,6 +321,10 @@ function getPreviewBlockSummary(group: PreviewBlockGroup, sample: PreviewBlock |
   return `${message} (${group.count.toLocaleString()} occurrences).`;
 }
 
+function formatPreviewBlockGroups(groups: PreviewBlockGroup[]): string {
+  return groups.map((group) => `${group.code} × ${group.count.toLocaleString()}`).join(', ');
+}
+
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
   if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
   return <Badge variant="secondary">LMB {status}</Badge>;
@@ -986,6 +990,16 @@ export default function SettlementDetailPage() {
   const previewIssueFirstByCode = useMemo(() => firstPreviewBlockByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
   const previewBlockingFirstByCode = useMemo(() => firstPreviewBlockByCode(previewBlockingBlocks), [previewBlockingBlocks]);
   const previewWarningFirstByCode = useMemo(() => firstPreviewBlockByCode(previewWarningBlocks), [previewWarningBlocks]);
+  const previewJournalLines = useMemo(() => {
+    if (!previewData) return [] as JeLinePreview[];
+    return [...previewData.cogsJournalEntry.lines, ...previewData.pnlJournalEntry.lines];
+  }, [previewData]);
+  const previewJournalNetCents = useMemo(() => {
+    return previewJournalLines.reduce(
+      (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
+      0,
+    );
+  }, [previewJournalLines]);
 
   const adsAllocationEnabled = !!previewInvoiceId && !!settlement;
 
@@ -1359,175 +1373,18 @@ export default function SettlementDetailPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="plutus-preview" className="p-4">
-                {!settlement && (
-                  <div className="space-y-3">
-                    <Skeleton className="h-5 w-64" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                  </div>
-                )}
-
-                {settlement && !previewInvoiceId && (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
-                    <div className="flex flex-col items-center gap-2 text-center">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400">
-                        Choose a Plutus invoice above to compute advertising allocation.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {settlement && previewInvoiceId && (
-                  <>
-                    {isAdsAllocationLoading && (
-                      <div className="space-y-3">
-                        <Skeleton className="h-5 w-64" />
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                      </div>
-                    )}
-
-                    {!isAdsAllocationLoading && adsAllocationError && (
-                      <div className="text-sm text-danger-700 dark:text-danger-400">
-                        {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
-                        <div className="mt-2">
-                          <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
-                            Upload Ads Data
-                          </Link>
-                        </div>
-                      </div>
-                    )}
-
-                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
-                      <div className="space-y-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                              Advertising allocation
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
-                            </div>
-                            {adsAllocation.totalAdsCents !== 0 && (
-                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                Ads total: {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                              </div>
-                            )}
-                            {adsAllocation.totalAdsCents !== 0 && adsAllocation.adsDataUpload && (
-                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                Source: {adsAllocation.adsDataUpload.filename}
-                              </div>
-                            )}
-                          </div>
-
-                          {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
-                            <Button
-                              size="sm"
-                              onClick={() => saveAdsAllocationMutation.mutate()}
-                              disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                            >
-                              {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                            </Button>
-                          )}
-                        </div>
-
-                        {adsAllocation.totalAdsCents === 0 ? (
-                          <div className="text-sm text-slate-500 dark:text-slate-400">
-                            No advertising costs found for this invoice.
-                          </div>
-                        ) : (
-                          <>
-                            {adsAllocationPreview.error && (
-                              <div className="text-sm text-danger-700 dark:text-danger-400">
-                                {adsAllocationPreview.error}
-                              </div>
-                            )}
-
-                            {!adsAllocation.adsDataUpload && (
-                              <div className="text-sm text-danger-700 dark:text-danger-400">
-                                Missing Ads Data upload for this invoice range.{' '}
-                                <Link href="/ads-data" className="underline">
-                                  Upload Ads Data
-                                </Link>
-                                .
-                              </div>
-                            )}
-
-                            <div className="overflow-x-auto">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead className="text-right">Weight (Spend)</TableHead>
-                                    <TableHead className="text-right">Allocated</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {adsAllocationPreview.lines.map((line) => (
-                                    <TableRow key={line.sku}>
-                                      <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
-                                        {line.sku}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        <div className="flex justify-end">
-                                          <div className="w-[140px]">
-                                            <Input
-                                              type="number"
-                                              step="0.01"
-                                              value={line.weightInput}
-                                              onChange={(event) => {
-                                                const next = event.target.value;
-                                                setAdsDirty(true);
-                                                setAdsEditLines((prev) =>
-                                                  prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
-                                                );
-                                              }}
-                                            />
-                                          </div>
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                        {line.allocatedCents === null
-                                          ? '—'
-                                          : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                  <TableRow>
-                                    <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                      Total
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                      {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                                    </TableCell>
-                                  </TableRow>
-                                </TableBody>
-                              </Table>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                              <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
-                                Manage Ads Data
-                              </Link>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Weight source: {adsAllocation.weightSource}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-
               {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                 <TabsContent value="plutus-preview" className="p-4">
-                  {(isLoadingAudit || isPreviewLoading) && (
+                  {!settlement && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-5 w-64" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  )}
+
+                  {settlement && (isLoadingAudit || isPreviewLoading || (previewInvoiceId !== null && isAdsAllocationLoading)) && (
                     <div className="space-y-3">
                       <Skeleton className="h-5 w-56" />
                       <Skeleton className="h-10 w-full" />
@@ -1567,7 +1424,7 @@ export default function SettlementDetailPage() {
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
                         <div className="text-sm text-slate-500 dark:text-slate-400">
-                          Choose a Plutus invoice above to compute a settlement preview.
+                          Choose a Plutus invoice above.
                         </div>
                       </div>
                     </div>
@@ -1579,19 +1436,22 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {previewData && previewData.cogsJournalEntry && (
-                    <div className="space-y-6">
-                      {/* Header */}
-                      <div className="flex items-center justify-between">
+                  {settlement && previewInvoiceId && adsAllocationError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                      {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                    </div>
+                  )}
+
+                  {previewData && settlement && (
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                            Invoice {previewData.invoiceId}
-                          </div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">Invoice {previewData.invoiceId}</div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                             {previewData.minDate} &rarr; {previewData.maxDate}
                           </div>
                           <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Sales {previewData.sales.length} &middot; Returns {previewData.returns.length} &middot; COGS Lines {previewData.cogsJournalEntry.lines.length} &middot; P&amp;L Lines {previewData.pnlJournalEntry.lines.length}
+                            Sales {previewData.sales.length} &middot; Returns {previewData.returns.length} &middot; Lines {previewJournalLines.length}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1635,233 +1495,237 @@ export default function SettlementDetailPage() {
                             {isProcessedPreview
                               ? previewIssueCount === 0
                                 ? 'Processed'
-                                : 'Processed (Needs Review)'
+                                : 'Processed (Review)'
                               : previewBlockingCount > 0
                                 ? 'Blocked'
                                 : previewWarningCount > 0
                                   ? 'Ready (Warnings)'
-                                  : 'Ready to Process'}
+                                  : 'Ready'}
                           </Badge>
                         </div>
                       </div>
 
-                      {/* Blocks */}
-                      {isProcessedPreview && previewIssueCount > 0 && (
-                        <div
-                          className={cn(
-                            'rounded-lg p-4',
-                            'border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
+                      {adsAllocation && (
+                        <div className="rounded-lg border border-slate-200/70 bg-slate-50/50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                          {adsAllocation.totalAdsCents === 0 ? (
+                            <div className="text-sm text-slate-600 dark:text-slate-300">
+                              No advertising costs found for this invoice.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-sm text-slate-900 dark:text-white">
+                                Ads allocation total: {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                              </div>
+                              {adsAllocation.adsDataUpload && (
+                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                  Source: {adsAllocation.adsDataUpload.filename}
+                                </div>
+                              )}
+                              {!adsAllocation.adsDataUpload && (
+                                <div className="mt-1 text-xs text-red-700 dark:text-red-300">
+                                  Missing ads source data. <Link href="/ads-data" className="underline">Upload Ads Data</Link>.
+                                </div>
+                              )}
+                              <details className="mt-3">
+                                <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200">
+                                  Edit ads allocation
+                                </summary>
+                                <div className="mt-3 space-y-3">
+                                  {adsAllocationPreview.error && (
+                                    <div className="text-sm text-danger-700 dark:text-danger-400">
+                                      {adsAllocationPreview.error}
+                                    </div>
+                                  )}
+
+                                  <div className="overflow-x-auto">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>SKU</TableHead>
+                                          <TableHead className="text-right">Weight (Spend)</TableHead>
+                                          <TableHead className="text-right">Allocated</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {adsAllocationPreview.lines.map((line) => (
+                                          <TableRow key={line.sku}>
+                                            <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                              {line.sku}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              <div className="flex justify-end">
+                                                <div className="w-[140px]">
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={line.weightInput}
+                                                    onChange={(event) => {
+                                                      const next = event.target.value;
+                                                      setAdsDirty(true);
+                                                      setAdsEditLines((prev) =>
+                                                        prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                                      );
+                                                    }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                              {line.allocatedCents === null
+                                                ? '—'
+                                                : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                        <TableRow>
+                                          <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                            Total
+                                          </TableCell>
+                                          <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                            {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                        </TableRow>
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-3">
+                                    <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                                      Manage Ads Data
+                                    </Link>
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                                        Weight source: {adsAllocation.weightSource}
+                                      </div>
+                                      {adsAllocationSaveEnabled && (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => saveAdsAllocationMutation.mutate()}
+                                          disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                                        >
+                                          {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </details>
+                            </>
                           )}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                              {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
-                            </span>
+                        </div>
+                      )}
+
+                      {isProcessedPreview && previewIssueCount > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="h-4 w-4" />
+                            {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
                           </div>
-                          <div className="mb-2 flex flex-wrap gap-1.5">
-                            {previewIssueGroups.map((group) => (
-                              <span
-                                key={group.code}
-                                className="rounded border border-amber-300 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:text-amber-200"
-                              >
-                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
-                              </span>
-                            ))}
+                          <div className="mt-1 text-sm text-amber-700 dark:text-amber-200">
+                            {formatPreviewBlockGroups(previewIssueGroups)}
                           </div>
-                          <ul
-                            className="text-sm space-y-1 text-amber-700 dark:text-amber-200"
-                          >
-                            {previewIssueGroups.map((group) => (
-                              <li key={group.code}>
-                                {getPreviewBlockSummary(group, previewIssueFirstByCode.get(group.code))}
-                              </li>
-                            ))}
-                          </ul>
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-200">Details</summary>
+                            <ul className="mt-2 text-sm space-y-1 text-amber-700 dark:text-amber-200">
+                              {previewIssueGroups.map((group) => (
+                                <li key={group.code}>
+                                  {getPreviewBlockSummary(group, previewIssueFirstByCode.get(group.code))}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
                         </div>
                       )}
 
                       {!isProcessedPreview && previewBlockingCount > 0 && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">
-                              {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
-                            </span>
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+                            <AlertTriangle className="h-4 w-4" />
+                            {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
                           </div>
-                          <div className="mb-2 flex flex-wrap gap-1.5">
-                            {previewBlockingGroups.map((group) => (
-                              <span
-                                key={group.code}
-                                className="rounded border border-red-300 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:text-red-200"
-                              >
-                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
-                              </span>
-                            ))}
+                          <div className="mt-1 text-sm text-red-700 dark:text-red-200">
+                            {formatPreviewBlockGroups(previewBlockingGroups)}
                           </div>
-                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                            {previewBlockingGroups.map((group) => (
-                              <li key={group.code}>
-                                {getPreviewBlockSummary(group, previewBlockingFirstByCode.get(group.code))}
-                              </li>
-                            ))}
-                          </ul>
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-red-700 dark:text-red-200">Details</summary>
+                            <ul className="mt-2 text-sm text-red-700 dark:text-red-200 space-y-1">
+                              {previewBlockingGroups.map((group) => (
+                                <li key={group.code}>
+                                  {getPreviewBlockSummary(group, previewBlockingFirstByCode.get(group.code))}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
                         </div>
                       )}
 
                       {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20">
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'}
-                            </span>
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="h-4 w-4" />
+                            {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'}
                           </div>
-                          <div className="mb-2 flex flex-wrap gap-1.5">
-                            {previewWarningGroups.map((group) => (
-                              <span
-                                key={group.code}
-                                className="rounded border border-amber-300 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:text-amber-200"
-                              >
-                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
-                              </span>
-                            ))}
+                          <div className="mt-1 text-sm text-amber-700 dark:text-amber-200">
+                            {formatPreviewBlockGroups(previewWarningGroups)}
                           </div>
-                          <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
-                            {previewWarningGroups.map((group) => (
-                              <li key={group.code}>
-                                {getPreviewBlockSummary(group, previewWarningFirstByCode.get(group.code))}
-                              </li>
-                            ))}
-                          </ul>
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-200">Details</summary>
+                            <ul className="mt-2 text-sm text-amber-700 dark:text-amber-200 space-y-1">
+                              {previewWarningGroups.map((group) => (
+                                <li key={group.code}>
+                                  {getPreviewBlockSummary(group, previewWarningFirstByCode.get(group.code))}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
                         </div>
                       )}
 
-                      {/* COGS Journal Entry */}
-                      {previewData.cogsJournalEntry.lines.length > 0 && (
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-                            COGS Journal Entry
-                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
-                              {previewData.cogsJournalEntry.docNumber}
-                            </span>
-                          </div>
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead>Account</TableHead>
-                                  <TableHead className="text-right">Amount</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {previewData.cogsJournalEntry.lines.map((line, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      {line.description}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      <div className="flex flex-col">
-                                        <span>{line.accountName}</span>
-                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
-                                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                                            {line.accountFullyQualifiedName}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      <SignedCentsAmount
-                                        amountCents={line.amountCents}
-                                        postingType={line.postingType}
-                                        currency={settlement.marketplace.currency}
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                                <TableRow>
-                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                    Net
-                                  </TableCell>
-                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                    {formatMoney(
-                                      previewData.cogsJournalEntry.lines.reduce(
-                                        (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
-                                        0,
-                                      ) / 100,
-                                      settlement.marketplace.currency,
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Account</TableHead>
+                              <TableHead className="text-right">Amount</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {previewJournalLines.map((line, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                  {line.description === '' ? '—' : line.description}
+                                </TableCell>
+                                <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                  <div className="flex flex-col">
+                                    <span>{line.accountName === '' ? '—' : line.accountName}</span>
+                                    {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        {line.accountFullyQualifiedName}
+                                      </span>
                                     )}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* P&L Reclass Journal Entry */}
-                      {previewData.pnlJournalEntry.lines.length > 0 && (
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-                            P&amp;L Reclass Journal Entry
-                            <span className="ml-2 font-mono text-xs font-normal text-slate-500 dark:text-slate-400">
-                              {previewData.pnlJournalEntry.docNumber}
-                            </span>
-                          </div>
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead>Account</TableHead>
-                                  <TableHead className="text-right">Amount</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {previewData.pnlJournalEntry.lines.map((line, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      {line.description}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                      <div className="flex flex-col">
-                                        <span>{line.accountName}</span>
-                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
-                                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                                            {line.accountFullyQualifiedName}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      <SignedCentsAmount
-                                        amountCents={line.amountCents}
-                                        postingType={line.postingType}
-                                        currency={settlement.marketplace.currency}
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                                <TableRow>
-                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                    Net
-                                  </TableCell>
-                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                    {formatMoney(
-                                      previewData.pnlJournalEntry.lines.reduce(
-                                        (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
-                                        0,
-                                      ) / 100,
-                                      settlement.marketplace.currency,
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                  <SignedCentsAmount
+                                    amountCents={line.amountCents}
+                                    postingType={line.postingType}
+                                    currency={settlement.marketplace.currency}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow>
+                              <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                Net
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                {formatMoney(previewJournalNetCents / 100, settlement.marketplace.currency)}
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
                   )}
                 </TabsContent>
