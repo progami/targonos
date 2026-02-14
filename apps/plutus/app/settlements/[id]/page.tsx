@@ -157,6 +157,7 @@ type SettlementProcessingPreview = {
 };
 
 type PreviewBlock = SettlementProcessingPreview['blocks'][number];
+type PreviewBlockGroup = { code: string; count: number };
 
 type ConnectionStatus = { connected: boolean; error?: string };
 
@@ -259,6 +260,29 @@ function isIdempotencyBlock(block: PreviewBlock): boolean {
 
 function isBlockingPreviewBlock(block: PreviewBlock): boolean {
   return isBlockingProcessingCode(block.code);
+}
+
+const MAX_PREVIEW_BLOCK_DETAILS = 25;
+
+function groupPreviewBlocksByCode(blocks: PreviewBlock[]): PreviewBlockGroup[] {
+  const grouped = new Map<string, number>();
+  for (const block of blocks) {
+    const current = grouped.get(block.code);
+    if (current === undefined) {
+      grouped.set(block.code, 1);
+      continue;
+    }
+    grouped.set(block.code, current + 1);
+  }
+
+  return [...grouped.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => {
+      if (a.count !== b.count) {
+        return b.count - a.count;
+      }
+      return a.code.localeCompare(b.code);
+    });
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -898,6 +922,21 @@ export default function SettlementDetailPage() {
   const previewBlockingCount = previewBlockingBlocks.length;
   const previewWarningCount = previewWarningBlocks.length;
   const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
+  const previewIssueGroups = useMemo(() => groupPreviewBlocksByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
+  const previewBlockingGroups = useMemo(() => groupPreviewBlocksByCode(previewBlockingBlocks), [previewBlockingBlocks]);
+  const previewWarningGroups = useMemo(() => groupPreviewBlocksByCode(previewWarningBlocks), [previewWarningBlocks]);
+  const visiblePreviewIssueDetails = useMemo(
+    () => visiblePreviewBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
+    [visiblePreviewBlocks],
+  );
+  const visiblePreviewBlockingDetails = useMemo(
+    () => previewBlockingBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
+    [previewBlockingBlocks],
+  );
+  const visiblePreviewWarningDetails = useMemo(
+    () => previewWarningBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
+    [previewWarningBlocks],
+  );
 
   const adsAllocationEnabled = !!previewInvoiceId && !!settlement;
 
@@ -1305,9 +1344,9 @@ export default function SettlementDetailPage() {
                     )}
                   </TabsList>
 
-                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
+                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && tab === 'plutus-preview' && (
                     <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-                      <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Preview invoice</div>
+                      <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Plutus invoice</div>
                       <Select
                         value={previewInvoiceId ?? ''}
                         onValueChange={(v) => {
@@ -1414,7 +1453,7 @@ export default function SettlementDetailPage() {
                     <div className="flex flex-col items-center gap-2 text-center">
                       <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">
-                        Choose a Preview invoice above to compute advertising allocation.
+                        Choose a Plutus invoice above to compute advertising allocation.
                       </div>
                     </div>
                   </div>
@@ -1720,7 +1759,7 @@ export default function SettlementDetailPage() {
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
                         <div className="text-sm text-slate-500 dark:text-slate-400">
-                          Choose a Preview invoice above to compute a settlement preview.
+                          Choose a Plutus invoice above to compute a settlement preview.
                         </div>
                       </div>
                     </div>
@@ -1837,10 +1876,20 @@ export default function SettlementDetailPage() {
                               {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
                             </span>
                           </div>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {previewIssueGroups.map((group) => (
+                              <span
+                                key={group.code}
+                                className="rounded border border-amber-300 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:text-amber-200"
+                              >
+                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
+                              </span>
+                            ))}
+                          </div>
                           <ul
                             className="text-sm space-y-1 text-amber-700 dark:text-amber-200"
                           >
-                            {visiblePreviewBlocks.map((b, idx) => (
+                            {visiblePreviewIssueDetails.map((b, idx) => (
                               <li key={idx}>
                                 <span className="font-mono text-xs">{b.code}</span>: {b.message}
                                 {b.details && 'error' in b.details && (
@@ -1852,6 +1901,12 @@ export default function SettlementDetailPage() {
                               </li>
                             ))}
                           </ul>
+                          {previewIssueCount > MAX_PREVIEW_BLOCK_DETAILS && (
+                            <div className="mt-2 text-xs text-amber-700 dark:text-amber-200">
+                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
+                              {(previewIssueCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1863,8 +1918,18 @@ export default function SettlementDetailPage() {
                               {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
                             </span>
                           </div>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {previewBlockingGroups.map((group) => (
+                              <span
+                                key={group.code}
+                                className="rounded border border-red-300 px-1.5 py-0.5 text-xs text-red-700 dark:border-red-800 dark:text-red-200"
+                              >
+                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
+                              </span>
+                            ))}
+                          </div>
                           <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                            {previewBlockingBlocks.map((b, idx) => (
+                            {visiblePreviewBlockingDetails.map((b, idx) => (
                               <li key={idx}>
                                 <span className="font-mono text-xs">{b.code}</span>: {b.message}
                                 {b.details && 'error' in b.details && (
@@ -1876,6 +1941,12 @@ export default function SettlementDetailPage() {
                               </li>
                             ))}
                           </ul>
+                          {previewBlockingCount > MAX_PREVIEW_BLOCK_DETAILS && (
+                            <div className="mt-2 text-xs text-red-700 dark:text-red-200">
+                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
+                              {(previewBlockingCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1887,8 +1958,18 @@ export default function SettlementDetailPage() {
                               {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
                             </span>
                           </div>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {previewWarningGroups.map((group) => (
+                              <span
+                                key={group.code}
+                                className="rounded border border-amber-300 px-1.5 py-0.5 text-xs text-amber-700 dark:border-amber-800 dark:text-amber-200"
+                              >
+                                <span className="font-mono">{group.code}</span> &times; {group.count.toLocaleString()}
+                              </span>
+                            ))}
+                          </div>
                           <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
-                            {previewWarningBlocks.map((b, idx) => (
+                            {visiblePreviewWarningDetails.map((b, idx) => (
                               <li key={idx}>
                                 <span className="font-mono text-xs">{b.code}</span>: {b.message}
                                 {b.details && 'error' in b.details && (
@@ -1900,6 +1981,12 @@ export default function SettlementDetailPage() {
                               </li>
                             ))}
                           </ul>
+                          {previewWarningCount > MAX_PREVIEW_BLOCK_DETAILS && (
+                            <div className="mt-2 text-xs text-amber-700 dark:text-amber-200">
+                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
+                              {(previewWarningCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
+                            </div>
+                          )}
                         </div>
                       )}
 
