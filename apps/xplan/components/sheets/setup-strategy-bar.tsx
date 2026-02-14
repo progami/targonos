@@ -2,12 +2,11 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Plus, Check, Pencil, Trash2, Star } from 'lucide-react';
+import { Plus, Check, Pencil, Trash2, Star, ChevronRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { withAppBasePath } from '@/lib/base-path';
 import { cn } from '@/lib/utils';
 import { formatDateDisplay } from '@/lib/utils/dates';
-import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,7 +80,7 @@ type StrategyGroupView = {
   strategies: Strategy[];
 };
 
-interface StrategiesWorkspaceProps {
+interface SetupStrategyBarProps {
   strategies: Strategy[];
   activeStrategyId?: string | null;
   viewer: {
@@ -100,11 +99,11 @@ function normalizeGroupCode(raw: string) {
     .replace(/-+/g, '-');
 }
 
-export function StrategiesWorkspace({
+export function SetupStrategyBar({
   strategies: initialStrategies,
   activeStrategyId,
   viewer,
-}: StrategiesWorkspaceProps) {
+}: SetupStrategyBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [strategies, setStrategies] = useState<Strategy[]>(initialStrategies);
@@ -207,6 +206,20 @@ export function StrategiesWorkspace({
       });
   }, [strategies]);
 
+  /* ------------------------------------------------------------------ */
+  /*  Derived active state                                               */
+  /* ------------------------------------------------------------------ */
+
+  const activeStrategy = strategies.find((s) => s.id === selectedStrategyId);
+  const activeRegion = activeStrategy?.region ?? 'US';
+  const activeGroupId = activeStrategy?.strategyGroupId ?? null;
+  const regionGroups = groups.filter((g) => g.region === activeRegion);
+  const activeGroup = regionGroups.find((g) => g.id === activeGroupId) ?? regionGroups[0] ?? null;
+
+  /* ------------------------------------------------------------------ */
+  /*  Assignee loading                                                   */
+  /* ------------------------------------------------------------------ */
+
   useEffect(() => {
     let cancelled = false;
 
@@ -243,6 +256,10 @@ export function StrategiesWorkspace({
     };
   }, []);
 
+  /* ------------------------------------------------------------------ */
+  /*  Helpers                                                            */
+  /* ------------------------------------------------------------------ */
+
   const strategyAssigneeIds = (strategy: Strategy) =>
     Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
       ? strategy.strategyAssignees.map((entry) => entry.assigneeId)
@@ -257,20 +274,20 @@ export function StrategiesWorkspace({
     return leftSorted.every((value, index) => value === rightSorted[index]);
   };
 
-  const renderAssigneeLabel = (strategy: Strategy) => {
-    const assigneeEmails =
+  const getAssigneeShortLabels = (strategy: Strategy): string => {
+    const emails =
       Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
         ? strategy.strategyAssignees.map((entry) => entry.assigneeEmail)
         : strategy.assigneeEmail
           ? [strategy.assigneeEmail]
           : [];
 
-    if (assigneeEmails.length > 0) return assigneeEmails.join(', ');
-    return 'Unassigned';
+    if (emails.length === 0) return 'Unassigned';
+    return emails.map((email) => email.split('@')[0]).join(', ');
   };
 
   const renderLastEditedLabel = (strategy: Strategy) =>
-    formatDateDisplay(strategy.updatedAt, lastEditedFormatter, '—');
+    formatDateDisplay(strategy.updatedAt, lastEditedFormatter, '\u2014');
 
   const toggleGroupAssignee = (id: string) => {
     setGroupAssigneeIds((prev) =>
@@ -284,11 +301,53 @@ export function StrategiesWorkspace({
     );
   };
 
+  /* ------------------------------------------------------------------ */
+  /*  Region switching                                                   */
+  /* ------------------------------------------------------------------ */
+
+  const handleRegionSwitch = (region: 'US' | 'UK') => {
+    if (region === activeRegion) return;
+    const targetGroups = groups.filter((g) => g.region === region);
+    const firstGroup = targetGroups[0];
+    if (!firstGroup) return;
+    const primary = firstGroup.strategies.find((s) => s.isPrimary) ?? firstGroup.strategies[0];
+    if (!primary) return;
+    handleSelectStrategy(primary.id, primary.name);
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Group switching                                                    */
+  /* ------------------------------------------------------------------ */
+
+  const handleGroupChange = (groupId: string) => {
+    if (groupId === activeGroup?.id) return;
+    const targetGroup = regionGroups.find((g) => g.id === groupId);
+    if (!targetGroup) return;
+    const primary = targetGroup.strategies.find((s) => s.isPrimary) ?? targetGroup.strategies[0];
+    if (!primary) return;
+    handleSelectStrategy(primary.id, primary.name);
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Scenario switching                                                 */
+  /* ------------------------------------------------------------------ */
+
+  const handleScenarioChange = (strategyId: string) => {
+    if (strategyId === selectedStrategyId) return;
+    const target = activeGroup?.strategies.find((s) => s.id === strategyId);
+    if (!target) return;
+    setPendingSwitch({ id: target.id, name: target.name });
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Dialog openers / closers                                           */
+  /* ------------------------------------------------------------------ */
+
   const openCreateGroupDialog = () => {
     setIsGroupDialogOpen(true);
     setGroupName('');
     setGroupCode('');
-    setGroupRegion('US');
+    setGroupRegion(activeRegion);
     setGroupScenarioName('Base case');
     setGroupScenarioDescription('');
     setGroupAssigneeIds(viewer.id ? [viewer.id] : []);
@@ -298,9 +357,10 @@ export function StrategiesWorkspace({
     setIsGroupDialogOpen(false);
   };
 
-  const openCreateScenarioDialog = (groupId: string) => {
+  const openCreateScenarioDialog = () => {
+    if (!activeGroup) return;
     setScenarioDialogMode('create');
-    setScenarioGroupId(groupId);
+    setScenarioGroupId(activeGroup.id);
     setScenarioStrategyId(null);
     setScenarioName('');
     setScenarioDescription('');
@@ -308,14 +368,15 @@ export function StrategiesWorkspace({
     setScenarioPrimary(false);
   };
 
-  const openEditScenarioDialog = (strategy: Strategy) => {
+  const openEditScenarioDialog = () => {
+    if (!activeStrategy) return;
     setScenarioDialogMode('edit');
-    setScenarioGroupId(strategy.strategyGroupId);
-    setScenarioStrategyId(strategy.id);
-    setScenarioName(strategy.name);
-    setScenarioDescription(strategy.description ?? '');
-    setScenarioAssigneeIds(strategyAssigneeIds(strategy));
-    setScenarioPrimary(strategy.isPrimary);
+    setScenarioGroupId(activeStrategy.strategyGroupId);
+    setScenarioStrategyId(activeStrategy.id);
+    setScenarioName(activeStrategy.name);
+    setScenarioDescription(activeStrategy.description ?? '');
+    setScenarioAssigneeIds(strategyAssigneeIds(activeStrategy));
+    setScenarioPrimary(activeStrategy.isPrimary);
   };
 
   const closeScenarioDialog = () => {
@@ -323,6 +384,10 @@ export function StrategiesWorkspace({
     setScenarioGroupId(null);
     setScenarioStrategyId(null);
   };
+
+  /* ------------------------------------------------------------------ */
+  /*  CRUD handlers                                                      */
+  /* ------------------------------------------------------------------ */
 
   const handleCreateGroup = async () => {
     const nextGroupName = groupName.trim();
@@ -499,15 +564,16 @@ export function StrategiesWorkspace({
     }
   };
 
-  const handleSetPrimaryScenario = async (strategy: Strategy) => {
-    if (strategy.isPrimary) return;
+  const handleSetPrimaryScenario = async () => {
+    if (!activeStrategy) return;
+    if (activeStrategy.isPrimary) return;
 
     try {
       const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: strategy.id,
+          id: activeStrategy.id,
           isPrimary: true,
         }),
       });
@@ -523,25 +589,24 @@ export function StrategiesWorkspace({
 
       setStrategies((prev) =>
         prev.map((item) => {
-          if (item.strategyGroupId !== strategy.strategyGroupId) return item;
-          if (item.id === strategy.id) {
+          if (item.strategyGroupId !== activeStrategy.strategyGroupId) return item;
+          if (item.id === activeStrategy.id) {
             return { ...item, ...data.strategy, isPrimary: true };
           }
           return { ...item, isPrimary: false };
         }),
       );
 
-      toast.success(`"${strategy.name}" is now the primary scenario`);
+      toast.success(`"${activeStrategy.name}" is now the primary scenario`);
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Failed to set primary scenario');
     }
   };
 
-  const requestDelete = (id: string) => {
-    const strategy = strategies.find((item) => item.id === id);
-    if (!strategy) return;
-    setPendingDelete(strategy);
+  const requestDelete = () => {
+    if (!activeStrategy) return;
+    setPendingDelete(activeStrategy);
   };
 
   const confirmDelete = async () => {
@@ -592,138 +657,170 @@ export function StrategiesWorkspace({
     toast.success(`Switched to "${pendingSwitch.name}"`);
   };
 
+  /* ------------------------------------------------------------------ */
+  /*  Styling constants                                                  */
+  /* ------------------------------------------------------------------ */
+
   const primaryActionClass =
     'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 enabled:hover:border-cyan-500 enabled:hover:bg-cyan-50 enabled:hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:focus:ring-cyan-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-cyan-300/50 dark:enabled:hover:bg-white/10';
 
+  const selectClass =
+    'h-8 rounded-md border border-input bg-background px-2 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
   const scenarioDialogTitle = scenarioDialogMode === 'edit' ? 'Edit scenario' : 'New scenario';
 
+  /* ------------------------------------------------------------------ */
+  /*  Render                                                             */
+  /* ------------------------------------------------------------------ */
+
+  const hasRegions = (region: 'US' | 'UK') => groups.some((g) => g.region === region);
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
-            Strategy Groups
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Each group has one primary scenario and optional what-if scenarios.
-          </p>
+    <>
+      <div className="border-b bg-muted/40 px-4 py-3">
+        {/* Breadcrumb navigation bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Region toggle */}
+          <div className="inline-flex overflow-hidden rounded-md border border-input shadow-sm">
+            <button
+              type="button"
+              disabled={!hasRegions('US')}
+              onClick={() => handleRegionSwitch('US')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors',
+                activeRegion === 'US'
+                  ? 'bg-cyan-600 text-white dark:bg-[#00C2B9] dark:text-[#002430]'
+                  : 'bg-background text-muted-foreground hover:bg-muted',
+                !hasRegions('US') && 'cursor-not-allowed opacity-40',
+              )}
+            >
+              US
+            </button>
+            <button
+              type="button"
+              disabled={!hasRegions('UK')}
+              onClick={() => handleRegionSwitch('UK')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors',
+                activeRegion === 'UK'
+                  ? 'bg-cyan-600 text-white dark:bg-[#00C2B9] dark:text-[#002430]'
+                  : 'bg-background text-muted-foreground hover:bg-muted',
+                !hasRegions('UK') && 'cursor-not-allowed opacity-40',
+              )}
+            >
+              UK
+            </button>
+          </div>
+
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+
+          {/* Group dropdown */}
+          {activeGroup ? (
+            <select
+              value={activeGroup.id}
+              onChange={(event) => handleGroupChange(event.target.value)}
+              className={selectClass}
+            >
+              {regionGroups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name} [{group.code}]
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-sm text-muted-foreground">No groups</span>
+          )}
+
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+
+          {/* Scenario dropdown */}
+          {activeGroup ? (
+            <select
+              value={selectedStrategyId ?? ''}
+              onChange={(event) => handleScenarioChange(event.target.value)}
+              className={selectClass}
+            >
+              {activeGroup.strategies.map((strategy) => (
+                <option key={strategy.id} value={strategy.id}>
+                  {strategy.name}
+                  {strategy.isPrimary ? ' \u2605' : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-sm text-muted-foreground">No scenarios</span>
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={openCreateGroupDialog} className={primaryActionClass}>
+              <span className="inline-flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" />
+                New Group
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openCreateScenarioDialog}
+              disabled={!activeGroup}
+              className={primaryActionClass}
+            >
+              <span className="inline-flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" />
+                Add Scenario
+              </span>
+            </button>
+
+            {activeStrategy && !activeStrategy.isPrimary ? (
+              <button
+                type="button"
+                onClick={() => void handleSetPrimaryScenario()}
+                className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
+                title="Set as primary"
+              >
+                <Star className="h-4 w-4" />
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={openEditScenarioDialog}
+              disabled={!activeStrategy}
+              className="rounded-md p-2 text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title="Edit scenario"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={requestDelete}
+              disabled={!activeStrategy}
+              className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Delete scenario"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={openCreateGroupDialog} className={primaryActionClass}>
-          <span className="inline-flex items-center gap-1.5">
-            <Plus className="h-4 w-4" />
-            New group
-          </span>
-        </button>
+
+        {/* Metadata line */}
+        {activeStrategy ? (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {getAssigneeShortLabels(activeStrategy)} &middot; {activeStrategy._count.products} products
+            &middot; {activeStrategy._count.purchaseOrders} orders &middot; Edited{' '}
+            {renderLastEditedLabel(activeStrategy)}
+          </p>
+        ) : null}
       </div>
 
-      {groups.length === 0 ? (
-        <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm dark:border-white/10">
-          No strategy groups yet. Create your first group to get started.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {groups.map((group) => (
-            <article
-              key={group.id}
-              className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10"
-            >
-              <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-sm font-semibold text-foreground">{group.name}</span>
-                  <Badge variant="secondary" className="uppercase">
-                    {group.region}
-                  </Badge>
-                  <Badge variant="outline" className="font-mono">
-                    {group.code}
-                  </Badge>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openCreateScenarioDialog(group.id)}
-                  className={primaryActionClass}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Plus className="h-4 w-4" />
-                    Add scenario
-                  </span>
-                </button>
-              </header>
-
-              <div className="divide-y">
-                {group.strategies.map((strategy) => {
-                  const isActive = selectedStrategyId === strategy.id;
-                  return (
-                    <div
-                      key={strategy.id}
-                      className={cn(
-                        'flex cursor-pointer flex-wrap items-start justify-between gap-3 px-4 py-3 transition',
-                        isActive
-                          ? 'bg-cyan-50/70 dark:bg-cyan-900/20'
-                          : 'hover:bg-muted/40 dark:hover:bg-white/5',
-                      )}
-                      onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
-                    >
-                      <div className="min-w-0 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{strategy.name}</span>
-                          {strategy.isPrimary ? (
-                            <Badge className="bg-amber-500 text-white hover:bg-amber-500 dark:bg-amber-400 dark:text-slate-900 dark:hover:bg-amber-400">
-                              Primary
-                            </Badge>
-                          ) : null}
-                          {isActive ? (
-                            <Badge className="bg-cyan-600 text-white hover:bg-cyan-600 dark:bg-[#00C2B9] dark:text-slate-900 dark:hover:bg-[#00C2B9]">
-                              Active
-                            </Badge>
-                          ) : null}
-                        </div>
-                        {strategy.description ? (
-                          <p className="text-xs text-muted-foreground">{strategy.description}</p>
-                        ) : null}
-                        <p className="text-xs text-muted-foreground">
-                          {renderAssigneeLabel(strategy)} · {strategy._count.products} products ·{' '}
-                          {strategy._count.purchaseOrders} orders · Edited{' '}
-                          {renderLastEditedLabel(strategy)}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                        {!strategy.isPrimary ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleSetPrimaryScenario(strategy)}
-                            className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10 dark:hover:text-amber-300"
-                            title="Set as primary"
-                          >
-                            <Star className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => openEditScenarioDialog(strategy)}
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted"
-                          title="Edit scenario"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => requestDelete(strategy.id)}
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20 dark:hover:text-rose-400"
-                          title="Delete scenario"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
+      {/* ---------------------------------------------------------------- */}
+      {/*  Create group dialog                                              */}
+      {/* ---------------------------------------------------------------- */}
       <Dialog open={isGroupDialogOpen} onOpenChange={(open) => !open && closeCreateGroupDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -836,6 +933,9 @@ export function StrategiesWorkspace({
         </DialogContent>
       </Dialog>
 
+      {/* ---------------------------------------------------------------- */}
+      {/*  Create / edit scenario dialog                                    */}
+      {/* ---------------------------------------------------------------- */}
       <Dialog open={scenarioDialogMode != null} onOpenChange={(open) => !open && closeScenarioDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -949,6 +1049,9 @@ export function StrategiesWorkspace({
         </DialogContent>
       </Dialog>
 
+      {/* ---------------------------------------------------------------- */}
+      {/*  Switch confirmation dialog                                       */}
+      {/* ---------------------------------------------------------------- */}
       <AlertDialog
         open={pendingSwitch != null}
         onOpenChange={(open) => {
@@ -973,6 +1076,9 @@ export function StrategiesWorkspace({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ---------------------------------------------------------------- */}
+      {/*  Delete confirmation dialog                                       */}
+      {/* ---------------------------------------------------------------- */}
       <AlertDialog
         open={pendingDelete != null}
         onOpenChange={(open) => {
@@ -1003,6 +1109,6 @@ export function StrategiesWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </>
   );
 }
