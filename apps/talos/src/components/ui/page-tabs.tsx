@@ -85,7 +85,9 @@ export function PageTabs({
                   className={cn(
                     'ml-1 rounded-full px-2 py-0.5 text-xs font-medium',
                     isActive
-                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      ? variant === 'pills'
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-primary/10 text-primary'
                       : 'bg-muted text-muted-foreground'
                   )}
                 >

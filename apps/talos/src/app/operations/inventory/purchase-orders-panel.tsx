@@ -21,7 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Filter, Search } from '@/lib/lucide-icons'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { ChevronRight, Eye, Filter, Search } from '@/lib/lucide-icons'
 import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
@@ -100,6 +107,7 @@ export interface PurchaseOrderSummary {
   orderNumber: string
   poNumber: string | null
   grnNumber?: string | null
+  splitGroupId?: string | null
   tenantCode?: string | null
   matchedSkuCodes?: string[]
   type: PurchaseOrderTypeOption
@@ -122,6 +130,9 @@ interface PurchaseOrdersPanelProps {
   onPosted: () => void
   statusFilter?: PurchaseOrderFilter
   typeFilter?: PurchaseOrderTypeOption
+  onCountsLoaded?: (counts: Record<string, number>) => void
+  globalSearch?: string
+  lifecycleTrigger?: number
 }
 
 const DEFAULT_BADGE_CLASS = 'bg-muted text-muted-foreground border border-muted'
@@ -250,41 +261,42 @@ export function PurchaseOrdersPanel({
   onPosted: _onPosted,
   statusFilter = 'ISSUED',
   typeFilter,
+  onCountsLoaded,
+  globalSearch,
+  lifecycleTrigger,
 }: PurchaseOrdersPanelProps) {
-  const [orders, setOrders] = useState<PurchaseOrderSummary[]>([])
+  const [allOrders, setAllOrders] = useState<PurchaseOrderSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState(FILTER_ALL)
   const [receiveTypeFilter, setReceiveTypeFilter] = useState(FILTER_ALL)
+  const [lifecycleOrderId, setLifecycleOrderId] = useState<string | null>(null)
+  const [lifecycleMembers, setLifecycleMembers] = useState<PurchaseOrderSummary[]>([])
+  const [lifecycleLoading, setLifecycleLoading] = useState(false)
 
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true)
-      const endpoint = withBasePath(
-        statusFilter === 'MANUFACTURING'
-          ? '/api/purchase-orders/manufacturing'
-          : '/api/purchase-orders'
-      )
-      const response = await fetch(endpoint, { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/purchase-orders'), { credentials: 'include' })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         toast.error(payload?.error ?? 'Failed to load purchase orders')
         return
       }
-
       const payload = await response.json().catch(() => null)
-      const data = Array.isArray(payload?.data) ? (payload.data as PurchaseOrderSummary[]) : []
-      setOrders(data)
+      setAllOrders(Array.isArray(payload?.data) ? (payload.data as PurchaseOrderSummary[]) : [])
     } catch (_error) {
       toast.error('Failed to load purchase orders')
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [])
 
   useEffect(() => {
     fetchOrders()
   }, [fetchOrders])
+
+  const orders = allOrders
 
   useEffect(() => {
     if (statusFilter !== 'WAREHOUSE') {
@@ -292,9 +304,16 @@ export function PurchaseOrdersPanel({
     }
   }, [statusFilter])
 
-  // Count orders by new 5-stage statuses
+  // Count orders by stage — filtered by global search when active, so tab counts reflect matches
   const statusCounts = useMemo(() => {
-    return orders.reduce(
+    const globalNeedle = typeof globalSearch === 'string' ? globalSearch.trim() : ''
+    const source = globalNeedle.length > 0
+      ? allOrders.filter(o => {
+          const matchesType = typeFilter ? o.type === typeFilter : true
+          return matchesType && orderMatchesSearch(o, globalNeedle)
+        })
+      : allOrders
+    return source.reduce(
       (acc, order) => {
         if (order.status === 'ISSUED') acc.issuedCount += 1
         if (order.status === 'MANUFACTURING') acc.manufacturingCount += 1
@@ -311,7 +330,17 @@ export function PurchaseOrdersPanel({
         closedCount: 0,
       }
     )
-  }, [orders])
+  }, [allOrders, globalSearch, typeFilter])
+
+  useEffect(() => {
+    onCountsLoaded?.({
+      ISSUED: statusCounts.issuedCount,
+      MANUFACTURING: statusCounts.manufacturingCount,
+      OCEAN: statusCounts.oceanCount,
+      WAREHOUSE: statusCounts.warehouseCount,
+      CLOSED: statusCounts.closedCount,
+    })
+  }, [statusCounts, onCountsLoaded])
 
   const visibleOrders = useMemo(
     () =>
@@ -357,8 +386,11 @@ export function PurchaseOrdersPanel({
     const supplierNeedle = supplierFilter === FILTER_ALL ? '' : normalizeForMatch(supplierFilter)
     const receiveTypeNeedle = receiveTypeFilter === FILTER_ALL ? '' : normalizeForMatch(receiveTypeFilter)
     const isWarehouseStage = statusFilter === 'WAREHOUSE'
+    const globalNeedle = typeof globalSearch === 'string' ? globalSearch.trim() : ''
 
     return visibleOrders.filter(order => {
+      if (globalNeedle.length > 0 && !orderMatchesSearch(order, globalNeedle)) return false
+
       if (supplierNeedle.length > 0) {
         const supplier = normalizeForMatch(order.counterpartyName)
         if (supplier !== supplierNeedle) return false
@@ -371,7 +403,7 @@ export function PurchaseOrdersPanel({
 
       return orderMatchesSearch(order, searchFilter)
     })
-  }, [receiveTypeFilter, searchFilter, statusFilter, supplierFilter, visibleOrders])
+  }, [globalSearch, receiveTypeFilter, searchFilter, statusFilter, supplierFilter, visibleOrders])
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -386,6 +418,50 @@ export function PurchaseOrdersPanel({
     setSupplierFilter(FILTER_ALL)
     setReceiveTypeFilter(FILTER_ALL)
   }, [])
+
+  const openLifecycle = useCallback(async (order: PurchaseOrderSummary) => {
+    setLifecycleOrderId(order.id)
+
+    if (order.splitGroupId) {
+      // Fetch all split group members (may include cross-tenant POs)
+      setLifecycleLoading(true)
+      const localMembers = allOrders.filter(o => o.splitGroupId === order.splitGroupId)
+
+      try {
+        const endpoint = withBasePath(`/api/purchase-orders?splitGroupId=${encodeURIComponent(order.splitGroupId)}`)
+        const response = await fetch(endpoint, { credentials: 'include' })
+        if (response.ok) {
+          const payload = await response.json().catch(() => null)
+          const remote = Array.isArray(payload?.data) ? (payload.data as PurchaseOrderSummary[]) : []
+          // Merge: use remote data, but also include any local-only entries
+          const remoteIds = new Set(remote.map(r => r.id))
+          setLifecycleMembers([...remote, ...localMembers.filter(l => !remoteIds.has(l.id))])
+        } else {
+          setLifecycleMembers(localMembers)
+        }
+      } catch {
+        setLifecycleMembers(localMembers)
+      } finally {
+        setLifecycleLoading(false)
+      }
+    } else {
+      setLifecycleMembers([order])
+    }
+  }, [allOrders])
+
+  const lifecycleOrder = useMemo(
+    () => (lifecycleOrderId ? allOrders.find(o => o.id === lifecycleOrderId) ?? lifecycleMembers.find(o => o.id === lifecycleOrderId) ?? null : null),
+    [lifecycleOrderId, allOrders, lifecycleMembers]
+  )
+
+  // React to lifecycle trigger from the page-level "View Lifecycle" button
+  useEffect(() => {
+    if (!lifecycleTrigger || !globalSearch) return
+    const needle = globalSearch.trim()
+    if (!needle) return
+    const match = allOrders.find(o => orderMatchesSearch(o, needle))
+    if (match) openLifecycle(match)
+  }, [lifecycleTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = useMemo<TableColumn[]>(() => {
     const cols: TableColumn[] = []
@@ -920,11 +996,35 @@ export function PurchaseOrdersPanel({
         thClassName: 'w-[96px]',
         tdClassName: 'px-3 py-2 whitespace-nowrap text-muted-foreground tabular-nums',
         render: order => formatDateDisplay(order.createdAt),
+      },
+      {
+        key: 'lifecycle',
+        header: buildColumnHeader(''),
+        fit: true,
+        thClassName: 'w-[40px]',
+        tdClassName: 'px-1 py-2',
+        render: order => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="View lifecycle"
+            onClick={e => {
+              e.preventDefault()
+              e.stopPropagation()
+              openLifecycle(order)
+            }}
+          >
+            <Eye className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        ),
       }
     )
 
     return cols
   }, [
+    openLifecycle,
     receiveTypeFilter,
     receiveTypeOptions,
     searchFilter,
@@ -939,30 +1039,12 @@ export function PurchaseOrdersPanel({
 	      <DataTableContainer
 	        title="Purchase Orders"
 	        headerContent={
-	          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-	            <span>
-	              <span className="font-semibold text-foreground">{statusCounts.issuedCount}</span> Issued
-	            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.manufacturingCount}</span>{' '}
-              Manufacturing
-            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.oceanCount}</span> Transit
-            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.warehouseCount}</span> Warehouse
-            </span>
-            <span>
-              <span className="font-semibold text-foreground">{statusCounts.closedCount}</span> Closed
-            </span>
-            {hasActiveFilters && (
-              <Button type="button" variant="outline" size="sm" className="h-8" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </div>
-        }
+	          hasActiveFilters ? (
+	            <Button type="button" variant="outline" size="sm" className="h-8" onClick={clearFilters}>
+	              Clear filters
+	            </Button>
+	          ) : undefined
+	        }
         className="flex-1"
       >
         <table className="w-full table-fixed text-sm">
@@ -1000,6 +1082,133 @@ export function PurchaseOrdersPanel({
           </tbody>
         </table>
       </DataTableContainer>
+
+      {/* Lifecycle Dialog */}
+      <Dialog open={lifecycleOrderId !== null} onOpenChange={open => { if (!open) setLifecycleOrderId(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>PO Lifecycle</DialogTitle>
+            <DialogDescription>
+              {lifecycleOrder
+                ? `Journey of ${lifecycleOrder.poNumber ?? lifecycleOrder.orderNumber}`
+                : 'Loading…'}
+            </DialogDescription>
+          </DialogHeader>
+          {lifecycleLoading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Loading lifecycle…</p>
+          ) : lifecycleOrder ? (
+            <LifecycleTree order={lifecycleOrder} members={lifecycleMembers} />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+/* ---------- Lifecycle tree helpers ---------- */
+
+const STAGE_ORDER: PurchaseOrderStatusOption[] = ['ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'CLOSED']
+
+const STAGE_LABEL: Record<string, string> = {
+  ISSUED: 'Issued',
+  MANUFACTURING: 'Manufacturing',
+  OCEAN: 'Transit',
+  WAREHOUSE: 'Warehouse',
+  CLOSED: 'Closed',
+}
+
+function stageIndex(status: PurchaseOrderStatusOption) {
+  const idx = STAGE_ORDER.indexOf(status)
+  return idx >= 0 ? idx : 0
+}
+
+function LifecycleTree({ order, members }: { order: PurchaseOrderSummary; members: PurchaseOrderSummary[] }) {
+  const poRef = order.poNumber ?? order.orderNumber
+  const isSplitGroup = members.length > 1
+
+  // Build stage progression for the parent PO
+  const currentIdx = stageIndex(order.status)
+  const passedStages = STAGE_ORDER.filter((_s, i) => i <= currentIdx && i < STAGE_ORDER.length - 1)
+
+  return (
+    <div className="space-y-4 py-2">
+      {/* Stage progression */}
+      <div className="flex items-center gap-1 text-xs">
+        {passedStages.map((stage, i) => (
+          <span key={stage} className="flex items-center gap-1">
+            {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+            <Badge
+              className={
+                stage === order.status
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }
+            >
+              {STAGE_LABEL[stage] ?? stage}
+            </Badge>
+          </span>
+        ))}
+        {order.status === 'CLOSED' && (
+          <span className="flex items-center gap-1">
+            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            <Badge className="bg-destructive/10 text-destructive border border-destructive/20">Closed</Badge>
+          </span>
+        )}
+      </div>
+
+      {/* Tree of children */}
+      <div className="rounded-md border border-border p-3 space-y-3">
+        <p className="text-sm font-semibold text-foreground">
+          PO# {poRef}
+        </p>
+        {isSplitGroup ? (
+          <div className="ml-3 space-y-2 border-l-2 border-border pl-3">
+            {members.map(member => (
+              <LifecycleNode key={member.id} order={member} />
+            ))}
+          </div>
+        ) : (
+          <div className="ml-3 border-l-2 border-border pl-3">
+            <LifecycleNode order={order} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LifecycleNode({ order }: { order: PurchaseOrderSummary }) {
+  const ci = order.stageData.ocean.commercialInvoiceNumber
+  const grn = order.grnNumber
+  const tenant = order.tenantCode
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      {ci ? (
+        <span className="font-medium text-foreground">CI# {ci}</span>
+      ) : (
+        <span className="text-muted-foreground italic">No CI</span>
+      )}
+      <ChevronRight className="h-3 w-3 text-muted-foreground" />
+      {grn ? (
+        <span className="font-medium text-foreground">GRN# {grn}</span>
+      ) : (
+        <span className="text-muted-foreground italic">No GRN</span>
+      )}
+      {tenant && (
+        <Badge variant="outline" className="text-xs">{tenant.toUpperCase()}</Badge>
+      )}
+      <Badge
+        className={
+          order.status === 'CLOSED'
+            ? 'bg-destructive/10 text-destructive border border-destructive/20'
+            : order.status === 'WAREHOUSE'
+              ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+              : 'bg-muted text-muted-foreground'
+        }
+      >
+        {STAGE_LABEL[order.status] ?? order.status}
+      </Badge>
     </div>
   )
 }
