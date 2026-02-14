@@ -558,15 +558,15 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
-    const defaultStrategy = await prismaAny.strategy.findFirst({
+    const primaryStrategy = await prismaAny.strategy.findFirst({
       where: {
-        isDefault: true,
+        isPrimary: true,
         ...buildStrategyAccessWhere(actor),
       },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     });
-    if (defaultStrategy) return defaultStrategy.id;
+    if (primaryStrategy) return primaryStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where: buildStrategyAccessWhere(actor),
@@ -597,15 +597,15 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
-    const defaultStrategy = await prismaAny.strategy.findFirst({
+    const primaryStrategy = await prismaAny.strategy.findFirst({
       where: {
-        isDefault: true,
+        isPrimary: true,
         ...where,
       },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     });
-    if (defaultStrategy) return defaultStrategy.id;
+    if (primaryStrategy) return primaryStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where,
@@ -2204,10 +2204,23 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   const activeStrategyRow = strategyId
     ? await prismaAnyLocal.strategy?.findUnique?.({
         where: { id: strategyId },
-        select: { name: true, region: true },
+        select: {
+          name: true,
+          region: true,
+          strategyGroup: {
+            select: {
+              code: true,
+              name: true,
+            },
+          },
+        },
       })
     : null;
-  const activeStrategyName: string | null = activeStrategyRow?.name ?? null;
+  const activeStrategyName: string | null = activeStrategyRow
+    ? activeStrategyRow.strategyGroup?.name
+      ? `${activeStrategyRow.strategyGroup.name} · ${activeStrategyRow.name}`
+      : activeStrategyRow.name
+    : null;
   const strategyRegion: StrategyRegion =
     strategyId && activeStrategyRow
       ? (() => {
@@ -2275,7 +2288,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         salesWeeks: true,
       };
 
-      const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
+      const orderBy = [{ isPrimary: 'desc' }, { updatedAt: 'desc' }];
 
       const strategySelect = {
         id: true,
@@ -2284,6 +2297,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: true,
         region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
+        strategyGroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            region: true,
+            createdById: true,
+            createdByEmail: true,
+            assigneeId: true,
+            assigneeEmail: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         createdById: true,
         createdByEmail: true,
         assigneeId: true,
@@ -2308,6 +2337,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: true,
         region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
+        strategyGroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            region: true,
+            createdById: true,
+            createdByEmail: true,
+            assigneeId: true,
+            assigneeEmail: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         createdAt: true,
         updatedAt: true,
         _count: { select: countsSelect },
@@ -2348,6 +2393,20 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: string;
         region: 'US' | 'UK';
         isDefault: boolean;
+        isPrimary: boolean;
+        strategyGroupId: string;
+        strategyGroup: {
+          id: string;
+          code: string;
+          name: string;
+          region: 'US' | 'UK';
+          createdById: string | null;
+          createdByEmail: string | null;
+          assigneeId: string | null;
+          assigneeEmail: string | null;
+          createdAt: string;
+          updatedAt: string;
+        } | null;
         createdById: string | null;
         createdByEmail: string | null;
         assigneeId: string | null;
@@ -2373,6 +2432,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: s.status,
         region: s.region === 'UK' ? 'UK' : 'US',
         isDefault: Boolean(s.isDefault),
+        isPrimary: Boolean(s.isPrimary),
+        strategyGroupId: s.strategyGroupId,
+        strategyGroup: s.strategyGroup
+          ? {
+              id: s.strategyGroup.id,
+              code: s.strategyGroup.code,
+              name: s.strategyGroup.name,
+              region: s.strategyGroup.region === 'UK' ? 'UK' : 'US',
+              createdById: s.strategyGroup.createdById ?? null,
+              createdByEmail: s.strategyGroup.createdByEmail ?? null,
+              assigneeId: s.strategyGroup.assigneeId ?? null,
+              assigneeEmail: s.strategyGroup.assigneeEmail ?? null,
+              createdAt: s.strategyGroup.createdAt.toISOString(),
+              updatedAt: s.strategyGroup.updatedAt.toISOString(),
+            }
+          : null,
         createdById: s.createdById ?? null,
         createdByEmail: s.createdByEmail ?? null,
         assigneeId: s.assigneeId ?? null,
