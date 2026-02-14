@@ -33,11 +33,13 @@ import {
   mapRecurringTransactionsToEvents,
 } from '../lib/plutus/cashflow/qbo-mappers';
 import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
+import { buildPnlJournalLines } from '../lib/plutus/journal-builder';
 import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
+import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
 function test(name: string, fn: () => void) {
@@ -212,6 +214,98 @@ test('computePnlAllocation uses absolute sales quantities for weights', () => {
 
   assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -600);
   assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, -300);
+});
+
+test('computePnlAllocation routes AWD rows into warehousingAwd bucket', () => {
+  const rows = [
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand B',
+      net: 10,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon FBA Fees - AWD Processing Fee',
+      net: -9,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: 'SKU-A',
+      quantity: 0,
+      description: 'Amazon Storage Fees - AWD Storage Fee',
+      net: -3,
+    },
+  ];
+
+  const allocation = computePnlAllocation(rows, {
+    getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
+  });
+
+  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandA, -900);
+  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandB, -300);
+  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonStorageFees.BrandA, undefined);
+});
+
+test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '238',
+      SyncToken: '0',
+      Name: 'AWD',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'ShippingFreightDeliveryCos',
+    },
+    {
+      Id: '245',
+      SyncToken: '0',
+      Name: 'US-PDS',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'ShippingFreightDeliveryCos',
+      ParentRef: { value: '238', name: 'AWD' },
+    },
+  ];
+
+  const lines = buildPnlJournalLines(
+    { warehousingAwd: { 'US-PDS': -12345 } },
+    { warehousingAwd: '238' },
+    accounts,
+    'INV-1',
+    blocks,
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.accountId, '245');
+  assert.equal(lines[0]?.postingType, 'Debit');
+  assert.equal(lines[0]?.amountCents, 12345);
+  assert.equal(lines[1]?.accountId, '238');
+  assert.equal(lines[1]?.postingType, 'Credit');
+  assert.equal(lines[1]?.amountCents, 12345);
+  assert.equal(blocks.length, 0);
 });
 
 test('isBlockingProcessingCode treats cost basis and allocation as warnings', () => {

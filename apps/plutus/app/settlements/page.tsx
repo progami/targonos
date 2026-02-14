@@ -558,7 +558,8 @@ export default function SettlementsPage() {
                                 dropdownItems={[
                                   { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
                                   { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
-                                  { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                                  { label: 'Advertising Allocation', onClick: () => router.push(`/settlements/${s.id}?tab=ads-allocation`) },
+                                  { label: 'Plutus Preview', onClick: () => router.push(`/settlements/${s.id}?tab=plutus-preview`) },
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >

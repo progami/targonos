@@ -30,6 +30,7 @@ import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
 import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -132,8 +133,22 @@ type SettlementProcessingPreview = {
   minDate: string;
   maxDate: string;
   blocks: Array<{ code: string; message: string; details?: Record<string, string | number> }>;
-  sales: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
-  returns: Array<{ orderId: string; sku: string; date: string; quantity: number; principalCents: number }>;
+  sales: Array<{
+    orderId: string;
+    sku: string;
+    date: string;
+    quantity: number;
+    principalCents: number;
+    costByComponentCents: { manufacturing: number; freight: number; duty: number; mfgAccessories: number };
+  }>;
+  returns: Array<{
+    orderId: string;
+    sku: string;
+    date: string;
+    quantity: number;
+    principalCents: number;
+    costByComponentCents: { manufacturing: number; freight: number; duty: number; mfgAccessories: number };
+  }>;
   cogsByBrandComponentCents: Record<string, Record<string, number>>;
   pnlByBucketBrandCents: Record<string, Record<string, number>>;
   cogsJournalEntry: JePreview;
@@ -181,7 +196,7 @@ type AdsAllocationResponse = {
   weightUnit: string;
   adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
   lines: AdsAllocationLine[];
-  skuProfitability: {
+  skuProfitability: null | {
     lines: AdsSkuProfitabilityLine[];
     totals: AdsSkuProfitabilityTotals;
   };
@@ -297,8 +312,13 @@ async function postSettlement(settlementId: string, invoiceId: string, marketpla
   return { ok: true as const, data };
 }
 
-async function fetchAdsAllocation(settlementId: string): Promise<AdsAllocationResponse> {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/ads-allocation`);
+async function fetchAdsAllocation(
+  settlementId: string,
+  invoiceId: string,
+  marketplace: MarketplaceId,
+): Promise<AdsAllocationResponse> {
+  const query = new URLSearchParams({ invoiceId, marketplace });
+  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/ads-allocation?${query.toString()}`);
   const data = await res.json();
   if (!res.ok) {
     const message = typeof data.details === 'string' ? data.details : data.error ?? 'Failed to load settlement advertising allocation';
@@ -362,12 +382,14 @@ function ProcessSettlementDialog({
   periodStart,
   periodEnd,
   marketplaceId,
+  defaultInvoiceId,
   onProcessed,
 }: {
   settlementId: string;
   periodStart: string | null;
   periodEnd: string | null;
   marketplaceId: MarketplaceId;
+  defaultInvoiceId: string | null;
   onProcessed: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -423,10 +445,15 @@ function ProcessSettlementDialog({
 
   // Auto-select recommended invoice when dialog opens and no invoice is selected
   useEffect(() => {
+    if (!open) return;
     if (selectedInvoice !== '') return;
+    if (defaultInvoiceId) {
+      setSelectedInvoice(defaultInvoiceId);
+      return;
+    }
     if (invoiceRecommendation.kind !== 'match') return;
     setSelectedInvoice(invoiceRecommendation.invoiceId);
-  }, [invoiceRecommendation, selectedInvoice]);
+  }, [defaultInvoiceId, invoiceRecommendation, open, selectedInvoice]);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -728,6 +755,16 @@ function ProcessSettlementDialog({
 // Main page component
 // ---------------------------------------------------------------------------
 
+type SettlementDetailTab = 'sales' | 'ads-allocation' | 'plutus-preview' | 'history';
+
+function parseSettlementTab(tab: string | null): SettlementDetailTab {
+  if (tab === 'history') return 'history';
+  if (tab === 'ads-allocation') return 'ads-allocation';
+  if (tab === 'analysis') return 'ads-allocation';
+  if (tab === 'plutus-preview') return 'plutus-preview';
+  return 'sales';
+}
+
 export default function SettlementDetailPage() {
   const routeParams = useParams();
   const rawId = routeParams.id;
@@ -739,12 +776,18 @@ export default function SettlementDetailPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const initialTab = searchParams.get('tab');
-  const [tab, setTab] = useState(
-    initialTab === 'history' ? 'history' : initialTab === 'ads-allocation' ? 'ads-allocation' : 'sales',
-  );
+  const [tab, setTab] = useState<SettlementDetailTab>(parseSettlementTab(initialTab));
+  const handleTabChange = (value: string) => {
+    setTab(parseSettlementTab(value));
+  };
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [pendingPreviewInvoiceId, setPendingPreviewInvoiceId] = useState<string>('');
+
+  useEffect(() => {
+    setPendingPreviewInvoiceId('');
+  }, [settlementId]);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -760,6 +803,14 @@ export default function SettlementDetailPage() {
   });
 
   const settlement = data?.settlement;
+
+  useEffect(() => {
+    if (tab !== 'plutus-preview') return;
+    if (!settlement) return;
+    if (settlement.plutusStatus === 'Pending') return;
+    if (settlement.plutusStatus === 'Processed') return;
+    setTab('sales');
+  }, [settlement, tab]);
 
   const totalLines = useMemo(() => {
     if (!settlement) return 0;
@@ -779,25 +830,39 @@ export default function SettlementDetailPage() {
     staleTime: 60 * 1000,
   });
 
+  const auditInvoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
+
+  const marketplaceAuditInvoices = useMemo(() => {
+    if (!settlement) return [];
+    return auditInvoices.filter((inv) => inv.marketplace === settlement.marketplace.id);
+  }, [auditInvoices, settlement]);
+
   const recommendedInvoice = useMemo(() => {
-    if (!auditData?.invoices || !settlement) return null;
+    if (!settlement) return null;
     const match = selectAuditInvoiceForSettlement({
       settlementMarketplace: settlement.marketplace.id,
       settlementPeriodStart: settlement.periodStart,
       settlementPeriodEnd: settlement.periodEnd,
-      invoices: auditData.invoices,
+      invoices: auditInvoices,
     });
 
     return match.kind === 'match' ? match.invoiceId : null;
-  }, [auditData?.invoices, settlement]);
+  }, [auditInvoices, settlement]);
 
   const previewInvoiceId = useMemo(() => {
     if (!settlement) return null;
     if (settlement.plutusStatus === 'Processed' && data?.processing?.invoiceId) {
       return data.processing.invoiceId;
     }
-    return recommendedInvoice;
-  }, [data?.processing?.invoiceId, recommendedInvoice, settlement]);
+    if (settlement.plutusStatus === 'Pending') {
+      const chosen = pendingPreviewInvoiceId.trim();
+      if (chosen !== '') {
+        return chosen;
+      }
+      return recommendedInvoice;
+    }
+    return null;
+  }, [data?.processing?.invoiceId, pendingPreviewInvoiceId, recommendedInvoice, settlement]);
 
   const previewEnabled = !!previewInvoiceId && (settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed');
 
@@ -826,30 +891,16 @@ export default function SettlementDetailPage() {
   const previewWarningCount = previewWarningBlocks.length;
   const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
 
-  const adsAllocationEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
+  const adsAllocationEnabled = !!previewInvoiceId && !!settlement;
 
   const { data: adsAllocation, isLoading: isAdsAllocationLoading, error: adsAllocationError } = useQuery({
-    queryKey: ['plutus-settlement-ads-allocation', settlementId],
-    queryFn: () => fetchAdsAllocation(settlementId),
+    queryKey: ['plutus-settlement-ads-allocation', settlementId, previewInvoiceId, settlement?.marketplace.id, settlement?.plutusStatus],
+    queryFn: () => fetchAdsAllocation(settlementId, previewInvoiceId!, settlement!.marketplace.id),
     enabled: adsAllocationEnabled,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-
-  const showAdsAllocationTab = useMemo(() => {
-    if (!adsAllocationEnabled) return false;
-    if (isAdsAllocationLoading) return true;
-    if (adsAllocationError) return true;
-    if (!adsAllocation) return false;
-    return adsAllocation.totalAdsCents !== 0;
-  }, [adsAllocation, adsAllocationEnabled, adsAllocationError, isAdsAllocationLoading]);
-
-  useEffect(() => {
-    if (!settlement) return;
-    if (tab !== 'ads-allocation') return;
-    if (showAdsAllocationTab) return;
-    setTab('sales');
-  }, [settlement, showAdsAllocationTab, tab]);
+  const adsAllocationSaveEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
 
   type AdsEditLine = { sku: string; weightInput: string };
   const [adsEditLines, setAdsEditLines] = useState<AdsEditLine[]>([]);
@@ -941,13 +992,56 @@ export default function SettlementDetailPage() {
     return { ok: true as const, lines: withAlloc, error: null };
   }, [adsAllocation, adsEditLines]);
 
-  const adsSkuProfitabilityPreview = useMemo(() => {
+  const baseAdsSkuProfitability = useMemo(() => {
     if (!adsAllocation) {
       return null;
     }
 
+    if (adsAllocation.skuProfitability) {
+      return adsAllocation.skuProfitability;
+    }
+
+    if (!previewData) {
+      return null;
+    }
+
+    const sales = previewData.sales.map((sale) => ({
+      sku: sale.sku,
+      quantity: sale.quantity,
+      principalCents: sale.principalCents,
+      costManufacturingCents: sale.costByComponentCents.manufacturing,
+      costFreightCents: sale.costByComponentCents.freight,
+      costDutyCents: sale.costByComponentCents.duty,
+      costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
+    }));
+
+    const returns = previewData.returns.map((ret) => ({
+      sku: ret.sku,
+      quantity: ret.quantity,
+      principalCents: ret.principalCents,
+      costManufacturingCents: ret.costByComponentCents.manufacturing,
+      costFreightCents: ret.costByComponentCents.freight,
+      costDutyCents: ret.costByComponentCents.duty,
+      costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
+    }));
+
+    return buildSettlementSkuProfitability({
+      sales,
+      returns,
+      allocationLines: adsAllocation.lines.map((line) => ({
+        sku: line.sku,
+        allocatedCents: line.allocatedCents,
+      })),
+    });
+  }, [adsAllocation, previewData]);
+
+  const adsSkuProfitabilityPreview = useMemo(() => {
+    if (!baseAdsSkuProfitability) {
+      return null;
+    }
+
     const baseBySku = new Map<string, AdsSkuProfitabilityLine>();
-    for (const line of adsAllocation.skuProfitability.lines) {
+    for (const line of baseAdsSkuProfitability.lines) {
       baseBySku.set(line.sku, line);
     }
 
@@ -960,7 +1054,7 @@ export default function SettlementDetailPage() {
         adsBySku.set(line.sku, line.allocatedCents);
       }
     } else {
-      for (const line of adsAllocation.skuProfitability.lines) {
+      for (const line of baseAdsSkuProfitability.lines) {
         adsBySku.set(line.sku, line.adsAllocatedCents);
       }
     }
@@ -1025,7 +1119,7 @@ export default function SettlementDetailPage() {
     }
 
     return { lines, totals };
-  }, [adsAllocation, adsAllocationPreview]);
+  }, [adsAllocationPreview, baseAdsSkuProfitability]);
 
   const saveAdsAllocationMutation = useMutation({
     mutationFn: async () => {
@@ -1164,15 +1258,16 @@ export default function SettlementDetailPage() {
                   <PlutusPill status={settlement.plutusStatus} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {settlement.plutusStatus === 'Pending' && (
-                    <ProcessSettlementDialog
-                      settlementId={settlementId}
-                      periodStart={settlement.periodStart}
-                      periodEnd={settlement.periodEnd}
-                      marketplaceId={settlement.marketplace.id}
-                      onProcessed={() => void handleProcessed()}
-                    />
-                  )}
+	                  {settlement.plutusStatus === 'Pending' && (
+	                    <ProcessSettlementDialog
+	                      settlementId={settlementId}
+	                      periodStart={settlement.periodStart}
+	                      periodEnd={settlement.periodEnd}
+	                      marketplaceId={settlement.marketplace.id}
+	                      defaultInvoiceId={previewInvoiceId}
+	                      onProcessed={() => void handleProcessed()}
+	                    />
+	                  )}
                   {data?.processing && (
                     <Button variant="outline" size="sm" onClick={() => void handleRollback()} disabled={isRollingBack}>
                       {isRollingBack ? 'Rolling back...' : 'Rollback'}
@@ -1192,18 +1287,48 @@ export default function SettlementDetailPage() {
 
         <Card className="border-slate-200/70 dark:border-white/10">
           <CardContent className="p-0">
-            <Tabs value={tab} onValueChange={setTab}>
+            <Tabs value={tab} onValueChange={handleTabChange}>
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
-                <TabsList>
-                  <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
-                  {showAdsAllocationTab && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <TabsList>
+                    <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
                     <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
+                    {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
+                      <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
+                    )}
+                    <TabsTrigger value="history">History</TabsTrigger>
+                  </TabsList>
+
+                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                      <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Preview invoice</div>
+                      <Select
+                        value={previewInvoiceId ?? ''}
+                        onValueChange={(v) => {
+                          setPendingPreviewInvoiceId(v);
+                        }}
+                      >
+                        <SelectTrigger className="w-full sm:w-[360px] bg-white dark:bg-slate-900">
+                          <SelectValue placeholder="Select invoice..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {marketplaceAuditInvoices.map((inv) => (
+                            <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+                              <div className="flex items-center gap-2">
+                                <span>{inv.invoiceId}</span>
+                                {inv.invoiceId === recommendedInvoice && (
+                                  <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
+                                    Recommended
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
-                  {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                    <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
-                  )}
-                  <TabsTrigger value="history">History</TabsTrigger>
-                </TabsList>
+                </div>
               </div>
 
               <TabsContent value="sales" className="p-4">
@@ -1268,253 +1393,284 @@ export default function SettlementDetailPage() {
                 )}
               </TabsContent>
 
-              {showAdsAllocationTab && data?.processing && settlement && (
-                <TabsContent value="ads-allocation" className="p-4">
-                  {isAdsAllocationLoading && (
-                    <div className="space-y-3">
-                      <Skeleton className="h-5 w-64" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  )}
+              <TabsContent value="ads-allocation" className="p-4">
+                {!settlement && (
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-64" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                )}
 
-                  {!isAdsAllocationLoading && adsAllocationError && (
-                    <div className="text-sm text-danger-700 dark:text-danger-400">
-                      {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
-                      <div className="mt-2">
-                        <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
-                          Upload Ads Data
-                        </Link>
+                {settlement && !previewInvoiceId && (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">
+                        Choose a Preview invoice above to compute advertising allocation.
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                            Advertising cost allocation (SKU)
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Total source:{' '}
-                            {adsAllocation.totalSource === 'AUDIT_DATA'
-                              ? 'Audit Data (Amazon Advertising Costs rows)'
-                              : adsAllocation.totalSource === 'ADS_REPORT'
-                                ? 'Ads Data spend fallback'
-                                : adsAllocation.totalSource === 'SAVED'
-                                  ? 'Saved allocation'
-                                  : 'No source data'}
-                          </div>
-                          {adsAllocation.adsDataUpload && (
+                {settlement && previewInvoiceId && (
+                  <>
+                    {isAdsAllocationLoading && (
+                      <div className="space-y-3">
+                        <Skeleton className="h-5 w-64" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                      </div>
+                    )}
+
+                    {!isAdsAllocationLoading && adsAllocationError && (
+                      <div className="text-sm text-danger-700 dark:text-danger-400">
+                        {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                        <div className="mt-2">
+                          <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                            Upload Ads Data
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                                Advertising cost allocation (SKU)
+                              </div>
+                              {!adsAllocationSaveEnabled && (
+                                <Badge variant="secondary" className="text-[10px]">Preview</Badge>
+                              )}
+                            </div>
                             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                              Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
                             </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {adsAllocation.totalAdsCents !== 0 && (
-                            <Button
-                              size="sm"
-                              onClick={() => saveAdsAllocationMutation.mutate()}
-                              disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                            >
-                              {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {adsAllocation.kind === 'saved' ? (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          Saved allocation &middot; weights can be edited and re-saved
-                        </div>
-                      ) : (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          Prefilled allocation &middot; review and save to lock it in
-                        </div>
-                      )}
-
-                      {adsAllocation.totalAdsCents === 0 ? (
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
-                          No advertising cost found for this invoice in stored Audit Data or Ads Data. Nothing to allocate.
-                        </div>
-                      ) : (
-                        <>
-                          {adsAllocationPreview.error && (
-                            <div className="text-sm text-danger-700 dark:text-danger-400">
-                              {adsAllocationPreview.error}
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Total source:{' '}
+                              {adsAllocation.totalSource === 'AUDIT_DATA'
+                                ? 'Audit Data (Amazon Advertising Costs rows)'
+                                : adsAllocation.totalSource === 'ADS_REPORT'
+                                  ? 'Ads Data spend fallback'
+                                  : adsAllocation.totalSource === 'SAVED'
+                                    ? 'Saved allocation'
+                                    : 'No source data'}
                             </div>
-                          )}
+                            {adsAllocation.adsDataUpload && (
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                              </div>
+                            )}
+                          </div>
 
-                          {!adsAllocation.adsDataUpload && (
-                            <div className="text-sm text-danger-700 dark:text-danger-400">
-                              Missing Ads Data upload for this invoice range.{' '}
-                              <Link href="/ads-data" className="underline">
-                                Upload Ads Data
-                              </Link>
-                              .
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
+                              <Button
+                                size="sm"
+                                onClick={() => saveAdsAllocationMutation.mutate()}
+                                disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                              >
+                                {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
 
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>SKU</TableHead>
-                                  <TableHead className="text-right">Weight (Spend)</TableHead>
-                                  <TableHead className="text-right">Allocated</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {adsAllocationPreview.lines.map((line) => (
-                                  <TableRow key={line.sku}>
-                                    <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
-                                      {line.sku}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex justify-end">
-                                        <div className="w-[140px]">
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            value={line.weightInput}
-                                            onChange={(event) => {
-                                              const next = event.target.value;
-                                              setAdsDirty(true);
-                                              setAdsEditLines((prev) =>
-                                                prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
-                                              );
-                                            }}
-                                          />
+                        {!adsAllocationSaveEnabled ? (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Preview allocation &middot; edit weights to simulate and process the settlement to save
+                          </div>
+                        ) : adsAllocation.kind === 'saved' ? (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Saved allocation &middot; weights can be edited and re-saved
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Prefilled allocation &middot; review and save to lock it in
+                          </div>
+                        )}
+
+                        {adsAllocation.totalAdsCents === 0 ? (
+                          <div className="text-sm text-slate-500 dark:text-slate-400">
+                            No advertising cost found for this invoice in stored Audit Data or Ads Data. Nothing to allocate.
+                          </div>
+                        ) : (
+                          <>
+                            {adsAllocationPreview.error && (
+                              <div className="text-sm text-danger-700 dark:text-danger-400">
+                                {adsAllocationPreview.error}
+                              </div>
+                            )}
+
+                            {!adsAllocation.adsDataUpload && (
+                              <div className="text-sm text-danger-700 dark:text-danger-400">
+                                Missing Ads Data upload for this invoice range.{' '}
+                                <Link href="/ads-data" className="underline">
+                                  Upload Ads Data
+                                </Link>
+                                .
+                              </div>
+                            )}
+
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead className="text-right">Weight (Spend)</TableHead>
+                                    <TableHead className="text-right">Allocated</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {adsAllocationPreview.lines.map((line) => (
+                                    <TableRow key={line.sku}>
+                                      <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                        {line.sku}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <div className="flex justify-end">
+                                          <div className="w-[140px]">
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              value={line.weightInput}
+                                              onChange={(event) => {
+                                                const next = event.target.value;
+                                                setAdsDirty(true);
+                                                setAdsEditLines((prev) =>
+                                                  prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                                );
+                                              }}
+                                            />
+                                          </div>
                                         </div>
-                                      </div>
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                        {line.allocatedCents === null
+                                          ? '—'
+                                          : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                  <TableRow>
+                                    <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                      Total
                                     </TableCell>
-                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      {line.allocatedCents === null
-                                        ? '—'
-                                        : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                    <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                      {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
                                     </TableCell>
                                   </TableRow>
-                                ))}
-                                <TableRow>
-                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                    Total
-                                  </TableCell>
-                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                    {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
+                                </TableBody>
+                              </Table>
+                            </div>
 
-                          {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
-                            <div className="space-y-2">
-                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                SKU contribution after ads allocation
-                              </div>
-                              <div className="overflow-x-auto">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>SKU</TableHead>
-                                      <TableHead className="text-right">Sold</TableHead>
-                                      <TableHead className="text-right">Returns</TableHead>
-                                      <TableHead className="text-right">Net Units</TableHead>
-                                      <TableHead className="text-right">Principal</TableHead>
-                                      <TableHead className="text-right">COGS</TableHead>
-                                      <TableHead className="text-right">Ads</TableHead>
-                                      <TableHead className="text-right">Contribution</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {adsSkuProfitabilityPreview.lines.map((line) => (
-                                      <TableRow key={`profit-${line.sku}`}>
-                                        <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
-                                          {line.sku}
+                            {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  SKU contribution after ads allocation
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>SKU</TableHead>
+                                        <TableHead className="text-right">Sold</TableHead>
+                                        <TableHead className="text-right">Returns</TableHead>
+                                        <TableHead className="text-right">Net Units</TableHead>
+                                        <TableHead className="text-right">Principal</TableHead>
+                                        <TableHead className="text-right">COGS</TableHead>
+                                        <TableHead className="text-right">Ads</TableHead>
+                                        <TableHead className="text-right">Contribution</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {adsSkuProfitabilityPreview.lines.map((line) => (
+                                        <TableRow key={`profit-${line.sku}`}>
+                                          <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                            {line.sku}
+                                          </TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">{line.soldUnits}</TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">{line.returnedUnits}</TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">{line.netUnits}</TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">
+                                            {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">
+                                            {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell className="text-right text-sm tabular-nums">
+                                            {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell
+                                            className={cn(
+                                              'text-right text-sm font-semibold tabular-nums',
+                                              line.contributionAfterAdsCents < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
+                                            )}
+                                          >
+                                            {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                      <TableRow>
+                                        <TableCell className="text-sm font-semibold text-slate-900 dark:text-white">Total</TableCell>
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {adsSkuProfitabilityPreview.totals.soldUnits}
                                         </TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">{line.soldUnits}</TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">{line.returnedUnits}</TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">{line.netUnits}</TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">
-                                          {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {adsSkuProfitabilityPreview.totals.returnedUnits}
                                         </TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">
-                                          {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {adsSkuProfitabilityPreview.totals.netUnits}
                                         </TableCell>
-                                        <TableCell className="text-right text-sm tabular-nums">
-                                          {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
                                         </TableCell>
                                         <TableCell
                                           className={cn(
                                             'text-right text-sm font-semibold tabular-nums',
-                                            line.contributionAfterAdsCents < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
+                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
+                                              ? 'text-red-600 dark:text-red-400'
+                                              : 'text-slate-900 dark:text-white',
                                           )}
                                         >
-                                          {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                          {formatMoney(
+                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
+                                            settlement.marketplace.currency,
+                                          )}
                                         </TableCell>
                                       </TableRow>
-                                    ))}
-                                    <TableRow>
-                                      <TableCell className="text-sm font-semibold text-slate-900 dark:text-white">Total</TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {adsSkuProfitabilityPreview.totals.soldUnits}
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {adsSkuProfitabilityPreview.totals.returnedUnits}
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {adsSkuProfitabilityPreview.totals.netUnits}
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
-                                      </TableCell>
-                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                        {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
-                                      </TableCell>
-                                      <TableCell
-                                        className={cn(
-                                          'text-right text-sm font-semibold tabular-nums',
-                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
-                                            ? 'text-red-600 dark:text-red-400'
-                                            : 'text-slate-900 dark:text-white',
-                                        )}
-                                      >
-                                        {formatMoney(
-                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
-                                          settlement.marketplace.currency,
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  </TableBody>
-                                </Table>
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between">
+                              <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                                Manage Ads Data
+                              </Link>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Weight source: {adsAllocation.weightSource}
                               </div>
                             </div>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
-                              Manage Ads Data
-                            </Link>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              Weight source: {adsAllocation.weightSource}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </TabsContent>
-              )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </TabsContent>
 
               {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                 <TabsContent value="plutus-preview" className="p-4">
@@ -1542,12 +1698,23 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && auditData?.invoices?.length && marketplaceAuditInvoices.length === 0 && (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
                       <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">No matching invoice found</div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">No invoices for this marketplace</div>
                         <div className="text-sm text-slate-500 dark:text-slate-400">
-                          Use the Process Settlement dialog to select an invoice manually.
+                          Audit data exists, but none of the uploaded invoices match {settlement.marketplace.id}.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && marketplaceAuditInvoices.length > 0 && !previewInvoiceId && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          Choose a Preview invoice above to compute a settlement preview.
                         </div>
                       </div>
                     </div>

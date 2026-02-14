@@ -14,7 +14,8 @@ export type PnlBucketKey =
   | 'amazonStorageFees'
   | 'amazonAdvertisingCosts'
   | 'amazonPromotions'
-  | 'amazonFbaInventoryReimbursement';
+  | 'amazonFbaInventoryReimbursement'
+  | 'warehousingAwd';
 
 export type PnlAllocation = {
   invoiceId: string;
@@ -29,6 +30,7 @@ function classifyBucket(description: string): PnlBucketKey | null {
   const normalized = description.trim();
 
   if (normalized.startsWith('Amazon Seller Fees')) return 'amazonSellerFees';
+  if (/^Amazon (FBA Fees|Storage Fees)/.test(normalized) && /\bAWD\b/i.test(normalized)) return 'warehousingAwd';
   if (normalized.startsWith('Amazon FBA Fees')) return 'amazonFbaFees';
   if (normalized.startsWith('Amazon Storage Fees')) return 'amazonStorageFees';
   if (normalized.startsWith('Amazon Advertising Costs')) return 'amazonAdvertisingCosts';
@@ -98,6 +100,7 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     amazonAdvertisingCosts: {},
     amazonPromotions: {},
     amazonFbaInventoryReimbursement: {},
+    warehousingAwd: {},
   };
 
   // Units sold by brand (weights for non-SKU lines)
