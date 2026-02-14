@@ -104,15 +104,11 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-const KEY_PARAM_ENTRIES: Array<{ match: string; label: string; suffix: string; isAccent: boolean }> = [
+const KEY_PARAM_SLOTS: Array<{ match: string; label: string; suffix: string; isAccent: boolean }> = [
   { match: 'production stage default', label: 'Lead Time', suffix: ' weeks', isAccent: false },
-  { match: 'source stage default', label: 'Source Stage', suffix: ' weeks', isAccent: false },
   { match: 'ocean stage default', label: 'Ocean Stage', suffix: ' weeks', isAccent: true },
-  { match: 'final stage default', label: 'Final Stage', suffix: ' weeks', isAccent: false },
   { match: 'amazon payout delay', label: 'Payout Delay', suffix: ' weeks', isAccent: false },
   { match: 'stockout warning', label: 'Stockout Warn', suffix: ' weeks', isAccent: false },
-  { match: 'starting cash', label: 'Starting Cash', suffix: '', isAccent: false },
-  { match: 'weekly fixed costs', label: 'Fixed Costs', suffix: '', isAccent: false },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -189,21 +185,16 @@ export function StrategyGroupCard({
   }, [strategies]);
 
   const keyParameters = useMemo(() => {
-    if (!displayStrategy) return [];
+    if (!displayStrategy) return KEY_PARAM_SLOTS.map((s) => ({ label: s.label, value: '\u2014', isAccent: s.isAccent }));
     const raw = keyParametersByStrategyId[displayStrategy.id];
-    if (!raw) return [];
-    const result: Array<{ label: string; value: string; isAccent: boolean }> = [];
-    for (const entry of KEY_PARAM_ENTRIES) {
-      const found = raw.find((p) => p.label.toLowerCase().includes(entry.match));
-      if (found) {
-        result.push({
-          label: entry.label,
-          value: found.value + entry.suffix,
-          isAccent: entry.isAccent,
-        });
-      }
-    }
-    return result;
+    return KEY_PARAM_SLOTS.map((slot) => {
+      const found = raw?.find((p) => p.label.toLowerCase().includes(slot.match));
+      return {
+        label: slot.label,
+        value: found ? found.value + slot.suffix : '\u2014',
+        isAccent: slot.isAccent,
+      };
+    });
   }, [displayStrategy, keyParametersByStrategyId]);
 
   /* ---- Assignee loading ---- */
@@ -473,33 +464,33 @@ export function StrategyGroupCard({
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#0c2a40]">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow dark:border-[#0b3a52] dark:bg-[#0c2a40]">
         {/* ---- Header bar ---- */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-[#0b3a52] dark:bg-[#081f33]">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 dark:border-[#0b3a52] dark:bg-[#081f33]">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
               {group.name}
             </h3>
-            <p className="text-xs text-muted-foreground">
-              {group.code} &middot; {group.region}
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {group.code}
             </p>
           </div>
           <button
             type="button"
             onClick={openEditScenarioDialog}
-            className="text-sm font-medium text-cyan-600 transition hover:text-cyan-700 dark:text-[#00C2B9] dark:hover:text-[#00d4cb]"
+            className="text-sm font-medium text-cyan-600 transition hover:text-cyan-700 hover:underline dark:text-[#00C2B9] dark:hover:text-[#00d4cb]"
           >
             Edit Group
           </button>
         </div>
 
         {/* ---- Strategies section ---- */}
-        <div className="px-5 py-4">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="p-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Strategies
           </p>
 
-          <div className="flex items-stretch gap-3 overflow-x-auto">
+          <div className="flex flex-wrap gap-4 mb-6">
             {sortedStrategies.map((strategy) => {
               const isActive = isActiveInGroup(strategy.id);
 
@@ -511,31 +502,31 @@ export function StrategyGroupCard({
                     type="button"
                     onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                     className={cn(
-                      'relative flex min-w-[200px] flex-1 flex-col rounded-lg border-2 p-3 text-left transition',
+                      'relative flex min-w-[200px] flex-1 flex-col rounded-lg border-2 p-4 text-left shadow-sm transition hover:shadow-md',
                       'border-slate-800 bg-sky-50 dark:border-[#00C2B9] dark:bg-cyan-900/20',
                     )}
                   >
                     {/* Check circle icon */}
-                    <CheckCircle className="absolute right-2 top-2 h-4 w-4 text-cyan-600 dark:text-[#00C2B9]" />
+                    <CheckCircle className="absolute right-2 top-2 h-5 w-5 text-cyan-600 dark:text-[#00C2B9]" />
 
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    <span className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-1">
                       {strategy.name}
                       {strategy.isPrimary ? (
-                        <Star className="ml-1 inline-block h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                       ) : null}
                     </span>
 
                     {strategy.description ? (
-                      <span className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      <p className="mt-1 mb-3 line-clamp-2 text-xs text-muted-foreground">
                         {strategy.description}
-                      </span>
+                      </p>
                     ) : null}
 
                     <div className="mt-auto flex items-center gap-2 pt-2">
-                      <span className="rounded-full bg-cyan-500 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-[#00C2B9] dark:text-[#002430]">
+                      <span className="rounded bg-cyan-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm dark:bg-[#00C2B9] dark:text-[#002430]">
                         Active
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         Last updated {timeAgo(strategy.updatedAt)}
                       </span>
                     </div>
@@ -550,14 +541,14 @@ export function StrategyGroupCard({
                   type="button"
                   onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                   className={cn(
-                    'flex w-32 shrink-0 flex-col rounded-lg border p-3 text-left transition hover:border-slate-400 dark:hover:border-[#00C2B9]/50',
+                    'flex w-32 shrink-0 flex-col justify-between rounded-lg border p-3 text-left transition hover:border-cyan-500 hover:bg-cyan-50/50 dark:hover:border-[#00C2B9]/50 dark:hover:bg-cyan-900/10',
                     'border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
                   )}
                 >
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <span className="text-xs font-medium text-muted-foreground">
                     Scenario
                   </span>
-                  <span className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                  <span className="mt-2 text-sm font-semibold leading-tight text-slate-900 dark:text-white">
                     {strategy.name}
                     {strategy.isPrimary ? (
                       <Star className="ml-1 inline-block h-3 w-3 fill-amber-400 text-amber-400" />
@@ -571,32 +562,30 @@ export function StrategyGroupCard({
             <button
               type="button"
               onClick={openCreateScenarioDialog}
-              className="flex w-32 shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 text-muted-foreground transition hover:border-cyan-500 hover:text-cyan-600 dark:border-[#0b3a52] dark:hover:border-[#00C2B9] dark:hover:text-[#00C2B9]"
+              className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-muted-foreground transition hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50/50 dark:border-[#0b3a52] dark:hover:border-[#00C2B9] dark:hover:text-[#00C2B9] dark:hover:bg-cyan-900/10"
             >
               <Plus className="h-5 w-5" />
             </button>
           </div>
-        </div>
 
-        {/* ---- Key Parameters section ---- */}
-        {keyParameters.length > 0 ? (
-          <div className="border-t border-slate-200 px-5 py-4 dark:border-[#0b3a52]">
+          {/* ---- Key Parameters section ---- */}
+          <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Key Parameters
-              </p>
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {keyParameters.map((param) => (
                 <div
                   key={param.label}
-                  className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#081f33]"
+                  className="rounded border border-slate-200 bg-slate-50 p-3 dark:border-[#0b3a52] dark:bg-[#081f33]"
                 >
-                  <p className="text-[10px] text-muted-foreground">{param.label}</p>
+                  <span className="text-xs text-muted-foreground">{param.label}</span>
                   <p
                     className={cn(
-                      'mt-0.5 font-mono text-sm font-semibold',
+                      'mt-1 font-mono font-semibold',
                       param.isAccent
                         ? 'text-cyan-600 dark:text-[#00C2B9]'
                         : 'text-slate-900 dark:text-white',
@@ -608,7 +597,7 @@ export function StrategyGroupCard({
               ))}
             </div>
           </div>
-        ) : null}
+        </div>
       </div>
 
       {/* ---------------------------------------------------------------- */}
