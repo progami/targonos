@@ -26,7 +26,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
 import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
@@ -759,10 +758,13 @@ function ProcessSettlementDialog({
 // Main page component
 // ---------------------------------------------------------------------------
 
-type SettlementDetailTab = 'sales' | 'ads-allocation' | 'plutus-preview' | 'history';
+type SettlementDetailTab = 'sales' | 'ads-allocation' | 'plutus-preview';
 
 function parseSettlementTab(tab: string | null): SettlementDetailTab {
-  if (tab === 'history') return 'history';
+  if (tab === 'lmb-preview') return 'ads-allocation';
+  if (tab === 'lmb-settlement') return 'sales';
+  if (tab === 'plutus-settlement') return 'plutus-preview';
+  if (tab === 'history') return 'plutus-preview';
   if (tab === 'ads-allocation') return 'ads-allocation';
   if (tab === 'analysis') return 'ads-allocation';
   if (tab === 'plutus-preview') return 'plutus-preview';
@@ -1295,12 +1297,11 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <TabsList>
-                    <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
-                    <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
+                    <TabsTrigger value="ads-allocation">LMB Preview</TabsTrigger>
+                    <TabsTrigger value="sales">LMB Settlement</TabsTrigger>
                     {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                      <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
+                      <TabsTrigger value="plutus-preview">Plutus Settlement</TabsTrigger>
                     )}
-                    <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
 
                   {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
@@ -1758,7 +1759,7 @@ export default function SettlementDetailPage() {
                     <div className="space-y-6">
                       {settlement?.plutusStatus === 'Processed' && (
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
-                          Showing read-only Plutus posting preview for the processed invoice. Posted JE IDs are in History.
+                          Showing read-only Plutus settlement preview for the processed invoice. Use COGS JE and P&amp;L JE buttons above.
                         </div>
                       )}
                       {/* Header */}
@@ -2017,51 +2018,6 @@ export default function SettlementDetailPage() {
                   )}
                 </TabsContent>
               )}
-
-              <TabsContent value="history" className="p-4">
-                {settlement && (
-                  <div>
-                    {!data?.processing && !data?.rollback && (
-                      <div className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">
-                        Plutus has not processed this settlement yet.
-                      </div>
-                    )}
-
-                    {(data?.processing || data?.rollback) && (
-                      <Timeline
-                        items={[
-                          ...(data?.rollback ? [{
-                            title: 'Rolled back' as const,
-                            variant: 'warning' as const,
-                            timestamp: new Date(data.rollback.rolledBackAt).toLocaleString('en-US'),
-                            description: (
-                              <div className="mt-1 space-y-1 text-xs">
-                                <div>Invoice: <span className="font-mono">{data.rollback.invoiceId}</span></div>
-                                <div>COGS JE: <span className="font-mono">{data.rollback.qboCogsJournalEntryId}</span></div>
-                                <div>P&amp;L Reclass JE: <span className="font-mono">{data.rollback.qboPnlReclassJournalEntryId}</span></div>
-                              </div>
-                            ),
-                          }] : []),
-                          ...(data?.processing ? [{
-                            title: `Processed — ${data.processing.orderSalesCount} sales, ${data.processing.orderReturnsCount} returns` as const,
-                            variant: 'success' as const,
-                            timestamp: new Date(data.processing.uploadedAt).toLocaleString('en-US'),
-                            description: (
-                              <div className="mt-1 space-y-1 text-xs">
-                                <div>Invoice: <span className="font-mono">{data.processing.invoiceId}</span></div>
-                                <div>Hash: <span className="font-mono">{data.processing.processingHash}</span></div>
-                                <div>Source: {data.processing.sourceFilename}</div>
-                                <div>COGS JE: <span className="font-mono">{data.processing.qboCogsJournalEntryId}</span></div>
-                                <div>P&amp;L Reclass JE: <span className="font-mono">{data.processing.qboPnlReclassJournalEntryId}</span></div>
-                              </div>
-                            ),
-                          }] : []),
-                        ]}
-                      />
-                    )}
-                  </div>
-                )}
-              </TabsContent>
 
             </Tabs>
           </CardContent>
