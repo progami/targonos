@@ -1293,23 +1293,24 @@ export default function SettlementDetailPage() {
             settlement ? (
               <div className="flex flex-col items-start gap-3 sm:items-end">
                 <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 group"
-                  >
-                    <StatusPill status={settlement.lmbStatus} />
-                    <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                  </a>
+                  <StatusPill status={settlement.lmbStatus} />
                   <PlutusPill status={settlement.plutusStatus} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-	                  {settlement.plutusStatus === 'Pending' && (
-	                    <ProcessSettlementDialog
-	                      settlementId={settlementId}
-	                      periodStart={settlement.periodStart}
-	                      periodEnd={settlement.periodEnd}
+                  <Button variant="outline" size="sm" asChild>
+                    <a
+                      href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open in QBO
+                    </a>
+                  </Button>
+		                  {settlement.plutusStatus === 'Pending' && (
+		                    <ProcessSettlementDialog
+		                      settlementId={settlementId}
+		                      periodStart={settlement.periodStart}
+		                      periodEnd={settlement.periodEnd}
 	                      marketplaceId={settlement.marketplace.id}
 	                      defaultInvoiceId={previewInvoiceId}
 	                      onProcessed={() => void handleProcessed()}
