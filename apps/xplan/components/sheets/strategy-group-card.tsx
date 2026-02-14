@@ -186,17 +186,14 @@ export function StrategyGroupCard({
 
   const keyParameters = useMemo(() => {
     const raw = displayStrategy ? keyParametersByStrategyId[displayStrategy.id] : undefined;
-    if (!raw?.length) return [];
-    const slots = KEY_PARAM_SLOTS.map((slot) => {
-      const found = raw.find((p) => p.label.toLowerCase().includes(slot.match));
+    return KEY_PARAM_SLOTS.map((slot) => {
+      const found = raw?.find((p) => p.label.toLowerCase().includes(slot.match));
       return {
         label: slot.label,
         value: found ? found.value + slot.suffix : '\u2014',
         isAccent: slot.isAccent,
       };
     });
-    const hasAny = slots.some((s) => s.value !== '\u2014');
-    return hasAny ? slots : [];
   }, [displayStrategy, keyParametersByStrategyId]);
 
   /* ---- Assignee loading ---- */
@@ -572,7 +569,7 @@ export function StrategyGroupCard({
           </div>
 
           {/* ---- Key Parameters section ---- */}
-          {keyParameters.length > 0 ? <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
+          <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Key Parameters
@@ -599,7 +596,7 @@ export function StrategyGroupCard({
                 </div>
               ))}
             </div>
-          </div> : null}
+          </div>
         </div>
       </div>
 
