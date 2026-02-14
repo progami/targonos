@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ArrowLeftRight,
-  BarChart3,
   Bell,
   Boxes,
   ChevronDown,
@@ -115,7 +114,6 @@ type NavItem =
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptText },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { href: '/analytics', label: 'Benchmarking', icon: BarChart3 },
   { href: '/cashflow', label: 'Cashflow', icon: TrendingUp },
   {
     label: 'Accounts & Taxes',
