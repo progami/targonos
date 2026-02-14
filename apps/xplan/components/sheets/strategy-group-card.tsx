@@ -459,7 +459,8 @@ export function StrategyGroupCard({
 
   const scenarioDialogTitle = scenarioDialogMode === 'edit' ? 'Edit scenario' : 'New scenario';
 
-  const isActiveInGroup = (strategyId: string) => strategyId === (displayStrategy?.id ?? null);
+  const isPrimaryInGroup = (strategyId: string) => strategyId === (displayStrategy?.id ?? null);
+  const isGloballyActive = (strategyId: string) => strategyId === selectedStrategyId;
 
   return (
     <>
@@ -491,10 +492,11 @@ export function StrategyGroupCard({
 
           <div className="flex flex-wrap gap-4 mb-6">
             {sortedStrategies.map((strategy) => {
-              const isActive = isActiveInGroup(strategy.id);
+              const isPrimary = isPrimaryInGroup(strategy.id);
+              const isActive = isGloballyActive(strategy.id);
 
-              if (isActive) {
-                /* Active / primary strategy card (larger) */
+              if (isPrimary) {
+                /* Primary strategy card (larger) — highlighted only if globally active */
                 return (
                   <button
                     key={strategy.id}
@@ -502,11 +504,14 @@ export function StrategyGroupCard({
                     onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                     className={cn(
                       'relative flex min-w-[200px] flex-1 flex-col rounded-lg border-2 p-4 text-left shadow-sm transition hover:shadow-md',
-                      'border-slate-800 bg-sky-50 dark:border-[#00C2B9] dark:bg-cyan-900/20',
+                      isActive
+                        ? 'border-slate-800 bg-sky-50 dark:border-[#00C2B9] dark:bg-cyan-900/20'
+                        : 'border-slate-300 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
                     )}
                   >
-                    {/* Check circle icon */}
-                    <CheckCircle className="absolute right-2 top-2 h-5 w-5 text-cyan-600 dark:text-[#00C2B9]" />
+                    {isActive ? (
+                      <CheckCircle className="absolute right-2 top-2 h-5 w-5 text-cyan-600 dark:text-[#00C2B9]" />
+                    ) : null}
 
                     <span className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-1">
                       {strategy.name}
@@ -522,9 +527,15 @@ export function StrategyGroupCard({
                     ) : null}
 
                     <div className="mt-auto flex items-center gap-2 pt-2">
-                      <span className="rounded bg-cyan-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm dark:bg-[#00C2B9] dark:text-[#002430]">
-                        Active
-                      </span>
+                      {isActive ? (
+                        <span className="rounded bg-cyan-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm dark:bg-[#00C2B9] dark:text-[#002430]">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                          Primary
+                        </span>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         Last updated {timeAgo(strategy.updatedAt)}
                       </span>
@@ -541,11 +552,13 @@ export function StrategyGroupCard({
                   onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                   className={cn(
                     'flex w-32 shrink-0 flex-col justify-between rounded-lg border p-3 text-left transition hover:border-cyan-500 hover:bg-cyan-50/50 dark:hover:border-[#00C2B9]/50 dark:hover:bg-cyan-900/10',
-                    'border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
+                    isActive
+                      ? 'border-cyan-500 bg-cyan-50/50 dark:border-[#00C2B9] dark:bg-cyan-900/20'
+                      : 'border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
                   )}
                 >
                   <span className="text-xs font-medium text-muted-foreground">
-                    Scenario
+                    {isActive ? 'Active' : 'Scenario'}
                   </span>
                   <span className="mt-2 text-sm font-semibold leading-tight text-slate-900 dark:text-white">
                     {strategy.name}
