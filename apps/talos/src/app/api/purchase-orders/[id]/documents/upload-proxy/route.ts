@@ -196,7 +196,11 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
 	      return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
 	    }
 
-    if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
+    if (
+      order.status === PurchaseOrderStatus.CLOSED ||
+      order.status === PurchaseOrderStatus.CANCELLED ||
+      order.status === PurchaseOrderStatus.REJECTED
+    ) {
       return NextResponse.json(
         { error: `Cannot modify documents for ${order.status.toLowerCase()} purchase orders` },
         { status: 409 }

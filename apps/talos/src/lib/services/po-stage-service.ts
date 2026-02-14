@@ -149,19 +149,20 @@ function normalizeAuditValue(value: unknown): unknown {
 export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
   ISSUED: [
     PurchaseOrderStatus.MANUFACTURING,
-    PurchaseOrderStatus.REJECTED,
-    PurchaseOrderStatus.CANCELLED,
+    PurchaseOrderStatus.CLOSED,
   ],
-  MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CANCELLED],
-  OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CANCELLED],
-  WAREHOUSE: [PurchaseOrderStatus.CANCELLED],
+  MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CLOSED],
+  OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CLOSED],
+  WAREHOUSE: [PurchaseOrderStatus.CLOSED],
   SHIPPED: [], // Terminal state
-  REJECTED: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.CANCELLED], // Terminal unless reopened
-  CANCELLED: [], // Terminal state
+  CLOSED: [], // Terminal state
 }
 
 function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
   if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
+  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
+    return PurchaseOrderStatus.CLOSED
+  }
   return status
 }
 
@@ -1750,10 +1751,10 @@ export async function transitionPurchaseOrderStage(
     if (!canEdit && !isSuperAdmin(user.email)) {
       throw new ValidationError(`You don't have permission to edit purchase orders`)
     }
-  } else if (targetStatus === PurchaseOrderStatus.CANCELLED) {
+  } else if (targetStatus === PurchaseOrderStatus.CLOSED) {
     const canCancel = await hasPermission(user.id, 'po.cancel')
     if (!canCancel && !isSuperAdmin(user.email)) {
-      throw new ValidationError(`You don't have permission to cancel purchase orders`)
+      throw new ValidationError(`You don't have permission to close purchase orders`)
     }
   } else {
     const canApprove = await canApproveStageTransition(user.id, currentStatus, targetStatus)
@@ -1765,7 +1766,7 @@ export async function transitionPurchaseOrderStage(
     }
   }
 
-  if (!isInPlaceUpdate && targetStatus === PurchaseOrderStatus.CANCELLED) {
+  if (!isInPlaceUpdate && targetStatus === PurchaseOrderStatus.CLOSED) {
     const storageRecalcInputs = await prisma.inventoryTransaction.findMany({
       where: { purchaseOrderId: order.id },
       select: {
@@ -3283,8 +3284,8 @@ export async function generatePurchaseOrderShippingMarks(params: {
     throw new ConflictError('Cannot generate shipping marks for legacy orders. They are archived.')
   }
 
-  if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
-    throw new ConflictError(`Cannot generate shipping marks for ${order.status.toLowerCase()} purchase orders`)
+  if (normalizeWorkflowStatus(order.status as PurchaseOrderStatus) === PurchaseOrderStatus.CLOSED) {
+    throw new ConflictError('Cannot generate shipping marks for closed purchase orders')
   }
 
   const tenant = await getCurrentTenant()

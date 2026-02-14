@@ -67,8 +67,7 @@ type POStageStatus =
   | 'OCEAN'
   | 'WAREHOUSE'
   | 'SHIPPED'
-  | 'REJECTED'
-  | 'CANCELLED'
+  | 'CLOSED'
 
 interface PurchaseOrderLineSummary {
   id: string
@@ -926,7 +925,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
-    type: 'cancel' | 'reject' | 'delete-line' | null
+    type: 'close' | 'delete-line' | null
     title: string
     message: string
     lineId?: string | null
@@ -2306,7 +2305,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   // Can user click on a stage to view it?
   const canViewStage = (stageValue: string) => {
     if (isCreate) return stageValue === 'ISSUED'
-    if (!order || order.status === 'CANCELLED') return false
+    if (!order || order.status === 'CLOSED') return false
     const targetIdx = STAGES.findIndex(s => s.value === stageValue)
     if (targetIdx < 0) return false
     // Can view completed stages and current stage.
@@ -2314,7 +2313,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }
 
   const nextStage = useMemo(() => {
-    if (!order || order.status === 'CANCELLED') return null
+    if (!order || order.status === 'CLOSED') return null
     const idx = STAGES.findIndex(s => s.value === order.status)
     if (idx >= 0 && idx < STAGES.length - 1) {
       return STAGES[idx + 1]
@@ -2357,24 +2356,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const handleTransition = async (targetStatus: POStageStatus) => {
     if (!order || transitioning) return
 
-    // Show confirmation dialog for cancel
-    if (targetStatus === 'CANCELLED') {
+    // Show confirmation dialog for close
+    if (targetStatus === 'CLOSED') {
       setConfirmDialog({
         open: true,
-        type: 'cancel',
-        title: 'Cancel Order',
-        message: 'Are you sure you want to cancel this order? This cannot be undone.',
-      })
-      return
-    }
-
-    if (targetStatus === 'REJECTED') {
-      setConfirmDialog({
-        open: true,
-        type: 'reject',
-        title: 'Mark as Rejected',
-        message:
-          'Mark this PO as rejected by the supplier? You can reopen it as a draft to revise and re-issue.',
+        type: 'close',
+        title: 'Close Order',
+        message: 'Are you sure you want to close this order? This cannot be undone.',
       })
       return
     }
@@ -2521,11 +2509,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }
 
   const handleConfirmDialogConfirm = async () => {
-    if (confirmDialog.type === 'cancel') {
-      await executeTransition('CANCELLED')
-    }
-    if (confirmDialog.type === 'reject') {
-      await executeTransition('REJECTED')
+    if (confirmDialog.type === 'close') {
+      await executeTransition('CLOSED')
     }
     if (confirmDialog.type === 'delete-line' && confirmDialog.lineId) {
       await handleDeleteLine(confirmDialog.lineId)
@@ -2580,7 +2565,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     dutySubtotal +
     supplierAdjustmentSubtotal
   const isTerminalStatus = order
-    ? order.status === 'SHIPPED' || order.status === 'CANCELLED' || order.status === 'REJECTED'
+    ? order.status === 'SHIPPED' || order.status === 'CLOSED'
     : false
   const isReadOnly = isTerminalStatus
   const canEdit = isCreate ? true : !isReadOnly
@@ -2594,8 +2579,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const showProductCostsStage =
     activeViewStage === 'ISSUED' ||
     activeViewStage === 'MANUFACTURING' ||
-    activeViewStage === 'REJECTED' ||
-    activeViewStage === 'CANCELLED'
+    activeViewStage === 'CLOSED'
 
   const showCargoCostsStage = activeViewStage === 'OCEAN'
   const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
@@ -3034,7 +3018,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleTransition('CANCELLED')}
+                onClick={() => handleTransition('CLOSED')}
                 disabled={transitioning}
                 className="text-rose-500 hover:text-rose-600 hover:bg-rose-50"
               >
@@ -3047,8 +3031,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	      <PageContent>
 	        <div className="flex flex-col gap-6">
 	          {/* Stage Progress Bar */}
-	          {(isCreate ||
-	            (order && !order.isLegacy && order.status !== 'CANCELLED' && order.status !== 'REJECTED')) && (
+		          {(isCreate ||
+		            (order && !order.isLegacy && order.status !== 'CLOSED')) && (
 	            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
                 {!isCreate && order?.splitGroupId && (
                   <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
@@ -3195,32 +3179,14 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             </div>
 	          )}
 
-	          {/* Cancelled banner */}
-	          {order && order.status === 'CANCELLED' && (
-	            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-	              <p className="text-sm text-slate-700 dark:text-slate-300">
-	                This order has been cancelled and cannot be modified.
-	              </p>
-	            </div>
-	          )}
-
-	          {/* Rejected banner */}
-		          {order && order.status === 'REJECTED' && (
-		            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+		          {/* Closed banner */}
+		          {order && order.status === 'CLOSED' && (
+		            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
 		              <p className="text-sm text-slate-700 dark:text-slate-300">
-		                This PO was rejected by the supplier. Reopen it to revise and re-issue.
+		                This order is closed and cannot be modified.
 		              </p>
-	              <Button
-	                variant="outline"
-	                onClick={() => handleTransition('ISSUED')}
-	                disabled={transitioning}
-	                className="gap-2"
-	              >
-	                <Send className="h-4 w-4" />
-	                Reopen PO
-	              </Button>
-	            </div>
-	          )}
+		            </div>
+		          )}
 
           {/* Details, Cargo, Costs, Documents & History Tabs */}
           <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
@@ -7064,13 +7030,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           message={confirmDialog.message}
           type={confirmDialog.type ? 'danger' : 'info'}
           confirmText={
-            confirmDialog.type === 'cancel'
-              ? 'Cancel Order'
-              : confirmDialog.type === 'reject'
-                ? 'Mark Rejected'
-                : confirmDialog.type === 'delete-line'
-                  ? 'Remove Line'
-                  : 'Confirm'
+            confirmDialog.type === 'close'
+              ? 'Close Order'
+              : confirmDialog.type === 'delete-line'
+                ? 'Remove Line'
+                : 'Confirm'
           }
           cancelText="Go Back"
         />

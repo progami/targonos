@@ -16,7 +16,6 @@ import {
   Factory,
   Ship,
   Warehouse,
-  PackageX,
   XCircle,
 } from '@/lib/lucide-icons'
 import { PurchaseOrdersPanel } from '../inventory/purchase-orders-panel'
@@ -30,8 +29,7 @@ type POStageStatus =
   | 'MANUFACTURING'
   | 'OCEAN'
   | 'WAREHOUSE'
-  | 'REJECTED'
-  | 'CANCELLED'
+  | 'CLOSED'
 
 type StatusConfig = {
   value: POStageStatus
@@ -71,15 +69,9 @@ const PIPELINE_STAGES: StatusConfig[] = [
 // Terminal statuses
 const TERMINAL_STATUSES: StatusConfig[] = [
   {
-    value: 'REJECTED',
-    label: 'Rejected',
-    description: 'Purchase orders declined by the supplier',
-    icon: PackageX,
-  },
-  {
-    value: 'CANCELLED',
-    label: 'Cancelled',
-    description: 'Purchase orders cancelled before completion',
+    value: 'CLOSED',
+    label: 'Closed',
+    description: 'Purchase orders closed before completion',
     icon: XCircle,
   },
 ]
