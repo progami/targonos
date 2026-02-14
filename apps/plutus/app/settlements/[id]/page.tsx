@@ -226,7 +226,11 @@ function formatPeriod(start: string | null, end: string | null): string {
     year: 'numeric',
   });
 
-  return `${startText} – ${endText}`;
+  return `${startText} — ${endText}`;
+}
+
+function getQboJournalHref(journalEntryId: string): string {
+  return `https://app.qbo.intuit.com/app/journal?txnId=${journalEntryId}`;
 }
 
 function formatMoney(amount: number, currency: string): string {
@@ -1456,7 +1460,7 @@ export default function SettlementDetailPage() {
                               {adsAllocation.totalSource === 'AUDIT_DATA'
                                 ? 'Audit Data (Amazon Advertising Costs rows)'
                                 : adsAllocation.totalSource === 'ADS_REPORT'
-                                  ? 'Ads Data spend fallback'
+                                  ? 'Legacy inferred from Ads Data (no invoice billing total)'
                                   : adsAllocation.totalSource === 'SAVED'
                                     ? 'Saved allocation'
                                     : 'No source data'}
@@ -1469,6 +1473,30 @@ export default function SettlementDetailPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {data?.processing && (
+                              <>
+                                <Button variant="outline" size="sm" asChild>
+                                  <a
+                                    href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    COGS JE
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </Button>
+                                <Button variant="outline" size="sm" asChild>
+                                  <a
+                                    href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    P&amp;L JE
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </Button>
+                              </>
+                            )}
                             {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
                               <Button
                                 size="sm"
@@ -1497,7 +1525,7 @@ export default function SettlementDetailPage() {
 
                         {adsAllocation.totalAdsCents === 0 ? (
                           <div className="text-sm text-slate-500 dark:text-slate-400">
-                            No advertising cost found for this invoice in stored Audit Data or Ads Data. Nothing to allocate.
+                            No Amazon Advertising Costs rows found in Audit Data for this invoice. Nothing to allocate.
                           </div>
                         ) : (
                           <>
@@ -1743,29 +1771,55 @@ export default function SettlementDetailPage() {
                             {previewData.minDate} &rarr; {previewData.maxDate}
                           </div>
                         </div>
-                        <Badge
-                          variant={
-                            isProcessedPreview
+                        <div className="flex items-center gap-2">
+                          {data?.processing && (
+                            <>
+                              <Button variant="outline" size="sm" asChild>
+                                <a
+                                  href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  COGS JE
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </Button>
+                              <Button variant="outline" size="sm" asChild>
+                                <a
+                                  href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  P&amp;L JE
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </Button>
+                            </>
+                          )}
+                          <Badge
+                            variant={
+                              isProcessedPreview
+                                ? previewIssueCount === 0
+                                  ? 'success'
+                                  : 'secondary'
+                                : previewBlockingCount > 0
+                                  ? 'destructive'
+                                  : previewWarningCount > 0
+                                    ? 'secondary'
+                                    : 'success'
+                            }
+                          >
+                            {isProcessedPreview
                               ? previewIssueCount === 0
-                                ? 'success'
-                                : 'secondary'
+                                ? 'Processed'
+                                : 'Processed (Needs Review)'
                               : previewBlockingCount > 0
-                                ? 'destructive'
+                                ? 'Blocked'
                                 : previewWarningCount > 0
-                                  ? 'secondary'
-                                  : 'success'
-                          }
-                        >
-                          {isProcessedPreview
-                            ? previewIssueCount === 0
-                              ? 'Processed'
-                              : 'Processed (Needs Review)'
-                            : previewBlockingCount > 0
-                              ? 'Blocked'
-                              : previewWarningCount > 0
-                                ? 'Ready (Warnings)'
-                                : 'Ready to Process'}
-                        </Badge>
+                                  ? 'Ready (Warnings)'
+                                  : 'Ready to Process'}
+                          </Badge>
+                        </div>
                       </div>
 
                       {/* Summary cards */}

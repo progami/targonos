@@ -125,8 +125,41 @@ export function buildPnlJournalLines(
   accounts: QboAccount[],
   invoiceId: string,
   blocks: ProcessingBlock[],
+  skuBreakdownByBucketBrand?: Record<string, Record<string, Record<string, number>>>,
 ): JournalEntryLinePreview[] {
   const pnlLines: JournalEntryLinePreview[] = [];
+
+  function formatCents(cents: number): string {
+    const sign = cents < 0 ? '-' : '';
+    const abs = Math.abs(cents);
+    return `${sign}$${(abs / 100).toFixed(2)}`;
+  }
+
+  function buildSkuBreakdownSuffix(skuBreakdown: Record<string, number> | undefined): string {
+    if (!skuBreakdown) {
+      return '';
+    }
+
+    const entries = Object.entries(skuBreakdown).filter((entry) => entry[1] !== 0);
+    if (entries.length === 0) {
+      return '';
+    }
+
+    entries.sort((a, b) => {
+      const delta = Math.abs(b[1]) - Math.abs(a[1]);
+      if (delta !== 0) return delta;
+      return a[0].localeCompare(b[0]);
+    });
+
+    const maxShown = 4;
+    const shown = entries.slice(0, maxShown).map((entry) => `${entry[0]}:${formatCents(entry[1])}`);
+    const hiddenCount = entries.length - shown.length;
+    if (hiddenCount > 0) {
+      shown.push(`+${hiddenCount} more`);
+    }
+
+    return ` | SKUs ${shown.join(', ')}`;
+  }
 
   const bucketMetaByKey: Record<
     string,
@@ -184,6 +217,10 @@ export function buildPnlJournalLines(
       }
 
       const absCents = Math.abs(cents);
+      const bucketBreakdown = skuBreakdownByBucketBrand ? skuBreakdownByBucketBrand[bucketKey] : undefined;
+      const brandSkuBreakdown = bucketBreakdown ? bucketBreakdown[brand] : undefined;
+      const skuSuffix = buildSkuBreakdownSuffix(brandSkuBreakdown);
+      const lineDescription = `${invoiceId} ${label} (${brand})${skuSuffix}`;
 
       if (cents > 0) {
         // Move positive amount from parent -> brand (debit parent, credit brand)
@@ -192,14 +229,14 @@ export function buildPnlJournalLines(
           accountName: label,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invoiceId} ${label}`,
+          description: lineDescription,
         });
         pnlLines.push({
           accountId: brandAccount.id,
           accountName: brandAccount.name,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${invoiceId} ${label} (${brand})`,
+          description: lineDescription,
         });
       } else {
         // Move negative amount from parent -> brand (debit brand, credit parent)
@@ -208,14 +245,14 @@ export function buildPnlJournalLines(
           accountName: brandAccount.name,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invoiceId} ${label} (${brand})`,
+          description: lineDescription,
         });
         pnlLines.push({
           accountId: parentAccountId,
           accountName: label,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${invoiceId} ${label}`,
+          description: lineDescription,
         });
       }
     }

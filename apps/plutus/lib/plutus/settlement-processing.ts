@@ -752,7 +752,14 @@ export async function computeSettlementPreview(input: {
   const brandNames = Array.from(new Set(skuToBrand.values())).sort();
 
   const cogsLines = buildCogsJournalLines(netCogsByBrand, brandNames, mapping, accountsResult.accounts, invoiceId, blocks);
-  const pnlLines = buildPnlJournalLines(pnlAllocation.allocationsByBucket, mapping, accountsResult.accounts, invoiceId, blocks);
+  const pnlLines = buildPnlJournalLines(
+    pnlAllocation.allocationsByBucket,
+    mapping,
+    accountsResult.accounts,
+    invoiceId,
+    blocks,
+    pnlAllocation.skuBreakdownByBucketBrand,
+  );
 
   const hashPrefix = processingHash.slice(0, 10);
 
