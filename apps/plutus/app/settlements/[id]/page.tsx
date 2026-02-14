@@ -29,7 +29,6 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { cn } from '@/lib/utils';
 import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
-import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -411,6 +410,28 @@ function SignedAmount({
       signed < 0 ? 'text-red-600 dark:text-red-400' : '',
     )}>
       {formatMoney(signed, currency)}
+    </span>
+  );
+}
+
+function SignedCentsAmount({
+  amountCents,
+  postingType,
+  currency,
+}: {
+  amountCents: number;
+  postingType: 'Debit' | 'Credit';
+  currency: string;
+}) {
+  const signed = postingType === 'Debit' ? amountCents : -amountCents;
+  return (
+    <span
+      className={cn(
+        'font-medium tabular-nums',
+        signed < 0 ? 'text-red-600 dark:text-red-400' : '',
+      )}
+    >
+      {formatMoney(signed / 100, currency)}
     </span>
   );
 }
@@ -1052,135 +1073,6 @@ export default function SettlementDetailPage() {
     return { ok: true as const, lines: withAlloc, error: null };
   }, [adsAllocation, adsEditLines]);
 
-  const baseAdsSkuProfitability = useMemo(() => {
-    if (!adsAllocation) {
-      return null;
-    }
-
-    if (adsAllocation.skuProfitability) {
-      return adsAllocation.skuProfitability;
-    }
-
-    if (!previewData) {
-      return null;
-    }
-
-    const sales = previewData.sales.map((sale) => ({
-      sku: sale.sku,
-      quantity: sale.quantity,
-      principalCents: sale.principalCents,
-      costManufacturingCents: sale.costByComponentCents.manufacturing,
-      costFreightCents: sale.costByComponentCents.freight,
-      costDutyCents: sale.costByComponentCents.duty,
-      costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
-    }));
-
-    const returns = previewData.returns.map((ret) => ({
-      sku: ret.sku,
-      quantity: ret.quantity,
-      principalCents: ret.principalCents,
-      costManufacturingCents: ret.costByComponentCents.manufacturing,
-      costFreightCents: ret.costByComponentCents.freight,
-      costDutyCents: ret.costByComponentCents.duty,
-      costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
-    }));
-
-    return buildSettlementSkuProfitability({
-      sales,
-      returns,
-      allocationLines: adsAllocation.lines.map((line) => ({
-        sku: line.sku,
-        allocatedCents: line.allocatedCents,
-      })),
-    });
-  }, [adsAllocation, previewData]);
-
-  const adsSkuProfitabilityPreview = useMemo(() => {
-    if (!baseAdsSkuProfitability) {
-      return null;
-    }
-
-    const baseBySku = new Map<string, AdsSkuProfitabilityLine>();
-    for (const line of baseAdsSkuProfitability.lines) {
-      baseBySku.set(line.sku, line);
-    }
-
-    const adsBySku = new Map<string, number>();
-    if (adsAllocationPreview.ok) {
-      for (const line of adsAllocationPreview.lines) {
-        if (line.allocatedCents === null) {
-          continue;
-        }
-        adsBySku.set(line.sku, line.allocatedCents);
-      }
-    } else {
-      for (const line of baseAdsSkuProfitability.lines) {
-        adsBySku.set(line.sku, line.adsAllocatedCents);
-      }
-    }
-
-    const allSkus = new Set<string>();
-    for (const sku of baseBySku.keys()) {
-      allSkus.add(sku);
-    }
-    for (const sku of adsBySku.keys()) {
-      allSkus.add(sku);
-    }
-
-    const lines: AdsSkuProfitabilityLine[] = [];
-    for (const sku of allSkus.values()) {
-      const base = baseBySku.get(sku);
-      const adsAllocated = adsBySku.get(sku);
-
-      const soldUnits = base ? base.soldUnits : 0;
-      const returnedUnits = base ? base.returnedUnits : 0;
-      const netUnits = base ? base.netUnits : soldUnits - returnedUnits;
-      const principalCents = base ? base.principalCents : 0;
-      const cogsCents = base ? base.cogsCents : 0;
-      const contributionBeforeAdsCents = base ? base.contributionBeforeAdsCents : principalCents - cogsCents;
-      const adsAllocatedCents = adsAllocated !== undefined ? adsAllocated : 0;
-      const contributionAfterAdsCents = contributionBeforeAdsCents - adsAllocatedCents;
-
-      lines.push({
-        sku,
-        soldUnits,
-        returnedUnits,
-        netUnits,
-        principalCents,
-        cogsCents,
-        adsAllocatedCents,
-        contributionBeforeAdsCents,
-        contributionAfterAdsCents,
-      });
-    }
-
-    lines.sort((a, b) => a.sku.localeCompare(b.sku));
-
-    const totals: AdsSkuProfitabilityTotals = {
-      soldUnits: 0,
-      returnedUnits: 0,
-      netUnits: 0,
-      principalCents: 0,
-      cogsCents: 0,
-      adsAllocatedCents: 0,
-      contributionBeforeAdsCents: 0,
-      contributionAfterAdsCents: 0,
-    };
-
-    for (const line of lines) {
-      totals.soldUnits += line.soldUnits;
-      totals.returnedUnits += line.returnedUnits;
-      totals.netUnits += line.netUnits;
-      totals.principalCents += line.principalCents;
-      totals.cogsCents += line.cogsCents;
-      totals.adsAllocatedCents += line.adsAllocatedCents;
-      totals.contributionBeforeAdsCents += line.contributionBeforeAdsCents;
-      totals.contributionAfterAdsCents += line.contributionAfterAdsCents;
-    }
-
-    return { lines, totals };
-  }, [adsAllocationPreview, baseAdsSkuProfitability]);
-
   const saveAdsAllocationMutation = useMutation({
     mutationFn: async () => {
       if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
@@ -1499,66 +1391,34 @@ export default function SettlementDetailPage() {
                       <div className="space-y-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                                Advertising cost allocation (SKU)
-                              </div>
-                              {!adsAllocationSaveEnabled && (
-                                <Badge variant="secondary" className="text-[10px]">Preview</Badge>
-                              )}
+                            <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                              Advertising allocation
                             </div>
                             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                               Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
                             </div>
                             {adsAllocation.totalAdsCents !== 0 && (
                               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                Total source:{' '}
-                                {adsAllocation.totalSource === 'AUDIT_DATA'
-                                  ? 'Audit Data (Amazon Advertising Costs rows)'
-                                  : adsAllocation.totalSource === 'ADS_REPORT'
-                                    ? 'Legacy inferred from Ads Data (no invoice billing total)'
-                                    : adsAllocation.totalSource === 'SAVED'
-                                      ? 'Saved allocation'
-                                      : 'No source data'}
+                                Ads total: {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
                               </div>
                             )}
-                            {adsAllocation.adsDataUpload && (
+                            {adsAllocation.totalAdsCents !== 0 && adsAllocation.adsDataUpload && (
                               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                                Source: {adsAllocation.adsDataUpload.filename}
                               </div>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
-                              <Button
-                                size="sm"
-                                onClick={() => saveAdsAllocationMutation.mutate()}
-                                disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                              >
-                                {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                              </Button>
-                            )}
-                          </div>
+                          {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => saveAdsAllocationMutation.mutate()}
+                              disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                            >
+                              {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                            </Button>
+                          )}
                         </div>
-
-                        {adsAllocation.totalAdsCents !== 0 && (
-                          <>
-                            {!adsAllocationSaveEnabled ? (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Preview allocation &middot; edit weights to simulate and process the settlement to save
-                              </div>
-                            ) : adsAllocation.kind === 'saved' ? (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Saved allocation &middot; weights can be edited and re-saved
-                              </div>
-                            ) : (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Prefilled allocation &middot; review and save to lock it in
-                              </div>
-                            )}
-                          </>
-                        )}
 
                         {adsAllocation.totalAdsCents === 0 ? (
                           <div className="text-sm text-slate-500 dark:text-slate-400">
@@ -1633,93 +1493,6 @@ export default function SettlementDetailPage() {
                                 </TableBody>
                               </Table>
                             </div>
-
-                            {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
-                              <div className="space-y-2">
-                                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  SKU contribution after ads allocation
-                                </div>
-                                <div className="overflow-x-auto">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>SKU</TableHead>
-                                        <TableHead className="text-right">Sold</TableHead>
-                                        <TableHead className="text-right">Returns</TableHead>
-                                        <TableHead className="text-right">Net Units</TableHead>
-                                        <TableHead className="text-right">Principal</TableHead>
-                                        <TableHead className="text-right">COGS</TableHead>
-                                        <TableHead className="text-right">Ads</TableHead>
-                                        <TableHead className="text-right">Contribution</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {adsSkuProfitabilityPreview.lines.map((line) => (
-                                        <TableRow key={`profit-${line.sku}`}>
-                                          <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
-                                            {line.sku}
-                                          </TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">{line.soldUnits}</TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">{line.returnedUnits}</TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">{line.netUnits}</TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">
-                                            {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">
-                                            {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell className="text-right text-sm tabular-nums">
-                                            {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell
-                                            className={cn(
-                                              'text-right text-sm font-semibold tabular-nums',
-                                              line.contributionAfterAdsCents < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
-                                            )}
-                                          >
-                                            {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                      <TableRow>
-                                        <TableCell className="text-sm font-semibold text-slate-900 dark:text-white">Total</TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {adsSkuProfitabilityPreview.totals.soldUnits}
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {adsSkuProfitabilityPreview.totals.returnedUnits}
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {adsSkuProfitabilityPreview.totals.netUnits}
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm font-semibold tabular-nums">
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell
-                                          className={cn(
-                                            'text-right text-sm font-semibold tabular-nums',
-                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
-                                              ? 'text-red-600 dark:text-red-400'
-                                              : 'text-slate-900 dark:text-white',
-                                          )}
-                                        >
-                                          {formatMoney(
-                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
-                                            settlement.marketplace.currency,
-                                          )}
-                                        </TableCell>
-                                      </TableRow>
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </div>
-                            )}
 
                             <div className="flex items-center justify-between">
                               <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
@@ -1802,6 +1575,9 @@ export default function SettlementDetailPage() {
                           <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                             {previewData.minDate} &rarr; {previewData.maxDate}
                           </div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Sales {previewData.sales.length} &middot; Returns {previewData.returns.length} &middot; COGS Lines {previewData.cogsJournalEntry.lines.length} &middot; P&amp;L Lines {previewData.pnlJournalEntry.lines.length}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {data?.processing && (
@@ -1852,34 +1628,6 @@ export default function SettlementDetailPage() {
                                   : 'Ready to Process'}
                           </Badge>
                         </div>
-                      </div>
-
-                      {/* Summary cards */}
-                      <div className="grid gap-3 sm:grid-cols-4">
-                        <Card className="border-slate-200/70 dark:border-white/10">
-                          <CardContent className="p-3">
-                            <div className="text-xs text-slate-500 dark:text-slate-400">Sales</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.sales.length}</div>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-slate-200/70 dark:border-white/10">
-                          <CardContent className="p-3">
-                            <div className="text-xs text-slate-500 dark:text-slate-400">Returns</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.returns.length}</div>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-slate-200/70 dark:border-white/10">
-                          <CardContent className="p-3">
-                            <div className="text-xs text-slate-500 dark:text-slate-400">COGS Lines</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.cogsJournalEntry.lines.length}</div>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-slate-200/70 dark:border-white/10">
-                          <CardContent className="p-3">
-                            <div className="text-xs text-slate-500 dark:text-slate-400">P&amp;L Lines</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{previewData.pnlJournalEntry.lines.length}</div>
-                          </CardContent>
-                        </Card>
                       </div>
 
                       {/* Blocks */}
@@ -2023,23 +1771,20 @@ export default function SettlementDetailPage() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>Account</TableHead>
                                   <TableHead>Description</TableHead>
-                                  <TableHead className="text-right">Debit</TableHead>
-                                  <TableHead className="text-right">Credit</TableHead>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead className="text-right">Amount</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {previewData.cogsJournalEntry.lines.map((line, idx) => (
                                   <TableRow key={idx}>
                                     <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
                                       <div className="flex flex-col">
                                         <span>{line.accountName}</span>
-                                        {line.accountNumber ? (
-                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">#{line.accountNumber}</span>
-                                        ) : (
-                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">ID {line.accountId}</span>
-                                        )}
                                         {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
                                           <span className="text-xs text-slate-500 dark:text-slate-400">
                                             {line.accountFullyQualifiedName}
@@ -2047,17 +1792,29 @@ export default function SettlementDetailPage() {
                                         )}
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
-                                      {line.description}
-                                    </TableCell>
                                     <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                      <SignedCentsAmount
+                                        amountCents={line.amountCents}
+                                        postingType={line.postingType}
+                                        currency={settlement.marketplace.currency}
+                                      />
                                     </TableCell>
                                   </TableRow>
                                 ))}
+                                <TableRow>
+                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                    Net
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                    {formatMoney(
+                                      previewData.cogsJournalEntry.lines.reduce(
+                                        (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
+                                        0,
+                                      ) / 100,
+                                      settlement.marketplace.currency,
+                                    )}
+                                  </TableCell>
+                                </TableRow>
                               </TableBody>
                             </Table>
                           </div>
@@ -2077,23 +1834,20 @@ export default function SettlementDetailPage() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>Account</TableHead>
                                   <TableHead>Description</TableHead>
-                                  <TableHead className="text-right">Debit</TableHead>
-                                  <TableHead className="text-right">Credit</TableHead>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead className="text-right">Amount</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {previewData.pnlJournalEntry.lines.map((line, idx) => (
                                   <TableRow key={idx}>
                                     <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-slate-700 dark:text-slate-200">
                                       <div className="flex flex-col">
                                         <span>{line.accountName}</span>
-                                        {line.accountNumber ? (
-                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">#{line.accountNumber}</span>
-                                        ) : (
-                                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">ID {line.accountId}</span>
-                                        )}
                                         {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
                                           <span className="text-xs text-slate-500 dark:text-slate-400">
                                             {line.accountFullyQualifiedName}
@@ -2101,17 +1855,29 @@ export default function SettlementDetailPage() {
                                         )}
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-sm text-slate-500 dark:text-slate-400">
-                                      {line.description}
-                                    </TableCell>
                                     <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                      <SignedCentsAmount
+                                        amountCents={line.amountCents}
+                                        postingType={line.postingType}
+                                        currency={settlement.marketplace.currency}
+                                      />
                                     </TableCell>
                                   </TableRow>
                                 ))}
+                                <TableRow>
+                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                    Net
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                    {formatMoney(
+                                      previewData.pnlJournalEntry.lines.reduce(
+                                        (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
+                                        0,
+                                      ) / 100,
+                                      settlement.marketplace.currency,
+                                    )}
+                                  </TableCell>
+                                </TableRow>
                               </TableBody>
                             </Table>
                           </div>
