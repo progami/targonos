@@ -760,15 +760,15 @@ function ProcessSettlementDialog({
 // Main page component
 // ---------------------------------------------------------------------------
 
-type SettlementDetailTab = 'sales' | 'ads-allocation' | 'plutus-preview';
+type SettlementDetailTab = 'sales' | 'plutus-preview';
 
 function parseSettlementTab(tab: string | null): SettlementDetailTab {
-  if (tab === 'lmb-preview') return 'ads-allocation';
+  if (tab === 'lmb-preview') return 'plutus-preview';
   if (tab === 'lmb-settlement') return 'sales';
   if (tab === 'plutus-settlement') return 'plutus-preview';
   if (tab === 'history') return 'plutus-preview';
-  if (tab === 'ads-allocation') return 'ads-allocation';
-  if (tab === 'analysis') return 'ads-allocation';
+  if (tab === 'ads-allocation') return 'plutus-preview';
+  if (tab === 'analysis') return 'plutus-preview';
   if (tab === 'plutus-preview') return 'plutus-preview';
   return 'sales';
 }
@@ -1299,7 +1299,6 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <TabsList>
-                    <TabsTrigger value="ads-allocation">LMB Preview</TabsTrigger>
                     <TabsTrigger value="sales">LMB Settlement</TabsTrigger>
                     {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                       <TabsTrigger value="plutus-preview">Plutus Settlement</TabsTrigger>
@@ -1400,7 +1399,7 @@ export default function SettlementDetailPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="ads-allocation" className="p-4">
+              <TabsContent value="plutus-preview" className="p-4">
                 {!settlement && (
                   <div className="space-y-3">
                     <Skeleton className="h-5 w-64" />

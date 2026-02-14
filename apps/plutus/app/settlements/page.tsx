@@ -557,7 +557,6 @@ export default function SettlementsPage() {
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
                                   { label: 'LMB Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-settlement`) },
-                                  { label: 'LMB Preview', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-preview`) },
                                   { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus-settlement`) },
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
