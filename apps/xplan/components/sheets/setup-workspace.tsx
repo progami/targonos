@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StrategyGroupCard } from '@/components/sheets/strategy-group-card';
@@ -186,48 +186,51 @@ export function SetupWorkspace({
       </div>
 
       {/* Content based on active tab */}
-      {activeTab === 'strategies' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* US Column */}
-          <div className="space-y-6">
+      {activeTab === 'strategies' && (() => {
+        const maxGroups = Math.max(usGroups.length, ukGroups.length);
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+            {/* Region headers */}
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#0b3a52] pb-2">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
                 🇺🇸 United States (US)
               </h2>
             </div>
-            {usGroups.map((group) => (
-              <StrategyGroupCard
-                key={group.id}
-                group={group}
-                activeStrategyId={activeStrategyId}
-                viewer={viewer}
-                keyParametersByStrategyId={keyParametersByStrategyId}
-              />
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#0b3a52] pb-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                🇬🇧 United Kingdom (UK)
+              </h2>
+            </div>
+
+            {/* Paired group cards */}
+            {Array.from({ length: maxGroups }, (_, i) => (
+              <Fragment key={i}>
+                {usGroups[i] ? (
+                  <StrategyGroupCard
+                    group={usGroups[i]}
+                    activeStrategyId={activeStrategyId}
+                    viewer={viewer}
+                    keyParametersByStrategyId={keyParametersByStrategyId}
+                  />
+                ) : <div />}
+                {ukGroups[i] ? (
+                  <StrategyGroupCard
+                    group={ukGroups[i]}
+                    activeStrategyId={activeStrategyId}
+                    viewer={viewer}
+                    keyParametersByStrategyId={keyParametersByStrategyId}
+                  />
+                ) : <div />}
+              </Fragment>
             ))}
+
+            {/* Add group buttons */}
             <button className="w-full rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
               <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
               <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
                 Add Product Group to US
               </span>
             </button>
-          </div>
-
-          {/* UK Column */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#0b3a52] pb-2">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                🇬🇧 United Kingdom (UK)
-              </h2>
-            </div>
-            {ukGroups.map((group) => (
-              <StrategyGroupCard
-                key={group.id}
-                group={group}
-                activeStrategyId={activeStrategyId}
-                viewer={viewer}
-                keyParametersByStrategyId={keyParametersByStrategyId}
-              />
-            ))}
             <button className="w-full rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
               <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
               <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
@@ -235,8 +238,8 @@ export function SetupWorkspace({
               </span>
             </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {activeTab === 'products' && hasStrategy && (
         <SetupProductTable
