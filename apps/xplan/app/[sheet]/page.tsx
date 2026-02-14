@@ -799,6 +799,43 @@ async function getProductSetupView(strategyId: string) {
   };
 }
 
+async function getKeyParametersForAllStrategies(
+  strategyIds: string[],
+): Promise<Record<string, Array<{ label: string; value: string }>>> {
+  if (strategyIds.length === 0) return {};
+
+  const prismaAny = prisma as unknown as Record<string, unknown>;
+  const businessParameterDelegate = prismaAny.businessParameter as
+    | {
+        findMany: (args?: unknown) => Promise<BusinessParameter[]>;
+      }
+    | undefined;
+
+  const allParams = await safeFindMany<BusinessParameter[]>(
+    businessParameterDelegate,
+    {
+      where: { strategyId: { in: strategyIds } },
+      orderBy: { label: 'asc' },
+    },
+    [],
+    'businessParameter',
+  );
+
+  const result: Record<string, Array<{ label: string; value: string }>> = {};
+  for (const param of allParams) {
+    const sid = (param as unknown as { strategyId: string }).strategyId;
+    if (!result[sid]) result[sid] = [];
+    result[sid].push({
+      label: param.label,
+      value:
+        param.valueNumeric != null
+          ? formatNumeric(param.valueNumeric)
+          : (param.valueText ?? ''),
+    });
+  }
+  return result;
+}
+
 async function loadOperationsContext(strategyId: string, calendar?: PlanningCalendar['calendar']) {
   const prismaAny = prisma as unknown as Record<string, unknown>;
   const productDelegate = prismaAny.product as
@@ -2506,9 +2543,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         _count: s._count,
       }));
 
-      const productSetupView = strategyId
-        ? await getProductSetupView(strategyId)
-        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] };
+      const allStrategyIds = strategies.map((s) => s.id);
+      const [productSetupView, keyParametersByStrategyId] = await Promise.all([
+        strategyId
+          ? getProductSetupView(strategyId)
+          : Promise.resolve({ products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] }),
+        getKeyParametersForAllStrategies(allStrategyIds),
+      ]);
 
       tabularContent = (
         <SetupWorkspace
@@ -2522,6 +2563,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           leadStageTemplates={productSetupView.leadStageTemplates}
           leadTimeProfiles={productSetupView.leadTimeProfiles}
           leadTimeOverrideIds={productSetupView.leadTimeOverrideIds}
+          keyParametersByStrategyId={keyParametersByStrategyId}
         />
       );
       visualContent = null;
