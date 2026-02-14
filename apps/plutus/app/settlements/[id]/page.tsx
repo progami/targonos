@@ -274,8 +274,6 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
   return isBlockingProcessingCode(block.code);
 }
 
-const MAX_PREVIEW_BLOCK_DETAILS = 25;
-
 function groupPreviewBlocksByCode(blocks: PreviewBlock[]): PreviewBlockGroup[] {
   const grouped = new Map<string, number>();
   for (const block of blocks) {
@@ -295,6 +293,32 @@ function groupPreviewBlocksByCode(blocks: PreviewBlock[]): PreviewBlockGroup[] {
       }
       return a.code.localeCompare(b.code);
     });
+}
+
+function firstPreviewBlockByCode(blocks: PreviewBlock[]): Map<string, PreviewBlock> {
+  const map = new Map<string, PreviewBlock>();
+  for (const block of blocks) {
+    if (map.has(block.code)) continue;
+    map.set(block.code, block);
+  }
+  return map;
+}
+
+function getPreviewBlockSummary(group: PreviewBlockGroup, sample: PreviewBlock | undefined): string {
+  if (group.code === 'ORDER_ALREADY_PROCESSED') {
+    return `${group.count.toLocaleString()} orders in this invoice were already processed by Plutus.`;
+  }
+  if (group.code === 'ALREADY_PROCESSED') {
+    const processingId = sample?.details ? sample.details.settlementProcessingId : undefined;
+    if (processingId === undefined) {
+      return 'Invoice already processed by Plutus.';
+    }
+    return `Invoice already processed by Plutus (settlementProcessingId=${String(processingId)}).`;
+  }
+
+  const message = sample ? getPreviewBlockMessage(sample) : group.code;
+  if (group.count === 1) return message;
+  return `${message} (${group.count.toLocaleString()} occurrences).`;
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -959,18 +983,9 @@ export default function SettlementDetailPage() {
   const previewIssueGroups = useMemo(() => groupPreviewBlocksByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
   const previewBlockingGroups = useMemo(() => groupPreviewBlocksByCode(previewBlockingBlocks), [previewBlockingBlocks]);
   const previewWarningGroups = useMemo(() => groupPreviewBlocksByCode(previewWarningBlocks), [previewWarningBlocks]);
-  const visiblePreviewIssueDetails = useMemo(
-    () => visiblePreviewBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
-    [visiblePreviewBlocks],
-  );
-  const visiblePreviewBlockingDetails = useMemo(
-    () => previewBlockingBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
-    [previewBlockingBlocks],
-  );
-  const visiblePreviewWarningDetails = useMemo(
-    () => previewWarningBlocks.slice(0, MAX_PREVIEW_BLOCK_DETAILS),
-    [previewWarningBlocks],
-  );
+  const previewIssueFirstByCode = useMemo(() => firstPreviewBlockByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
+  const previewBlockingFirstByCode = useMemo(() => firstPreviewBlockByCode(previewBlockingBlocks), [previewBlockingBlocks]);
+  const previewWarningFirstByCode = useMemo(() => firstPreviewBlockByCode(previewWarningBlocks), [previewWarningBlocks]);
 
   const adsAllocationEnabled = !!previewInvoiceId && !!settlement;
 
@@ -1657,24 +1672,12 @@ export default function SettlementDetailPage() {
                           <ul
                             className="text-sm space-y-1 text-amber-700 dark:text-amber-200"
                           >
-                            {visiblePreviewIssueDetails.map((b, idx) => (
-                              <li key={idx}>
-                                {getPreviewBlockMessage(b)}
-                                {showPreviewBlockErrorDetails(b) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-                                )}
+                            {previewIssueGroups.map((group) => (
+                              <li key={group.code}>
+                                {getPreviewBlockSummary(group, previewIssueFirstByCode.get(group.code))}
                               </li>
                             ))}
                           </ul>
-                          {previewIssueCount > MAX_PREVIEW_BLOCK_DETAILS && (
-                            <div className="mt-2 text-xs text-amber-700 dark:text-amber-200">
-                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
-                              {(previewIssueCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -1697,24 +1700,12 @@ export default function SettlementDetailPage() {
                             ))}
                           </div>
                           <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-                            {visiblePreviewBlockingDetails.map((b, idx) => (
-                              <li key={idx}>
-                                {getPreviewBlockMessage(b)}
-                                {showPreviewBlockErrorDetails(b) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-                                )}
+                            {previewBlockingGroups.map((group) => (
+                              <li key={group.code}>
+                                {getPreviewBlockSummary(group, previewBlockingFirstByCode.get(group.code))}
                               </li>
                             ))}
                           </ul>
-                          {previewBlockingCount > MAX_PREVIEW_BLOCK_DETAILS && (
-                            <div className="mt-2 text-xs text-red-700 dark:text-red-200">
-                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
-                              {(previewBlockingCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -1737,24 +1728,12 @@ export default function SettlementDetailPage() {
                             ))}
                           </div>
                           <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
-                            {visiblePreviewWarningDetails.map((b, idx) => (
-                              <li key={idx}>
-                                {getPreviewBlockMessage(b)}
-                                {showPreviewBlockErrorDetails(b) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-                                )}
+                            {previewWarningGroups.map((group) => (
+                              <li key={group.code}>
+                                {getPreviewBlockSummary(group, previewWarningFirstByCode.get(group.code))}
                               </li>
                             ))}
                           </ul>
-                          {previewWarningCount > MAX_PREVIEW_BLOCK_DETAILS && (
-                            <div className="mt-2 text-xs text-amber-700 dark:text-amber-200">
-                              Showing first {MAX_PREVIEW_BLOCK_DETAILS.toLocaleString()} details.{' '}
-                              {(previewWarningCount - MAX_PREVIEW_BLOCK_DETAILS).toLocaleString()} more not shown.
-                            </div>
-                          )}
                         </div>
                       )}
 
