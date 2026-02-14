@@ -1,6 +1,7 @@
 const path = require('path');
 const DEV_DIR = process.env.TARGONOS_DEV_DIR ?? process.env.TARGON_DEV_DIR;
 const MAIN_DIR = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR;
+const HOME_DIR = process.env.HOME;
 
 if (!DEV_DIR) {
   throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
@@ -9,6 +10,14 @@ if (!DEV_DIR) {
 if (!MAIN_DIR) {
   throw new Error('Missing TARGONOS_MAIN_DIR (or legacy TARGON_MAIN_DIR).');
 }
+
+if (!HOME_DIR) {
+  throw new Error('Missing HOME environment variable.');
+}
+
+const PLUTUS_STATE_DIR = path.join(HOME_DIR, '.targonos', 'plutus');
+const DEV_PLUTUS_QBO_CONNECTION_PATH = path.join(PLUTUS_STATE_DIR, 'qbo_connection.dev.production.json');
+const MAIN_PLUTUS_QBO_CONNECTION_PATH = path.join(PLUTUS_STATE_DIR, 'qbo_connection.main.production.json');
 
 module.exports = {
   apps: [
@@ -105,7 +114,27 @@ module.exports = {
       args: 'start -p 3112',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3112 },
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3112,
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'dev-plutus-cashflow-refresh',
+      cwd: path.join(DEV_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/cashflow-refresh-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '0',
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -145,48 +174,6 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-argus',
-      cwd: path.join(DEV_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3116',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3116,
-        BASE_PATH: '/argus',
-        NEXT_PUBLIC_BASE_PATH: '/argus',
-        ARGUS_ENV: 'dev'
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-argus-scheduler',
-      cwd: path.join(DEV_DIR, 'apps/argus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/scheduler.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', ARGUS_ENV: 'dev' },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-argus-capture',
-      cwd: path.join(DEV_DIR, 'apps/argus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/capture-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', ARGUS_ENV: 'dev' },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '800M'
     },
 
     // ===========================================
@@ -282,7 +269,27 @@ module.exports = {
       args: 'start -p 3012',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3012 },
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3012,
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-plutus-cashflow-refresh',
+      cwd: path.join(MAIN_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/cashflow-refresh-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1',
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -323,47 +330,5 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
-    {
-      name: 'main-argus',
-      cwd: path.join(MAIN_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3016',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3016,
-        BASE_PATH: '/argus',
-        NEXT_PUBLIC_BASE_PATH: '/argus',
-        ARGUS_ENV: 'main'
-      },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'main-argus-scheduler',
-      cwd: path.join(MAIN_DIR, 'apps/argus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/scheduler.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', ARGUS_ENV: 'main' },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'main-argus-capture',
-      cwd: path.join(MAIN_DIR, 'apps/argus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'lib/jobs/capture-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: { NODE_ENV: 'production', ARGUS_ENV: 'main' },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '800M'
-    }
   ]
 };

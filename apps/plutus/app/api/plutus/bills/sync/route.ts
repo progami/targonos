@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Push PO number to QBO memo
     const { updatedConnection } = await updateBill(connection, qboBillId, {
-      privateNote: `PO: ${mapping.poNumber}`,
+      privateNote: mapping.poNumber.trim() === '' ? undefined : `PO: ${mapping.poNumber}`,
       lineDescriptions,
     });
 

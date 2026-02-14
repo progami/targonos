@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 
@@ -21,13 +21,16 @@ import {
 } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { Timeline } from '@/components/ui/timeline';
 import { cn } from '@/lib/utils';
+import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -137,7 +140,52 @@ type SettlementProcessingPreview = {
   pnlJournalEntry: JePreview;
 };
 
+type PreviewBlock = SettlementProcessingPreview['blocks'][number];
+
 type ConnectionStatus = { connected: boolean; error?: string };
+
+type AdsAllocationLine = { sku: string; weight: number; allocatedCents: number };
+
+type AdsSkuProfitabilityLine = {
+  sku: string;
+  soldUnits: number;
+  returnedUnits: number;
+  netUnits: number;
+  principalCents: number;
+  cogsCents: number;
+  adsAllocatedCents: number;
+  contributionBeforeAdsCents: number;
+  contributionAfterAdsCents: number;
+};
+
+type AdsSkuProfitabilityTotals = {
+  soldUnits: number;
+  returnedUnits: number;
+  netUnits: number;
+  principalCents: number;
+  cogsCents: number;
+  adsAllocatedCents: number;
+  contributionBeforeAdsCents: number;
+  contributionAfterAdsCents: number;
+};
+
+type AdsAllocationResponse = {
+  kind: 'saved' | 'computed';
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  totalAdsCents: number;
+  totalSource: 'AUDIT_DATA' | 'ADS_REPORT' | 'NONE' | 'SAVED';
+  weightSource: string;
+  weightUnit: string;
+  adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
+  lines: AdsAllocationLine[];
+  skuProfitability: {
+    lines: AdsSkuProfitabilityLine[];
+    totals: AdsSkuProfitabilityTotals;
+  };
+};
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -181,6 +229,16 @@ function formatBlockDetails(details: Record<string, string | number> | undefined
   const entries = Object.entries(details).filter(([key]) => key !== 'error');
   if (entries.length === 0) return null;
   return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
+}
+
+function isIdempotencyBlock(block: PreviewBlock): boolean {
+  if (block.code === 'ALREADY_PROCESSED') return true;
+  if (block.code === 'ORDER_ALREADY_PROCESSED') return true;
+  return false;
+}
+
+function isBlockingPreviewBlock(block: PreviewBlock): boolean {
+  return isBlockingProcessingCode(block.code);
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -237,6 +295,30 @@ async function postSettlement(settlementId: string, invoiceId: string, marketpla
     return { ok: false as const, data };
   }
   return { ok: true as const, data };
+}
+
+async function fetchAdsAllocation(settlementId: string): Promise<AdsAllocationResponse> {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/ads-allocation`);
+  const data = await res.json();
+  if (!res.ok) {
+    const message = typeof data.details === 'string' ? data.details : data.error ?? 'Failed to load settlement advertising allocation';
+    throw new Error(message);
+  }
+  return data as AdsAllocationResponse;
+}
+
+async function saveAdsAllocation(input: { settlementId: string; lines: Array<{ sku: string; weight: number }> }) {
+  const res = await fetch(`${basePath}/api/plutus/settlements/${input.settlementId}/ads-allocation`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ lines: input.lines }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const message = typeof data.details === 'string' ? data.details : data.error ?? 'Failed to save settlement advertising allocation';
+    throw new Error(message);
+  }
+  return data as { success: true };
 }
 
 /**
@@ -400,6 +482,14 @@ function ProcessSettlementDialog({
   }
 
   const selectedMeta = invoicesWithMeta.find((i) => i.invoiceId === selectedInvoice);
+  const previewBlockingBlocks = useMemo(() => {
+    if (!preview) return [] as PreviewBlock[];
+    return preview.blocks.filter((block) => isBlockingPreviewBlock(block));
+  }, [preview]);
+  const previewWarningBlocks = useMemo(() => {
+    if (!preview) return [] as PreviewBlock[];
+    return preview.blocks.filter((block) => !isBlockingPreviewBlock(block));
+  }, [preview]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -542,8 +632,20 @@ function ProcessSettlementDialog({
                       Hash {preview.processingHash.slice(0, 10)} &middot; {preview.minDate} &rarr; {preview.maxDate}
                     </div>
                   </div>
-                  <Badge variant={preview.blocks.length === 0 ? 'success' : 'destructive'}>
-                    {preview.blocks.length === 0 ? 'Ready' : 'Blocked'}
+                  <Badge
+                    variant={
+                      previewBlockingBlocks.length > 0
+                        ? 'destructive'
+                        : previewWarningBlocks.length > 0
+                          ? 'secondary'
+                          : 'success'
+                    }
+                  >
+                    {previewBlockingBlocks.length > 0
+                      ? 'Blocked'
+                      : previewWarningBlocks.length > 0
+                        ? 'Ready (Warnings)'
+                        : 'Ready'}
                   </Badge>
                 </div>
 
@@ -570,31 +672,50 @@ function ProcessSettlementDialog({
                   </Card>
                 </div>
 
-	                {preview.blocks.length > 0 && (
-	                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-	                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
-	                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-	                      {preview.blocks.map((b, idx) => (
-	                        <li key={idx}>
-	                          <span className="font-mono">{b.code}</span>: {b.message}
-	                          {b.details && 'error' in b.details && (
-	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-	                          )}
+		                {previewBlockingBlocks.length > 0 && (
+		                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+		                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
+		                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+		                      {previewBlockingBlocks.map((b, idx) => (
+		                        <li key={idx}>
+		                          <span className="font-mono">{b.code}</span>: {b.message}
+		                          {b.details && 'error' in b.details && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          )}
 	                          {formatBlockDetails(b.details) && (
 	                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
 	                          )}
 	                        </li>
 	                      ))}
-	                    </ul>
-	                  </div>
-	                )}
+		                    </ul>
+		                  </div>
+		                )}
 
-                {preview.blocks.length === 0 && (
-                  <Button onClick={() => void handlePost()} disabled={isPosting}>
-                    {isPosting ? 'Posting...' : 'Post to QBO'}
-                  </Button>
-                )}
-              </div>
+		                {previewWarningBlocks.length > 0 && (
+		                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
+		                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">Warnings (non-blocking)</div>
+		                    <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
+		                      {previewWarningBlocks.map((b, idx) => (
+		                        <li key={idx}>
+		                          <span className="font-mono">{b.code}</span>: {b.message}
+		                          {b.details && 'error' in b.details && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+		                          )}
+		                          {formatBlockDetails(b.details) && (
+		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+		                          )}
+		                        </li>
+		                      ))}
+		                    </ul>
+		                  </div>
+		                )}
+
+	                {previewBlockingBlocks.length === 0 && (
+	                  <Button onClick={() => void handlePost()} disabled={isPosting}>
+	                    {isPosting ? 'Posting...' : 'Post to QBO'}
+	                  </Button>
+	                )}
+	              </div>
             )}
           </div>
         )}
@@ -618,7 +739,9 @@ export default function SettlementDetailPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const initialTab = searchParams.get('tab');
-  const [tab, setTab] = useState(initialTab === 'history' ? 'history' : 'sales');
+  const [tab, setTab] = useState(
+    initialTab === 'history' ? 'history' : initialTab === 'ads-allocation' ? 'ads-allocation' : 'sales',
+  );
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
@@ -668,11 +791,271 @@ export default function SettlementDetailPage() {
     return match.kind === 'match' ? match.invoiceId : null;
   }, [auditData?.invoices, settlement]);
 
+  const previewInvoiceId = useMemo(() => {
+    if (!settlement) return null;
+    if (settlement.plutusStatus === 'Processed' && data?.processing?.invoiceId) {
+      return data.processing.invoiceId;
+    }
+    return recommendedInvoice;
+  }, [data?.processing?.invoiceId, recommendedInvoice, settlement]);
+
+  const previewEnabled = !!previewInvoiceId && (settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed');
+
   const { data: previewData, isLoading: isPreviewLoading, error: previewError } = useQuery({
-    queryKey: ['plutus-settlement-preview', settlementId, recommendedInvoice],
-    queryFn: () => fetchPreview(settlementId, recommendedInvoice!, settlement!.marketplace.id),
-    enabled: !!recommendedInvoice && settlement?.plutusStatus === 'Pending',
+    queryKey: ['plutus-settlement-preview', settlementId, previewInvoiceId, settlement?.plutusStatus],
+    queryFn: () => fetchPreview(settlementId, previewInvoiceId!, settlement!.marketplace.id),
+    enabled: previewEnabled,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const visiblePreviewBlocks = useMemo(() => {
+    if (!previewData) return [] as PreviewBlock[];
+    if (settlement?.plutusStatus !== 'Processed') return previewData.blocks;
+    return previewData.blocks.filter((block) => !isIdempotencyBlock(block));
+  }, [previewData, settlement?.plutusStatus]);
+
+  const previewBlockingBlocks = useMemo(() => {
+    return visiblePreviewBlocks.filter((block) => isBlockingPreviewBlock(block));
+  }, [visiblePreviewBlocks]);
+  const previewWarningBlocks = useMemo(() => {
+    return visiblePreviewBlocks.filter((block) => !isBlockingPreviewBlock(block));
+  }, [visiblePreviewBlocks]);
+
+  const isProcessedPreview = settlement?.plutusStatus === 'Processed';
+  const previewBlockingCount = previewBlockingBlocks.length;
+  const previewWarningCount = previewWarningBlocks.length;
+  const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
+
+  const adsAllocationEnabled = settlement?.plutusStatus === 'Processed' && data?.processing !== null;
+
+  const { data: adsAllocation, isLoading: isAdsAllocationLoading, error: adsAllocationError } = useQuery({
+    queryKey: ['plutus-settlement-ads-allocation', settlementId],
+    queryFn: () => fetchAdsAllocation(settlementId),
+    enabled: adsAllocationEnabled,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const showAdsAllocationTab = useMemo(() => {
+    if (!adsAllocationEnabled) return false;
+    if (isAdsAllocationLoading) return true;
+    if (adsAllocationError) return true;
+    if (!adsAllocation) return false;
+    return adsAllocation.totalAdsCents !== 0;
+  }, [adsAllocation, adsAllocationEnabled, adsAllocationError, isAdsAllocationLoading]);
+
+  useEffect(() => {
+    if (!settlement) return;
+    if (tab !== 'ads-allocation') return;
+    if (showAdsAllocationTab) return;
+    setTab('sales');
+  }, [settlement, showAdsAllocationTab, tab]);
+
+  type AdsEditLine = { sku: string; weightInput: string };
+  const [adsEditLines, setAdsEditLines] = useState<AdsEditLine[]>([]);
+  const [adsDirty, setAdsDirty] = useState(false);
+
+  useEffect(() => {
+    setAdsDirty(false);
+    setAdsEditLines([]);
+  }, [settlementId]);
+
+  useEffect(() => {
+    if (!adsAllocation) return;
+    if (adsDirty) return;
+
+    setAdsEditLines(
+      adsAllocation.lines.map((l) => ({
+        sku: l.sku,
+        weightInput: adsAllocation.weightUnit === 'cents' ? (l.weight / 100).toFixed(2) : String(l.weight),
+      })),
+    );
+  }, [adsAllocation, adsDirty]);
+
+  function parseMoneyInputToCents(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const amount = Number(trimmed);
+    if (!Number.isFinite(amount)) return null;
+    const cents = Math.round(amount * 100);
+    if (!Number.isInteger(cents) || cents <= 0) return null;
+    return cents;
+  }
+
+  const adsAllocationPreview = useMemo(() => {
+    if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
+      return { ok: false as const, lines: [] as Array<{ sku: string; weightInput: string; allocatedCents: number | null }>, error: null as string | null };
+    }
+
+    if (adsAllocation.weightUnit !== 'cents') {
+      return { ok: false as const, lines: [], error: `Unsupported weight unit: ${adsAllocation.weightUnit}` };
+    }
+
+    const parsed = adsEditLines.map((l) => {
+      const weightCents = parseMoneyInputToCents(l.weightInput);
+      return { sku: l.sku, weightInput: l.weightInput, weightCents };
+    });
+
+    if (parsed.length === 0) {
+      return { ok: false as const, lines: [], error: 'No weights available for allocation.' };
+    }
+
+    const invalid = parsed.find((l) => l.weightCents === null);
+    if (invalid) {
+      return {
+        ok: false as const,
+        lines: parsed.map((l) => ({ sku: l.sku, weightInput: l.weightInput, allocatedCents: null })),
+        error: 'All weights must be positive dollar amounts.',
+      };
+    }
+
+    const weightsSorted = [...parsed].sort((a, b) => a.sku.localeCompare(b.sku));
+    const sign = adsAllocation.totalAdsCents < 0 ? -1 : 1;
+    const absTotal = Math.abs(adsAllocation.totalAdsCents);
+
+    const allocatedAbs = allocateByWeight(
+      absTotal,
+      weightsSorted.map((w) => ({ key: w.sku, weight: w.weightCents! })),
+    );
+
+    const withAlloc = parsed.map((l) => {
+      const centsAbs = allocatedAbs[l.sku];
+      if (centsAbs === undefined) {
+        return { sku: l.sku, weightInput: l.weightInput, allocatedCents: null };
+      }
+      return { sku: l.sku, weightInput: l.weightInput, allocatedCents: sign * centsAbs };
+    });
+
+    let sum = 0;
+    for (const line of withAlloc) {
+      if (line.allocatedCents === null) {
+        return { ok: false as const, lines: withAlloc, error: 'Allocation failed. Fix invalid rows.' };
+      }
+      sum += line.allocatedCents;
+    }
+
+    if (sum !== adsAllocation.totalAdsCents) {
+      return { ok: false as const, lines: withAlloc, error: `Allocated total mismatch (${sum} vs ${adsAllocation.totalAdsCents}).` };
+    }
+
+    return { ok: true as const, lines: withAlloc, error: null };
+  }, [adsAllocation, adsEditLines]);
+
+  const adsSkuProfitabilityPreview = useMemo(() => {
+    if (!adsAllocation) {
+      return null;
+    }
+
+    const baseBySku = new Map<string, AdsSkuProfitabilityLine>();
+    for (const line of adsAllocation.skuProfitability.lines) {
+      baseBySku.set(line.sku, line);
+    }
+
+    const adsBySku = new Map<string, number>();
+    if (adsAllocationPreview.ok) {
+      for (const line of adsAllocationPreview.lines) {
+        if (line.allocatedCents === null) {
+          continue;
+        }
+        adsBySku.set(line.sku, line.allocatedCents);
+      }
+    } else {
+      for (const line of adsAllocation.skuProfitability.lines) {
+        adsBySku.set(line.sku, line.adsAllocatedCents);
+      }
+    }
+
+    const allSkus = new Set<string>();
+    for (const sku of baseBySku.keys()) {
+      allSkus.add(sku);
+    }
+    for (const sku of adsBySku.keys()) {
+      allSkus.add(sku);
+    }
+
+    const lines: AdsSkuProfitabilityLine[] = [];
+    for (const sku of allSkus.values()) {
+      const base = baseBySku.get(sku);
+      const adsAllocated = adsBySku.get(sku);
+
+      const soldUnits = base ? base.soldUnits : 0;
+      const returnedUnits = base ? base.returnedUnits : 0;
+      const netUnits = base ? base.netUnits : soldUnits - returnedUnits;
+      const principalCents = base ? base.principalCents : 0;
+      const cogsCents = base ? base.cogsCents : 0;
+      const contributionBeforeAdsCents = base ? base.contributionBeforeAdsCents : principalCents - cogsCents;
+      const adsAllocatedCents = adsAllocated !== undefined ? adsAllocated : 0;
+      const contributionAfterAdsCents = contributionBeforeAdsCents - adsAllocatedCents;
+
+      lines.push({
+        sku,
+        soldUnits,
+        returnedUnits,
+        netUnits,
+        principalCents,
+        cogsCents,
+        adsAllocatedCents,
+        contributionBeforeAdsCents,
+        contributionAfterAdsCents,
+      });
+    }
+
+    lines.sort((a, b) => a.sku.localeCompare(b.sku));
+
+    const totals: AdsSkuProfitabilityTotals = {
+      soldUnits: 0,
+      returnedUnits: 0,
+      netUnits: 0,
+      principalCents: 0,
+      cogsCents: 0,
+      adsAllocatedCents: 0,
+      contributionBeforeAdsCents: 0,
+      contributionAfterAdsCents: 0,
+    };
+
+    for (const line of lines) {
+      totals.soldUnits += line.soldUnits;
+      totals.returnedUnits += line.returnedUnits;
+      totals.netUnits += line.netUnits;
+      totals.principalCents += line.principalCents;
+      totals.cogsCents += line.cogsCents;
+      totals.adsAllocatedCents += line.adsAllocatedCents;
+      totals.contributionBeforeAdsCents += line.contributionBeforeAdsCents;
+      totals.contributionAfterAdsCents += line.contributionAfterAdsCents;
+    }
+
+    return { lines, totals };
+  }, [adsAllocation, adsAllocationPreview]);
+
+  const saveAdsAllocationMutation = useMutation({
+    mutationFn: async () => {
+      if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
+        throw new Error('No advertising cost found for this invoice');
+      }
+      if (adsAllocation.weightUnit !== 'cents') {
+        throw new Error(`Unsupported weight unit: ${adsAllocation.weightUnit}`);
+      }
+
+      const lines = adsEditLines
+        .map((l) => {
+          const weight = parseMoneyInputToCents(l.weightInput);
+          if (weight === null) {
+            throw new Error(`Invalid weight for ${l.sku}`);
+          }
+          return { sku: l.sku, weight };
+        })
+        .sort((a, b) => a.sku.localeCompare(b.sku));
+
+      return saveAdsAllocation({ settlementId, lines });
+    },
+    onSuccess: async () => {
+      toast.success('Saved advertising allocation');
+      setAdsDirty(false);
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement-ads-allocation', settlementId] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
   });
 
   if (!isCheckingConnection && connection?.connected === false) {
@@ -813,7 +1196,10 @@ export default function SettlementDetailPage() {
               <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
                 <TabsList>
                   <TabsTrigger value="sales">Sales &amp; Fees</TabsTrigger>
-                  {settlement?.plutusStatus === 'Pending' && (
+                  {showAdsAllocationTab && (
+                    <TabsTrigger value="ads-allocation">Advertising Allocation</TabsTrigger>
+                  )}
+                  {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                     <TabsTrigger value="plutus-preview">Plutus Preview</TabsTrigger>
                   )}
                   <TabsTrigger value="history">History</TabsTrigger>
@@ -882,7 +1268,255 @@ export default function SettlementDetailPage() {
                 )}
               </TabsContent>
 
-              {settlement?.plutusStatus === 'Pending' && (
+              {showAdsAllocationTab && data?.processing && settlement && (
+                <TabsContent value="ads-allocation" className="p-4">
+                  {isAdsAllocationLoading && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-5 w-64" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  )}
+
+                  {!isAdsAllocationLoading && adsAllocationError && (
+                    <div className="text-sm text-danger-700 dark:text-danger-400">
+                      {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                      <div className="mt-2">
+                        <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                          Upload Ads Data
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Advertising cost allocation (SKU)
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Total source:{' '}
+                            {adsAllocation.totalSource === 'AUDIT_DATA'
+                              ? 'Audit Data (Amazon Advertising Costs rows)'
+                              : adsAllocation.totalSource === 'ADS_REPORT'
+                                ? 'Ads Data spend fallback'
+                                : adsAllocation.totalSource === 'SAVED'
+                                  ? 'Saved allocation'
+                                  : 'No source data'}
+                          </div>
+                          {adsAllocation.adsDataUpload && (
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {adsAllocation.totalAdsCents !== 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => saveAdsAllocationMutation.mutate()}
+                              disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                            >
+                              {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {adsAllocation.kind === 'saved' ? (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Saved allocation &middot; weights can be edited and re-saved
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Prefilled allocation &middot; review and save to lock it in
+                        </div>
+                      )}
+
+                      {adsAllocation.totalAdsCents === 0 ? (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          No advertising cost found for this invoice in stored Audit Data or Ads Data. Nothing to allocate.
+                        </div>
+                      ) : (
+                        <>
+                          {adsAllocationPreview.error && (
+                            <div className="text-sm text-danger-700 dark:text-danger-400">
+                              {adsAllocationPreview.error}
+                            </div>
+                          )}
+
+                          {!adsAllocation.adsDataUpload && (
+                            <div className="text-sm text-danger-700 dark:text-danger-400">
+                              Missing Ads Data upload for this invoice range.{' '}
+                              <Link href="/ads-data" className="underline">
+                                Upload Ads Data
+                              </Link>
+                              .
+                            </div>
+                          )}
+
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>SKU</TableHead>
+                                  <TableHead className="text-right">Weight (Spend)</TableHead>
+                                  <TableHead className="text-right">Allocated</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {adsAllocationPreview.lines.map((line) => (
+                                  <TableRow key={line.sku}>
+                                    <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                      {line.sku}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end">
+                                        <div className="w-[140px]">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={line.weightInput}
+                                            onChange={(event) => {
+                                              const next = event.target.value;
+                                              setAdsDirty(true);
+                                              setAdsEditLines((prev) =>
+                                                prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                              );
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
+                                      {line.allocatedCents === null
+                                        ? '—'
+                                        : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow>
+                                  <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                                    Total
+                                  </TableCell>
+                                  <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                    {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                          {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                SKU contribution after ads allocation
+                              </div>
+                              <div className="overflow-x-auto">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>SKU</TableHead>
+                                      <TableHead className="text-right">Sold</TableHead>
+                                      <TableHead className="text-right">Returns</TableHead>
+                                      <TableHead className="text-right">Net Units</TableHead>
+                                      <TableHead className="text-right">Principal</TableHead>
+                                      <TableHead className="text-right">COGS</TableHead>
+                                      <TableHead className="text-right">Ads</TableHead>
+                                      <TableHead className="text-right">Contribution</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {adsSkuProfitabilityPreview.lines.map((line) => (
+                                      <TableRow key={`profit-${line.sku}`}>
+                                        <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                                          {line.sku}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.soldUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.returnedUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">{line.netUnits}</TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right text-sm tabular-nums">
+                                          {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell
+                                          className={cn(
+                                            'text-right text-sm font-semibold tabular-nums',
+                                            line.contributionAfterAdsCents < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
+                                          )}
+                                        >
+                                          {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                    <TableRow>
+                                      <TableCell className="text-sm font-semibold text-slate-900 dark:text-white">Total</TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.soldUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.returnedUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {adsSkuProfitabilityPreview.totals.netUnits}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-sm font-semibold tabular-nums">
+                                        {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell
+                                        className={cn(
+                                          'text-right text-sm font-semibold tabular-nums',
+                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : 'text-slate-900 dark:text-white',
+                                        )}
+                                      >
+                                        {formatMoney(
+                                          adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
+                                          settlement.marketplace.currency,
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between">
+                            <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
+                              Manage Ads Data
+                            </Link>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              Weight source: {adsAllocation.weightSource}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
+
+              {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                 <TabsContent value="plutus-preview" className="p-4">
                   {(isLoadingAudit || isPreviewLoading) && (
                     <div className="space-y-3">
@@ -893,7 +1527,7 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {!isLoadingAudit && !auditData?.invoices?.length && (
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data uploaded</div>
@@ -908,7 +1542,7 @@ export default function SettlementDetailPage() {
                     </div>
                   )}
 
-                  {!isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
+                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && auditData?.invoices?.length && !recommendedInvoice && (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
                       <div className="flex flex-col items-center gap-2 text-center">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">No matching invoice found</div>
@@ -927,6 +1561,11 @@ export default function SettlementDetailPage() {
 
                   {previewData && previewData.cogsJournalEntry && (
                     <div className="space-y-6">
+                      {settlement?.plutusStatus === 'Processed' && (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300">
+                          Showing read-only Plutus posting preview for the processed invoice. Posted JE IDs are in History.
+                        </div>
+                      )}
                       {/* Header */}
                       <div className="flex items-center justify-between">
                         <div>
@@ -937,8 +1576,28 @@ export default function SettlementDetailPage() {
                             {previewData.minDate} &rarr; {previewData.maxDate}
                           </div>
                         </div>
-                        <Badge variant={previewData.blocks.length === 0 ? 'success' : 'destructive'}>
-                          {previewData.blocks.length === 0 ? 'Ready to Process' : 'Blocked'}
+                        <Badge
+                          variant={
+                            isProcessedPreview
+                              ? previewIssueCount === 0
+                                ? 'success'
+                                : 'secondary'
+                              : previewBlockingCount > 0
+                                ? 'destructive'
+                                : previewWarningCount > 0
+                                  ? 'secondary'
+                                  : 'success'
+                          }
+                        >
+                          {isProcessedPreview
+                            ? previewIssueCount === 0
+                              ? 'Processed'
+                              : 'Processed (Needs Review)'
+                            : previewBlockingCount > 0
+                              ? 'Blocked'
+                              : previewWarningCount > 0
+                                ? 'Ready (Warnings)'
+                                : 'Ready to Process'}
                         </Badge>
                       </div>
 
@@ -971,29 +1630,84 @@ export default function SettlementDetailPage() {
                       </div>
 
                       {/* Blocks */}
-                      {previewData.blocks.length > 0 && (
+                      {isProcessedPreview && previewIssueCount > 0 && (
+                        <div
+                          className={cn(
+                            'rounded-lg p-4',
+                            'border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
+                          )}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                              {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                          <ul
+                            className="text-sm space-y-1 text-amber-700 dark:text-amber-200"
+                          >
+                            {visiblePreviewBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isProcessedPreview && previewBlockingCount > 0 && (
                         <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
                           <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
                             <span className="text-sm font-semibold text-red-700 dark:text-red-300">
-                              {previewData.blocks.length} blocking issue{previewData.blocks.length === 1 ? '' : 's'}
+                              {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
                             </span>
                           </div>
-	                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-	                            {previewData.blocks.map((b, idx) => (
-	                              <li key={idx}>
-	                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
-	                                {b.details && 'error' in b.details && (
-	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
-	                                )}
-	                                {formatBlockDetails(b.details) && (
-	                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-	                                )}
-	                              </li>
-	                            ))}
-	                          </ul>
-	                        </div>
-	                      )}
+                          <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
+                            {previewBlockingBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
+                            </span>
+                          </div>
+                          <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
+                            {previewWarningBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <span className="font-mono text-xs">{b.code}</span>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details.error)}</div>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
                       {/* COGS Journal Entry */}
                       {previewData.cogsJournalEntry.lines.length > 0 && (

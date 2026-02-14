@@ -12,6 +12,10 @@ import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
 import { buildAccountComponentMap, extractTrackedLinesFromBill } from '@/lib/plutus/bills/classification';
 import {
+  buildBillMappingPullSyncUpdates,
+  type BillMappingPullSyncCandidate,
+} from '@/lib/plutus/bills/pull-sync';
+import {
   allocateManufacturingSplitAmounts,
   buildManufacturingDescription,
   isPositiveInteger,
@@ -72,6 +76,40 @@ export async function GET(req: NextRequest) {
       include: { lines: true },
     });
     const mappingsByBillId = new Map(mappings.map((m) => [m.qboBillId, m]));
+
+    const billsById = new Map(billsResult.bills.map((bill) => [bill.Id, bill]));
+    const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+      mappings as BillMappingPullSyncCandidate[],
+      billsById,
+    );
+
+    if (pullSyncUpdates.length > 0) {
+      const syncedAt = new Date();
+      await db.$transaction(
+        pullSyncUpdates.map((update) =>
+          db.billMapping.update({
+            where: { id: update.id },
+            data: {
+              poNumber: update.poNumber,
+              billDate: update.billDate,
+              vendorName: update.vendorName,
+              totalAmount: update.totalAmount,
+              syncedAt,
+            },
+          }),
+        ),
+      );
+
+      for (const update of pullSyncUpdates) {
+        const existing = mappingsByBillId.get(update.qboBillId);
+        if (!existing) continue;
+        existing.poNumber = update.poNumber;
+        existing.billDate = update.billDate;
+        existing.vendorName = update.vendorName;
+        existing.totalAmount = update.totalAmount;
+        existing.syncedAt = syncedAt;
+      }
+    }
 
     // Build response
     const bills = billsResult.bills.map((bill) => {
@@ -151,9 +189,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { qboBillId, poNumber, brandId, billDate, vendorName, totalAmount, lines } = body;
 
-    if (typeof qboBillId !== 'string' || typeof poNumber !== 'string' || typeof brandId !== 'string') {
-      return NextResponse.json({ error: 'qboBillId, poNumber, and brandId are required' }, { status: 400 });
+    if (typeof qboBillId !== 'string' || typeof brandId !== 'string') {
+      return NextResponse.json({ error: 'qboBillId and brandId are required' }, { status: 400 });
     }
+    const normalizedPoNumber = typeof poNumber === 'string' ? poNumber.trim() : '';
 
     // Validate brandId exists
     const brand = await db.brand.findUnique({ where: { id: brandId } });
@@ -238,6 +277,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const hasManufacturingLines = parsedLines.some((line) => line.component === 'manufacturing');
+    if (hasManufacturingLines && normalizedPoNumber === '') {
+      return NextResponse.json({ error: 'PO number is required when manufacturing lines are present' }, { status: 400 });
+    }
+
     type PersistedLine = {
       qboLineId: string;
       component: string;
@@ -268,7 +312,7 @@ export async function POST(req: NextRequest) {
           }));
 
         const { updatedConnection } = await updateBill(connection, qboBillId, {
-          privateNote: `PO: ${poNumber}`,
+          privateNote: normalizedPoNumber === '' ? undefined : `PO: ${normalizedPoNumber}`,
           lineDescriptions,
         });
         if (updatedConnection) {
@@ -350,7 +394,7 @@ export async function POST(req: NextRequest) {
 
         const payload: Record<string, unknown> = {
           ...(currentBill as unknown as Record<string, unknown>),
-          PrivateNote: `PO: ${poNumber}`,
+          PrivateNote: normalizedPoNumber === '' ? currentBill.PrivateNote : `PO: ${normalizedPoNumber}`,
           Line: updatedLines,
         };
 
@@ -417,7 +461,7 @@ export async function POST(req: NextRequest) {
       where: { qboBillId },
       create: {
         qboBillId,
-        poNumber,
+        poNumber: normalizedPoNumber,
         brandId,
         billDate: billDate ? String(billDate) : '',
         vendorName: vendorName ? String(vendorName) : '',
@@ -425,7 +469,7 @@ export async function POST(req: NextRequest) {
         syncedAt,
       },
       update: {
-        poNumber,
+        poNumber: normalizedPoNumber,
         brandId,
         billDate: billDate ? String(billDate) : undefined,
         vendorName: vendorName ? String(vendorName) : undefined,

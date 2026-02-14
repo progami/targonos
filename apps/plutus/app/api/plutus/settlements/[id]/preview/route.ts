@@ -3,6 +3,7 @@ import { createLogger } from '@targon/logger';
 import { QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementPreview } from '@/lib/plutus/settlement-processing';
+import { isBlockingProcessingBlock } from '@/lib/plutus/settlement-types';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       await saveServerQboConnection(computed.updatedConnection);
     }
 
-    const status = computed.preview.blocks.length === 0 ? 200 : 400;
+    const status = computed.preview.blocks.some((block) => isBlockingProcessingBlock(block)) ? 400 : 200;
     return NextResponse.json(computed.preview, { status });
   } catch (error) {
     if (error instanceof QboAuthError) {

@@ -28,6 +28,10 @@ import {
 } from './settlement-validation';
 
 import { buildCogsJournalLines, buildPnlJournalLines } from './journal-builder';
+import {
+  buildBillMappingPullSyncUpdates,
+  type BillMappingPullSyncCandidate,
+} from './bills/pull-sync';
 
 import type {
   ProcessingBlock,
@@ -37,6 +41,7 @@ import type {
   SettlementProcessingPreview,
   SettlementProcessingResult,
 } from './settlement-types';
+import { isBlockingProcessingBlock } from './settlement-types';
 
 // Re-export all public types so existing imports from this file continue to work
 export type {
@@ -389,21 +394,8 @@ export async function computeSettlementPreview(input: {
 
   const mappedBillIds = new Set(plutusMappings.map((m) => m.qboBillId));
 
-  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
-  if (plutusMappings.length > 0) {
-    try {
-      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_PARSE_ERROR',
-        message: 'Failed to build inventory events from bill mappings',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
-    }
-  }
-
   // QBO Bills -> Inventory events (only inventory-account lines are used)
+  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let parsedBillsFromQbo: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let allBills: QboBill[] = [];
 
@@ -433,6 +425,56 @@ export async function computeSettlementPreview(input: {
     allBills = [];
   }
 
+  if (plutusMappings.length > 0 && allBills.length > 0) {
+    const billsById = new Map(allBills.map((bill) => [bill.Id, bill]));
+    const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+      plutusMappings as BillMappingPullSyncCandidate[],
+      billsById,
+    );
+
+    if (pullSyncUpdates.length > 0) {
+      const syncedAt = new Date();
+      await db.$transaction(
+        pullSyncUpdates.map((update) =>
+          db.billMapping.update({
+            where: { id: update.id },
+            data: {
+              poNumber: update.poNumber,
+              billDate: update.billDate,
+              vendorName: update.vendorName,
+              totalAmount: update.totalAmount,
+              syncedAt,
+            },
+          }),
+        ),
+      );
+
+      const mappingByBillId = new Map(plutusMappings.map((mapping) => [mapping.qboBillId, mapping]));
+      for (const update of pullSyncUpdates) {
+        const existing = mappingByBillId.get(update.qboBillId);
+        if (!existing) continue;
+        existing.poNumber = update.poNumber;
+        existing.billDate = update.billDate;
+        existing.vendorName = update.vendorName;
+        existing.totalAmount = update.totalAmount;
+        existing.syncedAt = syncedAt;
+      }
+    }
+  }
+
+  if (plutusMappings.length > 0) {
+    try {
+      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
+    } catch (error) {
+      blocks.push({
+        code: 'BILLS_PARSE_ERROR',
+        message: 'Failed to build inventory events from bill mappings',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
+    }
+  }
+
   try {
     const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
     parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
@@ -456,6 +498,11 @@ export async function computeSettlementPreview(input: {
       return brand;
     },
   };
+
+  // Principal groups for unit movements
+  const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
+  const refundGroups = buildPrincipalGroups(scopedInvoiceRows, isRefundPrincipal);
+  const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
 
   let pnlAllocation;
   try {
@@ -482,19 +529,20 @@ export async function computeSettlementPreview(input: {
     };
   }
 
-  // Principal groups for unit movements
-  const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
-  const refundGroups = buildPrincipalGroups(scopedInvoiceRows, isRefundPrincipal);
-
   // Check existing OrderSales
   const salePairs = Array.from(saleGroups.values()).map((s) => ({ orderId: s.orderId, sku: s.sku }));
-  const existingSales = await db.orderSale.findMany({
-    where: {
-      marketplace,
-      OR: salePairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-    },
-  });
-  const existingSalesSet = new Set(existingSales.map((s) => `${s.orderId}::${normalizeSku(s.sku)}`));
+  const existingSalesSet = new Set<string>();
+  if (salePairs.length > 0) {
+    const existingSales = await db.orderSale.findMany({
+      where: {
+        marketplace,
+        OR: salePairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
+      },
+    });
+    for (const sale of existingSales) {
+      existingSalesSet.add(`${sale.orderId}::${normalizeSku(sale.sku)}`);
+    }
+  }
   for (const sale of saleGroups.values()) {
     const key = `${sale.orderId}::${sale.sku}`;
     if (existingSalesSet.has(key)) {
@@ -508,79 +556,102 @@ export async function computeSettlementPreview(input: {
 
   // Match refunds to historical sales (DB)
   const refundPairs = Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku }));
-  const refundSaleRecords = await db.orderSale.findMany({
-    where: {
-      marketplace,
-      OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-    },
-  });
-  const saleRecordByKey = new Map(refundSaleRecords.map((r) => [`${r.orderId}::${normalizeSku(r.sku)}`, r]));
-
-  const existingReturns = await db.orderReturn.findMany({
-    where: {
-      marketplace,
-      OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-    },
-  });
+  const saleRecordByKey = new Map<string, {
+    orderId: string;
+    sku: string;
+    quantity: number;
+    principalCents: number;
+    costManufacturingCents: number;
+    costFreightCents: number;
+    costDutyCents: number;
+    costMfgAccessoriesCents: number;
+  }>();
   const returnedQtyByKey = new Map<string, number>();
-  for (const r of existingReturns) {
-    const key = `${r.orderId}::${normalizeSku(r.sku)}`;
-    const current = returnedQtyByKey.get(key);
-    returnedQtyByKey.set(key, (current === undefined ? 0 : current) + r.quantity);
+  if (refundPairs.length > 0) {
+    const refundSaleRecords = await db.orderSale.findMany({
+      where: {
+        marketplace,
+        OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
+      },
+    });
+    for (const sale of refundSaleRecords) {
+      saleRecordByKey.set(`${sale.orderId}::${normalizeSku(sale.sku)}`, sale);
+    }
+
+    const existingReturns = await db.orderReturn.findMany({
+      where: {
+        marketplace,
+        OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
+      },
+    });
+    for (const ret of existingReturns) {
+      const key = `${ret.orderId}::${normalizeSku(ret.sku)}`;
+      const current = returnedQtyByKey.get(key);
+      returnedQtyByKey.set(key, (current === undefined ? 0 : current) + ret.quantity);
+    }
   }
 
-  const matchedReturns = matchRefundsToSales(refundGroups, saleRecordByKey, returnedQtyByKey, blocks);
+  const matchedReturns =
+    refundPairs.length === 0 ? [] : matchRefundsToSales(refundGroups, saleRecordByKey, returnedQtyByKey, blocks);
 
   const maxDateObj = new Date(`${maxDate}T00:00:00Z`);
 
-  const knownSalesRecords = await db.orderSale.findMany({
-    where: {
-      marketplace,
-      saleDate: { lte: maxDateObj },
-    },
-  });
-  const knownReturnRecords = await db.orderReturn.findMany({
-    where: {
-      marketplace,
-      returnDate: { lte: maxDateObj },
-    },
-  });
-
-  const knownSales: KnownLedgerEvent[] = knownSalesRecords.map((s) => ({
-    date: dateToIsoDay(s.saleDate),
-    orderId: s.orderId,
-    sku: normalizeSku(s.sku),
-    units: s.quantity,
-    costByComponentCents: {
-      manufacturing: s.costManufacturingCents,
-      freight: s.costFreightCents,
-      duty: s.costDutyCents,
-      mfgAccessories: s.costMfgAccessoriesCents,
-    },
-  }));
-
-  const knownReturns: KnownLedgerEvent[] = knownReturnRecords.map((r) => ({
-    date: dateToIsoDay(r.returnDate),
-    orderId: r.orderId,
-    sku: normalizeSku(r.sku),
-    units: r.quantity,
-    costByComponentCents: {
-      manufacturing: r.costManufacturingCents,
-      freight: r.costFreightCents,
-      duty: r.costDutyCents,
-      mfgAccessories: r.costMfgAccessoriesCents,
-    },
-  }));
-
-  // Include current refunds in knownReturns for the replay
-  for (const ret of matchedReturns) {
-    knownReturns.push({
-      date: ret.date,
-      orderId: ret.orderId,
-      sku: ret.sku,
-      units: ret.quantity,
-      costByComponentCents: ret.costByComponentCents,
+  const knownSales: KnownLedgerEvent[] = [];
+  const knownReturns: KnownLedgerEvent[] = [];
+  if (hasInvoiceUnitMovements) {
+    const knownSalesRecords = await db.orderSale.findMany({
+      where: {
+        marketplace,
+        saleDate: { lte: maxDateObj },
+      },
     });
+    const knownReturnRecords = await db.orderReturn.findMany({
+      where: {
+        marketplace,
+        returnDate: { lte: maxDateObj },
+      },
+    });
+
+    for (const sale of knownSalesRecords) {
+      knownSales.push({
+        date: dateToIsoDay(sale.saleDate),
+        orderId: sale.orderId,
+        sku: normalizeSku(sale.sku),
+        units: sale.quantity,
+        costByComponentCents: {
+          manufacturing: sale.costManufacturingCents,
+          freight: sale.costFreightCents,
+          duty: sale.costDutyCents,
+          mfgAccessories: sale.costMfgAccessoriesCents,
+        },
+      });
+    }
+
+    for (const ret of knownReturnRecords) {
+      knownReturns.push({
+        date: dateToIsoDay(ret.returnDate),
+        orderId: ret.orderId,
+        sku: normalizeSku(ret.sku),
+        units: ret.quantity,
+        costByComponentCents: {
+          manufacturing: ret.costManufacturingCents,
+          freight: ret.costFreightCents,
+          duty: ret.costDutyCents,
+          mfgAccessories: ret.costMfgAccessoriesCents,
+        },
+      });
+    }
+
+    // Include current refunds in knownReturns for the replay
+    for (const ret of matchedReturns) {
+      knownReturns.push({
+        date: ret.date,
+        orderId: ret.orderId,
+        sku: ret.sku,
+        units: ret.quantity,
+        costByComponentCents: ret.costByComponentCents,
+      });
+    }
   }
 
   const computeSales = Array.from(saleGroups.values())
@@ -605,7 +676,7 @@ export async function computeSettlementPreview(input: {
 
   let ledgerBlocks: LedgerBlock[] = [];
   let computedCosts: SaleCost[] = [];
-  if (!hasBillsError) {
+  if (!hasBillsError && hasInvoiceUnitMovements) {
     const replay = replayInventoryLedger({
       parsedBills,
       knownSales,
@@ -645,6 +716,19 @@ export async function computeSettlementPreview(input: {
         if (!missingCostBasisSkus.has(sale.sku)) {
           throw new Error(`Missing computed cost basis but no ledger block emitted: ${sale.orderId} ${sale.sku}`);
         }
+        computedSales.push({
+          orderId: sale.orderId,
+          sku: sale.sku,
+          date: sale.date,
+          quantity: sale.units,
+          principalCents: sale.principalCents,
+          costByComponentCents: {
+            manufacturing: 0,
+            freight: 0,
+            duty: 0,
+            mfgAccessories: 0,
+          },
+        });
         continue;
       }
       computedSales.push({
@@ -718,7 +802,8 @@ export async function processSettlement(input: {
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
 
-  if (computed.preview.blocks.length > 0) {
+  const blockingBlocks = computed.preview.blocks.filter((block) => isBlockingProcessingBlock(block));
+  if (blockingBlocks.length > 0) {
     return { result: { ok: false, preview: computed.preview }, updatedConnection: computed.updatedConnection };
   }
 

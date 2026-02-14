@@ -27,7 +27,6 @@ interface DashboardStatsResponse {
   }
   // New: Order pipeline
   orderPipeline: {
-    draft: number
     issued: number
     manufacturing: number
     inTransit: number
@@ -420,7 +419,6 @@ export const GET = withAuth(async (request, session) => {
 
   // Calculate order pipeline counts
   const orderPipeline = {
-    draft: 0,
     issued: 0,
     manufacturing: 0,
     inTransit: 0,
@@ -429,7 +427,7 @@ export const GET = withAuth(async (request, session) => {
 	  for (const po of purchaseOrdersByStage) {
 	    switch (po.status) {
 	      case 'RFQ':
-	        orderPipeline.draft++
+	        orderPipeline.issued++
 	        break
       case 'ISSUED':
         orderPipeline.issued++

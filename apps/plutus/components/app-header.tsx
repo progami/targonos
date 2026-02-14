@@ -13,6 +13,7 @@ import {
   Menu,
   ReceiptText,
   Settings as SettingsIcon,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
@@ -115,6 +116,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptText },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/analytics', label: 'Benchmarking', icon: BarChart3 },
+  { href: '/cashflow', label: 'Cashflow', icon: TrendingUp },
   {
     label: 'Accounts & Taxes',
     icon: ListChecks,
@@ -128,6 +130,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Boxes,
     items: [
       { href: '/audit-data', label: 'Audit Data' },
+      { href: '/ads-data', label: 'Ads Data' },
       { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },

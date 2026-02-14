@@ -68,6 +68,7 @@ const UpdateDetailsSchema = z.object({
   paymentTerms: z.string().trim().optional().nullable(),
   counterpartyName: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
+  manufacturingStartDate: z.string().trim().optional().nullable(),
 })
 
 export const PATCH = withAuthAndParams(async (request, params, session) => {
@@ -112,6 +113,8 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
     counterpartyName:
       parsed.data.counterpartyName === '' ? null : parsed.data.counterpartyName ?? undefined,
     notes: parsed.data.notes === '' ? null : parsed.data.notes ?? undefined,
+    manufacturingStartDate:
+      parsed.data.manufacturingStartDate === '' ? null : parsed.data.manufacturingStartDate ?? undefined,
   }
 
   try {

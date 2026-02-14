@@ -9,7 +9,6 @@ import {
   ChevronRight,
   ExternalLink,
   Plus,
-  RefreshCw,
   Save,
   Search,
   Trash2,
@@ -34,6 +33,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  normalizePurchaseRegion,
+  normalizePurchaseSku,
+  parsePurchaseAllocationDescription,
+} from '@/lib/plutus/purchases/description';
 import { useTransactionsStore } from '@/lib/store/transactions';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +61,8 @@ type BillComponent =
   | 'warehouseAmazonFc'
   | 'warehouseAwd'
   | 'productExpenses';
+
+type BillReferenceType = 'PO' | 'CI' | 'GRN';
 
 type BillTrackedLine = {
   lineId: string;
@@ -113,13 +119,19 @@ type TransactionRow = {
 type BrandOption = { id: string; name: string };
 type SkuOption = { id: string; sku: string; productName: string | null; brandId: string };
 type VendorOption = { id: string; name: string };
-type BillCreateAccountOption = {
+
+type PurchaseAccountOption = {
   id: string;
   name: string;
   fullyQualifiedName: string;
   type: string;
   subType: string | null;
-  component: BillComponent | null;
+};
+
+type PurchaseCreateContextResponse = {
+  vendors: VendorOption[];
+  paymentAccounts: PurchaseAccountOption[];
+  lineAccounts: PurchaseAccountOption[];
 };
 
 type TransactionsResponse = {
@@ -132,6 +144,67 @@ type TransactionsResponse = {
   };
   brands?: BrandOption[];
   skus?: SkuOption[];
+  accounts?: PurchaseAccountOption[];
+};
+
+type BillCreateAccountOption = {
+  id: string;
+  name: string;
+  fullyQualifiedName: string;
+  accountType: string;
+  accountSubType: string | null;
+  classification: string | null;
+  component: BillComponent | null;
+};
+
+type BillCreateVendorOption = {
+  id: string;
+  name: string;
+  currencyCode: string | null;
+  billAddress: string;
+};
+
+type BillCreateTermOption = {
+  id: string;
+  name: string;
+  dueDays: number | null;
+  type: string | null;
+};
+
+type BillCreateCurrencyOption = {
+  code: string;
+  name: string | null;
+};
+
+type BillCreateContextResponse = {
+  vendors: BillCreateVendorOption[];
+  accounts: BillCreateAccountOption[];
+  terms: BillCreateTermOption[];
+  currencies: BillCreateCurrencyOption[];
+  brands: BrandOption[];
+  skus: SkuOption[];
+  preferences: {
+    homeCurrency: string | null;
+    multiCurrencyEnabled: boolean;
+    classTrackingPerTxn: boolean;
+    classTrackingPerTxnLine: boolean;
+    trackDepartments: boolean;
+    poCustomField: {
+      enabled: boolean;
+      definitionId?: string;
+      name?: string;
+      type: 'StringType' | 'NumberType' | 'BooleanType';
+    };
+  };
+};
+
+type BillCreateLineState = {
+  id: string;
+  accountId: string;
+  description: string;
+  amount: string;
+  sku: string;
+  quantity: string;
 };
 
 type BillRow = TransactionRow & {
@@ -141,11 +214,22 @@ type BillRow = TransactionRow & {
   mapping: BillMapping | null;
 };
 
+type PurchaseRow = TransactionRow & {
+  type: 'Purchase';
+};
+
 type MappingStatus = 'unmapped' | 'saved' | 'synced';
 
 type SplitEntryState = {
   id: string;
   sku: string;
+  quantity: string;
+};
+
+type PurchaseSplitEntryState = {
+  id: string;
+  sku: string;
+  region: string;
   quantity: string;
 };
 
@@ -166,6 +250,7 @@ type CreateBillLineState = {
   id: string;
   accountId: string;
   description: string;
+  reference: string;
   amount: string;
   sku: string;
   quantity: string;
@@ -176,9 +261,38 @@ type CreateBillLineState = {
 type CreateBillState = {
   txnDate: string;
   vendorId: string;
-  poNumber: string;
   brandId: string;
   lines: CreateBillLineState[];
+};
+
+type CreatePurchaseLineState = {
+  id: string;
+  accountId: string;
+  description: string;
+  amount: string;
+};
+
+type CreatePurchaseState = {
+  txnDate: string;
+  vendorId: string;
+  paymentAccountId: string;
+  memo: string;
+  lines: CreatePurchaseLineState[];
+};
+
+type PurchaseLineEditState = {
+  qboLineId: string;
+  accountId: string;
+  amountCents: number;
+  mode: 'single' | 'split';
+  sku: string;
+  region: string;
+  quantity: string;
+  splits: PurchaseSplitEntryState[];
+};
+
+type PurchaseEditState = {
+  lines: Record<string, PurchaseLineEditState>;
 };
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -191,9 +305,21 @@ const COMPONENT_LABELS: Record<string, string> = {
   warehouseAwd: 'AWD',
   productExpenses: 'Product Expenses',
 };
+const ALL_PURCHASE_ACCOUNTS = '__all_purchase_accounts__';
+
+function referenceTypeForComponent(component: BillComponent | null | undefined): BillReferenceType | null {
+  if (component === 'manufacturing') return 'PO';
+  if (component === 'freight' || component === 'duty' || component === 'mfgAccessories') return 'CI';
+  if (component === 'warehousing3pl' || component === 'warehouseAmazonFc' || component === 'warehouseAwd') return 'GRN';
+  return null;
+}
 
 function isBillRow(row: TransactionRow): row is BillRow {
   return row.type === 'Bill';
+}
+
+function isPurchaseRow(row: TransactionRow): row is PurchaseRow {
+  return row.type === 'Purchase';
 }
 
 function normalizeSku(raw: string): string {
@@ -327,6 +453,25 @@ function makeSplitEntry(sku: string = '', quantity: string = ''): SplitEntryStat
   return { id: nextSplitId(), sku, quantity };
 }
 
+let purchaseSplitIdCounter = 0;
+function nextPurchaseSplitId() {
+  purchaseSplitIdCounter += 1;
+  return `purchase-split-${purchaseSplitIdCounter}`;
+}
+
+function makePurchaseSplitEntry(
+  sku: string = '',
+  region: string = '',
+  quantity: string = '',
+): PurchaseSplitEntryState {
+  return {
+    id: nextPurchaseSplitId(),
+    sku,
+    region,
+    quantity,
+  };
+}
+
 let createLineIdCounter = 0;
 function nextCreateLineId() {
   createLineIdCounter += 1;
@@ -338,6 +483,7 @@ function makeCreateBillLineState(): CreateBillLineState {
     id: nextCreateLineId(),
     accountId: '',
     description: '',
+    reference: '',
     amount: '',
     sku: '',
     quantity: '',
@@ -351,9 +497,34 @@ function makeInitialCreateBillState(): CreateBillState {
   return {
     txnDate: today,
     vendorId: '',
-    poNumber: '',
     brandId: '',
     lines: [makeCreateBillLineState()],
+  };
+}
+
+let createPurchaseLineIdCounter = 0;
+function nextCreatePurchaseLineId() {
+  createPurchaseLineIdCounter += 1;
+  return `create-purchase-line-${createPurchaseLineIdCounter}`;
+}
+
+function makeCreatePurchaseLineState(): CreatePurchaseLineState {
+  return {
+    id: nextCreatePurchaseLineId(),
+    accountId: '',
+    description: '',
+    amount: '',
+  };
+}
+
+function makeInitialCreatePurchaseState(): CreatePurchaseState {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    txnDate: today,
+    vendorId: '',
+    paymentAccountId: '',
+    memo: '',
+    lines: [makeCreatePurchaseLineState()],
   };
 }
 
@@ -378,6 +549,39 @@ function initBillEditState(bill: BillRow): BillEditState {
   };
 }
 
+function initPurchaseEditState(purchase: PurchaseRow): PurchaseEditState {
+  const lines: Record<string, PurchaseLineEditState> = {};
+
+  for (const line of purchase.lines) {
+    if (!line.accountId) {
+      continue;
+    }
+
+    const amountCents = Math.round(line.amount * 100);
+    if (!Number.isInteger(amountCents) || amountCents <= 0) {
+      continue;
+    }
+
+    const parsedDescription = line.description ? parsePurchaseAllocationDescription(line.description) : null;
+    const sku = parsedDescription ? parsedDescription.sku : '';
+    const region = parsedDescription ? parsedDescription.region : '';
+    const quantity = parsedDescription ? String(parsedDescription.quantity) : '';
+
+    lines[line.id] = {
+      qboLineId: line.id,
+      accountId: line.accountId,
+      amountCents,
+      mode: 'single',
+      sku,
+      region,
+      quantity,
+      splits: [makePurchaseSplitEntry(sku, region, quantity), makePurchaseSplitEntry()],
+    };
+  }
+
+  return { lines };
+}
+
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
   return res.json();
@@ -390,6 +594,7 @@ async function fetchTransactions(input: {
   search: string;
   startDate: string | null;
   endDate: string | null;
+  accountId: string | null;
 }): Promise<TransactionsResponse> {
   const params = new URLSearchParams();
   params.set('type', input.type);
@@ -398,6 +603,7 @@ async function fetchTransactions(input: {
   if (input.search.trim() !== '') params.set('search', input.search.trim());
   if (input.startDate !== null && input.startDate.trim() !== '') params.set('startDate', input.startDate.trim());
   if (input.endDate !== null && input.endDate.trim() !== '') params.set('endDate', input.endDate.trim());
+  if (input.accountId !== null && input.accountId.trim() !== '') params.set('accountId', input.accountId.trim());
 
   const res = await fetch(`${basePath}/api/plutus/transactions?${params.toString()}`);
   if (!res.ok) {
@@ -407,11 +613,64 @@ async function fetchTransactions(input: {
   return res.json();
 }
 
-async function fetchBillCreateContext(): Promise<{
-  vendors: VendorOption[];
-  accounts: BillCreateAccountOption[];
-}> {
+async function fetchBillCreateContext(): Promise<BillCreateContextResponse> {
   const res = await fetch(`${basePath}/api/plutus/bills/create`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ? data.error : 'Failed to load bill create context');
+  }
+  return res.json();
+}
+
+async function createBillFromBuilder(input: {
+  txnDate: string;
+  vendorId: string;
+  docNumber?: string;
+  termId?: string;
+  dueDate?: string;
+  poNumber?: string;
+  memo?: string;
+  currencyCode?: string;
+  exchangeRate?: number;
+  brandId?: string;
+  files?: File[];
+  lines: Array<{
+    accountId: string;
+    description?: string;
+    amount: number;
+    sku?: string;
+    quantity?: number;
+  }>;
+}): Promise<{ bill: { Id: string }; mapping: unknown; attachments?: Array<{ fileName: string; attachableId: string }> }> {
+  let res: Response;
+  if (Array.isArray(input.files) && input.files.length > 0) {
+    const { files, ...payload } = input;
+    const formData = new FormData();
+    formData.set('payload', JSON.stringify(payload));
+    for (const file of files) {
+      formData.append('files', file);
+    }
+    res = await fetch(`${basePath}/api/plutus/bills/create`, {
+      method: 'POST',
+      body: formData,
+    });
+  } else {
+    const { files, ...payload } = input;
+    res = await fetch(`${basePath}/api/plutus/bills/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ? data.error : 'Failed to create bill');
+  }
+  return res.json();
+}
+
+async function fetchPurchaseCreateContext(): Promise<PurchaseCreateContextResponse> {
+  const res = await fetch(`${basePath}/api/plutus/purchases/create`);
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error);
@@ -419,51 +678,31 @@ async function fetchBillCreateContext(): Promise<{
   return res.json();
 }
 
-async function createBillFromTransactions(input: { state: CreateBillState }): Promise<unknown> {
+async function createPurchaseFromTransactions(input: { state: CreatePurchaseState }): Promise<unknown> {
   const payloadLines = input.state.lines.map((line) => {
     const amount = Number(line.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('Each line must have a positive amount');
     }
 
-    if (line.mode === 'split') {
-      const splits = line.splits.map((split) => {
-        const quantity = parsePositiveInteger(split.quantity);
-        if (quantity === null) {
-          throw new Error('Split quantity must be a positive integer');
-        }
-        return {
-          sku: split.sku.trim(),
-          quantity,
-        };
-      });
-
-      return {
-        accountId: line.accountId,
-        amount,
-        description: line.description.trim() !== '' ? line.description.trim() : undefined,
-        splits,
-      };
-    }
-
-    const quantity = parsePositiveInteger(line.quantity);
     return {
       accountId: line.accountId,
       amount,
       description: line.description.trim() !== '' ? line.description.trim() : undefined,
-      sku: line.sku.trim() !== '' ? line.sku.trim() : undefined,
-      quantity: quantity !== null ? quantity : undefined,
     };
   });
 
-  const res = await fetch(`${basePath}/api/plutus/bills/create`, {
+  const normalizedVendorId = input.state.vendorId.trim();
+  const normalizedMemo = input.state.memo.trim();
+
+  const res = await fetch(`${basePath}/api/plutus/purchases/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       txnDate: input.state.txnDate,
-      vendorId: input.state.vendorId,
-      poNumber: input.state.poNumber,
-      brandId: input.state.brandId,
+      paymentAccountId: input.state.paymentAccountId,
+      vendorId: normalizedVendorId === '' ? undefined : normalizedVendorId,
+      memo: normalizedMemo === '' ? undefined : normalizedMemo,
       lines: payloadLines,
     }),
   });
@@ -539,6 +778,91 @@ async function saveBillMapping(input: {
   return res.json();
 }
 
+async function savePurchaseMapping(input: {
+  purchase: PurchaseRow;
+  editState: PurchaseEditState;
+}): Promise<unknown> {
+  const payloadLines = Object.values(input.editState.lines).map((lineState) => {
+    if (lineState.mode === 'split') {
+      const splits = lineState.splits.map((split) => {
+        const quantity = parsePositiveInteger(split.quantity);
+        if (quantity === null) {
+          throw new Error('Split quantity must be a positive integer');
+        }
+        return {
+          sku: normalizePurchaseSku(split.sku),
+          region: normalizePurchaseRegion(split.region),
+          quantity,
+        };
+      });
+
+      return {
+        qboLineId: lineState.qboLineId,
+        accountId: lineState.accountId,
+        amountCents: lineState.amountCents,
+        splits,
+      };
+    }
+
+    const quantity = parsePositiveInteger(lineState.quantity);
+    if (quantity === null) {
+      throw new Error('Line quantity must be a positive integer');
+    }
+
+    const normalizedSku = normalizePurchaseSku(lineState.sku);
+    if (normalizedSku === '') {
+      throw new Error('Line sku is required');
+    }
+
+    const normalizedRegion = normalizePurchaseRegion(lineState.region);
+    if (normalizedRegion === '') {
+      throw new Error('Line region is required');
+    }
+
+    return {
+      qboLineId: lineState.qboLineId,
+      accountId: lineState.accountId,
+      amountCents: lineState.amountCents,
+      sku: normalizedSku,
+      region: normalizedRegion,
+      quantity,
+    };
+  });
+
+  const res = await fetch(`${basePath}/api/plutus/purchases/map`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      qboPurchaseId: input.purchase.id,
+      lines: payloadLines,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error);
+  }
+
+  return res.json();
+}
+
+function addDays(baseDate: string, days: number): string {
+  const date = new Date(`${baseDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return baseDate;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+let billCreateLineCounter = 0;
+function nextBillCreateLineId(): string {
+  billCreateLineCounter += 1;
+  return `bill-line-${billCreateLineCounter}`;
+}
+
 async function syncMappedBillsBulk(qboBillIds: string[]): Promise<{ successCount: number; failureCount: number; failures: Array<{ qboBillId: string; error: string }> }> {
   const res = await fetch(`${basePath}/api/plutus/bills/sync-bulk`, {
     method: 'POST',
@@ -555,48 +879,679 @@ async function syncMappedBillsBulk(qboBillIds: string[]): Promise<{ successCount
 }
 
 function CreateBillModal({
-  brands,
-  skus,
   open,
   onOpenChange,
+  onCreated,
 }: {
-  brands: BrandOption[];
-  skus: SkuOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
 }) {
-  const queryClient = useQueryClient();
-  const [createState, setCreateState] = useState<CreateBillState>(() => makeInitialCreateBillState());
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [openNonce, setOpenNonce] = useState(0);
+  const [vendorId, setVendorId] = useState('');
+  const [txnDate, setTxnDate] = useState(todayIsoDate());
+  const [dueDate, setDueDate] = useState('');
+  const [termId, setTermId] = useState('');
+  const [docNumber, setDocNumber] = useState('');
+  const [poNumber, setPoNumber] = useState('');
+  const [memo, setMemo] = useState('');
+  const [brandId, setBrandId] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('');
+  const [exchangeRate, setExchangeRate] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [lines, setLines] = useState<BillCreateLineState[]>([
+    { id: nextBillCreateLineId(), accountId: '', description: '', amount: '', sku: '', quantity: '' },
+  ]);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setCreateState(makeInitialCreateBillState());
-    setCreateError(null);
+    if (open) {
+      setOpenNonce((prev) => prev + 1);
+    }
   }, [open]);
 
-  const { data: createContext, isLoading: createContextLoading } = useQuery({
+  const { data: context, isLoading: isContextLoading, error: contextError } = useQuery({
     queryKey: ['plutus-bill-create-context'],
     queryFn: fetchBillCreateContext,
     enabled: open,
     staleTime: 5 * 60 * 1000,
   });
 
-  const accountById = useMemo(() => {
+  const createMutation = useMutation({
+    mutationFn: createBillFromBuilder,
+    onSuccess: () => {
+      setFormError(null);
+      onCreated();
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      setFormError(error.message);
+    },
+  });
+
+  useEffect(() => {
+    if (!open || !context) return;
+
+    const homeCurrency = context.preferences.homeCurrency ? context.preferences.homeCurrency : 'USD';
+    setVendorId('');
+    setTxnDate(todayIsoDate());
+    setDueDate('');
+    setTermId('');
+    setDocNumber('');
+    setPoNumber('');
+    setMemo('');
+    setBrandId('');
+    setCurrencyCode(homeCurrency);
+    setExchangeRate('');
+    setAttachments([]);
+    setLines([{ id: nextBillCreateLineId(), accountId: '', description: '', amount: '', sku: '', quantity: '' }]);
+    setFormError(null);
+  }, [context, open, openNonce]);
+
+  const selectedVendor = useMemo(
+    () => context?.vendors.find((vendor) => vendor.id === vendorId) ?? null,
+    [context?.vendors, vendorId],
+  );
+
+  const accountsById = useMemo(() => {
     const map = new Map<string, BillCreateAccountOption>();
-    for (const account of createContext?.accounts ?? []) {
+    for (const account of context?.accounts ?? []) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [context?.accounts]);
+
+  const homeCurrency = context?.preferences.homeCurrency ? context.preferences.homeCurrency : 'USD';
+  const multiCurrencyEnabled = context?.preferences.multiCurrencyEnabled === true;
+
+  useEffect(() => {
+    if (!context || !selectedVendor || !multiCurrencyEnabled) return;
+    if (!selectedVendor.currencyCode) return;
+    setCurrencyCode((previous) => {
+      if (previous === '' || previous === homeCurrency) {
+        return selectedVendor.currencyCode ? selectedVendor.currencyCode : previous;
+      }
+      return previous;
+    });
+  }, [context, selectedVendor, multiCurrencyEnabled, homeCurrency]);
+
+  const accountOptions = context?.accounts ?? [];
+  const brandOptions = context?.brands ?? [];
+  const termOptions = context?.terms ?? [];
+
+  const trackedLineCount = useMemo(() => {
+    let count = 0;
+    for (const line of lines) {
+      const component = line.accountId !== '' ? accountsById.get(line.accountId)?.component : null;
+      if (component) count += 1;
+    }
+    return count;
+  }, [accountsById, lines]);
+
+  const filteredSkus = useMemo(() => {
+    const skuOptions = context?.skus ?? [];
+    if (brandId === '') return [];
+    return skuOptions.filter((sku) => sku.brandId === brandId);
+  }, [brandId, context?.skus]);
+
+  const transactionCurrency = multiCurrencyEnabled ? (currencyCode !== '' ? currencyCode : homeCurrency) : homeCurrency;
+
+  const transactionTotal = useMemo(() => {
+    return lines.reduce((sum, line) => {
+      const amount = Number.parseFloat(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return sum;
+      return sum + amount;
+    }, 0);
+  }, [lines]);
+
+  const exchangeRateValue = Number.parseFloat(exchangeRate);
+  const canConvertToHome = transactionCurrency === homeCurrency || (Number.isFinite(exchangeRateValue) && exchangeRateValue > 0);
+  const homeTotal = transactionCurrency === homeCurrency
+    ? transactionTotal
+    : canConvertToHome
+      ? transactionTotal * exchangeRateValue
+      : null;
+
+  const formatMoneySafe = (amount: number, currency: string): string => {
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(2)}`;
+    }
+  };
+
+  const poLabel = context?.preferences.poCustomField.enabled
+    ? `PO number${context.preferences.poCustomField.name ? ` (${context.preferences.poCustomField.name})` : ''}`
+    : 'PO number (stored in memo)';
+
+  const addLine = () => {
+    setLines((prev) => [...prev, { id: nextBillCreateLineId(), accountId: '', description: '', amount: '', sku: '', quantity: '' }]);
+  };
+
+  const removeLine = (lineId: string) => {
+    setLines((prev) => {
+      const next = prev.filter((line) => line.id !== lineId);
+      if (next.length === 0) {
+        return [{ id: nextBillCreateLineId(), accountId: '', description: '', amount: '', sku: '', quantity: '' }];
+      }
+      return next;
+    });
+  };
+
+  const updateLine = (lineId: string, patch: Partial<BillCreateLineState>) => {
+    setLines((prev) => prev.map((line) => (line.id === lineId ? { ...line, ...patch } : line)));
+  };
+
+  const handleTermChange = (nextTermId: string) => {
+    setTermId(nextTermId);
+    const selectedTerm = termOptions.find((term) => term.id === nextTermId);
+    if (!selectedTerm || selectedTerm.dueDays === null) return;
+    setDueDate(addDays(txnDate, selectedTerm.dueDays));
+  };
+
+  const handleSubmit = () => {
+    if (!context) return;
+
+    if (vendorId === '') {
+      setFormError('Vendor is required.');
+      return;
+    }
+
+    const payloadLines: Array<{
+      accountId: string;
+      description?: string;
+      amount: number;
+      sku?: string;
+      quantity?: number;
+    }> = [];
+
+    for (const line of lines) {
+      const hasAnyValue = line.accountId !== '' || line.description.trim() !== '' || line.amount.trim() !== '' || line.sku.trim() !== '' || line.quantity.trim() !== '';
+      if (!hasAnyValue) continue;
+
+      if (line.accountId === '') {
+        setFormError('Each line must include a category account.');
+        return;
+      }
+
+      const amount = Number.parseFloat(line.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setFormError('Each line amount must be a positive number.');
+        return;
+      }
+
+      const account = accountsById.get(line.accountId);
+      const component = account?.component ?? null;
+      const sku = line.sku.trim();
+      const quantity = line.quantity.trim();
+
+      let parsedQuantity: number | undefined;
+      if (quantity !== '') {
+        const numericQuantity = Number.parseInt(quantity, 10);
+        if (!Number.isInteger(numericQuantity) || numericQuantity <= 0) {
+          setFormError('Line quantity must be a positive integer.');
+          return;
+        }
+        parsedQuantity = numericQuantity;
+      }
+
+      if (component === 'manufacturing') {
+        if (sku === '' || parsedQuantity === undefined) {
+          setFormError('Manufacturing lines require SKU and quantity.');
+          return;
+        }
+      }
+
+      payloadLines.push({
+        accountId: line.accountId,
+        description: line.description.trim() !== '' ? line.description.trim() : undefined,
+        amount,
+        sku: sku !== '' ? sku : undefined,
+        quantity: parsedQuantity,
+      });
+    }
+
+    if (payloadLines.length === 0) {
+      setFormError('Add at least one valid bill line.');
+      return;
+    }
+
+    if (attachments.length > 20) {
+      setFormError('Maximum 20 attachments allowed.');
+      return;
+    }
+    for (const file of attachments) {
+      if (file.size > 20 * 1024 * 1024) {
+        setFormError(`Attachment too large: ${file.name} (max 20MB).`);
+        return;
+      }
+    }
+
+    if (trackedLineCount > 0 && poNumber.trim() === '') {
+      setFormError('PO number is required for tracked/COGS lines.');
+      return;
+    }
+
+    if (trackedLineCount > 0 && brandId === '') {
+      setFormError('Brand is required for tracked/COGS lines.');
+      return;
+    }
+
+    let parsedExchangeRate: number | undefined;
+    if (multiCurrencyEnabled && transactionCurrency !== homeCurrency) {
+      parsedExchangeRate = Number.parseFloat(exchangeRate);
+      if (!Number.isFinite(parsedExchangeRate) || parsedExchangeRate <= 0) {
+        setFormError('Exchange rate is required for non-home currency bills.');
+        return;
+      }
+    }
+
+    setFormError(null);
+    createMutation.mutate({
+      txnDate,
+      vendorId,
+      docNumber: docNumber.trim() !== '' ? docNumber.trim() : undefined,
+      termId: termId !== '' ? termId : undefined,
+      dueDate: dueDate.trim() !== '' ? dueDate.trim() : undefined,
+      poNumber: poNumber.trim() !== '' ? poNumber.trim() : undefined,
+      memo: memo.trim() !== '' ? memo.trim() : undefined,
+      currencyCode: multiCurrencyEnabled ? transactionCurrency : undefined,
+      exchangeRate: parsedExchangeRate,
+      brandId: brandId !== '' ? brandId : undefined,
+      files: attachments,
+      lines: payloadLines,
+    });
+  };
+
+  const selectedTerm = termOptions.find((term) => term.id === termId) ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto border-slate-200/70 dark:border-white/10">
+        <DialogHeader>
+          <DialogTitle>Create Bill</DialogTitle>
+          <DialogDescription>
+            Mirrors QBO bill builder fields supported via API. Category lines can be tracked for PO/brand/SKU allocation.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isContextLoading && (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+
+        {!isContextLoading && contextError && (
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {contextError instanceof Error ? contextError.message : String(contextError)}
+          </p>
+        )}
+
+        {!isContextLoading && !contextError && context && (
+          <div className="space-y-5">
+            <div className="grid gap-3 lg:grid-cols-[2fr,1fr]">
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Vendor</div>
+                <select
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                  value={vendorId}
+                  onChange={(event) => setVendorId(event.target.value)}
+                >
+                  <option value="">Select vendor</option>
+                  {context.vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-md border border-slate-200 p-3 dark:border-white/10">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Balance due</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+                  {formatMoneySafe(transactionTotal, transactionCurrency)}
+                </div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Home total: {homeTotal === null ? 'Add exchange rate' : formatMoneySafe(homeTotal, homeCurrency)}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-700 dark:border-white/10 dark:text-slate-300 whitespace-pre-line min-h-[64px]">
+              {selectedVendor?.billAddress && selectedVendor.billAddress.trim() !== ''
+                ? selectedVendor.billAddress
+                : 'Mailing address unavailable'}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Terms</div>
+                <select
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                  value={termId}
+                  onChange={(event) => handleTermChange(event.target.value)}
+                >
+                  <option value="">Select terms</option>
+                  {termOptions.map((term) => (
+                    <option key={term.id} value={term.id}>{term.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Bill date</div>
+                <Input
+                  type="date"
+                  value={txnDate}
+                  onChange={(event) => {
+                    const nextDate = event.target.value;
+                    setTxnDate(nextDate);
+                    if (selectedTerm?.dueDays !== null && selectedTerm?.dueDays !== undefined) {
+                      setDueDate(addDays(nextDate, selectedTerm.dueDays));
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Due date</div>
+                <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Bill no.</div>
+                <Input value={docNumber} onChange={(event) => setDocNumber(event.target.value)} placeholder="Vendor invoice no." />
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">{poLabel}</div>
+                <Input value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="PO-..." />
+              </div>
+
+              {trackedLineCount > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Brand (tracked lines)</div>
+                  <select
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                    value={brandId}
+                    onChange={(event) => setBrandId(event.target.value)}
+                  >
+                    <option value="">Select brand</option>
+                    {brandOptions.map((brand) => (
+                      <option key={brand.id} value={brand.id}>{brand.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Currency</div>
+                <select
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
+                  value={transactionCurrency}
+                  disabled={!multiCurrencyEnabled}
+                  onChange={(event) => setCurrencyCode(event.target.value)}
+                >
+                  {!multiCurrencyEnabled && <option value={homeCurrency}>{homeCurrency}</option>}
+                  {multiCurrencyEnabled && context.currencies.map((currency) => (
+                    <option key={currency.code} value={currency.code}>
+                      {currency.code}{currency.name ? ` - ${currency.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Exchange rate</div>
+                <Input
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  value={exchangeRate}
+                  disabled={transactionCurrency === homeCurrency}
+                  onChange={(event) => setExchangeRate(event.target.value)}
+                  placeholder={transactionCurrency === homeCurrency ? '1.000000' : `1 ${transactionCurrency} = ? ${homeCurrency}`}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 dark:border-white/10">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-white/[0.03]">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Category</th>
+                      <th className="px-3 py-2 text-left font-semibold">Description</th>
+                      <th className="px-3 py-2 text-left font-semibold">Amount ({transactionCurrency})</th>
+                      <th className="px-3 py-2 text-left font-semibold">SKU</th>
+                      <th className="px-3 py-2 text-left font-semibold">Qty</th>
+                      <th className="w-10 px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line) => {
+                      const account = line.accountId !== '' ? accountsById.get(line.accountId) : undefined;
+                      const isManufacturing = account?.component === 'manufacturing';
+
+                      return (
+                        <tr key={line.id} className="border-t border-slate-200 dark:border-white/10">
+                          <td className="px-3 py-2 align-top">
+                            <select
+                              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-white/5"
+                              value={line.accountId}
+                              onChange={(event) => {
+                                const nextAccountId = event.target.value;
+                                const nextAccount = nextAccountId !== '' ? accountsById.get(nextAccountId) : undefined;
+                                const nextDescription = line.description.trim() === ''
+                                  ? (nextAccount?.fullyQualifiedName ? nextAccount.fullyQualifiedName : '')
+                                  : line.description;
+                                updateLine(line.id, {
+                                  accountId: nextAccountId,
+                                  description: nextDescription,
+                                  ...(nextAccount?.component === 'manufacturing' ? {} : { sku: '', quantity: '' }),
+                                });
+                              }}
+                            >
+                              <option value="">Select account</option>
+                              {accountOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.fullyQualifiedName}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="px-3 py-2 align-top">
+                            <Input
+                              value={line.description}
+                              onChange={(event) => updateLine(line.id, { description: event.target.value })}
+                              placeholder="Line description"
+                            />
+                          </td>
+
+                          <td className="px-3 py-2 align-top">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={line.amount}
+                              onChange={(event) => updateLine(line.id, { amount: event.target.value })}
+                              placeholder="0.00"
+                            />
+                          </td>
+
+                          <td className="px-3 py-2 align-top">
+                            {isManufacturing ? (
+                              <select
+                                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
+                                value={line.sku}
+                                disabled={brandId === ''}
+                                onChange={(event) => updateLine(line.id, { sku: event.target.value })}
+                              >
+                                <option value="">{brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
+                                {filteredSkus.map((sku) => (
+                                  <option key={sku.id} value={sku.sku}>
+                                    {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input value="" disabled placeholder="Manufacturing only" />
+                            )}
+                          </td>
+
+                          <td className="px-3 py-2 align-top">
+                            {isManufacturing ? (
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={line.quantity}
+                                onChange={(event) => updateLine(line.id, { quantity: event.target.value })}
+                                placeholder="Units"
+                              />
+                            ) : (
+                              <Input value="" disabled placeholder="-" />
+                            )}
+                          </td>
+
+                          <td className="px-3 py-2 align-top text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeLine(line.id)}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 p-3 dark:border-white/10">
+                <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  Add lines
+                </Button>
+                <div className="text-right text-sm">
+                  <div className="font-medium text-slate-900 dark:text-white">
+                    Total ({transactionCurrency}): {formatMoneySafe(transactionTotal, transactionCurrency)}
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Total ({homeCurrency}): {homeTotal === null ? 'Add exchange rate' : formatMoneySafe(homeTotal, homeCurrency)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Memo</div>
+              <textarea
+                className="w-full min-h-[96px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                value={memo}
+                onChange={(event) => setMemo(event.target.value)}
+                placeholder="Optional memo"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Attachments</div>
+              <input
+                type="file"
+                multiple
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  if (files.length === 0) return;
+                  setAttachments((prev) => [...prev, ...files]);
+                  event.currentTarget.value = '';
+                }}
+                className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+              />
+              <div className="text-xs text-slate-500 dark:text-slate-400">Max 20 files, 20MB each.</div>
+              {attachments.length > 0 && (
+                <div className="rounded-md border border-slate-200 dark:border-white/10">
+                  <ul className="divide-y divide-slate-200 dark:divide-white/10">
+                    {attachments.map((file, index) => (
+                      <li key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="truncate text-slate-700 dark:text-slate-300">
+                          {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {formError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isContextLoading || !!contextError || createMutation.isPending}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {createMutation.isPending ? 'Creating...' : 'Save bill'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreatePurchaseModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [createState, setCreateState] = useState<CreatePurchaseState>(() => makeInitialCreatePurchaseState());
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setCreateState(makeInitialCreatePurchaseState());
+    setCreateError(null);
+  }, [open]);
+
+  const { data: createContext, isLoading: createContextLoading } = useQuery({
+    queryKey: ['plutus-purchase-create-context'],
+    queryFn: fetchPurchaseCreateContext,
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const lineAccountById = useMemo(() => {
+    const map = new Map<string, PurchaseAccountOption>();
+    for (const account of createContext?.lineAccounts ?? []) {
       map.set(account.id, account);
     }
     return map;
   }, [createContext]);
 
-  const filteredSkus = useMemo(() => {
-    if (createState.brandId === '') return [];
-    return skus.filter((sku) => sku.brandId === createState.brandId);
-  }, [createState.brandId, skus]);
-
   const createMutation = useMutation({
-    mutationFn: () => createBillFromTransactions({ state: createState }),
+    mutationFn: () => createPurchaseFromTransactions({ state: createState }),
     onSuccess: () => {
       setCreateError(null);
       queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
@@ -610,17 +1565,14 @@ function CreateBillModal({
   const canSave = useMemo(() => {
     if (
       createState.txnDate.trim() === '' ||
-      createState.vendorId === '' ||
-      createState.poNumber.trim() === '' ||
-      createState.brandId === '' ||
+      createState.paymentAccountId === '' ||
       createState.lines.length === 0
     ) {
       return false;
     }
 
     for (const line of createState.lines) {
-      const account = accountById.get(line.accountId);
-      if (!account) {
+      if (!lineAccountById.has(line.accountId)) {
         return false;
       }
 
@@ -628,38 +1580,12 @@ function CreateBillModal({
       if (!Number.isFinite(amount) || amount <= 0) {
         return false;
       }
-
-      if (account.component !== 'manufacturing') {
-        if (line.mode === 'split') {
-          return false;
-        }
-        continue;
-      }
-
-      if (line.mode === 'single') {
-        if (line.sku.trim() === '') return false;
-        if (parsePositiveInteger(line.quantity) === null) return false;
-        continue;
-      }
-
-      if (line.splits.length < 2) {
-        return false;
-      }
-
-      const seenSkus = new Set<string>();
-      for (const split of line.splits) {
-        const normalizedSku = normalizeSku(split.sku);
-        if (normalizedSku === '') return false;
-        if (seenSkus.has(normalizedSku)) return false;
-        seenSkus.add(normalizedSku);
-        if (parsePositiveInteger(split.quantity) === null) return false;
-      }
     }
 
     return true;
-  }, [accountById, createState]);
+  }, [createState, lineAccountById]);
 
-  const updateLine = (lineId: string, patch: Partial<CreateBillLineState>) => {
+  const updateLine = (lineId: string, patch: Partial<CreatePurchaseLineState>) => {
     setCreateState((prev) => ({
       ...prev,
       lines: prev.lines.map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
@@ -669,7 +1595,7 @@ function CreateBillModal({
   const addLine = () => {
     setCreateState((prev) => ({
       ...prev,
-      lines: [...prev.lines, makeCreateBillLineState()],
+      lines: [...prev.lines, makeCreatePurchaseLineState()],
     }));
   };
 
@@ -683,61 +1609,22 @@ function CreateBillModal({
     });
   };
 
-  const updateSplit = (lineId: string, splitId: string, patch: Partial<SplitEntryState>) => {
-    const line = createState.lines.find((candidate) => candidate.id === lineId);
-    if (!line) return;
-    const splits = line.splits.map((split) => (split.id === splitId ? { ...split, ...patch } : split));
-    updateLine(lineId, { splits });
-  };
-
-  const addSplit = (lineId: string) => {
-    const line = createState.lines.find((candidate) => candidate.id === lineId);
-    if (!line) return;
-    updateLine(lineId, { splits: [...line.splits, makeSplitEntry()] });
-  };
-
-  const removeSplit = (lineId: string, splitId: string) => {
-    const line = createState.lines.find((candidate) => candidate.id === lineId);
-    if (!line || line.splits.length <= 2) return;
-    updateLine(lineId, { splits: line.splits.filter((split) => split.id !== splitId) });
-  };
-
-  const toggleSplitMode = (lineId: string) => {
-    const line = createState.lines.find((candidate) => candidate.id === lineId);
-    if (!line) return;
-
-    if (line.mode === 'single') {
-      updateLine(lineId, {
-        mode: 'split',
-        splits: [makeSplitEntry(line.sku, line.quantity), makeSplitEntry()],
-      });
-      return;
-    }
-
-    const firstSplit = line.splits[0];
-    updateLine(lineId, {
-      mode: 'single',
-      sku: firstSplit ? firstSplit.sku : '',
-      quantity: firstSplit ? firstSplit.quantity : '',
-      splits: [makeSplitEntry(), makeSplitEntry()],
-    });
-  };
-
   const vendors = createContext?.vendors ?? [];
-  const accounts = createContext?.accounts ?? [];
+  const paymentAccounts = createContext?.paymentAccounts ?? [];
+  const lineAccounts = createContext?.lineAccounts ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Bill</DialogTitle>
-          <DialogDescription>Create a new QBO bill with chart-of-accounts lines from Transactions.</DialogDescription>
+          <DialogTitle>Create Expense</DialogTitle>
+          <DialogDescription>Create a new QBO purchase transaction for card/bank spend.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Bill Date</label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
               <Input
                 type="date"
                 value={createState.txnDate}
@@ -745,51 +1632,39 @@ function CreateBillModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Vendor</label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payment Account</label>
+              <select
+                value={createState.paymentAccountId}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, paymentAccountId: event.target.value }))}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+              >
+                <option value="">{createContextLoading ? 'Loading accounts…' : 'Select payment account'}</option>
+                {paymentAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.fullyQualifiedName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payee (optional)</label>
               <select
                 value={createState.vendorId}
                 onChange={(event) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
                 className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
               >
-                <option value="">{createContextLoading ? 'Loading vendors…' : 'Select vendor'}</option>
+                <option value="">{createContextLoading ? 'Loading vendors…' : 'No payee'}</option>
                 {vendors.map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Memo (optional)</label>
               <Input
-                value={createState.poNumber}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, poNumber: event.target.value }))}
-                placeholder="e.g. PO-2026-001"
-                className="font-mono text-sm"
+                value={createState.memo}
+                onChange={(event) => setCreateState((prev) => ({ ...prev, memo: event.target.value }))}
+                placeholder="Internal note"
+                className="text-sm"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
-              <select
-                value={createState.brandId}
-                onChange={(event) => {
-                  const nextBrandId = event.target.value;
-                  setCreateState((prev) => ({
-                    ...prev,
-                    brandId: nextBrandId,
-                    lines: prev.lines.map((line) => ({
-                      ...line,
-                      sku: '',
-                      quantity: '',
-                      splits: [makeSplitEntry(), makeSplitEntry()],
-                    })),
-                  }));
-                }}
-                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
-              >
-                <option value="">Select brand</option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -799,185 +1674,67 @@ function CreateBillModal({
                 <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
                   <TableHead className="text-xs">Account</TableHead>
                   <TableHead className="text-xs">Description</TableHead>
-                  <TableHead className="text-xs w-24">Amount</TableHead>
-                  <TableHead className="text-xs">SKU / Split</TableHead>
-                  <TableHead className="text-xs w-24">Qty</TableHead>
-                  <TableHead className="text-xs w-28">Action</TableHead>
+                  <TableHead className="text-xs w-28">Amount</TableHead>
+                  <TableHead className="text-xs w-20">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {createState.lines.map((line) => {
-                  const selectedAccount = accountById.get(line.accountId);
-                  const isManufacturing = selectedAccount?.component === 'manufacturing';
-                  const componentLabel = selectedAccount?.component ? COMPONENT_LABELS[selectedAccount.component] : null;
-
-                  return (
-                    <TableRow key={line.id}>
-                      <TableCell>
-                        <select
-                          value={line.accountId}
-                          onChange={(event) => {
-                            const nextAccountId = event.target.value;
-                            const nextAccount = accountById.get(nextAccountId);
-                            updateLine(line.id, {
-                              accountId: nextAccountId,
-                              description: nextAccount ? nextAccount.fullyQualifiedName : '',
-                              mode: 'single',
-                              sku: '',
-                              quantity: '',
-                              splits: [makeSplitEntry(), makeSplitEntry()],
-                            });
-                          }}
-                          className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
-                        >
-                          <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
-                          {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.fullyQualifiedName}
-                            </option>
-                          ))}
-                        </select>
-                        {componentLabel && (
-                          <p className="mt-1 text-[11px] text-brand-teal-600 dark:text-brand-teal-400">{componentLabel}</p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={line.description}
-                          onChange={(event) => updateLine(line.id, { description: event.target.value })}
-                          placeholder="Line description"
-                          className="h-8 text-xs"
-                          disabled={isManufacturing}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={line.amount}
-                          onChange={(event) => updateLine(line.id, { amount: event.target.value })}
-                          placeholder="0.00"
-                          className="h-8 text-xs"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {isManufacturing && line.mode === 'split' ? (
-                          <div className="space-y-1">
-                            {line.splits.map((split) => (
-                              <div key={split.id} className="flex items-center gap-2">
-                                <select
-                                  value={split.sku}
-                                  onChange={(event) => updateSplit(line.id, split.id, { sku: event.target.value })}
-                                  disabled={createState.brandId === ''}
-                                  className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
-                                >
-                                  <option value="">{createState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
-                                  {filteredSkus.map((sku) => (
-                                    <option key={sku.id} value={sku.sku}>
-                                      {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  step="1"
-                                  value={split.quantity}
-                                  onChange={(event) => updateSplit(line.id, split.id, { quantity: event.target.value })}
-                                  placeholder="Qty"
-                                  className="h-7 w-20 text-xs"
-                                />
-                                {line.splits.length > 2 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeSplit(line.id, split.id)}
-                                    className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : isManufacturing ? (
-                          <select
-                            value={line.sku}
-                            onChange={(event) => updateLine(line.id, { sku: event.target.value })}
-                            disabled={createState.brandId === ''}
-                            className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
-                          >
-                            <option value="">{createState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
-                            {filteredSkus.map((sku) => (
-                              <option key={sku.id} value={sku.sku}>
-                                {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-xs text-slate-400">&mdash;</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isManufacturing ? (
-                          line.mode === 'split' ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
-                          ) : (
-                            <Input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={line.quantity}
-                              onChange={(event) => updateLine(line.id, { quantity: event.target.value })}
-                              placeholder="Units"
-                              className="h-7 w-20 text-xs"
-                            />
-                          )
-                        ) : (
-                          <span className="text-xs text-slate-400">&mdash;</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          {isManufacturing && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleSplitMode(line.id)}
-                                className="h-7 px-2 text-xs"
-                              >
-                                {line.mode === 'split' ? 'Single' : 'Split'}
-                              </Button>
-                              {line.mode === 'split' && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => addSplit(line.id)}
-                                  className="h-7 px-2 text-xs"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeLine(line.id)}
-                            disabled={createState.lines.length <= 1}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {createState.lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell>
+                      <select
+                        value={line.accountId}
+                        onChange={(event) => {
+                          const nextAccountId = event.target.value;
+                          const nextAccount = lineAccountById.get(nextAccountId);
+                          updateLine(line.id, {
+                            accountId: nextAccountId,
+                            description: nextAccount ? nextAccount.fullyQualifiedName : '',
+                          });
+                        }}
+                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                      >
+                        <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
+                        {lineAccounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={line.description}
+                        onChange={(event) => updateLine(line.id, { description: event.target.value })}
+                        placeholder="Line description"
+                        className="h-8 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.amount}
+                        onChange={(event) => updateLine(line.id, { amount: event.target.value })}
+                        placeholder="0.00"
+                        className="h-8 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeLine(line.id)}
+                        disabled={createState.lines.length <= 1}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -1002,7 +1759,7 @@ function CreateBillModal({
             className="gap-1.5"
           >
             <Save className="h-3.5 w-3.5" />
-            {createMutation.isPending ? 'Creating...' : 'Create Bill'}
+            {createMutation.isPending ? 'Creating...' : 'Create Expense'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1026,6 +1783,10 @@ function EditBillModal({
   const queryClient = useQueryClient();
   const [editState, setEditState] = useState<BillEditState>(() => initBillEditState(bill));
   const [saveError, setSaveError] = useState<string | null>(null);
+  const requiresManufacturingPo = useMemo(
+    () => bill.trackedLines.some((line) => line.component === 'manufacturing'),
+    [bill.trackedLines],
+  );
 
   const filteredSkus = useMemo(() => {
     if (editState.brandId === '') return [];
@@ -1045,7 +1806,10 @@ function EditBillModal({
   });
 
   const canSave = useMemo(() => {
-    if (editState.poNumber.trim() === '' || editState.brandId === '') {
+    if (editState.brandId === '') {
+      return false;
+    }
+    if (requiresManufacturingPo && editState.poNumber.trim() === '') {
       return false;
     }
 
@@ -1091,7 +1855,7 @@ function EditBillModal({
     }
 
     return true;
-  }, [bill.trackedLines, editState]);
+  }, [bill.trackedLines, editState, requiresManufacturingPo]);
 
   const updateLine = (lineId: string, patch: Partial<LineEditState>) => {
     setEditState((prev) => ({
@@ -1185,16 +1949,18 @@ function EditBillModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
-              <Input
-                value={editState.poNumber}
-                onChange={(event) => setEditState((prev) => ({ ...prev, poNumber: event.target.value }))}
-                placeholder="e.g. PO-2026-001"
-                className="font-mono text-sm"
-              />
-            </div>
+          <div className={cn('grid gap-3', requiresManufacturingPo ? 'grid-cols-2' : 'grid-cols-1')}>
+            {requiresManufacturingPo && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
+                <Input
+                  value={editState.poNumber}
+                  onChange={(event) => setEditState((prev) => ({ ...prev, poNumber: event.target.value }))}
+                  placeholder="e.g. PO-2026-001"
+                  className="font-mono text-sm"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
               <select
@@ -1373,9 +2139,366 @@ function EditBillModal({
   );
 }
 
+function EditPurchaseModal({
+  purchase,
+  skus,
+  accounts,
+  open,
+  onOpenChange,
+}: {
+  purchase: PurchaseRow;
+  skus: SkuOption[];
+  accounts: PurchaseAccountOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [editState, setEditState] = useState<PurchaseEditState>(() => initPurchaseEditState(purchase));
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const accountById = useMemo(() => {
+    const map = new Map<string, PurchaseAccountOption>();
+    for (const account of accounts) {
+      map.set(account.id, account);
+    }
+    return map;
+  }, [accounts]);
+
+  const editableLines = useMemo(() => {
+    const states: PurchaseLineEditState[] = [];
+    for (const line of purchase.lines) {
+      const lineState = editState.lines[line.id];
+      if (!lineState) {
+        continue;
+      }
+      states.push(lineState);
+    }
+    return states;
+  }, [editState.lines, purchase.lines]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => savePurchaseMapping({ purchase, editState }),
+    onSuccess: () => {
+      setSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      setSaveError(error.message);
+    },
+  });
+
+  const canSave = useMemo(() => {
+    if (editableLines.length === 0) {
+      return false;
+    }
+
+    for (const line of editableLines) {
+      if (line.accountId === '') {
+        return false;
+      }
+      if (!accountById.has(line.accountId)) {
+        return false;
+      }
+
+      if (line.mode === 'single') {
+        if (normalizePurchaseSku(line.sku) === '') {
+          return false;
+        }
+        if (normalizePurchaseRegion(line.region) === '') {
+          return false;
+        }
+        if (parsePositiveInteger(line.quantity) === null) {
+          return false;
+        }
+        continue;
+      }
+
+      if (line.splits.length < 2) {
+        return false;
+      }
+      const seen = new Set<string>();
+      for (const split of line.splits) {
+        const sku = normalizePurchaseSku(split.sku);
+        if (sku === '') {
+          return false;
+        }
+        const region = normalizePurchaseRegion(split.region);
+        if (region === '') {
+          return false;
+        }
+        if (parsePositiveInteger(split.quantity) === null) {
+          return false;
+        }
+        const splitKey = `${sku}::${region}`;
+        if (seen.has(splitKey)) {
+          return false;
+        }
+        seen.add(splitKey);
+      }
+    }
+
+    return true;
+  }, [accountById, editableLines]);
+
+  const updateLine = (lineId: string, patch: Partial<PurchaseLineEditState>) => {
+    setEditState((prev) => ({
+      ...prev,
+      lines: {
+        ...prev.lines,
+        [lineId]: {
+          ...prev.lines[lineId],
+          ...patch,
+        },
+      },
+    }));
+  };
+
+  const updateSplit = (lineId: string, splitId: string, patch: Partial<PurchaseSplitEntryState>) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+    const splits = lineState.splits.map((split) => (split.id === splitId ? { ...split, ...patch } : split));
+    updateLine(lineId, { splits });
+  };
+
+  const addSplit = (lineId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+    updateLine(lineId, { splits: [...lineState.splits, makePurchaseSplitEntry()] });
+  };
+
+  const removeSplit = (lineId: string, splitId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState || lineState.splits.length <= 2) return;
+    updateLine(lineId, { splits: lineState.splits.filter((split) => split.id !== splitId) });
+  };
+
+  const toggleSplitMode = (lineId: string) => {
+    const lineState = editState.lines[lineId];
+    if (!lineState) return;
+
+    if (lineState.mode === 'single') {
+      updateLine(lineId, {
+        mode: 'split',
+        splits: [makePurchaseSplitEntry(lineState.sku, lineState.region, lineState.quantity), makePurchaseSplitEntry()],
+      });
+      return;
+    }
+
+    const primary = lineState.splits[0];
+    updateLine(lineId, {
+      mode: 'single',
+      sku: primary ? primary.sku : '',
+      region: primary ? primary.region : '',
+      quantity: primary ? primary.quantity : '',
+      splits: [makePurchaseSplitEntry(), makePurchaseSplitEntry()],
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between gap-3">
+            <span className="truncate">{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</span>
+            <a
+              href={qboTransactionUrl(purchase)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
+              title="Open in QuickBooks"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              QuickBooks
+            </a>
+          </DialogTitle>
+          <DialogDescription>
+            {purchase.txnDate} &middot; {formatCurrency(purchase.totalAmount)}
+            {purchase.docNumber.trim() !== '' ? ` \u00b7 ${purchase.docNumber}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+            Purchase Lines
+          </h3>
+          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
+                  <TableHead className="text-xs">Account</TableHead>
+                  <TableHead className="text-xs">SKU / Split</TableHead>
+                  <TableHead className="text-xs">Region</TableHead>
+                  <TableHead className="text-xs w-24">Qty</TableHead>
+                  <TableHead className="text-xs text-right">Amount</TableHead>
+                  <TableHead className="text-xs w-28">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {editableLines.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                      This purchase has no editable account-based lines.
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {editableLines.map((lineState) => (
+                  <TableRow key={lineState.qboLineId}>
+                    <TableCell>
+                      <select
+                        value={lineState.accountId}
+                        onChange={(event) => updateLine(lineState.qboLineId, { accountId: event.target.value })}
+                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                      >
+                        <option value="">Select account</option>
+                        {accounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <div className="space-y-1">
+                          {lineState.splits.map((split) => (
+                            <div key={split.id} className="flex items-center gap-2">
+                              <Input
+                                value={split.sku}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { sku: event.target.value })}
+                                placeholder="SKU"
+                                className="h-7 text-xs"
+                                list={`purchase-skus-${purchase.id}`}
+                              />
+                              <Input
+                                value={split.region}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { region: event.target.value })}
+                                placeholder="Region"
+                                className="h-7 w-28 text-xs"
+                              />
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={split.quantity}
+                                onChange={(event) => updateSplit(lineState.qboLineId, split.id, { quantity: event.target.value })}
+                                placeholder="Qty"
+                                className="h-7 w-20 text-xs"
+                              />
+                              {lineState.splits.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeSplit(lineState.qboLineId, split.id)}
+                                  className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <Input
+                          value={lineState.sku}
+                          onChange={(event) => updateLine(lineState.qboLineId, { sku: event.target.value })}
+                          placeholder="SKU"
+                          className="h-7 text-xs"
+                          list={`purchase-skus-${purchase.id}`}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Split rows include region</span>
+                      ) : (
+                        <Input
+                          value={lineState.region}
+                          onChange={(event) => updateLine(lineState.qboLineId, { region: event.target.value })}
+                          placeholder="Region"
+                          className="h-7 text-xs"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {lineState.mode === 'split' ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
+                      ) : (
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={lineState.quantity}
+                          onChange={(event) => updateLine(lineState.qboLineId, { quantity: event.target.value })}
+                          placeholder="Qty"
+                          className="h-7 w-20 text-xs"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-xs font-medium">
+                      {formatCurrency(lineState.amountCents / 100)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleSplitMode(lineState.qboLineId)}
+                          className="h-7 px-2 text-xs"
+                        >
+                          {lineState.mode === 'split' ? 'Single' : 'Split'}
+                        </Button>
+                        {lineState.mode === 'split' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addSplit(lineState.qboLineId)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <datalist id={`purchase-skus-${purchase.id}`}>
+          {skus.map((sku) => (
+            <option key={sku.id} value={sku.sku}>
+              {sku.productName ? `${sku.sku} - ${sku.productName}` : sku.sku}
+            </option>
+          ))}
+        </datalist>
+
+        {saveError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={!canSave || saveMutation.isPending}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
-
   const tab = useTransactionsStore((s) => s.tab);
   const searchInput = useTransactionsStore((s) => s.searchInput);
   const search = useTransactionsStore((s) => s.search);
@@ -1394,7 +2517,10 @@ export default function TransactionsPage() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editBill, setEditBill] = useState<BillRow | null>(null);
+  const [editPurchase, setEditPurchase] = useState<PurchaseRow | null>(null);
   const [createBillOpen, setCreateBillOpen] = useState(false);
+  const [createPurchaseOpen, setCreatePurchaseOpen] = useState(false);
+  const [purchaseAccountId, setPurchaseAccountId] = useState('');
   const [bulkSyncError, setBulkSyncError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1415,6 +2541,7 @@ export default function TransactionsPage() {
 
   const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
   const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
+  const normalizedAccountId = tab === 'purchase' && purchaseAccountId.trim() !== '' ? purchaseAccountId.trim() : null;
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -1424,7 +2551,7 @@ export default function TransactionsPage() {
 
   const apiType = tab;
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-transactions', apiType, page, pageSize, search, normalizedStartDate, normalizedEndDate],
+    queryKey: ['plutus-transactions', apiType, page, pageSize, search, normalizedStartDate, normalizedEndDate, normalizedAccountId],
     queryFn: () =>
       fetchTransactions({
         type: apiType,
@@ -1433,24 +2560,10 @@ export default function TransactionsPage() {
         search,
         startDate: normalizedStartDate,
         endDate: normalizedEndDate,
+        accountId: normalizedAccountId,
       }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 5 * 60 * 1000,
-  });
-
-  const syncMappedMutation = useMutation({
-    mutationFn: (qboBillIds: string[]) => syncMappedBillsBulk(qboBillIds),
-    onSuccess: (result) => {
-      setBulkSyncError(null);
-      queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
-      if (result.failureCount > 0) {
-        const sample = result.failures.slice(0, 3).map((failure) => `${failure.qboBillId}: ${failure.error}`).join(' | ');
-        setBulkSyncError(`Synced ${result.successCount}. Failed ${result.failureCount}. ${sample}`);
-      }
-    },
-    onError: (mutationError: Error) => {
-      setBulkSyncError(mutationError.message);
-    },
   });
 
   const currency = connection?.homeCurrency ? connection.homeCurrency : 'USD';
@@ -1462,9 +2575,19 @@ export default function TransactionsPage() {
     trackedLines: row.trackedLines ? row.trackedLines : [],
     mapping: row.mapping ? row.mapping : null,
   })), [rows]);
+  const purchaseRows = useMemo(() => rows.filter(isPurchaseRow), [rows]);
+  const visibleRows = tab === 'purchase' ? purchaseRows : rows;
 
   const brands = useMemo(() => (data?.brands ? data.brands : []), [data]);
   const skus = useMemo(() => (data?.skus ? data.skus : []), [data]);
+  const purchaseAccounts = useMemo(() => (data?.accounts ? data.accounts : []), [data]);
+  const purchasePaymentAccounts = useMemo(
+    () =>
+      purchaseAccounts.filter(
+        (account) => account.type === 'Bank' || account.type === 'Credit Card',
+      ),
+    [purchaseAccounts],
+  );
 
   const brandNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1473,11 +2596,6 @@ export default function TransactionsPage() {
     }
     return map;
   }, [brands]);
-
-  const mappedBillIds = useMemo(
-    () => billRows.filter((row) => row.isTrackedBill && row.mapping !== null).map((row) => row.id),
-    [billRows],
-  );
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Transactions" error={connection.error} />;
@@ -1506,7 +2624,12 @@ export default function TransactionsPage() {
 
           <Card className="border-slate-200/70 dark:border-white/10">
             <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto] md:items-end">
+              <div className={cn(
+                'grid gap-3 md:items-end',
+                tab === 'purchase'
+                  ? 'md:grid-cols-[1.15fr,0.52fr,0.52fr,0.7fr,0.42fr,auto]'
+                  : 'md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto]',
+              )}>
                 <div className="space-y-1.5">
                   <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                     Search
@@ -1576,10 +2699,36 @@ export default function TransactionsPage() {
                   </Select>
                 </div>
 
+                {tab === 'purchase' && (
+                  <div className="space-y-1.5">
+                    <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                      Payment account
+                    </div>
+                    <Select
+                      value={purchaseAccountId === '' ? ALL_PURCHASE_ACCOUNTS : purchaseAccountId}
+                      onValueChange={(value) => {
+                        setPurchaseAccountId(value === ALL_PURCHASE_ACCOUNTS ? '' : value);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="bg-white dark:bg-white/5">
+                        <SelectValue placeholder="All accounts" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</SelectItem>
+                        {purchasePaymentAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   {tab === 'bill' && (
                     <Button
-                      variant="outline"
                       onClick={() => setCreateBillOpen(true)}
                       className="gap-1.5"
                     >
@@ -1587,21 +2736,23 @@ export default function TransactionsPage() {
                       New Bill
                     </Button>
                   )}
-                  {tab === 'bill' && (
+                  {tab === 'purchase' && (
                     <Button
                       variant="outline"
-                      onClick={() => syncMappedMutation.mutate(mappedBillIds)}
-                      disabled={mappedBillIds.length === 0 || syncMappedMutation.isPending}
+                      onClick={() => setCreatePurchaseOpen(true)}
                       className="gap-1.5"
                     >
-                      <RefreshCw className={cn('h-3.5 w-3.5', syncMappedMutation.isPending && 'animate-spin')} />
-                      {syncMappedMutation.isPending ? 'Syncing...' : 'Sync Mapped Bills'}
+                      <Plus className="h-3.5 w-3.5" />
+                      New Expense
                     </Button>
                   )}
                   <Button
                     variant="outline"
-                    onClick={() => clear()}
-                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
+                    onClick={() => {
+                      clear();
+                      setPurchaseAccountId('');
+                    }}
+                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && purchaseAccountId.trim() === ''}
                   >
                     Clear
                   </Button>
@@ -1609,12 +2760,6 @@ export default function TransactionsPage() {
               </div>
             </CardContent>
           </Card>
-
-          {bulkSyncError && (
-            <Card className="p-4 border-red-200 dark:border-red-900">
-              <p className="text-sm text-red-700 dark:text-red-300">{bulkSyncError}</p>
-            </Card>
-          )}
 
           <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
             <CardContent className="p-0">
@@ -1752,7 +2897,7 @@ export default function TransactionsPage() {
                         </TableRow>
                       )}
 
-                      {!isLoading && !error && rows.length === 0 && (
+                      {!isLoading && !error && visibleRows.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={8}>
                             <EmptyState
@@ -1763,7 +2908,7 @@ export default function TransactionsPage() {
                         </TableRow>
                       )}
 
-                      {!isLoading && !error && rows.map((row) => {
+                      {!isLoading && !error && visibleRows.map((row) => {
                         const isExpanded = expanded[row.id] === true;
                         const docNumber = row.docNumber.trim() === '' ? '—' : row.docNumber;
                         const memo = row.memo.trim() === '' ? '—' : row.memo;
@@ -1820,6 +2965,20 @@ export default function TransactionsPage() {
                               <TableCell className="align-top">
                                 <div className="flex items-start gap-2">
                                   <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
+                                  {isPurchaseRow(row) && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setEditPurchase(row);
+                                      }}
+                                      className="h-7 px-2 text-2xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                    >
+                                      Map
+                                    </Button>
+                                  )}
                                   <Button
                                     asChild
                                     variant="ghost"
@@ -1976,11 +3135,9 @@ export default function TransactionsPage() {
           </Card>
         </div>
 
-        <CreateBillModal
-          brands={brands}
-          skus={skus}
-          open={createBillOpen}
-          onOpenChange={setCreateBillOpen}
+        <CreatePurchaseModal
+          open={createPurchaseOpen}
+          onOpenChange={setCreatePurchaseOpen}
         />
 
         {editBill && (
@@ -1997,6 +3154,29 @@ export default function TransactionsPage() {
             }}
           />
         )}
+
+        {editPurchase && (
+          <EditPurchaseModal
+            key={editPurchase.id}
+            purchase={editPurchase}
+            skus={skus}
+            accounts={purchaseAccounts}
+            open={true}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEditPurchase(null);
+              }
+            }}
+          />
+        )}
+
+        <CreateBillModal
+          open={createBillOpen}
+          onOpenChange={setCreateBillOpen}
+          onCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
+          }}
+        />
       </div>
     </main>
   );

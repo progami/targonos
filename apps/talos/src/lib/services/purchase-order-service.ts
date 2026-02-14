@@ -10,11 +10,30 @@ export interface UserContext {
 }
 
 export type PurchaseOrderWithLines = Prisma.PurchaseOrderGetPayload<{
-  include: { lines: true }
+  include: {
+    lines: true
+    grns: {
+      select: {
+        referenceNumber: true
+        receivedAt: true
+        createdAt: true
+      }
+    }
+  }
 }>
 
 export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetPayload<{
-  include: { lines: true; proformaInvoices: true }
+  include: {
+    lines: true
+    proformaInvoices: true
+    grns: {
+      select: {
+        referenceNumber: true
+        receivedAt: true
+        createdAt: true
+      }
+    }
+  }
 }>
 
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
@@ -70,6 +89,7 @@ export interface UpdatePurchaseOrderInput {
   paymentTerms?: string | null
   counterpartyName?: string | null
   notes?: string | null
+  manufacturingStartDate?: string | null
 }
 
 export async function getPurchaseOrders() {
@@ -83,7 +103,16 @@ export async function getPurchaseOrders() {
   return prisma.purchaseOrder.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { lines: true },
+    include: {
+      lines: true,
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -106,7 +135,16 @@ export async function getPurchaseOrdersBySplitGroup(splitGroupId: string) {
       ...where,
     },
     orderBy: { createdAt: 'desc' },
-    include: { lines: true },
+    include: {
+      lines: true,
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -119,7 +157,17 @@ export async function getPurchaseOrderById(id: string) {
       isLegacy: false,
       status: { in: VISIBLE_STATUSES },
     },
-    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+    include: {
+      lines: true,
+      proformaInvoices: { orderBy: [{ createdAt: 'asc' }] },
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 }
 
@@ -137,8 +185,8 @@ export async function updatePurchaseOrderDetails(
     throw new NotFoundError('Purchase order not found')
   }
 
-  if (order.isLegacy || order.status !== PurchaseOrderStatus.RFQ) {
-    throw new ConflictError('Only RFQs can be edited')
+  if (order.isLegacy) {
+    throw new ConflictError('Cannot edit legacy purchase orders')
   }
 
   let expectedDate: Date | null | undefined = order.expectedDate
@@ -151,6 +199,19 @@ export async function updatePurchaseOrderDetails(
         throw new ValidationError('Invalid cargo ready date value')
       }
       expectedDate = parsed
+    }
+  }
+
+  let manufacturingStartDate: Date | null | undefined = order.manufacturingStartDate
+  if (input.manufacturingStartDate !== undefined) {
+    if (input.manufacturingStartDate === null || input.manufacturingStartDate === '') {
+      manufacturingStartDate = null
+    } else {
+      const parsed = new Date(input.manufacturingStartDate)
+      if (Number.isNaN(parsed.getTime())) {
+        throw new ValidationError('Invalid manufacturing start date value')
+      }
+      manufacturingStartDate = parsed
     }
   }
 
@@ -218,6 +279,11 @@ export async function updatePurchaseOrderDetails(
   track('incoterms', order.incoterms ?? null, incoterms ?? null)
   track('paymentTerms', order.paymentTerms ?? null, paymentTerms ?? null)
   track('notes', order.notes ?? null, notes ?? null)
+  track(
+    'manufacturingStartDate',
+    order.manufacturingStartDate ? order.manufacturingStartDate.toISOString() : null,
+    manufacturingStartDate ? manufacturingStartDate.toISOString() : null
+  )
 
   const updated = await prisma.purchaseOrder.update({
     where: { id },
@@ -228,8 +294,19 @@ export async function updatePurchaseOrderDetails(
       incoterms,
       paymentTerms,
       notes,
+      manufacturingStartDate,
     },
-    include: { lines: true, proformaInvoices: { orderBy: [{ createdAt: 'asc' }] } },
+    include: {
+      lines: true,
+      proformaInvoices: { orderBy: [{ createdAt: 'asc' }] },
+      grns: {
+        select: {
+          referenceNumber: true,
+          receivedAt: true,
+          createdAt: true,
+        },
+      },
+    },
   })
 
   if (Object.keys(auditNewValue).length > 0) {
