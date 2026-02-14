@@ -96,46 +96,6 @@ if (ppdEnd === -1) {
 
 let ppdContent = html.slice(ppdStart, ppdEnd)
 
-// Fix DOM structure: Amazon's JS moves #leftCol and #centerCol inside #leftCenterCol.
-// In the saved HTML, #leftCenterCol is empty and leftCol/centerCol are siblings.
-// We need to restructure so they're inside leftCenterCol.
-const leftCenterColEmpty = '<div id="leftCenterCol">\n      </div>'
-const leftColStart = ppdContent.indexOf('<div id="leftCol"')
-const centerColStart = ppdContent.indexOf('<div id="centerCol"')
-
-if (ppdContent.includes(leftCenterColEmpty) && leftColStart !== -1 && centerColStart !== -1) {
-  // Find the end of leftCol and centerCol by depth counting
-  function findDivEnd(str, startIdx) {
-    let d = 0, j = startIdx
-    while (j < str.length) {
-      if (str.slice(j, j + 4) === '<div') { d++; j += 4 }
-      else if (str.slice(j, j + 6) === '</div>') {
-        d--
-        if (d === 0) return j + 6
-        j += 6
-      } else { j++ }
-    }
-    return -1
-  }
-
-  const leftColEnd = findDivEnd(ppdContent, leftColStart)
-  const centerColEnd = findDivEnd(ppdContent, centerColStart)
-
-  if (leftColEnd !== -1 && centerColEnd !== -1) {
-    const leftColHtml = ppdContent.slice(leftColStart, leftColEnd)
-    const centerColHtml = ppdContent.slice(centerColStart, centerColEnd)
-
-    // Replace empty leftCenterCol with one containing leftCol + centerCol
-    const newLeftCenterCol = `<div id="leftCenterCol">\n${leftColHtml}\n${centerColHtml}\n</div>`
-    ppdContent = ppdContent.replace(leftCenterColEmpty, newLeftCenterCol)
-
-    // Remove the original leftCol and centerCol (now duplicated)
-    // They appear after leftCenterCol in the original HTML
-    ppdContent = ppdContent.replace(leftColHtml, '')
-    ppdContent = ppdContent.replace(centerColHtml, '')
-  }
-}
-
 // Also extract the below-fold content (A+ content, description, etc.)
 // These are outside #ppd but important for the full PDP view
 const belowFoldSections = []
@@ -181,8 +141,23 @@ for (const id of sectionIds) {
 
 // Remove all <script> tags from the PDP content
 const removeScripts = (s) => s.replace(/<script[\s\S]*?<\/script>/g, '')
-ppdContent = removeScripts(ppdContent)
-const belowFold = belowFoldSections.map(removeScripts).join('\n')
+
+// Fix lazy-loaded images: Amazon uses grey-pixel.gif as src with the real URL in data-src.
+// Since we strip all scripts, the lazy-load JS never runs, so swap data-src → src.
+function fixLazyImages(s) {
+  // Replace data-src with src for images that have a grey-pixel placeholder
+  s = s.replace(/<img\s([^>]*?)src="[^"]*grey-pixel[^"]*"([^>]*?)data-src="([^"]+)"([^>]*?)>/g,
+    '<img $1src="$3"$2$4>')
+  // Handle reverse attribute order: data-src before src
+  s = s.replace(/<img\s([^>]*?)data-src="([^"]+)"([^>]*?)src="[^"]*grey-pixel[^"]*"([^>]*?)>/g,
+    '<img $1src="$2"$3$4>')
+  // Remove the a-lazy-loaded class (prevents CSS hiding)
+  s = s.replace(/\ba-lazy-loaded\b/g, 'a-lazy-resolved')
+  return s
+}
+
+ppdContent = fixLazyImages(removeScripts(ppdContent))
+const belowFold = belowFoldSections.map(s => fixLazyImages(removeScripts(s))).join('\n')
 
 // Extract the <body> class
 const bodyClassMatch = html.match(/<body\s+class="([^"]*)"/)
@@ -210,10 +185,7 @@ ${styles.join('\n')}
     margin: 0 auto;
     padding: 0 18px;
   }
-  /* Fix leftCol width (normally set by JS) */
-  #leftCol {
-    width: 40%;
-  }
+  /* Ensure leftCenterCol leaves room for right buy-box column */
   #leftCenterCol {
     margin-right: 270px;
   }
