@@ -304,16 +304,44 @@ function firstPreviewBlockByCode(blocks: PreviewBlock[]): Map<string, PreviewBlo
   return map;
 }
 
+function isIdempotencyCode(code: string): boolean {
+  if (code === 'ALREADY_PROCESSED') return true;
+  if (code === 'ORDER_ALREADY_PROCESSED') return true;
+  return false;
+}
+
+function getPreviewBlockGroupLabel(groupCode: string): string {
+  if (groupCode === 'ORDER_ALREADY_PROCESSED') return 'Already posted orders';
+  if (groupCode === 'ALREADY_PROCESSED') return 'Already posted invoice';
+  if (groupCode === 'INVOICE_CONFLICT') return 'Invoice hash conflict';
+  if (groupCode === 'PNL_ALLOCATION_ERROR') return 'Allocation rule';
+  return groupCode;
+}
+
 function getPreviewBlockSummary(group: PreviewBlockGroup, sample: PreviewBlock | undefined): string {
   if (group.code === 'ORDER_ALREADY_PROCESSED') {
     return `${group.count.toLocaleString()} orders in this invoice were already processed by Plutus.`;
   }
   if (group.code === 'ALREADY_PROCESSED') {
     const processingId = sample?.details ? sample.details.settlementProcessingId : undefined;
-    if (processingId === undefined) {
-      return 'Invoice already processed by Plutus.';
+    const settlementJournalEntryId = sample?.details ? sample.details.settlementJournalEntryId : undefined;
+    const cogsJournalEntryId = sample?.details ? sample.details.cogsJournalEntryId : undefined;
+    const pnlJournalEntryId = sample?.details ? sample.details.pnlJournalEntryId : undefined;
+
+    const hasSettlementLink =
+      settlementJournalEntryId !== undefined &&
+      cogsJournalEntryId !== undefined &&
+      pnlJournalEntryId !== undefined;
+
+    if (hasSettlementLink) {
+      return `Invoice already posted in settlement ${String(settlementJournalEntryId)} (COGS JE ${String(cogsJournalEntryId)}, P&L JE ${String(pnlJournalEntryId)}).`;
     }
-    return `Invoice already processed by Plutus (settlementProcessingId=${String(processingId)}).`;
+
+    if (processingId !== undefined) {
+      return `Invoice already processed by Plutus (settlementProcessingId=${String(processingId)}).`;
+    }
+
+    return 'Invoice already processed by Plutus.';
   }
 
   const message = sample ? getPreviewBlockMessage(sample) : group.code;
@@ -322,7 +350,7 @@ function getPreviewBlockSummary(group: PreviewBlockGroup, sample: PreviewBlock |
 }
 
 function formatPreviewBlockGroups(groups: PreviewBlockGroup[]): string {
-  return groups.map((group) => `${group.code} × ${group.count.toLocaleString()}`).join(', ');
+  return groups.map((group) => `${getPreviewBlockGroupLabel(group.code)} × ${group.count.toLocaleString()}`).join(', ');
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -990,6 +1018,10 @@ export default function SettlementDetailPage() {
   const previewIssueFirstByCode = useMemo(() => firstPreviewBlockByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
   const previewBlockingFirstByCode = useMemo(() => firstPreviewBlockByCode(previewBlockingBlocks), [previewBlockingBlocks]);
   const previewWarningFirstByCode = useMemo(() => firstPreviewBlockByCode(previewWarningBlocks), [previewWarningBlocks]);
+  const previewBlockingIdempotencyOnly = useMemo(() => {
+    if (previewBlockingGroups.length === 0) return false;
+    return previewBlockingGroups.every((group) => isIdempotencyCode(group.code));
+  }, [previewBlockingGroups]);
   const previewJournalLines = useMemo(() => {
     if (!previewData) return [] as JeLinePreview[];
     return [...previewData.cogsJournalEntry.lines, ...previewData.pnlJournalEntry.lines];
@@ -1486,7 +1518,9 @@ export default function SettlementDetailPage() {
                                   ? 'success'
                                   : 'secondary'
                                 : previewBlockingCount > 0
-                                  ? 'destructive'
+                                  ? previewBlockingIdempotencyOnly
+                                    ? 'secondary'
+                                    : 'destructive'
                                   : previewWarningCount > 0
                                     ? 'secondary'
                                     : 'success'
@@ -1497,7 +1531,9 @@ export default function SettlementDetailPage() {
                                 ? 'Processed'
                                 : 'Processed (Review)'
                               : previewBlockingCount > 0
-                                ? 'Blocked'
+                                ? previewBlockingIdempotencyOnly
+                                  ? 'Already Posted'
+                                  : 'Blocked'
                                 : previewWarningCount > 0
                                   ? 'Ready (Warnings)'
                                   : 'Ready'}
@@ -1638,17 +1674,56 @@ export default function SettlementDetailPage() {
                       )}
 
                       {!isProcessedPreview && previewBlockingCount > 0 && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+                        <div
+                          className={cn(
+                            'rounded-lg border p-3',
+                            previewBlockingIdempotencyOnly
+                              ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
+                              : 'border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20',
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              'flex items-center gap-2 text-sm font-semibold',
+                              previewBlockingIdempotencyOnly
+                                ? 'text-amber-700 dark:text-amber-300'
+                                : 'text-red-700 dark:text-red-300',
+                            )}
+                          >
                             <AlertTriangle className="h-4 w-4" />
-                            {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
+                            {previewBlockingIdempotencyOnly
+                              ? 'Already posted data'
+                              : `${previewBlockingCount} blocking issue${previewBlockingCount === 1 ? '' : 's'}`}
                           </div>
-                          <div className="mt-1 text-sm text-red-700 dark:text-red-200">
+                          <div
+                            className={cn(
+                              'mt-1 text-sm',
+                              previewBlockingIdempotencyOnly
+                                ? 'text-amber-700 dark:text-amber-200'
+                                : 'text-red-700 dark:text-red-200',
+                            )}
+                          >
                             {formatPreviewBlockGroups(previewBlockingGroups)}
                           </div>
                           <details className="mt-2">
-                            <summary className="cursor-pointer text-xs text-red-700 dark:text-red-200">Details</summary>
-                            <ul className="mt-2 text-sm text-red-700 dark:text-red-200 space-y-1">
+                            <summary
+                              className={cn(
+                                'cursor-pointer text-xs',
+                                previewBlockingIdempotencyOnly
+                                  ? 'text-amber-700 dark:text-amber-200'
+                                  : 'text-red-700 dark:text-red-200',
+                              )}
+                            >
+                              Details
+                            </summary>
+                            <ul
+                              className={cn(
+                                'mt-2 text-sm space-y-1',
+                                previewBlockingIdempotencyOnly
+                                  ? 'text-amber-700 dark:text-amber-200'
+                                  : 'text-red-700 dark:text-red-200',
+                              )}
+                            >
                               {previewBlockingGroups.map((group) => (
                                 <li key={group.code}>
                                   {getPreviewBlockSummary(group, previewBlockingFirstByCode.get(group.code))}

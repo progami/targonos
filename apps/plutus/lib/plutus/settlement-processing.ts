@@ -211,7 +211,13 @@ export async function computeSettlementPreview(input: {
     blocks.push({
       code: 'ALREADY_PROCESSED',
       message: 'Settlement already processed by Plutus',
-      details: { settlementProcessingId: existingSettlement.id },
+      details: {
+        settlementProcessingId: existingSettlement.id,
+        settlementJournalEntryId: existingSettlement.qboSettlementJournalEntryId,
+        cogsJournalEntryId: existingSettlement.qboCogsJournalEntryId,
+        pnlJournalEntryId: existingSettlement.qboPnlReclassJournalEntryId,
+        invoiceId: existingSettlement.invoiceId,
+      },
     });
   }
 
@@ -223,13 +229,25 @@ export async function computeSettlementPreview(input: {
       blocks.push({
         code: 'ALREADY_PROCESSED',
         message: 'Invoice already processed by Plutus',
-        details: { settlementProcessingId: existingInvoice.id },
+        details: {
+          settlementProcessingId: existingInvoice.id,
+          settlementJournalEntryId: existingInvoice.qboSettlementJournalEntryId,
+          cogsJournalEntryId: existingInvoice.qboCogsJournalEntryId,
+          pnlJournalEntryId: existingInvoice.qboPnlReclassJournalEntryId,
+          invoiceId: existingInvoice.invoiceId,
+        },
       });
     } else {
       blocks.push({
         code: 'INVOICE_CONFLICT',
         message: 'Invoice exists with different data (hash mismatch)',
-        details: { settlementProcessingId: existingInvoice.id },
+        details: {
+          settlementProcessingId: existingInvoice.id,
+          settlementJournalEntryId: existingInvoice.qboSettlementJournalEntryId,
+          cogsJournalEntryId: existingInvoice.qboCogsJournalEntryId,
+          pnlJournalEntryId: existingInvoice.qboPnlReclassJournalEntryId,
+          invoiceId: existingInvoice.invoiceId,
+        },
       });
     }
   }
