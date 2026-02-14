@@ -2,7 +2,12 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileUp, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import UploadIcon from '@mui/icons-material/Upload';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,12 +63,12 @@ async function fetchAuditData(): Promise<AuditDataResponse> {
   return res.json();
 }
 
-function UploadIcon() {
+function UploadSvgIcon() {
   return (
-    <svg className="h-10 w-10" viewBox="0 0 48 48" fill="none">
-      <rect x="8" y="10" width="32" height="28" rx="4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <path d="M24 20v12M20 24l4-4 4 4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <Box component="svg" sx={{ width: 40, height: 40 }} viewBox="0 0 48 48" fill="none">
+      <rect x="8" y="10" width="32" height="28" rx="4" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--mui-palette-divider, #e2e8f0)' }} />
+      <path d="M24 20v12M20 24l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--mui-palette-divider, #e2e8f0)' }} />
+    </Box>
   );
 }
 
@@ -145,8 +150,8 @@ export default function AuditDataPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Audit Data"
           description="Upload Link My Books Audit Data (CSV/ZIP). Plutus uses it to compute per-SKU unit movements, COGS, and brand allocation for fees."
@@ -154,15 +159,26 @@ export default function AuditDataPage() {
         />
 
         {/* Upload Zone */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <div
-              className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 transition-colors ${
-                isDragging
-                  ? 'border-brand-teal-500 bg-brand-teal-50/50 dark:border-brand-cyan dark:bg-brand-cyan/5'
-                  : 'border-slate-300 hover:border-brand-teal-400 dark:border-slate-700 dark:hover:border-brand-cyan/50'
-              }`}
-              onDragOver={(e) => {
+        <Card sx={{ mt: 3, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box
+              sx={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 3,
+                border: 2,
+                borderStyle: 'dashed',
+                px: 3,
+                py: 6,
+                transition: 'all 0.2s',
+                ...(isDragging
+                  ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
+                  : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
+              }}
+              onDragOver={(e: React.DragEvent) => {
                 e.preventDefault();
                 setIsDragging(true);
               }}
@@ -174,104 +190,164 @@ export default function AuditDataPage() {
                 type="file"
                 accept=".csv,.zip"
                 onChange={onFileChange}
-                className="hidden"
+                style={{ display: 'none' }}
               />
 
               {isUploading ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-brand-teal-500 dark:border-slate-700 dark:border-t-brand-cyan" />
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Processing audit data...</p>
-                </div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    sx={{
+                      height: 40,
+                      width: 40,
+                      borderRadius: '50%',
+                      border: 4,
+                      borderColor: 'divider',
+                      borderTopColor: '#45B3D4',
+                      animation: 'spin 1s linear infinite',
+                      '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
+                    }}
+                  />
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>Processing audit data...</Typography>
+                </Box>
               ) : (
                 <>
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-teal-50 text-brand-teal-600 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
-                    <Upload className="h-7 w-7" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <Box
+                    sx={{
+                      mb: 2,
+                      display: 'flex',
+                      height: 56,
+                      width: 56,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 3,
+                      bgcolor: 'rgba(69, 179, 212, 0.08)',
+                      color: '#45B3D4',
+                    }}
+                  >
+                    <UploadIcon sx={{ fontSize: 28 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                     Drop your LMB Audit Data file here
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                     CSV or ZIP &middot; One file covers all settlements in the date range
-                  </p>
-                  <button
+                  </Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="mt-4 rounded-lg bg-brand-teal-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-teal-600 dark:bg-brand-cyan dark:text-slate-900 dark:hover:bg-brand-cyan/90"
+                    sx={{
+                      mt: 2,
+                      borderRadius: 2,
+                      bgcolor: '#45B3D4',
+                      px: 2,
+                      py: 1,
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#fff',
+                      boxShadow: 1,
+                      transition: 'background-color 0.2s',
+                      border: 'none',
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: '#2fa3c7' },
+                    }}
                   >
                     Choose File
-                  </button>
+                  </Box>
                 </>
               )}
-            </div>
+            </Box>
 
             {/* Upload Error */}
             {uploadError !== null && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <Box
+                sx={{
+                  mt: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  borderRadius: 2,
+                  bgcolor: 'rgba(239, 68, 68, 0.06)',
+                  px: 2,
+                  py: 1.5,
+                  fontSize: '0.875rem',
+                  color: 'error.main',
+                }}
+              >
+                <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
                 {uploadError}
-              </div>
+              </Box>
             )}
 
             {/* Upload Result */}
             {uploadResult !== null && (
-              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
+              <Box
+                sx={{
+                  mt: 2,
+                  borderRadius: 2,
+                  border: 1,
+                  borderColor: 'rgba(16, 185, 129, 0.3)',
+                  bgcolor: 'rgba(16, 185, 129, 0.06)',
+                  p: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.875rem', fontWeight: 500, color: 'success.dark' }}>
+                  <CheckCircleIcon sx={{ fontSize: 16 }} />
                   Uploaded {uploadResult.filename} &mdash; {uploadResult.rowCount.toLocaleString()} rows across{' '}
                   {uploadResult.invoiceCount} settlement{uploadResult.invoiceCount === 1 ? '' : 's'}
-                </div>
+                </Box>
                 {uploadResult.invoiceSummaries.length > 0 && (
-                  <div className="mt-3 overflow-x-auto">
+                  <Box sx={{ mt: 1.5, overflowX: 'auto' }}>
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-emerald-100/50 dark:bg-emerald-950/30">
-                          <TableHead className="text-emerald-700 dark:text-emerald-400">Invoice</TableHead>
-                          <TableHead className="text-emerald-700 dark:text-emerald-400">Date Range</TableHead>
-                          <TableHead className="text-emerald-700 dark:text-emerald-400 text-right">Rows</TableHead>
-                          <TableHead className="text-emerald-700 dark:text-emerald-400 text-right">SKUs</TableHead>
+                        <TableRow sx={{ bgcolor: 'rgba(16, 185, 129, 0.08)' }}>
+                          <TableHead sx={{ color: 'success.dark' }}>Invoice</TableHead>
+                          <TableHead sx={{ color: 'success.dark' }}>Date Range</TableHead>
+                          <TableHead sx={{ color: 'success.dark', textAlign: 'right' }}>Rows</TableHead>
+                          <TableHead sx={{ color: 'success.dark', textAlign: 'right' }}>SKUs</TableHead>
                         </TableRow>
                       </TableHeader>
                         <TableBody>
                           {uploadResult.invoiceSummaries.map((s) => (
                           <TableRow key={`${s.marketplace}:${s.invoiceId}`}>
-                            <TableCell className="font-mono text-sm">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px]">
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Badge variant="outline" sx={{ fontSize: '10px' }}>
                                   {s.marketplace === 'amazon.com' ? 'US' : 'UK'}
                                 </Badge>
-                                <span>{s.invoiceId}</span>
-                              </div>
+                                <Box component="span">{s.invoiceId}</Box>
+                              </Box>
                             </TableCell>
-                            <TableCell className="text-sm">
+                            <TableCell sx={{ fontSize: '0.875rem' }}>
                               {s.minDate} &ndash; {s.maxDate}
                             </TableCell>
-                            <TableCell className="text-sm text-right tabular-nums">
+                            <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {s.rowCount.toLocaleString()}
                             </TableCell>
-                            <TableCell className="text-sm text-right tabular-nums">{s.skuCount}</TableCell>
+                            <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.skuCount}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
-                  </div>
+                  </Box>
                 )}
-              </div>
+              </Box>
             )}
           </CardContent>
         </Card>
 
         {/* Upload History */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10 overflow-hidden">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table className="table-striped">
+        <Card sx={{ mt: 3, borderColor: 'divider', overflow: 'hidden' }}>
+          <CardContent sx={{ p: 0 }}>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                    <TableHead className="font-semibold">Filename</TableHead>
-                    <TableHead className="font-semibold">Uploaded</TableHead>
-                    <TableHead className="font-semibold text-right">Settlements</TableHead>
-                    <TableHead className="font-semibold text-right">Rows</TableHead>
-                    <TableHead className="font-semibold">Status</TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                    <TableHead sx={{ fontWeight: 600 }}>Filename</TableHead>
+                    <TableHead sx={{ fontWeight: 600 }}>Uploaded</TableHead>
+                    <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Settlements</TableHead>
+                    <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Rows</TableHead>
+                    <TableHead sx={{ fontWeight: 600 }}>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -279,8 +355,8 @@ export default function AuditDataPage() {
                     <>
                       {Array.from({ length: 3 }).map((_, idx) => (
                         <TableRow key={idx}>
-                          <TableCell colSpan={5} className="py-4">
-                            <Skeleton className="h-8 w-full" />
+                          <TableCell colSpan={5} sx={{ py: 2 }}>
+                            <Skeleton sx={{ height: 32, width: '100%' }} />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -291,7 +367,7 @@ export default function AuditDataPage() {
                     <TableRow>
                       <TableCell colSpan={5}>
                         <EmptyState
-                          icon={<UploadIcon />}
+                          icon={<UploadSvgIcon />}
                           title="No audit data uploaded"
                           description="Upload an LMB Audit Data CSV above. One file covers all settlements in the date range."
                         />
@@ -304,12 +380,12 @@ export default function AuditDataPage() {
                     data.uploads.map((u) => (
                       <TableRow key={u.id}>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <FileUp className="h-4 w-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-900 dark:text-white">{u.filename}</span>
-                          </div>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <UploadFileIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{u.filename}</Box>
+                          </Box>
                         </TableCell>
-                        <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                        <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                           {new Date(u.uploadedAt).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -318,8 +394,8 @@ export default function AuditDataPage() {
                             minute: '2-digit',
                           })}
                         </TableCell>
-                        <TableCell className="text-sm text-right tabular-nums">{u.invoiceCount}</TableCell>
-                        <TableCell className="text-sm text-right tabular-nums">
+                        <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{u.invoiceCount}</TableCell>
+                        <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           {u.rowCount.toLocaleString()}
                         </TableCell>
                         <TableCell>
@@ -329,17 +405,17 @@ export default function AuditDataPage() {
                     ))}
                 </TableBody>
               </Table>
-            </div>
+            </Box>
           </CardContent>
         </Card>
 
         {/* Loaded invoice IDs summary */}
         {data && data.invoiceIds.length > 0 && (
-          <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+          <Typography sx={{ mt: 2, fontSize: '0.75rem', color: 'text.secondary' }}>
             Audit data available for {data.invoiceIds.length} settlement{data.invoiceIds.length === 1 ? '' : 's'}
-          </div>
+          </Typography>
         )}
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

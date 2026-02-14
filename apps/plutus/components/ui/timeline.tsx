@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type TimelineItem = {
   icon?: ReactNode;
@@ -11,93 +13,92 @@ type TimelineItem = {
 
 type TimelineProps = {
   items: TimelineItem[];
-  className?: string;
+  sx?: SxProps<Theme>;
 };
 
-const variantStyles = {
-  default: {
-    dot: 'bg-slate-300 dark:bg-slate-600',
-    ring: 'ring-slate-200 dark:ring-slate-700',
-    icon: 'text-slate-500 dark:text-slate-400',
-  },
-  success: {
-    dot: 'bg-emerald-500 dark:bg-emerald-400',
-    ring: 'ring-emerald-100 dark:ring-emerald-900/30',
-    icon: 'text-emerald-600 dark:text-emerald-400',
-  },
-  warning: {
-    dot: 'bg-amber-500 dark:bg-amber-400',
-    ring: 'ring-amber-100 dark:ring-amber-900/30',
-    icon: 'text-amber-600 dark:text-amber-400',
-  },
-  error: {
-    dot: 'bg-red-500 dark:bg-red-400',
-    ring: 'ring-red-100 dark:ring-red-900/30',
-    icon: 'text-red-600 dark:text-red-400',
-  },
+const variantColors = {
+  default: { dot: '#cbd5e1', ring: 'rgba(226, 232, 240, 1)', icon: '#64748b' },
+  success: { dot: '#22c55e', ring: 'rgba(220, 252, 231, 1)', icon: '#16a34a' },
+  warning: { dot: '#f59e0b', ring: 'rgba(254, 243, 199, 1)', icon: '#d97706' },
+  error: { dot: '#ef4444', ring: 'rgba(254, 226, 226, 1)', icon: '#dc2626' },
 };
 
 function CheckIcon() {
   return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+    <svg style={{ width: 14, height: 14 }} viewBox="0 0 16 16" fill="none">
       <path d="M4 8l3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-export function Timeline({ items, className }: TimelineProps) {
+export function Timeline({ items, sx }: TimelineProps) {
   return (
-    <div className={cn('relative', className)}>
+    <Box sx={{ position: 'relative', ...sx }}>
       {items.map((item, index) => {
         const variant = item.variant ?? 'default';
-        const styles = variantStyles[variant];
+        const colors = variantColors[variant];
         const isLast = index === items.length - 1;
 
         return (
-          <div key={index} className="relative flex gap-4 pb-8 last:pb-0">
-            {/* Vertical connecting line */}
+          <Box key={index} sx={{ position: 'relative', display: 'flex', gap: 2, pb: isLast ? 0 : 4 }}>
             {!isLast && (
-              <div className="absolute left-[15px] top-[28px] bottom-0 w-px bg-slate-200 dark:bg-slate-700" />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: '15px',
+                  top: '28px',
+                  bottom: 0,
+                  width: 1,
+                  bgcolor: 'divider',
+                }}
+              />
             )}
 
-            {/* Dot / Icon */}
-            <div className="relative flex-shrink-0">
-              <div
-                className={cn(
-                  'flex h-[30px] w-[30px] items-center justify-center rounded-full ring-4',
-                  styles.dot,
-                  styles.ring,
-                )}
+            <Box sx={{ position: 'relative', flexShrink: 0 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  height: 30,
+                  width: 30,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  bgcolor: colors.dot,
+                  boxShadow: `0 0 0 4px ${colors.ring}`,
+                }}
               >
-                <span className={styles.icon}>
+                <Box component="span" sx={{ color: colors.icon }}>
                   {item.icon ?? <CheckIcon />}
-                </span>
-              </div>
-            </div>
+                </Box>
+              </Box>
+            </Box>
 
-            {/* Content */}
-            <div className="min-w-0 flex-1 pt-0.5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-900 dark:text-white">
+            <Box sx={{ minWidth: 0, flex: 1, pt: 0.25 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
                     {item.title}
-                  </div>
+                  </Typography>
                   {item.description && (
-                    <div className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                    <Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
                       {item.description}
-                    </div>
+                    </Typography>
                   )}
-                </div>
+                </Box>
                 {item.timestamp && (
-                  <time className="shrink-0 text-xs font-medium text-slate-400 dark:text-slate-500">
+                  <Typography
+                    component="time"
+                    variant="caption"
+                    sx={{ flexShrink: 0, fontWeight: 500, color: 'text.disabled' }}
+                  >
                     {item.timestamp}
-                  </time>
+                  </Typography>
                 )}
-              </div>
-            </div>
-          </div>
+              </Box>
+            </Box>
+          </Box>
         );
       })}
-    </div>
+    </Box>
   );
 }

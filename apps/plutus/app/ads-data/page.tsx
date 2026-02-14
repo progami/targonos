@@ -2,7 +2,11 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, Upload } from 'lucide-react';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import UploadIcon from '@mui/icons-material/Upload';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -289,80 +293,160 @@ export default function AdsDataPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Ads Data"
           description="Upload Amazon Sponsored Products report exports. Plutus auto-detects marketplace/date range, then you confirm before save."
           variant="accent"
         />
 
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6 space-y-5">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+        <Card sx={{ mt: 3, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box
+              sx={{
+                borderRadius: 2,
+                border: 1,
+                borderColor: 'divider',
+                bgcolor: 'action.hover',
+                px: 2,
+                py: 1.5,
+                fontSize: '0.75rem',
+                color: 'text.secondary',
+              }}
+            >
               Upload once. Plutus detects US/UK ranges from the file and lets you review in a modal before creating uploads.
-            </div>
+            </Box>
 
-            <div
-              className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
-                isDragging
-                  ? 'border-brand-teal-500 bg-brand-teal-50/50 dark:border-brand-cyan dark:bg-brand-cyan/5'
-                  : 'border-slate-300 hover:border-brand-teal-400 dark:border-slate-700 dark:hover:border-brand-cyan/50'
-              }`}
-              onDragOver={(e) => {
+            <Box
+              sx={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 3,
+                border: 2,
+                borderStyle: 'dashed',
+                px: 3,
+                py: 5,
+                transition: 'all 0.2s',
+                ...(isDragging
+                  ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
+                  : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
+              }}
+              onDragOver={(e: React.DragEvent) => {
                 e.preventDefault();
                 setIsDragging(true);
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
             >
-              <input ref={fileInputRef} type="file" accept=".csv,.zip,.xlsx" onChange={onFileChange} className="hidden" />
+              <input ref={fileInputRef} type="file" accept=".csv,.zip,.xlsx" onChange={onFileChange} style={{ display: 'none' }} />
 
               {isBusy ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-brand-teal-500 dark:border-slate-700 dark:border-t-brand-cyan" />
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{busyLabel}</p>
-                </div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    sx={{
+                      height: 40,
+                      width: 40,
+                      borderRadius: '50%',
+                      border: 4,
+                      borderColor: 'divider',
+                      borderTopColor: '#45B3D4',
+                      animation: 'spin 1s linear infinite',
+                      '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
+                    }}
+                  />
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>{busyLabel}</Typography>
+                </Box>
               ) : (
                 <>
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-teal-50 text-brand-teal-600 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
-                    <Upload className="h-7 w-7" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Drop your SP report here</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">CSV, ZIP, or XLSX &middot; Advertised product report</p>
-                  <button
+                  <Box
+                    sx={{
+                      mb: 2,
+                      display: 'flex',
+                      height: 56,
+                      width: 56,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 3,
+                      bgcolor: 'rgba(69, 179, 212, 0.08)',
+                      color: '#45B3D4',
+                    }}
+                  >
+                    <UploadIcon sx={{ fontSize: 28 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Drop your SP report here</Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>CSV, ZIP, or XLSX &middot; Advertised product report</Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="mt-4 rounded-lg bg-brand-teal-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-teal-600 dark:bg-brand-cyan dark:text-slate-900 dark:hover:bg-brand-cyan/90"
+                    sx={{
+                      mt: 2,
+                      borderRadius: 2,
+                      bgcolor: '#45B3D4',
+                      px: 2,
+                      py: 1,
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#fff',
+                      boxShadow: 1,
+                      transition: 'background-color 0.2s',
+                      border: 'none',
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: '#2fa3c7' },
+                    }}
                   >
                     Choose File
-                  </button>
+                  </Box>
                 </>
               )}
-            </div>
+            </Box>
 
             {uploadError !== null && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  borderRadius: 2,
+                  bgcolor: 'rgba(239, 68, 68, 0.06)',
+                  px: 2,
+                  py: 1.5,
+                  fontSize: '0.875rem',
+                  color: 'error.main',
+                }}
+              >
+                <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
                 {uploadError}
-              </div>
+              </Box>
             )}
 
             {uploadResults !== null && uploadResults.length > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
+              <Box
+                sx={{
+                  borderRadius: 2,
+                  border: 1,
+                  borderColor: 'rgba(16, 185, 129, 0.3)',
+                  bgcolor: 'rgba(16, 185, 129, 0.06)',
+                  p: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.875rem', fontWeight: 500, color: 'success.dark' }}>
+                  <CheckCircleIcon sx={{ fontSize: 16 }} />
                   Uploaded {uploadResults[0]?.filename} for {uploadResults.length} marketplace{uploadResults.length === 1 ? '' : 's'}
-                </div>
-                <div className="mt-2 space-y-1 text-xs text-emerald-700/80 dark:text-emerald-400/80">
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.75rem', color: 'success.dark', opacity: 0.8 }}>
                   {uploadResults.map((upload) => (
-                    <div key={upload.id}>
+                    <Box key={upload.id}>
                       {marketplaceLabel(upload.marketplace)} &middot; Declared {upload.startDate}–{upload.endDate} &middot; Parsed {upload.minDate}
                       –{upload.maxDate} &middot; Rows {upload.rowCount.toLocaleString()} &middot; SKUs {upload.skuCount.toLocaleString()}
-                    </div>
+                    </Box>
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )}
           </CardContent>
         </Card>
@@ -379,8 +463,9 @@ export default function AdsDataPage() {
             }
             setReviewOpen(true);
           }}
+          maxWidth="lg"
         >
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
             <DialogHeader>
               <DialogTitle>Review detected report details</DialogTitle>
               <DialogDescription>
@@ -388,11 +473,23 @@ export default function AdsDataPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            <Box
+              sx={{
+                borderRadius: 2,
+                border: 1,
+                borderColor: 'divider',
+                bgcolor: 'action.hover',
+                px: 1.5,
+                py: 1,
+                fontSize: '0.75rem',
+                color: 'text.secondary',
+                mt: 2,
+              }}
+            >
               Today UTC: {detectTodayUtc || '—'} &middot; Max allowed latest row date: {detectMaxAllowedDate || '—'} (3-day freshness guard)
-            </div>
+            </Box>
 
-            <div className="overflow-x-auto">
+            <Box sx={{ overflowX: 'auto', mt: 2 }}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -400,8 +497,8 @@ export default function AdsDataPage() {
                     <TableHead>Marketplace</TableHead>
                     <TableHead>Start date</TableHead>
                     <TableHead>End date</TableHead>
-                    <TableHead className="text-right">Rows</TableHead>
-                    <TableHead className="text-right">SKUs</TableHead>
+                    <TableHead sx={{ textAlign: 'right' }}>Rows</TableHead>
+                    <TableHead sx={{ textAlign: 'right' }}>SKUs</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -420,7 +517,7 @@ export default function AdsDataPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="outline" sx={{ fontSize: '10px' }}>
                           {marketplaceLabel(target.marketplace)} ({target.marketplace})
                         </Badge>
                       </TableCell>
@@ -448,59 +545,79 @@ export default function AdsDataPage() {
                           disabled={!target.selected || isUploading}
                         />
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{target.rowCount.toLocaleString()}</TableCell>
-                      <TableCell className="text-right tabular-nums">{target.skuCount.toLocaleString()}</TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.rowCount.toLocaleString()}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.skuCount.toLocaleString()}</TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem' }}>
                         {target.isRecentEnough ? (
-                          <span className="text-emerald-700 dark:text-emerald-400">OK</span>
+                          <Box component="span" sx={{ color: 'success.dark' }}>OK</Box>
                         ) : (
-                          <span className="text-red-700 dark:text-red-400">Too recent for 3-day guard</span>
+                          <Box component="span" sx={{ color: 'error.main' }}>Too recent for 3-day guard</Box>
                         )}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </Box>
 
             {selectedTargets.length === 0 && (
-              <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <Box
+                sx={{
+                  borderRadius: 2,
+                  bgcolor: 'rgba(245, 158, 11, 0.06)',
+                  px: 1.5,
+                  py: 1,
+                  fontSize: '0.75rem',
+                  color: 'warning.dark',
+                  mt: 2,
+                }}
+              >
                 Select at least one marketplace to upload.
-              </div>
+              </Box>
             )}
 
             {hasInvalidSelectedDates && (
-              <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-400">
+              <Box
+                sx={{
+                  borderRadius: 2,
+                  bgcolor: 'rgba(239, 68, 68, 0.06)',
+                  px: 1.5,
+                  py: 1,
+                  fontSize: '0.75rem',
+                  color: 'error.main',
+                  mt: 2,
+                }}
+              >
                 One or more selected rows has an invalid date range.
-              </div>
+              </Box>
             )}
-
-            <DialogFooter>
-              <Button variant="outline" onClick={clearPendingReview} disabled={isUploading}>
-                Cancel
-              </Button>
-              <Button onClick={() => void submitDetectedUpload()} disabled={isUploading || selectedTargets.length === 0 || hasInvalidSelectedDates}>
-                {isUploading ? 'Uploading...' : `Upload ${selectedTargets.length} marketplace${selectedTargets.length === 1 ? '' : 's'}`}
-              </Button>
-            </DialogFooter>
           </DialogContent>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={clearPendingReview} disabled={isUploading}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submitDetectedUpload()} disabled={isUploading || selectedTargets.length === 0 || hasInvalidSelectedDates}>
+              {isUploading ? 'Uploading...' : `Upload ${selectedTargets.length} marketplace${selectedTargets.length === 1 ? '' : 's'}`}
+            </Button>
+          </DialogFooter>
         </Dialog>
 
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Uploads</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Used to weight settlement advertising allocations.</div>
-              </div>
-            </div>
+        <Card sx={{ mt: 3, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Uploads</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Used to weight settlement advertising allocations.</Typography>
+              </Box>
+            </Box>
 
             {isLoading && (
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-48" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Skeleton sx={{ height: 20, width: 192 }} />
+                <Skeleton sx={{ height: 40, width: '100%' }} />
+                <Skeleton sx={{ height: 40, width: '100%' }} />
+              </Box>
             )}
 
             {!isLoading && data?.uploads?.length === 0 && (
@@ -511,7 +628,7 @@ export default function AdsDataPage() {
             )}
 
             {!isLoading && data?.uploads?.length ? (
-              <div className="overflow-x-auto">
+              <Box sx={{ overflowX: 'auto' }}>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -519,46 +636,45 @@ export default function AdsDataPage() {
                       <TableHead>Marketplace</TableHead>
                       <TableHead>Declared range</TableHead>
                       <TableHead>Parsed range</TableHead>
-                      <TableHead className="text-right">Rows</TableHead>
-                      <TableHead className="text-right">SKUs</TableHead>
-                      <TableHead className="text-right">Uploaded</TableHead>
+                      <TableHead sx={{ textAlign: 'right' }}>Rows</TableHead>
+                      <TableHead sx={{ textAlign: 'right' }}>SKUs</TableHead>
+                      <TableHead sx={{ textAlign: 'right' }}>Uploaded</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {data.uploads.map((upload) => (
                       <TableRow key={upload.id}>
-                        <TableCell className="text-sm">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-slate-900 dark:text-white">{upload.reportType}</span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">{upload.filename}</span>
-                          </div>
+                        <TableCell sx={{ fontSize: '0.875rem' }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Box component="span" sx={{ fontWeight: 500, color: 'text.primary' }}>{upload.reportType}</Box>
+                            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{upload.filename}</Box>
+                          </Box>
                         </TableCell>
-                        <TableCell className="text-sm">
-                          <Badge variant="outline" className="text-[10px]">
+                        <TableCell sx={{ fontSize: '0.875rem' }}>
+                          <Badge variant="outline" sx={{ fontSize: '10px' }}>
                             {marketplaceLabel(upload.marketplace)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm tabular-nums">
+                        <TableCell sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
                           {upload.startDate} &ndash; {upload.endDate}
                         </TableCell>
-                        <TableCell className="text-sm tabular-nums">
+                        <TableCell sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
                           {upload.minDate} &ndash; {upload.maxDate}
                         </TableCell>
-                        <TableCell className="text-right text-sm tabular-nums">{upload.rowCount.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-sm tabular-nums">{upload.skuCount.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.rowCount.toLocaleString()}</TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.skuCount.toLocaleString()}</TableCell>
+                        <TableCell sx={{ textAlign: 'right', fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                           {new Date(upload.uploadedAt).toLocaleString('en-US')}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </Box>
             ) : null}
           </CardContent>
         </Card>
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }
-

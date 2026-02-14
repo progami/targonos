@@ -2,15 +2,15 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AlertCircle,
-  ArrowDownToLine,
-  CheckCircle2,
-  Download,
-  FileSearch,
-  Upload,
-  XCircle,
-} from 'lucide-react';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DownloadIcon from '@mui/icons-material/Download';
+import FindInPageIcon from '@mui/icons-material/FindInPage';
+import UploadIcon from '@mui/icons-material/Upload';
+import CancelIcon from '@mui/icons-material/Cancel';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,13 +18,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectItem } from '@/components/ui/select';
 import { StatCard } from '@/components/ui/stat-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -194,8 +188,8 @@ export default function ReconciliationPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Reconciliation"
           description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored LMB audit data"
@@ -203,147 +197,171 @@ export default function ReconciliationPage() {
         />
 
         {/* Instructions */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">How it works</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+        <Card sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>How it works</Typography>
+            <Box sx={{ mt: 2, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
                   1
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Download your report</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Download your report</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                     Export the Date Range Transaction Report from Amazon Seller Central (this is not required for settlement processing)
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
                   2
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Select month and marketplace</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select month and marketplace</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                     Choose the period and marketplace to reconcile
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
                   3
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Upload and reconcile</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Upload and reconcile</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                     Compare Amazon order totals against your stored LMB audit data
-                  </p>
-                </div>
-              </div>
-            </div>
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
           </CardContent>
         </Card>
 
         {/* Upload Form */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="month-input" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+        <Card sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+              <Box>
+                <Box component="label" htmlFor="month-input" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                   Month
-                </label>
+                </Box>
                 <Input id="month-input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">Marketplace</label>
+              </Box>
+              <Box>
+                <Box component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Marketplace</Box>
                 <Select value={marketplace} onValueChange={(v) => setMarketplace(v as 'US' | 'UK')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="US">US - Amazon.com</SelectItem>
-                    <SelectItem value="UK">UK - Amazon.co.uk</SelectItem>
-                  </SelectContent>
+                  <SelectItem value="US">US - Amazon.com</SelectItem>
+                  <SelectItem value="UK">UK - Amazon.co.uk</SelectItem>
                 </Select>
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {/* Drop Zone */}
-            <div
-              className={`relative mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
-                isDragging
-                  ? 'border-brand-teal-500 bg-brand-teal-50/50 dark:border-brand-cyan dark:bg-brand-cyan/5'
-                  : 'border-slate-300 hover:border-brand-teal-400 dark:border-slate-700 dark:hover:border-brand-cyan/50'
-              }`}
-              onDragOver={(e) => {
+            <Box
+              sx={{
+                position: 'relative',
+                mt: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 3,
+                border: '2px dashed',
+                borderColor: isDragging ? '#45B3D4' : 'divider',
+                bgcolor: isDragging ? 'rgba(69, 179, 212, 0.04)' : 'transparent',
+                px: 3,
+                py: 5,
+                transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: '#45B3D4',
+                },
+              }}
+              onDragOver={(e: React.DragEvent) => {
                 e.preventDefault();
                 setIsDragging(true);
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
             >
-              <input ref={fileInputRef} type="file" accept=".csv" onChange={onFileChange} className="hidden" />
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={onFileChange} style={{ display: 'none' }} />
 
               {selectedFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedFile.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                  <button
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(16, 185, 129, 0.08)', color: '#059669' }}>
+                    <CheckCircleOutlineIcon sx={{ fontSize: 24 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{selectedFile.name}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{(selectedFile.size / 1024).toFixed(1)} KB</Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-xs font-medium text-brand-teal-600 hover:text-brand-teal-700 dark:text-brand-cyan dark:hover:text-brand-cyan/80"
+                    sx={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500, color: '#2384a1', '&:hover': { color: '#1a6b82' } }}
                   >
                     Choose a different file
-                  </button>
-                </div>
+                  </Box>
+                </Box>
               ) : (
                 <>
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-teal-50 text-brand-teal-600 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
-                    <Upload className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <Box sx={{ mb: 1.5, display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(69, 179, 212, 0.08)', color: '#2384a1' }}>
+                    <UploadIcon sx={{ fontSize: 24 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                     Drop your Amazon Transaction Report here
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                     CSV format, Date Range Transaction Report from Seller Central
-                  </p>
-                  <button
+                  </Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="mt-3 rounded-lg bg-brand-teal-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-teal-600 dark:bg-brand-cyan dark:text-slate-900 dark:hover:bg-brand-cyan/90"
+                    sx={{
+                      mt: 1.5,
+                      borderRadius: 2,
+                      bgcolor: '#45B3D4',
+                      px: 2,
+                      py: 1,
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: 1,
+                      transition: 'background-color 0.2s',
+                      '&:hover': { bgcolor: '#2fa3c7' },
+                    }}
                   >
                     Choose File
-                  </button>
+                  </Box>
                 </>
               )}
-            </div>
+            </Box>
 
             {/* Reconcile Button */}
-            <div className="mt-4 flex justify-end">
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
               <Button onClick={handleReconcile} disabled={!selectedFile || isReconciling}>
                 {isReconciling ? (
                   <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    <Box sx={{ height: 16, width: 16, borderRadius: 99, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } }} />
                     Reconciling...
                   </>
                 ) : (
                   <>
-                    <FileSearch className="h-4 w-4" />
+                    <FindInPageIcon sx={{ fontSize: 16 }} />
                     Reconcile
                   </>
                 )}
               </Button>
-            </div>
+            </Box>
 
             {/* Error */}
             {error !== null && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.06)', px: 2, py: 1.5, fontSize: '0.875rem', color: '#b91c1c' }}>
+                <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
                 {error}
-              </div>
+              </Box>
             )}
           </CardContent>
         </Card>
@@ -352,112 +370,115 @@ export default function ReconciliationPage() {
         {result !== null && (
           <>
             {/* Summary Stats */}
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Box sx={{ mt: 3, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
               <StatCard
                 label="Amazon Transactions"
                 value={result.summary.totalAmazonTransactions.toLocaleString()}
-                icon={<ArrowDownToLine className="h-5 w-5" />}
+                icon={<VerticalAlignBottomIcon sx={{ fontSize: 20 }} />}
               />
               <StatCard
                 label="Matched"
                 value={result.summary.matched.toLocaleString()}
-                icon={<CheckCircle2 className="h-5 w-5" />}
+                icon={<CheckCircleOutlineIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-emerald-500"
               />
               <StatCard
                 label="Discrepancies"
                 value={result.summary.discrepancies.toLocaleString()}
-                icon={<AlertCircle className="h-5 w-5" />}
+                icon={<ErrorOutlineIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-red-500"
               />
               <StatCard
                 label="Unmatched"
                 value={(result.summary.amazonOnly + result.summary.lmbOnly).toLocaleString()}
-                icon={<XCircle className="h-5 w-5" />}
+                icon={<CancelIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-amber-500"
               />
-            </div>
+            </Box>
 
             {/* Detail Breakdown */}
-            <div className="mt-2 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 px-1">
-              <span>LMB rows: {result.summary.totalLmbRows.toLocaleString()}</span>
-              <span>&middot;</span>
-              <span>Amazon only: {result.summary.amazonOnly.toLocaleString()}</span>
-              <span>&middot;</span>
-              <span>LMB only: {result.summary.lmbOnly.toLocaleString()}</span>
-            </div>
+            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.75rem', color: 'text.secondary', px: 0.5 }}>
+              <Box component="span">LMB rows: {result.summary.totalLmbRows.toLocaleString()}</Box>
+              <Box component="span">&middot;</Box>
+              <Box component="span">Amazon only: {result.summary.amazonOnly.toLocaleString()}</Box>
+              <Box component="span">&middot;</Box>
+              <Box component="span">LMB only: {result.summary.lmbOnly.toLocaleString()}</Box>
+            </Box>
 
             {/* Results Table */}
-            <Card className="mt-4 border-slate-200/70 dark:border-white/10 overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <Card sx={{ mt: 2, borderColor: 'rgba(203,213,225,0.7)', overflow: 'hidden' }}>
+              <CardContent sx={{ p: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'rgba(203,213,225,0.7)', px: 2, py: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                     Reconciliation Details
-                    <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                    <Box component="span" sx={{ ml: 1, fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
                       ({result.rows.length.toLocaleString()} orders)
-                    </span>
-                  </h3>
+                    </Box>
+                  </Typography>
                   <Button variant="outline" size="sm" onClick={() => exportToCsv(result.rows, month, marketplace)}>
-                    <Download className="h-3.5 w-3.5" />
+                    <DownloadIcon sx={{ fontSize: 14 }} />
                     Export CSV
                   </Button>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table className="table-striped">
+                </Box>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table>
                     <TableHeader>
-                      <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                        <TableHead className="font-semibold">Order ID</TableHead>
-                        <TableHead className="font-semibold">Date</TableHead>
-                        <TableHead className="font-semibold">Type</TableHead>
-                        <TableHead className="font-semibold text-right">Amazon</TableHead>
-                        <TableHead className="font-semibold text-right">LMB</TableHead>
-                        <TableHead className="font-semibold text-right">Difference</TableHead>
-                        <TableHead className="font-semibold">Status</TableHead>
+                      <TableRow sx={{ bgcolor: 'rgba(248,250,252,0.8)' }}>
+                        <TableHead sx={{ fontWeight: 600 }}>Order ID</TableHead>
+                        <TableHead sx={{ fontWeight: 600 }}>Date</TableHead>
+                        <TableHead sx={{ fontWeight: 600 }}>Type</TableHead>
+                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Amazon</TableHead>
+                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>LMB</TableHead>
+                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Difference</TableHead>
+                        <TableHead sx={{ fontWeight: 600 }}>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {result.rows.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={7} className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                          <TableCell colSpan={7} sx={{ py: 4, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}>
                             No matching orders found for this period
                           </TableCell>
                         </TableRow>
                       )}
                       {result.rows.map((row) => (
                         <TableRow key={row.orderId}>
-                          <TableCell className="font-mono text-xs">{row.orderId}</TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.date}</TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.type}</TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '—'}
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{row.orderId}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{row.date}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{row.type}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '\u2014'}
                           </TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '—'}
+                          <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '\u2014'}
                           </TableCell>
                           <TableCell
-                            className={`text-sm text-right tabular-nums ${
-                              row.difference !== 0
+                            sx={{
+                              fontSize: '0.875rem',
+                              textAlign: 'right',
+                              fontVariantNumeric: 'tabular-nums',
+                              ...(row.difference !== 0
                                 ? row.difference > 0
-                                  ? 'text-red-600 dark:text-red-400'
-                                  : 'text-amber-600 dark:text-amber-400'
-                                : 'text-slate-400 dark:text-slate-500'
-                            }`}
+                                  ? { color: '#dc2626' }
+                                  : { color: '#d97706' }
+                                : { color: 'text.disabled' }),
+                            }}
                           >
                             {row.difference !== 0
                               ? `${row.difference > 0 ? '+' : ''}${formatCurrency(row.difference, currency)}`
-                              : '—'}
+                              : '\u2014'}
                           </TableCell>
                           <TableCell>{statusBadge(row.status)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </div>
+                </Box>
               </CardContent>
             </Card>
           </>
         )}
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

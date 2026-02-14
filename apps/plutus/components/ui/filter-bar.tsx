@@ -1,15 +1,11 @@
 'use client';
 
 import * as React from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { Select, SelectItem } from '@/components/ui/select';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type FilterOption = {
   value: string;
@@ -31,7 +27,7 @@ type FilterBarProps = {
   onClear?: () => void;
   showFilterButton?: boolean;
   showClearButton?: boolean;
-  className?: string;
+  sx?: SxProps<Theme>;
 };
 
 export function FilterBar({
@@ -40,56 +36,71 @@ export function FilterBar({
   onClear,
   showFilterButton = true,
   showClearButton = true,
-  className,
+  sx,
 }: FilterBarProps) {
   const hasActiveFilters = filters.some((f) => f.value !== '' && f.value !== 'all');
 
   return (
-    <div
-      className={cn(
-        'flex flex-wrap items-end gap-4 rounded-xl border border-slate-200/70 bg-white p-5 shadow-soft dark:border-white/10 dark:bg-slate-900/50',
-        className,
-      )}
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'flex-end',
+        gap: 2,
+        borderRadius: 3,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        p: 2.5,
+        boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 4px 12px -4px rgba(0, 0, 0, 0.04)',
+        ...sx,
+      }}
     >
       {filters.map((filter) => (
-        <div key={filter.key} className="flex-1 min-w-[160px] space-y-1.5">
-          <label className="block text-2xs font-semibold uppercase tracking-wide text-brand-teal-600 dark:text-brand-teal-400">
+        <Box key={filter.key} sx={{ flex: 1, minWidth: 160 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              mb: 0.75,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: '#2384a1',
+            }}
+          >
             {filter.label}
-          </label>
-          <Select value={filter.value} onValueChange={filter.onChange}>
-            <SelectTrigger className="h-11 bg-white dark:bg-white/5">
-              <SelectValue placeholder={filter.placeholder ?? 'Select'} />
-            </SelectTrigger>
-            <SelectContent>
-              {filter.options.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
+          </Typography>
+          <Select
+            value={filter.value}
+            onValueChange={filter.onChange}
+            placeholder={filter.placeholder}
+            sx={{ height: 44 }}
+          >
+            {filter.options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </Select>
-        </div>
+        </Box>
       ))}
 
-      <div className="flex items-center gap-2">
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {showClearButton && hasActiveFilters && (
-          <Button
-            variant="ghost"
-            onClick={onClear}
-            className="h-11 px-4 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-          >
+          <Button variant="ghost" onClick={onClear} sx={{ height: 44, px: 2 }}>
             Clear
           </Button>
         )}
         {showFilterButton && (
           <Button
             onClick={onFilter}
-            className="h-11 px-6 text-xs font-semibold uppercase tracking-wide"
+            sx={{ height: 44, px: 3, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}
           >
             Filter
           </Button>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

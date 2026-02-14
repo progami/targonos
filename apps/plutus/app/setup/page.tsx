@@ -2,13 +2,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CheckIcon from '@mui/icons-material/Check';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectItem } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PageHeader } from '@/components/page-header';
-import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -221,39 +226,6 @@ function suggestPlutusAccountMappings(accounts: QboAccount[]): Record<string, st
   return suggestions;
 }
 
-// Icons
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function InfoIcon({ className }: { className?: string }) {
-  return (
-    <svg className={cn('h-4 w-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
 // Account definitions
 const INVENTORY_ACCOUNTS = [
   { key: 'invManufacturing', label: 'Manufacturing', type: 'Other Current Asset' },
@@ -314,54 +286,93 @@ function Sidebar({
   ];
 
   return (
-    <nav className="w-full md:w-72 flex-shrink-0 border-b border-slate-200/70 dark:border-white/10 md:border-b-0 md:border-r bg-white/60 dark:bg-white/[0.02]">
-      <div className="px-5 pt-5 pb-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <Box
+      component="nav"
+      sx={{
+        width: { xs: '100%', md: 288 },
+        flexShrink: 0,
+        borderBottom: { xs: 1, md: 0 },
+        borderRight: { xs: 0, md: 1 },
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+      }}
+    >
+      <Box sx={{ px: 2.5, pt: 2.5, pb: 1.5 }}>
+        <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
           Wizard
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <ol className="relative px-5 pb-5">
+      <Box component="ol" sx={{ position: 'relative', px: 2.5, pb: 2.5 }}>
         {items.map((item, index) => {
           const isActive = section === item.id;
           const isLast = index === items.length - 1;
 
           return (
-            <li key={item.id} className={cn('relative pl-9', !isLast && 'pb-6')}>
+            <Box component="li" key={item.id} sx={{ position: 'relative', pl: 4.5, ...(!isLast && { pb: 3 }), listStyle: 'none' }}>
               {!isLast && (
-                <div className="absolute left-[13px] top-7 h-full w-px bg-slate-200 dark:bg-white/10" />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '13px',
+                    top: 28,
+                    height: '100%',
+                    width: '1px',
+                    bgcolor: 'divider',
+                  }}
+                />
               )}
 
-              <div
-                className={cn(
-                  'absolute left-2 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border',
-                  item.complete
-                    ? 'bg-emerald-500 border-emerald-500 text-white'
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: 8,
+                  top: 6,
+                  display: 'flex',
+                  height: 24,
+                  width: 24,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 99,
+                  border: 1,
+                  ...(item.complete
+                    ? { bgcolor: '#10b981', borderColor: '#10b981', color: '#fff' }
                     : isActive
-                      ? 'bg-white border-brand-teal-500 text-brand-teal-600 dark:bg-slate-950 dark:border-brand-cyan dark:text-brand-cyan'
-                      : 'bg-white border-slate-300 text-slate-400 dark:bg-slate-950 dark:border-white/10 dark:text-slate-500',
-                )}
+                      ? { bgcolor: 'background.paper', borderColor: '#45B3D4', color: '#45B3D4' }
+                      : { bgcolor: 'background.paper', borderColor: 'divider', color: 'text.disabled' }),
+                }}
               >
-                {item.complete ? <CheckIcon className="h-4 w-4" /> : <span className="text-xs font-semibold">{index + 1}</span>}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onSectionChange(item.id)}
-                className={cn(
-                  'w-full text-left text-sm transition-colors',
-                  isActive
-                    ? 'font-semibold text-slate-900 dark:text-white'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+                {item.complete ? (
+                  <CheckIcon sx={{ fontSize: 16 }} />
+                ) : (
+                  <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{index + 1}</Box>
                 )}
+              </Box>
+
+              <Box
+                component="button"
+                onClick={() => onSectionChange(item.id)}
+                sx={{
+                  width: '100%',
+                  textAlign: 'left',
+                  fontSize: '0.875rem',
+                  transition: 'color 0.15s',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  p: 0,
+                  ...(isActive
+                    ? { fontWeight: 600, color: 'text.primary' }
+                    : { color: 'text.secondary', '&:hover': { color: 'text.primary' } }),
+                }}
               >
                 {item.label}
-              </button>
-            </li>
+              </Box>
+            </Box>
           );
         })}
-      </ol>
-    </nav>
+      </Box>
+    </Box>
   );
 }
 
@@ -390,87 +401,81 @@ function BrandsSection({
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Brands</h2>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Brands</Typography>
+      </Box>
 
       {brands.length > 0 && (
-        <Card className="border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
+        <Card sx={{ border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 0 }}>
+            <Box sx={{ overflowX: 'auto' }}>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Brand</TableHead>
                     <TableHead>Marketplace</TableHead>
                     <TableHead>Currency</TableHead>
-                    <TableHead className="w-12 text-right"> </TableHead>
+                    <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {brands.map((brand, i) => (
                     <TableRow key={i}>
-                      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{brand.name}</TableCell>
-                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">
+                      <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{brand.name}</TableCell>
+                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                         {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
                       </TableCell>
-                      <TableCell className="text-sm text-slate-600 dark:text-slate-300">{brand.currency}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{brand.currency}</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
                         <Button variant="ghost" size="icon" onClick={() => removeBrand(i)} aria-label={`Remove brand ${brand.name}`}>
-                          <XIcon className="h-4 w-4" />
+                          <CloseIcon sx={{ fontSize: 16 }} />
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </Box>
           </CardContent>
         </Card>
       )}
 
-      <Card className="border-slate-200/70 dark:border-white/10">
-        <CardContent className="p-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr,240px,auto] sm:items-end">
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <Card sx={{ border: 1, borderColor: 'divider' }}>
+        <CardContent sx={{ p: 2 }}>
+          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: '1fr 240px auto' }, alignItems: { sm: 'end' } }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Brand name
-              </div>
+              </Box>
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => (e.key === 'Enter' ? addBrand() : undefined)}
                 placeholder="US-Dust Sheets"
               />
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Marketplace
-              </div>
-              <Select value={newMarketplace} onValueChange={setNewMarketplace}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select marketplace…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MARKETPLACES.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              </Box>
+              <Select value={newMarketplace} onValueChange={setNewMarketplace} placeholder="Select marketplace...">
+                {MARKETPLACES.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
               </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={addBrand} disabled={!newName.trim()}>
-                <PlusIcon className="h-4 w-4" />
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Button onClick={addBrand} disabled={!newName.trim()} startIcon={<AddIcon sx={{ fontSize: 16 }} />}>
                 Add Brand
               </Button>
-            </div>
-          </div>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
-    </div>
+    </Box>
   );
 }
 
@@ -493,33 +498,35 @@ function AccountRow({
 
   return (
     <TableRow>
-      <TableCell className="text-sm font-medium text-slate-900 dark:text-white">
+      <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
         {label}
       </TableCell>
       <TableCell>
-        <Select value={accountId} onValueChange={onChange}>
-          <SelectTrigger
-            className={cn(
-              'bg-white dark:bg-white/5',
-              selected ? 'border-brand-teal-300 dark:border-brand-teal-700' : undefined,
-            )}
-          >
-            <SelectValue placeholder="Select parent account…" />
-          </SelectTrigger>
-          <SelectContent>
-            {filtered.map((a) => {
-              const label = a.acctNum ? `${a.acctNum} · ${a.fullyQualifiedName}` : a.fullyQualifiedName;
-              return (
-                <SelectItem key={a.id} value={a.id}>
-                  {label}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
+        <Select
+          value={accountId}
+          onValueChange={onChange}
+          placeholder="Select parent account..."
+          sx={{
+            bgcolor: 'background.paper',
+            ...(selected && {
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: '#45B3D4',
+              },
+            }),
+          }}
+        >
+          {filtered.map((a) => {
+            const label = a.acctNum ? `${a.acctNum} \u00B7 ${a.fullyQualifiedName}` : a.fullyQualifiedName;
+            return (
+              <SelectItem key={a.id} value={a.id}>
+                {label}
+              </SelectItem>
+            );
+          })}
         </Select>
       </TableCell>
-      <TableCell className="w-12 text-right">
-        {selected && <CheckIcon className="h-4 w-4 text-green-500" />}
+      <TableCell sx={{ width: 48, textAlign: 'right' }}>
+        {selected && <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />}
       </TableCell>
     </TableRow>
   );
@@ -616,60 +623,91 @@ function AccountsSection({
 
   if (brands.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">Add brands first before mapping accounts.</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>Add brands first before mapping accounts.</Typography>
+      </Box>
     );
   }
 
   if (!isQboConnected) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md w-full border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
-              <PlusIcon className="h-5 w-5" />
-            </div>
-            <div className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">Connect QuickBooks</div>
-            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+        <Card sx={{ maxWidth: 448, width: '100%', border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 3, textAlign: 'center' }}>
+            <Box
+              sx={{
+                mx: 'auto',
+                display: 'flex',
+                height: 48,
+                width: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                bgcolor: 'action.hover',
+                color: 'text.secondary',
+              }}
+            >
+              <AddIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Box sx={{ mt: 2, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Connect QuickBooks</Box>
+            <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
               Account mapping is available after connecting QBO.
-            </div>
-            <div className="mt-5">
+            </Box>
+            <Box sx={{ mt: 2.5 }}>
               <Button
                 onClick={handleConnect}
-                className="w-full rounded-xl bg-brand-teal-600 hover:bg-brand-teal-700 dark:bg-brand-cyan dark:hover:bg-brand-cyan/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20"
+                sx={{
+                  width: '100%',
+                  borderRadius: 3,
+                  bgcolor: '#45B3D4',
+                  '&:hover': { bgcolor: '#2fa3c7' },
+                  color: '#fff',
+                  boxShadow: '0 4px 14px -3px rgba(69,179,212,0.25)',
+                }}
               >
                 Connect to QuickBooks
               </Button>
-            </div>
+            </Box>
           </CardContent>
         </Card>
-      </div>
+      </Box>
     );
   }
 
   if (isLoadingAccounts) {
     return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">Loading QBO accounts...</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>Loading QBO accounts...</Typography>
+      </Box>
     );
   }
 
   const renderAccountGroup = (title: string, accountList: Array<{ key: string; label: string; type: string }>) => (
-    <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</div>
-        </div>
+    <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+      <CardContent sx={{ p: 0 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'action.hover',
+            px: 2,
+            py: 1.5,
+          }}
+        >
+          <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{title}</Box>
+        </Box>
 
-        <div className="overflow-x-auto">
+        <Box sx={{ overflowX: 'auto' }}>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Category</TableHead>
                 <TableHead>QBO parent account</TableHead>
-                <TableHead className="w-12 text-right"> </TableHead>
+                <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -685,57 +723,81 @@ function AccountsSection({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Box>
       </CardContent>
     </Card>
   );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Account Mapping</h2>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Account Mapping</Typography>
+      </Box>
 
       {accountsCreated && (
-        <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-4 text-sm text-emerald-900 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-white/5 dark:text-emerald-300 dark:ring-emerald-900/30">
-              <CheckIcon className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-semibold">Sub-accounts ensured in QBO</div>
-              <div className="mt-0.5 text-emerald-800/80 dark:text-emerald-200/80">
+        <Box
+          sx={{
+            borderRadius: 3,
+            border: 1,
+            borderColor: 'rgba(16,185,129,0.2)',
+            bgcolor: 'rgba(16,185,129,0.05)',
+            p: 2,
+            fontSize: '0.875rem',
+            color: '#065f46',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+            <Box
+              sx={{
+                mt: 0.25,
+                display: 'flex',
+                height: 32,
+                width: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 2,
+                bgcolor: 'rgba(255,255,255,0.8)',
+                color: '#047857',
+                border: 1,
+                borderColor: 'rgba(16,185,129,0.2)',
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 16 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ fontWeight: 600 }}>Sub-accounts ensured in QBO</Box>
+              <Box sx={{ mt: 0.25, color: 'rgba(6,95,70,0.8)' }}>
                 {lastEnsureSummary
                   ? `Created ${lastEnsureSummary.created}, skipped ${lastEnsureSummary.skipped}.`
                   : `Ready for ${brands.length} brand${brands.length > 1 ? 's' : ''}.`}
-              </div>
-            </div>
-          </div>
-        </div>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
       )}
 
-      <div className="grid gap-4">
+      <Box sx={{ display: 'grid', gap: 2 }}>
         {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
         {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
         {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
         {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
-      </div>
+      </Box>
 
       {error && (
-        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        </div>
+        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.05)', border: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
+          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{error}</Typography>
+        </Box>
       )}
 
       <Button
         onClick={createAccounts}
         disabled={!allMapped || creating}
-        className="w-full"
+        sx={{ width: '100%' }}
       >
-        {creating ? 'Ensuring…' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+        {creating ? 'Ensuring...' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
       </Button>
-    </div>
+    </Box>
   );
 }
 
@@ -879,34 +941,46 @@ function SkusSection({
 
   if (brands.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">Add brands first before adding SKUs.</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>Add brands first before adding SKUs.</Typography>
+      </Box>
     );
   }
 
   if (countries.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 dark:text-slate-400">No supported marketplaces found. Add US or UK brands first.</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>No supported marketplaces found. Add US or UK brands first.</Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Inventory</h2>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Inventory</Typography>
+      </Box>
 
-      <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 bg-slate-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Configured SKUs</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">{draftSkus.length} total</div>
-          </div>
+      <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              borderBottom: 1,
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              px: 2,
+              py: 1.5,
+            }}
+          >
+            <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Configured SKUs</Box>
+            <Box sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{draftSkus.length} total</Box>
+          </Box>
 
-          <div className="overflow-x-auto">
+          <Box sx={{ overflowX: 'auto' }}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -915,7 +989,7 @@ function SkusSection({
                   <TableHead>ASIN</TableHead>
                   <TableHead>Country</TableHead>
                   <TableHead>Brand</TableHead>
-                  <TableHead className="w-12 text-right"> </TableHead>
+                  <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -929,15 +1003,15 @@ function SkusSection({
                     .sort((a, b) => a.key.localeCompare(b.key))
                     .map(({ sku, key, country }) => (
                       <TableRow key={key}>
-                        <TableCell className="font-mono text-sm text-slate-900 dark:text-white whitespace-nowrap">{sku.sku}</TableCell>
-                        <TableCell className="min-w-[220px]">
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.primary', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
+                        <TableCell sx={{ minWidth: 220 }}>
                           <Input
                             value={sku.productName}
                             onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
                             placeholder="Product name"
                           />
                         </TableCell>
-                        <TableCell className="min-w-[170px]">
+                        <TableCell sx={{ minWidth: 170 }}>
                           <Input
                             value={sku.asin ? sku.asin : ''}
                             onChange={(e) =>
@@ -947,128 +1021,129 @@ function SkusSection({
                               )
                             }
                             placeholder="ASIN"
-                            className="font-mono"
                           />
                         </TableCell>
                         <TableCell>
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'inline-flex',
+                              height: 24,
+                              width: 24,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: 99,
+                              bgcolor: 'action.hover',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              color: 'text.secondary',
+                            }}
+                          >
                             {country}
-                          </span>
+                          </Box>
                         </TableCell>
-                        <TableCell className="min-w-[220px]">
-                          <Select value={sku.brand} onValueChange={(value) => handleUpdateConfiguredSku(key, { brand: value })}>
-                            <SelectTrigger className="w-[220px]">
-                              <SelectValue placeholder="Select brand…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {brandsForCountry(country).map((b) => (
-                                <SelectItem key={b.name} value={b.name}>
-                                  {b.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
+                        <TableCell sx={{ minWidth: 220 }}>
+                          <Select value={sku.brand} onValueChange={(value) => handleUpdateConfiguredSku(key, { brand: value })} placeholder="Select brand..." sx={{ width: 220 }}>
+                            {brandsForCountry(country).map((b) => (
+                              <SelectItem key={b.name} value={b.name}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
                           </Select>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell sx={{ textAlign: 'right' }}>
                           <Button variant="ghost" size="icon" onClick={() => handleRemoveConfiguredSku(key)} aria-label={`Remove SKU ${sku.sku}`}>
-                            <XIcon className="h-4 w-4" />
+                            <CloseIcon sx={{ fontSize: 16 }} />
                           </Button>
                         </TableCell>
                       </TableRow>
                     ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                    <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}>
                       No SKUs configured yet.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-          </div>
+          </Box>
 
-          <div className="border-t border-slate-200/70 dark:border-white/10 bg-white/60 dark:bg-white/[0.02] px-4 py-4">
-            <div className="grid gap-3 md:grid-cols-[1.2fr,2fr,1.2fr,1.2fr,auto] md:items-end">
-              <div>
-                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SKU</div>
+          <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 2, py: 2 }}>
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.2fr 2fr 1.2fr 1.2fr auto' }, alignItems: { md: 'end' } }}>
+              <Box>
+                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>SKU</Box>
                 <Input
                   value={manualSku.sku}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, sku: e.target.value }))}
                   placeholder="e.g. CSTDS001002"
-                  className="font-mono"
                 />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Product name</div>
+              </Box>
+              <Box>
+                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Product name</Box>
                 <Input
                   value={manualSku.productName}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, productName: e.target.value }))}
                   placeholder="Optional"
                 />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">ASIN</div>
+              </Box>
+              <Box>
+                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>ASIN</Box>
                 <Input
                   value={manualSku.asin}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, asin: e.target.value }))}
                   placeholder="Optional"
-                  className="font-mono"
                 />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</div>
-                <Select value={manualSku.brand} onValueChange={(value) => setManualSku((prev) => ({ ...prev, brand: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select brand…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {supportedBrands.map((b) => (
-                      <SelectItem key={b.name} value={b.name}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+              </Box>
+              <Box>
+                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Brand</Box>
+                <Select value={manualSku.brand} onValueChange={(value) => setManualSku((prev) => ({ ...prev, brand: value }))} placeholder="Select brand...">
+                  {supportedBrands.map((b) => (
+                    <SelectItem key={b.name} value={b.name}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
                 </Select>
-              </div>
+              </Box>
               <Button onClick={handleAddManualSku} disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}>
                 Add SKU
               </Button>
-            </div>
-          </div>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
           {draftSkus.length} configured SKU{draftSkus.length !== 1 ? 's' : ''}
-        </p>
+        </Typography>
         <Button onClick={handleSave}>
           Save SKUs
         </Button>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
 // Status Bar
 function StatusBar({ brands, mappedAccounts, totalAccounts, skus }: { brands: number; mappedAccounts: number; totalAccounts: number; skus: number }) {
   return (
-    <div className="border-t border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03] px-6 py-3">
-      <div className="flex items-center gap-6 text-sm">
-        <span className={cn('flex items-center gap-1.5', brands > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-500')}>
-          <span className={cn('w-2 h-2 rounded-full', brands > 0 ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600')} />
+    <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 3, py: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.875rem' }}>
+        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: brands > 0 ? '#16a34a' : 'text.secondary' }}>
+          <Box component="span" sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: brands > 0 ? '#22c55e' : 'text.disabled' }} />
           {brands} brand{brands !== 1 ? 's' : ''}
-        </span>
-        <span className={cn('flex items-center gap-1.5', mappedAccounts === totalAccounts ? 'text-green-600 dark:text-green-400' : mappedAccounts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500')}>
-          <span className={cn('w-2 h-2 rounded-full', mappedAccounts === totalAccounts ? 'bg-green-500' : mappedAccounts > 0 ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600')} />
+        </Box>
+        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: mappedAccounts === totalAccounts ? '#16a34a' : mappedAccounts > 0 ? '#d97706' : 'text.secondary' }}>
+          <Box component="span" sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: mappedAccounts === totalAccounts ? '#22c55e' : mappedAccounts > 0 ? '#f59e0b' : 'text.disabled' }} />
           {mappedAccounts}/{totalAccounts} accounts
-        </span>
-        <span className={cn('flex items-center gap-1.5', skus > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-500')}>
-          <span className={cn('w-2 h-2 rounded-full', skus > 0 ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600')} />
+        </Box>
+        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: skus > 0 ? '#16a34a' : 'text.secondary' }}>
+          <Box component="span" sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: skus > 0 ? '#22c55e' : 'text.disabled' }} />
           {skus} SKU{skus !== 1 ? 's' : ''}
-        </span>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -1231,53 +1306,65 @@ export default function SetupPage() {
   // Show loading while checking connection or loading setup
   if (isCheckingConnection || isLoadingSetup) {
     return (
-      <main className="flex-1 page-enter">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <Box component="main" sx={{ flex: 1 }}>
+        <Box sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
           <PageHeader
             title="Accounts & Taxes Setup Wizard"
             variant="accent"
           />
-          <div className="mt-6">
-            <Card className="border-slate-200/70 dark:border-white/10">
-              <CardContent className="p-6">
-                <div className="text-sm text-slate-500">Loading setup…</div>
+          <Box sx={{ mt: 3 }}>
+            <Card sx={{ border: 1, borderColor: 'divider' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Loading setup...</Box>
               </CardContent>
             </Card>
-          </div>
-        </div>
-      </main>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Accounts & Taxes Setup Wizard"
           variant="accent"
         />
 
         {connectionStatus?.connected !== true && (
-          <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                  <InfoIcon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Not connected to QuickBooks</div>
-                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          <Card sx={{ mt: 3, border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Box
+                  sx={{
+                    mt: 0.25,
+                    display: 'flex',
+                    height: 32,
+                    width: 32,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    color: 'text.secondary',
+                  }}
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Box sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Not connected to QuickBooks</Box>
+                  <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                     You can still add brands and inventory. Connect QBO to map accounts and use dashboards.
-                  </div>
-                </div>
-              </div>
+                  </Box>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         )}
 
-        <Card className="mt-6 overflow-hidden border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-0">
-            <div className="flex flex-col md:flex-row">
+        <Card sx={{ mt: 3, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 0 }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
               <Sidebar
                 section={state.section}
                 onSectionChange={(s) => saveState({ section: s })}
@@ -1286,8 +1373,8 @@ export default function SetupPage() {
                 skusComplete={state.skus.length > 0}
               />
 
-              <div className="flex-1 p-6">
-                <div className="max-w-4xl">
+              <Box sx={{ flex: 1, p: 3 }}>
+                <Box sx={{ maxWidth: 896 }}>
                   {state.section === 'brands' && <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />}
                   {state.section === 'accounts' && (
                     <AccountsSection
@@ -1302,9 +1389,9 @@ export default function SetupPage() {
                     />
                   )}
                   {state.section === 'skus' && <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />}
-                </div>
-              </div>
-            </div>
+                </Box>
+              </Box>
+            </Box>
           </CardContent>
 
           <StatusBar
@@ -1314,7 +1401,7 @@ export default function SetupPage() {
             skus={state.skus.length}
           />
         </Card>
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

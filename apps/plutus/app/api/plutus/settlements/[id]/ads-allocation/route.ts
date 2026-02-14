@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { allocateByWeight } from '@/lib/inventory/money';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
@@ -79,6 +78,10 @@ function diffDays(start: string, end: string): number {
   const startDate = parseIsoDay(start);
   const endDate = parseIsoDay(end);
   return Math.floor((endDate.getTime() - startDate.getTime()) / 86400000);
+}
+
+function formatCentsAmount(cents: number): string {
+  return (cents / 100).toFixed(2);
 }
 
 function chooseBestUpload<T extends { startDate: string; endDate: string; uploadedAt: Date }>(uploads: T[]): T | null {
@@ -272,19 +275,14 @@ async function computeAllocation(input: {
 
   const sign = input.totalAdsCents < 0 ? -1 : 1;
   const absTotal = Math.abs(input.totalAdsCents);
+  if (totalWeight !== absTotal) {
+    throw new AllocationApiError(
+      `Ads Data total (${formatCentsAmount(totalWeight)}) does not match billed Amazon Advertising Costs (${formatCentsAmount(absTotal)}) for invoice ${input.invoiceId}. Upload data that matches billing exactly.`,
+      400,
+    );
+  }
 
-  const allocatedAbs = allocateByWeight(
-    absTotal,
-    weights.map((w) => ({ key: w.sku, weight: w.weight })),
-  );
-
-  const lines = weights.map((w) => {
-    const cents = allocatedAbs[w.sku];
-    if (cents === undefined) {
-      throw new Error(`Missing allocation for ${w.sku}`);
-    }
-    return { sku: w.sku, weight: w.weight, allocatedCents: sign * cents };
-  });
+  const lines = weights.map((w) => ({ sku: w.sku, weight: w.weight, allocatedCents: sign * w.weight }));
 
   return {
     adsDataUpload: bestUpload,
@@ -605,7 +603,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
       const weight = raw.weight;
       if (typeof weight !== 'number' || !Number.isInteger(weight) || weight <= 0) {
-        return NextResponse.json({ error: 'Each line requires positive integer weight (cents)' }, { status: 400 });
+        return NextResponse.json({ error: 'Each line requires positive integer amount (cents)' }, { status: 400 });
       }
 
       if (seen.has(sku)) {
@@ -620,19 +618,18 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const sign = totalAdsCents < 0 ? -1 : 1;
     const absTotal = Math.abs(totalAdsCents);
+    let totalInput = 0;
+    for (const line of normalizedLines) totalInput += line.weight;
+    if (totalInput !== absTotal) {
+      return NextResponse.json(
+        {
+          error: `Allocation total (${formatCentsAmount(totalInput)}) must equal billed Amazon Advertising Costs (${formatCentsAmount(absTotal)}).`,
+        },
+        { status: 400 },
+      );
+    }
 
-    const allocatedAbs = allocateByWeight(
-      absTotal,
-      normalizedLines.map((l) => ({ key: l.sku, weight: l.weight })),
-    );
-
-    const linesToSave = normalizedLines.map((l) => {
-      const cents = allocatedAbs[l.sku];
-      if (cents === undefined) {
-        throw new Error(`Missing allocation for ${l.sku}`);
-      }
-      return { sku: l.sku, weight: l.weight, allocatedCents: sign * cents };
-    });
+    const linesToSave = normalizedLines.map((l) => ({ sku: l.sku, weight: l.weight, allocatedCents: sign * l.weight }));
 
     let sumAllocated = 0;
     for (const line of linesToSave) sumAllocated += line.allocatedCents;

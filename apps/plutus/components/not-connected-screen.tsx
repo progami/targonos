@@ -1,5 +1,8 @@
 'use client';
 
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
 import { Button } from '@/components/ui/button';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -7,25 +10,23 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-function QboLogo({ className }: { className?: string }) {
+function QboLogo() {
   return (
-    <svg className={className} viewBox="0 0 48 48" fill="none">
-      {/* QBO-style green circle */}
-      <circle cx="24" cy="24" r="20" className="fill-emerald-100 dark:fill-emerald-900/30" />
-      <circle cx="24" cy="24" r="20" className="stroke-emerald-300 dark:stroke-emerald-700" strokeWidth="1.5" />
-      {/* QB icon - stylized Q */}
+    <svg style={{ width: 96, height: 96 }} viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="20" fill="#dcfce7" stroke="#86efac" strokeWidth="1.5" />
       <path
         d="M24 12c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12z"
-        className="stroke-emerald-500 dark:stroke-emerald-400"
+        stroke="#22c55e"
         strokeWidth="2"
         fill="none"
       />
       <path
         d="M20 20h8v4a4 4 0 01-4 4h0a4 4 0 01-4-4v-4z"
-        className="fill-emerald-200 stroke-emerald-500 dark:fill-emerald-800/50 dark:stroke-emerald-400"
+        fill="#bbf7d0"
+        stroke="#22c55e"
         strokeWidth="1.5"
       />
-      <path d="M24 28v6" className="stroke-emerald-500 dark:stroke-emerald-400" strokeWidth="2" strokeLinecap="round" />
+      <path d="M24 28v6" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -41,49 +42,103 @@ export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
   };
 
   return (
-    <div className="flex items-center justify-center py-16 md:py-24">
-      <div className="max-w-md w-full px-4 sm:px-6">
-        <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-10 dark:border-white/10 dark:bg-white/5 text-center shadow-soft">
-          <div className="flex justify-center mb-8">
-            <div className="relative">
-              <QboLogo className="h-24 w-24" />
-              <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-slate-100 dark:border-slate-900 dark:bg-slate-800">
-                <svg className="h-4 w-4 text-slate-400" viewBox="0 0 16 16" fill="none">
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 8, md: 12 } }}>
+      <Box sx={{ maxWidth: 448, width: '100%', px: { xs: 2, sm: 3 } }}>
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 4,
+            border: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            p: 5,
+            textAlign: 'center',
+            boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 4px 12px -4px rgba(0, 0, 0, 0.04)',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Box sx={{ position: 'relative' }}>
+              <QboLogo />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: -4,
+                  right: -4,
+                  display: 'flex',
+                  height: 32,
+                  width: 32,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  border: 2,
+                  borderColor: 'background.paper',
+                  bgcolor: 'action.hover',
+                }}
+              >
+                <svg style={{ width: 16, height: 16, color: '#94a3b8' }} viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
-              </div>
-            </div>
-          </div>
+              </Box>
+            </Box>
+          </Box>
 
-          <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+          <Typography
+            variant="caption"
+            sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}
+          >
             QuickBooks Online
-          </div>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+          </Typography>
+          <Typography variant="h6" sx={{ mt: 1, fontWeight: 600, color: 'text.primary' }}>
             Connect to continue
-          </h2>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}>
             Connect your QuickBooks Online account to view and manage your {title.toLowerCase()}.
-          </p>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          </Typography>
+          <Typography variant="caption" component="p" sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}>
             This connection is shared across Plutus users. If you are not a QuickBooks Company Admin, ask one to connect.
-          </p>
+          </Typography>
 
-          <div className="mt-8">
+          <Box sx={{ mt: 4 }}>
             <Button
               onClick={handleConnect}
-              className="w-full rounded-xl bg-gradient-to-r from-brand-teal-500 to-brand-teal-600 hover:from-brand-teal-600 hover:to-brand-teal-700 dark:from-brand-cyan dark:to-brand-teal-400 dark:hover:from-brand-cyan/90 dark:hover:to-brand-teal-400/90 text-white shadow-lg shadow-brand-teal-500/25 dark:shadow-brand-cyan/20 transition-all duration-200"
+              sx={{
+                width: '100%',
+                borderRadius: 3,
+                background: 'linear-gradient(to right, #45B3D4, #2fa3c7)',
+                color: '#fff',
+                boxShadow: '0 4px 16px rgba(69, 179, 212, 0.25)',
+                '&:hover': { background: 'linear-gradient(to right, #2fa3c7, #2384a1)' },
+              }}
             >
               Connect to QuickBooks
             </Button>
             {error && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-left text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
-                <span className="mt-0.5 inline-block h-2 w-2 rounded-full bg-red-500/80" />
-                <span>{error}</span>
-              </div>
+              <Box
+                sx={{
+                  mt: 2,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  borderRadius: 2,
+                  bgcolor: 'error.main',
+                  opacity: 0.1,
+                  px: 2,
+                  py: 1.5,
+                  textAlign: 'left',
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{ mt: 0.25, display: 'inline-block', height: 8, width: 8, borderRadius: '50%', bgcolor: 'error.main', opacity: 0.8 }}
+                />
+                <Typography variant="body2" sx={{ color: 'error.main' }}>
+                  {error}
+                </Typography>
+              </Box>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </Box>
+        </Paper>
+      </Box>
+    </Box>
   );
 }

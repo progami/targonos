@@ -2,7 +2,10 @@
 
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import IconButton from '@mui/material/IconButton';
+import Box from '@mui/material/Box';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -14,24 +17,41 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="h-8 w-8 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800" />
+      <Box
+        sx={{
+          height: 32,
+          width: 32,
+          borderRadius: 2,
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      />
     );
   }
 
   const isDark = theme === 'dark';
 
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+      size="small"
+      sx={{
+        width: 32,
+        height: 32,
+        borderRadius: 2,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        color: 'text.secondary',
+        '&:hover': {
+          bgcolor: 'action.hover',
+          color: 'text.primary',
+        },
+      }}
     >
-      {isDark ? (
-        <Sun className="h-4 w-4" aria-hidden />
-      ) : (
-        <Moon className="h-4 w-4" aria-hidden />
-      )}
-    </button>
+      {isDark ? <LightModeIcon sx={{ fontSize: 16 }} /> : <DarkModeIcon sx={{ fontSize: 16 }} />}
+    </IconButton>
   );
 }

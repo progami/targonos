@@ -1,34 +1,61 @@
 import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
+import Chip from '@mui/material/Chip';
+import type { ChipProps } from '@mui/material/Chip';
 
-import { cn } from '@/lib/utils';
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
 
-const badgeVariants = cva(
-  'inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-teal-500/50 focus:ring-offset-2',
-  {
-    variants: {
-      variant: {
-        default:
-          'border-transparent bg-brand-teal-500/10 text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan',
-        secondary:
-          'border-transparent bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-300',
-        destructive:
-          'border-transparent bg-danger-100 text-danger-700 dark:bg-danger-900/50 dark:text-danger-400',
-        outline: 'border-slate-300 text-slate-600 dark:border-white/20 dark:text-slate-400',
-        success:
-          'border-transparent bg-success-100 text-success-700 dark:bg-success-900/50 dark:text-success-400',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-    },
-  },
-);
-
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
-
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+export interface BadgeProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'> {
+  variant?: BadgeVariant;
+  sx?: ChipProps['sx'];
 }
 
-export { Badge, badgeVariants };
+const variantMap: Record<BadgeVariant, { color: ChipProps['color']; variant: ChipProps['variant']; sx?: object }> = {
+  default: {
+    color: 'info',
+    variant: 'filled',
+    sx: { bgcolor: 'rgba(69, 179, 212, 0.1)', color: '#2384a1', '.MuiChip-label': { fontWeight: 500 } },
+  },
+  secondary: {
+    color: 'default',
+    variant: 'filled',
+    sx: { bgcolor: 'action.hover', color: 'text.secondary' },
+  },
+  destructive: {
+    color: 'error',
+    variant: 'filled',
+    sx: { bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 },
+  },
+  outline: {
+    color: 'default',
+    variant: 'outlined',
+    sx: {},
+  },
+  success: {
+    color: 'success',
+    variant: 'filled',
+    sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' },
+  },
+};
+
+function Badge({ variant = 'default', children, sx, ...props }: BadgeProps) {
+  const mapped = variantMap[variant];
+  return (
+    <Chip
+      label={children}
+      size="small"
+      color={mapped.color}
+      variant={mapped.variant}
+      sx={{
+        height: 22,
+        fontSize: '0.6875rem',
+        fontWeight: 500,
+        borderRadius: '6px',
+        ...mapped.sx,
+        ...sx,
+      }}
+      {...(props as any)}
+    />
+  );
+}
+
+export { Badge };

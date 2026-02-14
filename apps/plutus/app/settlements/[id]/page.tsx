@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { useSnackbar } from 'notistack';
+import WarningIcon from '@mui/icons-material/Warning';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
@@ -17,18 +20,16 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/page-header';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectItem } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import { cn } from '@/lib/utils';
-import { allocateByWeight } from '@/lib/inventory/money';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -156,7 +157,6 @@ type SettlementProcessingPreview = {
 };
 
 type PreviewBlock = SettlementProcessingPreview['blocks'][number];
-type PreviewBlockGroup = { code: string; count: number };
 
 type ConnectionStatus = { connected: boolean; error?: string };
 
@@ -251,19 +251,6 @@ function formatBlockDetails(details: Record<string, string | number> | undefined
   return entries.map(([key, value]) => `${key}=${String(value)}`).join(' ');
 }
 
-function getPreviewBlockMessage(block: PreviewBlock): string {
-  if (block.code === 'PNL_ALLOCATION_ERROR') {
-    return 'No sales units found in this invoice, so SKU-less fees cannot be auto-allocated.';
-  }
-  return block.message;
-}
-
-function showPreviewBlockErrorDetails(block: PreviewBlock): boolean {
-  if (!(block.details && 'error' in block.details)) return false;
-  if (block.code === 'PNL_ALLOCATION_ERROR') return false;
-  return true;
-}
-
 function isIdempotencyBlock(block: PreviewBlock): boolean {
   if (block.code === 'ALREADY_PROCESSED') return true;
   if (block.code === 'ORDER_ALREADY_PROCESSED') return true;
@@ -272,85 +259,6 @@ function isIdempotencyBlock(block: PreviewBlock): boolean {
 
 function isBlockingPreviewBlock(block: PreviewBlock): boolean {
   return isBlockingProcessingCode(block.code);
-}
-
-function groupPreviewBlocksByCode(blocks: PreviewBlock[]): PreviewBlockGroup[] {
-  const grouped = new Map<string, number>();
-  for (const block of blocks) {
-    const current = grouped.get(block.code);
-    if (current === undefined) {
-      grouped.set(block.code, 1);
-      continue;
-    }
-    grouped.set(block.code, current + 1);
-  }
-
-  return [...grouped.entries()]
-    .map(([code, count]) => ({ code, count }))
-    .sort((a, b) => {
-      if (a.count !== b.count) {
-        return b.count - a.count;
-      }
-      return a.code.localeCompare(b.code);
-    });
-}
-
-function firstPreviewBlockByCode(blocks: PreviewBlock[]): Map<string, PreviewBlock> {
-  const map = new Map<string, PreviewBlock>();
-  for (const block of blocks) {
-    if (map.has(block.code)) continue;
-    map.set(block.code, block);
-  }
-  return map;
-}
-
-function isIdempotencyCode(code: string): boolean {
-  if (code === 'ALREADY_PROCESSED') return true;
-  if (code === 'ORDER_ALREADY_PROCESSED') return true;
-  return false;
-}
-
-function getPreviewBlockGroupLabel(groupCode: string): string {
-  if (groupCode === 'ORDER_ALREADY_PROCESSED') return 'Already posted orders';
-  if (groupCode === 'ALREADY_PROCESSED') return 'Already posted invoice';
-  if (groupCode === 'INVOICE_CONFLICT') return 'Invoice hash conflict';
-  if (groupCode === 'PNL_ALLOCATION_ERROR') return 'Allocation rule';
-  return groupCode;
-}
-
-function getPreviewBlockSummary(group: PreviewBlockGroup, sample: PreviewBlock | undefined): string {
-  if (group.code === 'ORDER_ALREADY_PROCESSED') {
-    return `${group.count.toLocaleString()} orders in this invoice were already processed by Plutus.`;
-  }
-  if (group.code === 'ALREADY_PROCESSED') {
-    const processingId = sample?.details ? sample.details.settlementProcessingId : undefined;
-    const settlementJournalEntryId = sample?.details ? sample.details.settlementJournalEntryId : undefined;
-    const cogsJournalEntryId = sample?.details ? sample.details.cogsJournalEntryId : undefined;
-    const pnlJournalEntryId = sample?.details ? sample.details.pnlJournalEntryId : undefined;
-
-    const hasSettlementLink =
-      settlementJournalEntryId !== undefined &&
-      cogsJournalEntryId !== undefined &&
-      pnlJournalEntryId !== undefined;
-
-    if (hasSettlementLink) {
-      return `Invoice already posted in settlement ${String(settlementJournalEntryId)} (COGS JE ${String(cogsJournalEntryId)}, P&L JE ${String(pnlJournalEntryId)}).`;
-    }
-
-    if (processingId !== undefined) {
-      return `Invoice already processed by Plutus (settlementProcessingId=${String(processingId)}).`;
-    }
-
-    return 'Invoice already processed by Plutus.';
-  }
-
-  const message = sample ? getPreviewBlockMessage(sample) : group.code;
-  if (group.count === 1) return message;
-  return `${message} (${group.count.toLocaleString()} occurrences).`;
-}
-
-function formatPreviewBlockGroups(groups: PreviewBlockGroup[]): string {
-  return groups.map((group) => `${getPreviewBlockGroupLabel(group.code)} × ${group.count.toLocaleString()}`).join(', ');
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
@@ -461,34 +369,16 @@ function SignedAmount({
 }) {
   const signed = postingType === 'Debit' ? amount : -amount;
   return (
-    <span className={cn(
-      'font-medium tabular-nums',
-      signed < 0 ? 'text-red-600 dark:text-red-400' : '',
-    )}>
-      {formatMoney(signed, currency)}
-    </span>
-  );
-}
-
-function SignedCentsAmount({
-  amountCents,
-  postingType,
-  currency,
-}: {
-  amountCents: number;
-  postingType: 'Debit' | 'Credit';
-  currency: string;
-}) {
-  const signed = postingType === 'Debit' ? amountCents : -amountCents;
-  return (
-    <span
-      className={cn(
-        'font-medium tabular-nums',
-        signed < 0 ? 'text-red-600 dark:text-red-400' : '',
-      )}
+    <Box
+      component="span"
+      sx={{
+        fontWeight: 500,
+        fontVariantNumeric: 'tabular-nums',
+        ...(signed < 0 && { color: 'error.main' }),
+      }}
     >
-      {formatMoney(signed / 100, currency)}
-    </span>
+      {formatMoney(signed, currency)}
+    </Box>
   );
 }
 
@@ -511,6 +401,7 @@ function ProcessSettlementDialog({
   defaultInvoiceId: string | null;
   onProcessed: () => void;
 }) {
+  const { enqueueSnackbar } = useSnackbar();
   const [open, setOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<string>('');
   const [preview, setPreview] = useState<SettlementProcessingPreview | null>(null);
@@ -614,14 +505,14 @@ function ProcessSettlementDialog({
         return;
       }
 
-      toast.success('Settlement processed and posted to QBO');
+      enqueueSnackbar('Settlement processed and posted to QBO', { variant: 'success' });
       setOpen(false);
       setPreview(null);
       setSelectedInvoice('');
       onProcessed();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      toast.error('Failed to post settlement');
+      enqueueSnackbar('Failed to post settlement', { variant: 'error' });
     } finally {
       setIsPosting(false);
     }
@@ -638,235 +529,262 @@ function ProcessSettlementDialog({
   }, [preview]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="sm">Process Settlement</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Process Settlement</DialogTitle>
-          <DialogDescription>
-            Match an audit data invoice to this settlement, preview the journal entries, then post to QuickBooks.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>Process Settlement</Button>
+      <Dialog open={open} onOpenChange={handleOpenChange} maxWidth="md">
+        <DialogContent onClose={() => handleOpenChange(false)} sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
+          <DialogHeader>
+            <DialogTitle>Process Settlement</DialogTitle>
+            <DialogDescription>
+              Match an audit data invoice to this settlement, preview the journal entries, then post to QuickBooks.
+            </DialogDescription>
+          </DialogHeader>
 
-        {isLoadingAuditData && (
-          <div className="space-y-3">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-5 w-48" />
-          </div>
-        )}
+          {isLoadingAuditData && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Skeleton sx={{ height: 36, width: '100%' }} />
+              <Skeleton sx={{ height: 20, width: 192 }} />
+            </Box>
+          )}
 
-        {!isLoadingAuditData && invoices.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/5">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data available</div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Upload the LMB Audit Data CSV on the Audit Data page first.
-              </div>
-            </div>
-          </div>
-        )}
+          {!isLoadingAuditData && invoices.length === 0 && (
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data available</Typography>
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                  Upload the LMB Audit Data CSV on the Audit Data page first.
+                </Typography>
+              </Box>
+            </Box>
+          )}
 
-        {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/5">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <div className="text-sm font-medium text-slate-900 dark:text-white">No invoices for this marketplace</div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Audit data exists, but none of the uploaded invoices match {marketplaceId}. Upload the correct Audit Data file.
-              </div>
-            </div>
-          </div>
-        )}
+          {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                  Audit data exists, but none of the uploaded invoices match {marketplaceId}. Upload the correct Audit Data file.
+                </Typography>
+              </Box>
+            </Box>
+          )}
 
-        {!isLoadingAuditData && marketplaceInvoices.length > 0 && (
-          <div className="space-y-4">
-            {invoiceRecommendation.kind === 'ambiguous' && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
-                Multiple audit invoices match this settlement period. Select the correct invoice manually.
-              </div>
-            )}
-            {invoiceRecommendation.kind === 'none' && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
-                No audit invoice matches this settlement period. Upload the correct Audit Data file or choose an invoice manually.
-              </div>
-            )}
-
-            {/* Invoice selector */}
-            <div>
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Invoice</div>
-              <Select
-                value={selectedInvoice}
-                onValueChange={(v) => {
-                  setSelectedInvoice(v);
-                  setPreview(null);
-                  setError(null);
-                }}
-              >
-                <SelectTrigger className="bg-white dark:bg-slate-900">
-                  <SelectValue placeholder="Select an invoice..." />
-                </SelectTrigger>
-                <SelectContent>
-	                  {invoicesWithMeta.map((inv) => (
-	                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
-	                      <div className="flex items-center gap-2">
-	                        <span>{inv.invoiceId}</span>
-                        {inv.recommended && (
-                          <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
-                            Recommended
-                          </span>
-                        )}
-	                        {inv.candidate && !inv.recommended && (
-	                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-	                            Candidate
-	                          </span>
-	                        )}
-	                      </div>
-	                    </SelectItem>
-	                  ))}
-	                </SelectContent>
-	              </Select>
-
-              {/* Invoice metadata */}
-              {selectedMeta && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <span>{selectedMeta.rowCount.toLocaleString()} row{selectedMeta.rowCount === 1 ? '' : 's'}</span>
-                  <span className="text-slate-300 dark:text-white/20">|</span>
-                  <span>Data: {selectedMeta.minDate} to {selectedMeta.maxDate}</span>
-                  {selectedMeta.dateLabel && (
-                    <>
-                      <span className="text-slate-300 dark:text-white/20">|</span>
-                      <span>ID dates: {selectedMeta.dateLabel}</span>
-                    </>
-                  )}
-                  {selectedMeta.recommended && (
-                    <Badge variant="default" className="text-[10px]">Recommended</Badge>
-                  )}
-                </div>
+          {!isLoadingAuditData && marketplaceInvoices.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {invoiceRecommendation.kind === 'ambiguous' && (
+                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5, fontSize: '0.875rem', color: 'warning.dark' }}>
+                  Multiple audit invoices match this settlement period. Select the correct invoice manually.
+                </Box>
+              )}
+              {invoiceRecommendation.kind === 'none' && (
+                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5, fontSize: '0.875rem', color: 'warning.dark' }}>
+                  No audit invoice matches this settlement period. Upload the correct Audit Data file or choose an invoice manually.
+                </Box>
               )}
 
-	              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-	                {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'} for this marketplace
-	              </div>
-	            </div>
+              {/* Invoice selector */}
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.75 }}>Invoice</Typography>
+                <Select
+                  value={selectedInvoice}
+                  onValueChange={(v) => {
+                    setSelectedInvoice(v);
+                    setPreview(null);
+                    setError(null);
+                  }}
+                  placeholder="Select an invoice..."
+                  sx={{ bgcolor: 'background.paper' }}
+                  renderValue={(selected) => {
+                    if (!selected) return <Box component="span" sx={{ color: '#94a3b8' }}>Select an invoice...</Box>;
+                    return selected;
+                  }}
+                >
+                  {invoicesWithMeta.map((inv) => (
+                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box component="span">{inv.invoiceId}</Box>
+                        {inv.recommended && (
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              borderRadius: '6px',
+                              bgcolor: 'rgba(69, 179, 212, 0.1)',
+                              px: 0.75,
+                              py: 0.25,
+                              fontSize: '10px',
+                              fontWeight: 500,
+                              color: '#2384a1',
+                            }}
+                          >
+                            Recommended
+                          </Box>
+                        )}
+                        {inv.candidate && !inv.recommended && (
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              borderRadius: '6px',
+                              bgcolor: 'rgba(245, 158, 11, 0.1)',
+                              px: 0.75,
+                              py: 0.25,
+                              fontSize: '10px',
+                              fontWeight: 500,
+                              color: 'warning.dark',
+                            }}
+                          >
+                            Candidate
+                          </Box>
+                        )}
+                      </Box>
+                    </SelectItem>
+                  ))}
+                </Select>
 
-            {/* Preview button */}
-            <Button
-              onClick={() => void handlePreview()}
-              disabled={!selectedInvoice || isPreviewLoading}
-              variant="outline"
-            >
-              {isPreviewLoading ? 'Computing preview...' : 'Preview'}
-            </Button>
+                {/* Invoice metadata */}
+                {selectedMeta && (
+                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, fontSize: '0.75rem', color: 'text.secondary' }}>
+                    <Box component="span">{selectedMeta.rowCount.toLocaleString()} row{selectedMeta.rowCount === 1 ? '' : 's'}</Box>
+                    <Box component="span" sx={{ color: 'text.disabled' }}>|</Box>
+                    <Box component="span">Data: {selectedMeta.minDate} to {selectedMeta.maxDate}</Box>
+                    {selectedMeta.dateLabel && (
+                      <>
+                        <Box component="span" sx={{ color: 'text.disabled' }}>|</Box>
+                        <Box component="span">ID dates: {selectedMeta.dateLabel}</Box>
+                      </>
+                    )}
+                    {selectedMeta.recommended && (
+                      <Badge variant="default" sx={{ fontSize: '10px' }}>Recommended</Badge>
+                    )}
+                  </Box>
+                )}
 
-            {/* Error */}
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
-                {error}
-              </div>
-            )}
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
+                  {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'} for this marketplace
+                </Typography>
+              </Box>
 
-            {/* Preview results */}
-            {preview && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                      Preview &middot; Invoice {preview.invoiceId}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      Hash {preview.processingHash.slice(0, 10)} &middot; {preview.minDate} &rarr; {preview.maxDate}
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      previewBlockingBlocks.length > 0
-                        ? 'destructive'
+              {/* Preview button */}
+              <Button
+                onClick={() => void handlePreview()}
+                disabled={!selectedInvoice || isPreviewLoading}
+                variant="outline"
+              >
+                {isPreviewLoading ? 'Computing preview...' : 'Preview'}
+              </Button>
+
+              {/* Error */}
+              {error && (
+                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
+                  {error}
+                </Box>
+              )}
+
+              {/* Preview results */}
+              {preview && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                        Preview &middot; Invoice {preview.invoiceId}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
+                        Hash {preview.processingHash.slice(0, 10)} &middot; {preview.minDate} &rarr; {preview.maxDate}
+                      </Typography>
+                    </Box>
+                    <Badge
+                      variant={
+                        previewBlockingBlocks.length > 0
+                          ? 'destructive'
+                          : previewWarningBlocks.length > 0
+                            ? 'secondary'
+                            : 'success'
+                      }
+                    >
+                      {previewBlockingBlocks.length > 0
+                        ? 'Blocked'
                         : previewWarningBlocks.length > 0
-                          ? 'secondary'
-                          : 'success'
-                    }
-                  >
-                    {previewBlockingBlocks.length > 0
-                      ? 'Blocked'
-                      : previewWarningBlocks.length > 0
-                        ? 'Ready (Warnings)'
-                        : 'Ready'}
-                  </Badge>
-                </div>
+                          ? 'Ready (Warnings)'
+                          : 'Ready'}
+                    </Badge>
+                  </Box>
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Card className="border-slate-200/70 dark:border-white/10">
-                    <CardContent className="p-3">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Sales</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.sales.length}</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-slate-200/70 dark:border-white/10">
-                    <CardContent className="p-3">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Returns</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.returns.length}</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-slate-200/70 dark:border-white/10">
-                    <CardContent className="p-3">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">JE Lines</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                        {preview.cogsJournalEntry.lines.length + preview.pnlJournalEntry.lines.length}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                  <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(3, 1fr)' } }}>
+                    <Card sx={{ border: 1, borderColor: 'divider' }}>
+                      <CardContent sx={{ p: 1.5 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales</Typography>
+                        <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{preview.sales.length}</Typography>
+                      </CardContent>
+                    </Card>
+                    <Card sx={{ border: 1, borderColor: 'divider' }}>
+                      <CardContent sx={{ p: 1.5 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Returns</Typography>
+                        <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{preview.returns.length}</Typography>
+                      </CardContent>
+                    </Card>
+                    <Card sx={{ border: 1, borderColor: 'divider' }}>
+                      <CardContent sx={{ p: 1.5 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>JE Lines</Typography>
+                        <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                          {preview.cogsJournalEntry.lines.length + preview.pnlJournalEntry.lines.length}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Box>
 
-		                {previewBlockingBlocks.length > 0 && (
-		                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-		                    <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Blocked</div>
-		                    <ul className="text-sm text-red-700 dark:text-red-200 space-y-1">
-		                      {previewBlockingBlocks.map((b, idx) => (
-		                        <li key={idx}>
-		                          <span className="font-mono">{b.code}</span>: {getPreviewBlockMessage(b)}
-		                          {showPreviewBlockErrorDetails(b) && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
-		                          )}
-		                          {formatBlockDetails(b.details) && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-		                          )}
-	                        </li>
-	                      ))}
-		                    </ul>
-		                  </div>
-		                )}
+                  {previewBlockingBlocks.length > 0 && (
+                    <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'error.dark', mb: 1 }}>Blocked</Typography>
+                      <Box component="ul" sx={{ fontSize: '0.875rem', color: 'error.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {previewBlockingBlocks.map((b, idx) => (
+                          <li key={idx}>
+                            <Box component="span" sx={{ fontFamily: 'monospace' }}>{b.code}</Box>: {b.message}
+                            {b.details && 'error' in b.details && (
+                              <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                            )}
+                            {formatBlockDetails(b.details) && (
+                              <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                            )}
+                          </li>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
 
-		                {previewWarningBlocks.length > 0 && (
-		                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
-		                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-2">Warnings</div>
-		                    <ul className="text-sm text-amber-700 dark:text-amber-200 space-y-1">
-		                      {previewWarningBlocks.map((b, idx) => (
-		                        <li key={idx}>
-		                          <span className="font-mono">{b.code}</span>: {getPreviewBlockMessage(b)}
-		                          {showPreviewBlockErrorDetails(b) && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{String(b.details?.error)}</div>
-		                          )}
-		                          {formatBlockDetails(b.details) && (
-		                            <div className="text-xs opacity-75 mt-0.5 font-mono">{formatBlockDetails(b.details)}</div>
-		                          )}
-		                        </li>
-		                      ))}
-		                    </ul>
-		                  </div>
-		                )}
+                  {previewWarningBlocks.length > 0 && (
+                    <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark', mb: 1 }}>Warnings (non-blocking)</Typography>
+                      <Box component="ul" sx={{ fontSize: '0.875rem', color: 'warning.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {previewWarningBlocks.map((b, idx) => (
+                          <li key={idx}>
+                            <Box component="span" sx={{ fontFamily: 'monospace' }}>{b.code}</Box>: {b.message}
+                            {b.details && 'error' in b.details && (
+                              <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                            )}
+                            {formatBlockDetails(b.details) && (
+                              <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                            )}
+                          </li>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
 
-	                {previewBlockingBlocks.length === 0 && (
-	                  <Button onClick={() => void handlePost()} disabled={isPosting}>
-	                    {isPosting ? 'Posting...' : 'Post to QBO'}
-	                  </Button>
-	                )}
-	              </div>
-            )}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+                  {previewBlockingBlocks.length === 0 && (
+                    <Button onClick={() => void handlePost()} disabled={isPosting}>
+                      {isPosting ? 'Posting...' : 'Post to QBO'}
+                    </Button>
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -880,6 +798,7 @@ function parseSettlementTab(tab: string | null): SettlementDetailTab {
   if (tab === 'lmb-preview') return 'plutus-preview';
   if (tab === 'lmb-settlement') return 'sales';
   if (tab === 'plutus-settlement') return 'plutus-preview';
+  if (tab === 'lmb-preview') return 'plutus-preview';
   if (tab === 'history') return 'plutus-preview';
   if (tab === 'ads-allocation') return 'plutus-preview';
   if (tab === 'analysis') return 'plutus-preview';
@@ -888,6 +807,7 @@ function parseSettlementTab(tab: string | null): SettlementDetailTab {
 }
 
 export default function SettlementDetailPage() {
+  const { enqueueSnackbar } = useSnackbar();
   const routeParams = useParams();
   const rawId = routeParams.id;
   if (typeof rawId !== 'string') {
@@ -1012,26 +932,6 @@ export default function SettlementDetailPage() {
   const previewBlockingCount = previewBlockingBlocks.length;
   const previewWarningCount = previewWarningBlocks.length;
   const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
-  const previewIssueGroups = useMemo(() => groupPreviewBlocksByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
-  const previewBlockingGroups = useMemo(() => groupPreviewBlocksByCode(previewBlockingBlocks), [previewBlockingBlocks]);
-  const previewWarningGroups = useMemo(() => groupPreviewBlocksByCode(previewWarningBlocks), [previewWarningBlocks]);
-  const previewIssueFirstByCode = useMemo(() => firstPreviewBlockByCode(visiblePreviewBlocks), [visiblePreviewBlocks]);
-  const previewBlockingFirstByCode = useMemo(() => firstPreviewBlockByCode(previewBlockingBlocks), [previewBlockingBlocks]);
-  const previewWarningFirstByCode = useMemo(() => firstPreviewBlockByCode(previewWarningBlocks), [previewWarningBlocks]);
-  const previewBlockingIdempotencyOnly = useMemo(() => {
-    if (previewBlockingGroups.length === 0) return false;
-    return previewBlockingGroups.every((group) => isIdempotencyCode(group.code));
-  }, [previewBlockingGroups]);
-  const previewJournalLines = useMemo(() => {
-    if (!previewData) return [] as JeLinePreview[];
-    return [...previewData.cogsJournalEntry.lines, ...previewData.pnlJournalEntry.lines];
-  }, [previewData]);
-  const previewJournalNetCents = useMemo(() => {
-    return previewJournalLines.reduce(
-      (sum, line) => sum + (line.postingType === 'Debit' ? line.amountCents : -line.amountCents),
-      0,
-    );
-  }, [previewJournalLines]);
 
   const adsAllocationEnabled = !!previewInvoiceId && !!settlement;
 
@@ -1079,6 +979,9 @@ export default function SettlementDetailPage() {
     if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
       return { ok: false as const, lines: [] as Array<{ sku: string; weightInput: string; allocatedCents: number | null }>, error: null as string | null };
     }
+    if (!settlement) {
+      return { ok: false as const, lines: [] as Array<{ sku: string; weightInput: string; allocatedCents: number | null }>, error: 'Settlement unavailable.' };
+    }
 
     if (adsAllocation.weightUnit !== 'cents') {
       return { ok: false as const, lines: [], error: `Unsupported weight unit: ${adsAllocation.weightUnit}` };
@@ -1090,7 +993,7 @@ export default function SettlementDetailPage() {
     });
 
     if (parsed.length === 0) {
-      return { ok: false as const, lines: [], error: 'No weights available for allocation.' };
+      return { ok: false as const, lines: [], error: 'No amounts available for allocation.' };
     }
 
     const invalid = parsed.find((l) => l.weightCents === null);
@@ -1098,26 +1001,23 @@ export default function SettlementDetailPage() {
       return {
         ok: false as const,
         lines: parsed.map((l) => ({ sku: l.sku, weightInput: l.weightInput, allocatedCents: null })),
-        error: 'All weights must be positive dollar amounts.',
+        error: 'All amounts must be positive dollar values.',
       };
     }
 
-    const weightsSorted = [...parsed].sort((a, b) => a.sku.localeCompare(b.sku));
     const sign = adsAllocation.totalAdsCents < 0 ? -1 : 1;
     const absTotal = Math.abs(adsAllocation.totalAdsCents);
+    const withAlloc = parsed.map((l) => ({ sku: l.sku, weightInput: l.weightInput, allocatedCents: sign * l.weightCents! }));
 
-    const allocatedAbs = allocateByWeight(
-      absTotal,
-      weightsSorted.map((w) => ({ key: w.sku, weight: w.weightCents! })),
-    );
-
-    const withAlloc = parsed.map((l) => {
-      const centsAbs = allocatedAbs[l.sku];
-      if (centsAbs === undefined) {
-        return { sku: l.sku, weightInput: l.weightInput, allocatedCents: null };
-      }
-      return { sku: l.sku, weightInput: l.weightInput, allocatedCents: sign * centsAbs };
-    });
+    let inputTotal = 0;
+    for (const line of parsed) inputTotal += line.weightCents!;
+    if (inputTotal !== absTotal) {
+      return {
+        ok: false as const,
+        lines: withAlloc,
+        error: `Allocation total must equal billed ads (${formatMoney(absTotal / 100, settlement.marketplace.currency)}). Current total is ${formatMoney(inputTotal / 100, settlement.marketplace.currency)}.`,
+      };
+    }
 
     let sum = 0;
     for (const line of withAlloc) {
@@ -1132,7 +1032,136 @@ export default function SettlementDetailPage() {
     }
 
     return { ok: true as const, lines: withAlloc, error: null };
-  }, [adsAllocation, adsEditLines]);
+  }, [adsAllocation, adsEditLines, settlement]);
+
+  const baseAdsSkuProfitability = useMemo(() => {
+    if (!adsAllocation) {
+      return null;
+    }
+
+    if (adsAllocation.skuProfitability) {
+      return adsAllocation.skuProfitability;
+    }
+
+    if (!previewData) {
+      return null;
+    }
+
+    const sales = previewData.sales.map((sale) => ({
+      sku: sale.sku,
+      quantity: sale.quantity,
+      principalCents: sale.principalCents,
+      costManufacturingCents: sale.costByComponentCents.manufacturing,
+      costFreightCents: sale.costByComponentCents.freight,
+      costDutyCents: sale.costByComponentCents.duty,
+      costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
+    }));
+
+    const returns = previewData.returns.map((ret) => ({
+      sku: ret.sku,
+      quantity: ret.quantity,
+      principalCents: ret.principalCents,
+      costManufacturingCents: ret.costByComponentCents.manufacturing,
+      costFreightCents: ret.costByComponentCents.freight,
+      costDutyCents: ret.costByComponentCents.duty,
+      costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
+    }));
+
+    return buildSettlementSkuProfitability({
+      sales,
+      returns,
+      allocationLines: adsAllocation.lines.map((line) => ({
+        sku: line.sku,
+        allocatedCents: line.allocatedCents,
+      })),
+    });
+  }, [adsAllocation, previewData]);
+
+  const adsSkuProfitabilityPreview = useMemo(() => {
+    if (!baseAdsSkuProfitability) {
+      return null;
+    }
+
+    const baseBySku = new Map<string, AdsSkuProfitabilityLine>();
+    for (const line of baseAdsSkuProfitability.lines) {
+      baseBySku.set(line.sku, line);
+    }
+
+    const adsBySku = new Map<string, number>();
+    if (adsAllocationPreview.ok) {
+      for (const line of adsAllocationPreview.lines) {
+        if (line.allocatedCents === null) {
+          continue;
+        }
+        adsBySku.set(line.sku, line.allocatedCents);
+      }
+    } else {
+      for (const line of baseAdsSkuProfitability.lines) {
+        adsBySku.set(line.sku, line.adsAllocatedCents);
+      }
+    }
+
+    const allSkus = new Set<string>();
+    for (const sku of baseBySku.keys()) {
+      allSkus.add(sku);
+    }
+    for (const sku of adsBySku.keys()) {
+      allSkus.add(sku);
+    }
+
+    const lines: AdsSkuProfitabilityLine[] = [];
+    for (const sku of allSkus.values()) {
+      const base = baseBySku.get(sku);
+      const adsAllocated = adsBySku.get(sku);
+
+      const soldUnits = base ? base.soldUnits : 0;
+      const returnedUnits = base ? base.returnedUnits : 0;
+      const netUnits = base ? base.netUnits : soldUnits - returnedUnits;
+      const principalCents = base ? base.principalCents : 0;
+      const cogsCents = base ? base.cogsCents : 0;
+      const contributionBeforeAdsCents = base ? base.contributionBeforeAdsCents : principalCents - cogsCents;
+      const adsAllocatedCents = adsAllocated !== undefined ? adsAllocated : 0;
+      const contributionAfterAdsCents = contributionBeforeAdsCents - adsAllocatedCents;
+
+      lines.push({
+        sku,
+        soldUnits,
+        returnedUnits,
+        netUnits,
+        principalCents,
+        cogsCents,
+        adsAllocatedCents,
+        contributionBeforeAdsCents,
+        contributionAfterAdsCents,
+      });
+    }
+
+    lines.sort((a, b) => a.sku.localeCompare(b.sku));
+
+    const totals: AdsSkuProfitabilityTotals = {
+      soldUnits: 0,
+      returnedUnits: 0,
+      netUnits: 0,
+      principalCents: 0,
+      cogsCents: 0,
+      adsAllocatedCents: 0,
+      contributionBeforeAdsCents: 0,
+      contributionAfterAdsCents: 0,
+    };
+
+    for (const line of lines) {
+      totals.soldUnits += line.soldUnits;
+      totals.returnedUnits += line.returnedUnits;
+      totals.netUnits += line.netUnits;
+      totals.principalCents += line.principalCents;
+      totals.cogsCents += line.cogsCents;
+      totals.adsAllocatedCents += line.adsAllocatedCents;
+      totals.contributionBeforeAdsCents += line.contributionBeforeAdsCents;
+      totals.contributionAfterAdsCents += line.contributionAfterAdsCents;
+    }
+
+    return { lines, totals };
+  }, [adsAllocationPreview, baseAdsSkuProfitability]);
 
   const saveAdsAllocationMutation = useMutation({
     mutationFn: async () => {
@@ -1156,12 +1185,12 @@ export default function SettlementDetailPage() {
       return saveAdsAllocation({ settlementId, lines });
     },
     onSuccess: async () => {
-      toast.success('Saved advertising allocation');
+      enqueueSnackbar('Saved advertising allocation', { variant: 'success' });
       setAdsDirty(false);
       await queryClient.invalidateQueries({ queryKey: ['plutus-settlement-ads-allocation', settlementId] });
     },
     onError: (e: Error) => {
-      toast.error(e.message);
+      enqueueSnackbar(e.message, { variant: 'error' });
     },
   });
 
@@ -1229,81 +1258,81 @@ export default function SettlementDetailPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-3">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ maxWidth: '72rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
           <BackButton />
-        </div>
+        </Box>
 
         <PageHeader
-          className="mt-4"
+          sx={{ mt: 2 }}
           title="Settlement Details"
           kicker={settlement ? settlement.marketplace.label : 'Link My Books'}
           description={
             settlement ? (
-              <div className="space-y-1">
-                <div className="font-mono text-sm text-slate-700 dark:text-slate-300">{settlement.docNumber}</div>
-                <div className="text-sm text-slate-700 dark:text-slate-200">
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>{settlement.docNumber}</Typography>
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                   {formatPeriod(settlement.periodStart, settlement.periodEnd)} &middot; Posted{' '}
                   {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                </div>
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                </Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                   {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
-                </div>
-              </div>
+                </Typography>
+              </Box>
             ) : (
               'Loads the QBO journal entry for this settlement and shows Plutus processing status.'
             )
           }
           actions={
             settlement ? (
-              <div className="flex flex-col items-start gap-3 sm:items-end">
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusPill status={settlement.lmbStatus} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 1.5 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    component="a"
+                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, '&:hover .qbo-link-icon': { color: 'text.secondary' }, textDecoration: 'none' }}
+                  >
+                    <StatusPill status={settlement.lmbStatus} />
+                    <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s' }} />
+                  </Box>
                   <PlutusPill status={settlement.plutusStatus} />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Open in QBO
-                    </a>
-                  </Button>
-		                  {settlement.plutusStatus === 'Pending' && (
-		                    <ProcessSettlementDialog
-		                      settlementId={settlementId}
-		                      periodStart={settlement.periodStart}
-		                      periodEnd={settlement.periodEnd}
-	                      marketplaceId={settlement.marketplace.id}
-	                      defaultInvoiceId={previewInvoiceId}
-	                      onProcessed={() => void handleProcessed()}
-	                    />
-	                  )}
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {settlement.plutusStatus === 'Pending' && (
+                    <ProcessSettlementDialog
+                      settlementId={settlementId}
+                      periodStart={settlement.periodStart}
+                      periodEnd={settlement.periodEnd}
+                      marketplaceId={settlement.marketplace.id}
+                      defaultInvoiceId={previewInvoiceId}
+                      onProcessed={() => void handleProcessed()}
+                    />
+                  )}
                   {data?.processing && (
                     <Button variant="outline" size="sm" onClick={() => void handleRollback()} disabled={isRollingBack}>
                       {isRollingBack ? 'Rolling back...' : 'Rollback'}
                     </Button>
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
             ) : null
           }
         />
 
         {actionError && (
-          <div className="mb-4 text-sm text-danger-700 dark:text-danger-400">
+          <Typography sx={{ mb: 2, fontSize: '0.875rem', color: 'error.main' }}>
             {actionError}
-          </div>
+          </Typography>
         )}
 
-        <Card className="border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-0">
+        <Card sx={{ border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 0 }}>
             <Tabs value={tab} onValueChange={handleTabChange}>
-              <div className="border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03] px-4 py-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
                   <TabsList>
                     <TabsTrigger value="sales">LMB Settlement</TabsTrigger>
                     {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
@@ -1311,89 +1340,103 @@ export default function SettlementDetailPage() {
                     )}
                   </TabsList>
 
-                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && tab === 'plutus-preview' && (
-                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-                      <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Plutus invoice</div>
+                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
+                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.75, sm: 1 }, alignItems: { sm: 'center' } }}>
+                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary' }}>Preview invoice</Typography>
                       <Select
                         value={previewInvoiceId ?? ''}
                         onValueChange={(v) => {
                           setPendingPreviewInvoiceId(v);
                         }}
+                        placeholder="Select invoice..."
+                        sx={{ width: { xs: '100%', sm: 360 }, bgcolor: 'background.paper' }}
+                        renderValue={(selected) => {
+                          if (!selected) return <Box component="span" sx={{ color: '#94a3b8' }}>Select invoice...</Box>;
+                          return selected;
+                        }}
                       >
-                        <SelectTrigger className="w-full sm:w-[360px] bg-white dark:bg-slate-900">
-                          <SelectValue placeholder="Select invoice..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {marketplaceAuditInvoices.map((inv) => (
-                            <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
-                              <div className="flex items-center gap-2">
-                                <span>{inv.invoiceId}</span>
-                                {inv.invoiceId === recommendedInvoice && (
-                                  <span className="inline-flex items-center rounded-md bg-brand-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-teal-700 dark:bg-brand-cyan/15 dark:text-brand-cyan">
-                                    Recommended
-                                  </span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
+                        {marketplaceAuditInvoices.map((inv) => (
+                          <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Box component="span">{inv.invoiceId}</Box>
+                              {inv.invoiceId === recommendedInvoice && (
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    borderRadius: '6px',
+                                    bgcolor: 'rgba(69, 179, 212, 0.1)',
+                                    px: 0.75,
+                                    py: 0.25,
+                                    fontSize: '10px',
+                                    fontWeight: 500,
+                                    color: '#2384a1',
+                                  }}
+                                >
+                                  Recommended
+                                </Box>
+                              )}
+                            </Box>
+                          </SelectItem>
+                        ))}
                       </Select>
-                    </div>
+                    </Box>
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <TabsContent value="sales" className="p-4">
+              <TabsContent value="sales" sx={{ p: 2 }}>
                 {isLoading && (
-                  <div className="space-y-3">
-                    <Skeleton className="h-5 w-40" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                  </div>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Skeleton sx={{ height: 20, width: 160 }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                  </Box>
                 )}
                 {!isLoading && error && (
-                  <div className="text-sm text-danger-700 dark:text-danger-400">
+                  <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
                     {error instanceof Error ? error.message : String(error)}
-                  </div>
+                  </Typography>
                 )}
 
                 {settlement && (
-                  <div className="overflow-x-auto">
+                  <Box sx={{ overflowX: 'auto' }}>
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Description</TableHead>
                           <TableHead>Account</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead sx={{ textAlign: 'right' }}>Amount</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {settlement.lines.map((line, idx) => (
                           <TableRow key={`${idx}`}>
-                            <TableCell className="text-sm text-slate-700 dark:text-slate-200">
+                            <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                               {line.description === '' ? '—' : line.description}
                             </TableCell>
-                            <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                              <div className="flex flex-col">
-                                <span>{line.accountName === '' ? '—' : line.accountName}</span>
+                            <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                <Box component="span">{line.accountName === '' ? '—' : line.accountName}</Box>
                                 {line.accountFullyQualifiedName && (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                  <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
                                     {line.accountFullyQualifiedName}
-                                  </span>
+                                  </Box>
                                 )}
-                              </div>
+                              </Box>
                             </TableCell>
-                            <TableCell className="text-right text-sm text-slate-900 dark:text-white">
+                            <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', color: 'text.primary' }}>
                               <SignedAmount amount={line.amount} postingType={line.postingType} currency={settlement.marketplace.currency} />
                             </TableCell>
                           </TableRow>
                         ))}
                         <TableRow>
-                          <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
+                          <TableCell colSpan={2} sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                             Net
                           </TableCell>
-                          <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
+                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                             {settlement.settlementTotal === null
                               ? formatMoney(totalLines, settlement.marketplace.currency)
                               : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
@@ -1401,113 +1444,397 @@ export default function SettlementDetailPage() {
                         </TableRow>
                       </TableBody>
                     </Table>
-                  </div>
+                  </Box>
+                )}
+              </TabsContent>
+
+              <TabsContent value="plutus-preview" sx={{ p: 2 }}>
+                {!settlement && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Skeleton sx={{ height: 20, width: 256 }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                  </Box>
+                )}
+
+                {settlement && !previewInvoiceId && (
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                        Choose a Preview invoice above to compute advertising allocation.
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+
+                {settlement && previewInvoiceId && (
+                  <>
+                    {isAdsAllocationLoading && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <Skeleton sx={{ height: 20, width: 256 }} />
+                        <Skeleton sx={{ height: 40, width: '100%' }} />
+                        <Skeleton sx={{ height: 40, width: '100%' }} />
+                        <Skeleton sx={{ height: 40, width: '100%' }} />
+                      </Box>
+                    )}
+
+                    {!isAdsAllocationLoading && adsAllocationError && (
+                      <Box sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                        {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                        <Box sx={{ mt: 1 }}>
+                          <Box
+                            component={Link}
+                            href="/ads-data"
+                            sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
+                          >
+                            Upload Ads Data
+                          </Box>
+                        </Box>
+                      </Box>
+                    )}
+
+                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                                Advertising cost allocation (SKU)
+                              </Typography>
+                              {!adsAllocationSaveEnabled && (
+                                <Badge variant="secondary" sx={{ fontSize: '10px' }}>Preview</Badge>
+                              )}
+                            </Box>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                              Invoice <Box component="span" sx={{ fontFamily: 'monospace' }}>{adsAllocation.invoiceId}</Box> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
+                            </Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                              Total source:{' '}
+                              {adsAllocation.totalSource === 'AUDIT_DATA'
+                                ? 'Audit Data (Amazon Advertising Costs rows)'
+                                : adsAllocation.totalSource === 'ADS_REPORT'
+                                  ? 'Legacy inferred from Ads Data (no invoice billing total)'
+                                  : adsAllocation.totalSource === 'SAVED'
+                                    ? 'Saved allocation'
+                                    : 'No source data'}
+                            </Typography>
+                            {adsAllocation.adsDataUpload && (
+                              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                                Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
+                              </Typography>
+                            )}
+                          </Box>
+
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
+                              <Button
+                                size="sm"
+                                onClick={() => saveAdsAllocationMutation.mutate()}
+                                disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                              >
+                                {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                              </Button>
+                            )}
+                          </Box>
+                        </Box>
+
+                        {!adsAllocationSaveEnabled ? (
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                            Preview allocation &middot; edit amounts and match billed total exactly
+                          </Typography>
+                        ) : adsAllocation.kind === 'saved' ? (
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                            Saved allocation &middot; edit amounts and re-save
+                          </Typography>
+                        ) : (
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                            Prefilled allocation &middot; review and save to lock it in
+                          </Typography>
+                        )}
+
+                        {adsAllocation.totalAdsCents === 0 ? (
+                          <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                            No Amazon Advertising Costs rows found in Audit Data for this invoice. Nothing to allocate.
+                          </Typography>
+                        ) : (
+                          <>
+                            {adsAllocationPreview.error && (
+                              <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                                {adsAllocationPreview.error}
+                              </Typography>
+                            )}
+
+                            {!adsAllocation.adsDataUpload && (
+                              <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                                Missing Ads Data upload for this invoice range.{' '}
+                                <Box component={Link} href="/ads-data" sx={{ textDecoration: 'underline', color: 'inherit' }}>
+                                  Upload Ads Data
+                                </Box>
+                                .
+                              </Typography>
+                            )}
+
+                            <Box sx={{ overflowX: 'auto' }}>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead sx={{ textAlign: 'right' }}>Amount</TableHead>
+                                    <TableHead sx={{ textAlign: 'right' }}>Posted</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {adsAllocationPreview.lines.map((line) => (
+                                    <TableRow key={line.sku}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                        {line.sku}
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right' }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                          <Box sx={{ width: 140 }}>
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              value={line.weightInput}
+                                              onChange={(event) => {
+                                                const next = event.target.value;
+                                                setAdsDirty(true);
+                                                setAdsEditLines((prev) =>
+                                                  prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                                );
+                                              }}
+                                            />
+                                          </Box>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                        {line.allocatedCents === null
+                                          ? '—'
+                                          : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                  <TableRow>
+                                    <TableCell colSpan={2} sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                                      Total
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                                      {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                  </TableRow>
+                                </TableBody>
+                              </Table>
+                            </Box>
+
+                            {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                                  SKU contribution after ads allocation
+                                </Typography>
+                                <Box sx={{ overflowX: 'auto' }}>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>SKU</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Sold</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Returns</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Net Units</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Principal</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>COGS</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Ads</TableHead>
+                                        <TableHead sx={{ textAlign: 'right' }}>Contribution</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {adsSkuProfitabilityPreview.lines.map((line) => (
+                                        <TableRow key={`profit-${line.sku}`}>
+                                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                            {line.sku}
+                                          </TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.soldUnits}</TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.returnedUnits}</TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.netUnits}</TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                            {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                            {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                            {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                          <TableCell
+                                            sx={{
+                                              textAlign: 'right',
+                                              fontSize: '0.875rem',
+                                              fontWeight: 600,
+                                              fontVariantNumeric: 'tabular-nums',
+                                              ...(line.contributionAfterAdsCents < 0
+                                                ? { color: 'error.main' }
+                                                : { color: 'text.primary' }),
+                                            }}
+                                          >
+                                            {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                      <TableRow>
+                                        <TableCell sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Total</TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {adsSkuProfitabilityPreview.totals.soldUnits}
+                                        </TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {adsSkuProfitabilityPreview.totals.returnedUnits}
+                                        </TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {adsSkuProfitabilityPreview.totals.netUnits}
+                                        </TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                        </TableCell>
+                                        <TableCell
+                                          sx={{
+                                            textAlign: 'right',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            fontVariantNumeric: 'tabular-nums',
+                                            ...(adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
+                                              ? { color: 'error.main' }
+                                              : { color: 'text.primary' }),
+                                          }}
+                                        >
+                                          {formatMoney(
+                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
+                                            settlement.marketplace.currency,
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    </TableBody>
+                                  </Table>
+                                </Box>
+                              </Box>
+                            )}
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Box
+                                component={Link}
+                                href="/ads-data"
+                                sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
+                              >
+                                Manage Ads Data
+                              </Box>
+                              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                Weight source: {adsAllocation.weightSource}
+                              </Typography>
+                            </Box>
+                          </>
+                        )}
+                      </Box>
+                    )}
+                  </>
                 )}
               </TabsContent>
 
               {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                <TabsContent value="plutus-preview" className="p-4">
-                  {!settlement && (
-                    <div className="space-y-3">
-                      <Skeleton className="h-5 w-64" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  )}
-
-                  {settlement && (isLoadingAudit || isPreviewLoading || (previewInvoiceId !== null && isAdsAllocationLoading)) && (
-                    <div className="space-y-3">
-                      <Skeleton className="h-5 w-56" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
+                <TabsContent value="plutus-preview" sx={{ p: 2 }}>
+                  {(isLoadingAudit || isPreviewLoading) && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      <Skeleton sx={{ height: 20, width: 224 }} />
+                      <Skeleton sx={{ height: 40, width: '100%' }} />
+                      <Skeleton sx={{ height: 40, width: '100%' }} />
+                      <Skeleton sx={{ height: 40, width: '100%' }} />
+                    </Box>
                   )}
 
                   {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">No audit data uploaded</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data uploaded</Typography>
+                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                           Upload the LMB Audit Data CSV on the{' '}
-                          <Link href="/audit-data" className="text-brand-teal-600 hover:underline dark:text-brand-cyan">
+                          <Box
+                            component={Link}
+                            href="/audit-data"
+                            sx={{ color: '#2384a1', '&:hover': { textDecoration: 'underline' } }}
+                          >
                             Audit Data
-                          </Link>{' '}
+                          </Box>{' '}
                           page first.
-                        </div>
-                      </div>
-                    </div>
+                        </Typography>
+                      </Box>
+                    </Box>
                   )}
 
                   {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && auditData?.invoices?.length && marketplaceAuditInvoices.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">No invoices for this marketplace</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
+                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                           Audit data exists, but none of the uploaded invoices match {settlement.marketplace.id}.
-                        </div>
-                      </div>
-                    </div>
+                        </Typography>
+                      </Box>
+                    </Box>
                   )}
 
                   {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && marketplaceAuditInvoices.length > 0 && !previewInvoiceId && (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">Select an invoice</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
-                          Choose a Plutus invoice above.
-                        </div>
-                      </div>
-                    </div>
+                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
+                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                          Choose a Preview invoice above to compute a settlement preview.
+                        </Typography>
+                      </Box>
+                    </Box>
                   )}
 
                   {previewError && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                    <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
                       {previewError instanceof Error ? previewError.message : String(previewError)}
-                    </div>
+                    </Box>
                   )}
 
-                  {settlement && previewInvoiceId && adsAllocationError && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
-                      {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
-                    </div>
-                  )}
-
-                  {previewData && settlement && (
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">Invoice {previewData.invoiceId}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  {previewData && previewData.cogsJournalEntry && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {/* Header */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box>
+                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                            Invoice {previewData.invoiceId}
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
                             {previewData.minDate} &rarr; {previewData.maxDate}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            Sales {previewData.sales.length} &middot; Returns {previewData.returns.length} &middot; Lines {previewJournalLines.length}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {data?.processing && (
                             <>
-                              <Button variant="outline" size="sm" asChild>
-                                <a
-                                  href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  COGS JE
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                component="a"
+                                href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                              >
+                                COGS JE
                               </Button>
-                              <Button variant="outline" size="sm" asChild>
-                                <a
-                                  href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  P&amp;L JE
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                component="a"
+                                href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                              >
+                                P&amp;L JE
                               </Button>
                             </>
                           )}
@@ -1518,9 +1845,7 @@ export default function SettlementDetailPage() {
                                   ? 'success'
                                   : 'secondary'
                                 : previewBlockingCount > 0
-                                  ? previewBlockingIdempotencyOnly
-                                    ? 'secondary'
-                                    : 'destructive'
+                                  ? 'destructive'
                                   : previewWarningCount > 0
                                     ? 'secondary'
                                     : 'success'
@@ -1529,279 +1854,225 @@ export default function SettlementDetailPage() {
                             {isProcessedPreview
                               ? previewIssueCount === 0
                                 ? 'Processed'
-                                : 'Processed (Review)'
+                                : 'Processed (Needs Review)'
                               : previewBlockingCount > 0
-                                ? previewBlockingIdempotencyOnly
-                                  ? 'Already Posted'
-                                  : 'Blocked'
+                                ? 'Blocked'
                                 : previewWarningCount > 0
                                   ? 'Ready (Warnings)'
-                                  : 'Ready'}
+                                  : 'Ready to Process'}
                           </Badge>
-                        </div>
-                      </div>
+                        </Box>
+                      </Box>
 
-                      {adsAllocation && (
-                        <div className="rounded-lg border border-slate-200/70 bg-slate-50/50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                          {adsAllocation.totalAdsCents === 0 ? (
-                            <div className="text-sm text-slate-600 dark:text-slate-300">
-                              No advertising costs found for this invoice.
-                            </div>
-                          ) : (
-                            <>
-                              <div className="text-sm text-slate-900 dark:text-white">
-                                Ads allocation total: {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                              </div>
-                              {adsAllocation.adsDataUpload && (
-                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  Source: {adsAllocation.adsDataUpload.filename}
-                                </div>
-                              )}
-                              {!adsAllocation.adsDataUpload && (
-                                <div className="mt-1 text-xs text-red-700 dark:text-red-300">
-                                  Missing ads source data. <Link href="/ads-data" className="underline">Upload Ads Data</Link>.
-                                </div>
-                              )}
-                              <details className="mt-3">
-                                <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-200">
-                                  Edit ads allocation
-                                </summary>
-                                <div className="mt-3 space-y-3">
-                                  {adsAllocationPreview.error && (
-                                    <div className="text-sm text-danger-700 dark:text-danger-400">
-                                      {adsAllocationPreview.error}
-                                    </div>
-                                  )}
+                      {/* Summary cards */}
+                      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(4, 1fr)' } }}>
+                        <Card sx={{ border: 1, borderColor: 'divider' }}>
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales</Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.sales.length}</Typography>
+                          </CardContent>
+                        </Card>
+                        <Card sx={{ border: 1, borderColor: 'divider' }}>
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Returns</Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.returns.length}</Typography>
+                          </CardContent>
+                        </Card>
+                        <Card sx={{ border: 1, borderColor: 'divider' }}>
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>COGS Lines</Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.cogsJournalEntry.lines.length}</Typography>
+                          </CardContent>
+                        </Card>
+                        <Card sx={{ border: 1, borderColor: 'divider' }}>
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>P&amp;L Lines</Typography>
+                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.pnlJournalEntry.lines.length}</Typography>
+                          </CardContent>
+                        </Card>
+                      </Box>
 
-                                  <div className="overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>SKU</TableHead>
-                                          <TableHead className="text-right">Weight (Spend)</TableHead>
-                                          <TableHead className="text-right">Allocated</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {adsAllocationPreview.lines.map((line) => (
-                                          <TableRow key={line.sku}>
-                                            <TableCell className="font-mono text-sm text-slate-700 dark:text-slate-200">
-                                              {line.sku}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                              <div className="flex justify-end">
-                                                <div className="w-[140px]">
-                                                  <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={line.weightInput}
-                                                    onChange={(event) => {
-                                                      const next = event.target.value;
-                                                      setAdsDirty(true);
-                                                      setAdsEditLines((prev) =>
-                                                        prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
-                                                      );
-                                                    }}
-                                                  />
-                                                </div>
-                                              </div>
-                                            </TableCell>
-                                            <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                              {line.allocatedCents === null
-                                                ? '—'
-                                                : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
-                                        <TableRow>
-                                          <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                            Total
-                                          </TableCell>
-                                          <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                            {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                        </TableRow>
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-
-                                  <div className="flex items-center justify-between gap-3">
-                                    <Link href="/ads-data" className="text-xs underline text-slate-600 dark:text-slate-300">
-                                      Manage Ads Data
-                                    </Link>
-                                    <div className="flex items-center gap-3">
-                                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                                        Weight source: {adsAllocation.weightSource}
-                                      </div>
-                                      {adsAllocationSaveEnabled && (
-                                        <Button
-                                          size="sm"
-                                          onClick={() => saveAdsAllocationMutation.mutate()}
-                                          disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                                        >
-                                          {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </details>
-                            </>
-                          )}
-                        </div>
-                      )}
-
+                      {/* Blocks */}
                       {isProcessedPreview && previewIssueCount > 0 && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
-                            <AlertTriangle className="h-4 w-4" />
-                            {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
-                          </div>
-                          <div className="mt-1 text-sm text-amber-700 dark:text-amber-200">
-                            {formatPreviewBlockGroups(previewIssueGroups)}
-                          </div>
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-200">Details</summary>
-                            <ul className="mt-2 text-sm space-y-1 text-amber-700 dark:text-amber-200">
-                              {previewIssueGroups.map((group) => (
-                                <li key={group.code}>
-                                  {getPreviewBlockSummary(group, previewIssueFirstByCode.get(group.code))}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        </div>
+                        <Box sx={{ borderRadius: 2, p: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
+                              {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
+                            </Box>
+                          </Box>
+                          <Box component="ul" sx={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: 0.5, color: 'warning.dark' }}>
+                            {visiblePreviewBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                                )}
+                              </li>
+                            ))}
+                          </Box>
+                        </Box>
                       )}
 
                       {!isProcessedPreview && previewBlockingCount > 0 && (
-                        <div
-                          className={cn(
-                            'rounded-lg border p-3',
-                            previewBlockingIdempotencyOnly
-                              ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20'
-                              : 'border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20',
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              'flex items-center gap-2 text-sm font-semibold',
-                              previewBlockingIdempotencyOnly
-                                ? 'text-amber-700 dark:text-amber-300'
-                                : 'text-red-700 dark:text-red-300',
-                            )}
-                          >
-                            <AlertTriangle className="h-4 w-4" />
-                            {previewBlockingIdempotencyOnly
-                              ? 'Already posted data'
-                              : `${previewBlockingCount} blocking issue${previewBlockingCount === 1 ? '' : 's'}`}
-                          </div>
-                          <div
-                            className={cn(
-                              'mt-1 text-sm',
-                              previewBlockingIdempotencyOnly
-                                ? 'text-amber-700 dark:text-amber-200'
-                                : 'text-red-700 dark:text-red-200',
-                            )}
-                          >
-                            {formatPreviewBlockGroups(previewBlockingGroups)}
-                          </div>
-                          <details className="mt-2">
-                            <summary
-                              className={cn(
-                                'cursor-pointer text-xs',
-                                previewBlockingIdempotencyOnly
-                                  ? 'text-amber-700 dark:text-amber-200'
-                                  : 'text-red-700 dark:text-red-200',
-                              )}
-                            >
-                              Details
-                            </summary>
-                            <ul
-                              className={cn(
-                                'mt-2 text-sm space-y-1',
-                                previewBlockingIdempotencyOnly
-                                  ? 'text-amber-700 dark:text-amber-200'
-                                  : 'text-red-700 dark:text-red-200',
-                              )}
-                            >
-                              {previewBlockingGroups.map((group) => (
-                                <li key={group.code}>
-                                  {getPreviewBlockSummary(group, previewBlockingFirstByCode.get(group.code))}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        </div>
+                        <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <WarningIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'error.dark' }}>
+                              {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
+                            </Box>
+                          </Box>
+                          <Box component="ul" sx={{ fontSize: '0.875rem', color: 'error.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            {previewBlockingBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                                )}
+                              </li>
+                            ))}
+                          </Box>
+                        </Box>
                       )}
 
                       {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
-                            <AlertTriangle className="h-4 w-4" />
-                            {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'}
-                          </div>
-                          <div className="mt-1 text-sm text-amber-700 dark:text-amber-200">
-                            {formatPreviewBlockGroups(previewWarningGroups)}
-                          </div>
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-xs text-amber-700 dark:text-amber-200">Details</summary>
-                            <ul className="mt-2 text-sm text-amber-700 dark:text-amber-200 space-y-1">
-                              {previewWarningGroups.map((group) => (
-                                <li key={group.code}>
-                                  {getPreviewBlockSummary(group, previewWarningFirstByCode.get(group.code))}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        </div>
+                        <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
+                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
+                            </Box>
+                          </Box>
+                          <Box component="ul" sx={{ fontSize: '0.875rem', color: 'warning.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            {previewWarningBlocks.map((b, idx) => (
+                              <li key={idx}>
+                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                                {b.details && 'error' in b.details && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                                )}
+                                {formatBlockDetails(b.details) && (
+                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                                )}
+                              </li>
+                            ))}
+                          </Box>
+                        </Box>
                       )}
 
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Description</TableHead>
-                              <TableHead>Account</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {previewJournalLines.map((line, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                  {line.description === '' ? '—' : line.description}
-                                </TableCell>
-                                <TableCell className="text-sm text-slate-700 dark:text-slate-200">
-                                  <div className="flex flex-col">
-                                    <span>{line.accountName === '' ? '—' : line.accountName}</span>
-                                    {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
-                                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                                        {line.accountFullyQualifiedName}
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right text-sm font-medium tabular-nums text-slate-900 dark:text-white">
-                                  <SignedCentsAmount
-                                    amountCents={line.amountCents}
-                                    postingType={line.postingType}
-                                    currency={settlement.marketplace.currency}
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                            <TableRow>
-                              <TableCell colSpan={2} className="text-right text-sm font-medium text-slate-900 dark:text-white">
-                                Net
-                              </TableCell>
-                              <TableCell className="text-right text-sm font-semibold text-slate-900 dark:text-white">
-                                {formatMoney(previewJournalNetCents / 100, settlement.marketplace.currency)}
-                              </TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
+                      {/* COGS Journal Entry */}
+                      {previewData.cogsJournalEntry.lines.length > 0 && (
+                        <Box>
+                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
+                            COGS Journal Entry
+                            <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
+                              {previewData.cogsJournalEntry.docNumber}
+                            </Box>
+                          </Typography>
+                          <Box sx={{ overflowX: 'auto' }}>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead sx={{ textAlign: 'right' }}>Debit</TableHead>
+                                  <TableHead sx={{ textAlign: 'right' }}>Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.cogsJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Box component="span">{line.accountName}</Box>
+                                        {line.accountNumber ? (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
+                                        ) : (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
+                                        )}
+                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                            {line.accountFullyQualifiedName}
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* P&L Reclass Journal Entry */}
+                      {previewData.pnlJournalEntry.lines.length > 0 && (
+                        <Box>
+                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
+                            P&amp;L Reclass Journal Entry
+                            <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
+                              {previewData.pnlJournalEntry.docNumber}
+                            </Box>
+                          </Typography>
+                          <Box sx={{ overflowX: 'auto' }}>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead sx={{ textAlign: 'right' }}>Debit</TableHead>
+                                  <TableHead sx={{ textAlign: 'right' }}>Credit</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewData.pnlJournalEntry.lines.map((line, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Box component="span">{line.accountName}</Box>
+                                        {line.accountNumber ? (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
+                                        ) : (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
+                                        )}
+                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                          <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                            {line.accountFullyQualifiedName}
+                                          </Box>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                      {line.description}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
                   )}
                 </TabsContent>
               )}
@@ -1809,7 +2080,7 @@ export default function SettlementDetailPage() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }
