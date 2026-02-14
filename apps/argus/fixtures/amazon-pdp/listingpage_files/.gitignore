@@ -1,0 +1,4 @@
+# Exclude JS files — not used by the replica (scripts are stripped)
+*.js
+# Exclude sub-frame HTML files
+*.html

@@ -13,3 +13,4 @@ Key workflows:
 
 Persistence:
 - Uses Postgres via Prisma (schema `plutus`) for setup, audit data, processing history, and bill mappings.
+- QBO OAuth session is stored in one server-side JSON file; set `PLUTUS_QBO_CONNECTION_PATH` in every runtime to keep all workers/scripts on the same token file.
