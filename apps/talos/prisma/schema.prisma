@@ -984,22 +984,22 @@ enum PurchaseOrderType {
 }
 
 enum PurchaseOrderStatus {
-  // New 5-stage workflow statuses
+  // Workflow statuses (CLOSED is the canonical terminal status)
   RFQ
   ISSUED
   MANUFACTURING
   OCEAN
   WAREHOUSE
   SHIPPED
-  REJECTED
-  CANCELLED
+  REJECTED // Legacy alias for terminal state; normalized to CLOSED in app layer
+  CANCELLED // Legacy alias for terminal state; normalized to CLOSED in app layer
   ARCHIVED
 
   // Legacy statuses (for backward compatibility with existing data)
   AWAITING_PROOF
   REVIEW
   POSTED
-  CLOSED
+  CLOSED // Canonical terminal status for active workflow
 
   @@map("PurchaseOrderStatus")
 }
