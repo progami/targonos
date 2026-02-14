@@ -162,37 +162,7 @@ async function findBestCoveringUpload(input: {
   if (fullCoverageUploads.length > 0) {
     return chooseBestUpload(fullCoverageUploads);
   }
-
-  const overlappingUploads = await db.adsDataUpload.findMany({
-    where: {
-      reportType: ADS_REPORT_TYPE,
-      marketplace: input.marketplace,
-      startDate: { lte: input.invoiceEndDate },
-      endDate: { gte: input.invoiceStartDate },
-    },
-    select: {
-      id: true,
-      filename: true,
-      startDate: true,
-      endDate: true,
-      uploadedAt: true,
-    },
-    orderBy: { uploadedAt: 'desc' },
-  });
-
-  return chooseBestUpload(overlappingUploads);
-}
-
-async function loadAdsReportSpendCents(input: { uploadId: string; startDate: string; endDate: string }): Promise<number> {
-  const grouped = await db.adsDataRow.aggregate({
-    where: {
-      uploadId: input.uploadId,
-      date: { gte: input.startDate, lte: input.endDate },
-    },
-    _sum: { spendCents: true },
-  });
-  const total = grouped._sum.spendCents ?? 0;
-  return Number.isInteger(total) ? total : 0;
+  return null;
 }
 
 async function resolveSettlementAdsTotal(input: {
@@ -210,41 +180,45 @@ async function resolveSettlementAdsTotal(input: {
     return {
       totalAdsCents: auditTotal,
       totalSource: TOTAL_SOURCE_AUDIT,
-      adsDataUpload: null,
+      adsDataUpload: await findBestCoveringUpload({
+        marketplace: input.marketplace,
+        invoiceStartDate: input.invoiceStartDate,
+        invoiceEndDate: input.invoiceEndDate,
+      }),
     };
   }
 
+  return {
+    totalAdsCents: 0,
+    totalSource: TOTAL_SOURCE_NONE,
+    adsDataUpload: await findBestCoveringUpload({
+      marketplace: input.marketplace,
+      invoiceStartDate: input.invoiceStartDate,
+      invoiceEndDate: input.invoiceEndDate,
+    }),
+  };
+}
+
+async function requireCoveringUpload(input: {
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+}): Promise<AdsDataUploadSelection> {
   const upload = await findBestCoveringUpload({
     marketplace: input.marketplace,
     invoiceStartDate: input.invoiceStartDate,
     invoiceEndDate: input.invoiceEndDate,
   });
+
   if (!upload) {
-    return {
-      totalAdsCents: 0,
-      totalSource: TOTAL_SOURCE_NONE,
-      adsDataUpload: null,
-    };
+    throw new AllocationApiError(
+      `No Ads Data upload fully covers ${input.marketplace} ${input.invoiceId} (${input.invoiceStartDate}–${input.invoiceEndDate}). Upload a Sponsored Products report that covers the full invoice range.`,
+      400,
+    );
   }
 
-  const reportSpendCents = await loadAdsReportSpendCents({
-    uploadId: upload.id,
-    startDate: input.invoiceStartDate,
-    endDate: input.invoiceEndDate,
-  });
-  if (reportSpendCents <= 0) {
-    return {
-      totalAdsCents: 0,
-      totalSource: TOTAL_SOURCE_NONE,
-      adsDataUpload: upload,
-    };
-  }
-
-  return {
-    totalAdsCents: -reportSpendCents,
-    totalSource: TOTAL_SOURCE_ADS_REPORT,
-    adsDataUpload: upload,
-  };
+  return upload;
 }
 
 async function computeAllocation(input: {
@@ -265,18 +239,14 @@ async function computeAllocation(input: {
     };
   }
 
-  const bestUpload =
-    input.adsDataUpload ??
-    (await findBestCoveringUpload({
+  let bestUpload = input.adsDataUpload;
+  if (!bestUpload) {
+    bestUpload = await requireCoveringUpload({
       marketplace: input.marketplace,
+      invoiceId: input.invoiceId,
       invoiceStartDate: input.invoiceStartDate,
       invoiceEndDate: input.invoiceEndDate,
-    }));
-  if (!bestUpload) {
-    throw new AllocationApiError(
-      `No Ads Data upload overlaps ${input.marketplace} ${input.invoiceId} (${input.invoiceStartDate}–${input.invoiceEndDate}). Upload a Sponsored Products report for this period.`,
-      400,
-    );
+    });
   }
 
   const grouped = await db.adsDataRow.groupBy({
@@ -604,7 +574,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     if (totalAdsCents === 0) {
       return NextResponse.json(
-        { error: 'No advertising cost found for this invoice in stored Audit Data or Ads Data' },
+        { error: 'No Amazon Advertising Costs rows found in Audit Data for this invoice; nothing to allocate' },
         { status: 400 },
       );
     }

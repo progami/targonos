@@ -308,6 +308,91 @@ test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
   assert.equal(blocks.length, 0);
 });
 
+test('computePnlAllocation tracks SKU breakdown for SKU-less fee rows', () => {
+  const rows = [
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 10,
+    },
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Commission',
+      net: -3,
+    },
+  ];
+
+  const allocation = computePnlAllocation(rows, {
+    getBrandForSku: () => 'BrandA',
+  });
+
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -300);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -200);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-B'], -100);
+});
+
+test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '186',
+      SyncToken: '0',
+      Name: 'Amazon Advertising Costs',
+      AccountType: 'Expense',
+      AccountSubType: 'AdvertisingPromotional',
+    },
+    {
+      Id: '199',
+      SyncToken: '0',
+      Name: 'Amazon Advertising Costs - US-PDS',
+      AccountType: 'Expense',
+      AccountSubType: 'AdvertisingPromotional',
+      ParentRef: { value: '186', name: 'Amazon Advertising Costs' },
+    },
+  ];
+
+  const lines = buildPnlJournalLines(
+    { amazonAdvertisingCosts: { 'US-PDS': -12345 } },
+    { amazonAdvertisingCosts: '186' },
+    accounts,
+    'INV-3',
+    blocks,
+    {
+      amazonAdvertisingCosts: {
+        'US-PDS': {
+          'SKU-A': -8230,
+          'SKU-B': -4115,
+        },
+      },
+    },
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.description.includes('SKUs'), true);
+  assert.equal(lines[0]?.description.includes('SKU-A'), true);
+  assert.equal(lines[0]?.description.includes('SKU-B'), true);
+});
+
 test('isBlockingProcessingCode treats cost basis and allocation as warnings', () => {
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), false);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);

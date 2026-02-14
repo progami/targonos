@@ -20,6 +20,7 @@ export type PnlBucketKey =
 export type PnlAllocation = {
   invoiceId: string;
   allocationsByBucket: Record<PnlBucketKey, Record<string, number>>;
+  skuBreakdownByBucketBrand: Record<PnlBucketKey, Record<string, Record<string, number>>>;
 };
 
 export type BrandResolver = {
@@ -44,41 +45,55 @@ function isSalesPrincipal(description: string): boolean {
   return description.trim().startsWith('Amazon Sales - Principal');
 }
 
-function allocateSignedByUnits(
-  totalCents: number,
-  unitsByBrand: Map<string, number>,
-): Record<string, number> {
-  if (unitsByBrand.size === 0) {
-    throw new PnlAllocationNoWeightsError(
-      'Cannot allocate SKU-less fee buckets because there are no Amazon Sales - Principal rows with SKU + quantity > 0',
-    );
+function allocateSignedByWeights(totalCents: number, weightsByKey: Map<string, number>, noWeightsMessage: string): Record<string, number> {
+  if (weightsByKey.size === 0) {
+    throw new PnlAllocationNoWeightsError(noWeightsMessage);
   }
 
   const sign = totalCents < 0 ? -1 : 1;
   const abs = Math.abs(totalCents);
 
-  const weights = Array.from(unitsByBrand.entries()).map(([brand, units]) => ({
-    key: brand,
-    weight: units,
+  const weights = Array.from(weightsByKey.entries()).map(([key, weight]) => ({
+    key,
+    weight,
   }));
 
-  let totalUnits = 0;
-  for (const w of weights) totalUnits += w.weight;
-  if (totalUnits <= 0) {
-    throw new PnlAllocationNoWeightsError('Cannot allocate SKU-less P&L rows: total units-by-brand weight is 0');
+  let totalWeight = 0;
+  for (const w of weights) totalWeight += w.weight;
+  if (totalWeight <= 0) {
+    throw new PnlAllocationNoWeightsError(noWeightsMessage);
   }
 
   const allocated = allocateByWeight(abs, weights);
   const result: Record<string, number> = {};
-  for (const [brand, cents] of Object.entries(allocated)) {
-    result[brand] = sign * cents;
+  for (const [key, cents] of Object.entries(allocated)) {
+    result[key] = sign * cents;
   }
   return result;
+}
+
+function allocateSignedByUnits(totalCents: number, unitsByBrand: Map<string, number>): Record<string, number> {
+  return allocateSignedByWeights(
+    totalCents,
+    unitsByBrand,
+    'Cannot allocate SKU-less fee buckets because there are no Amazon Sales - Principal rows with SKU + quantity > 0',
+  );
 }
 
 function addCents(target: Record<string, number>, brand: string, cents: number) {
   const current = target[brand];
   target[brand] = (current === undefined ? 0 : current) + cents;
+}
+
+function addSkuCents(target: Record<string, Record<string, number>>, brand: string, sku: string, cents: number) {
+  const existingBySku = target[brand];
+  if (existingBySku === undefined) {
+    target[brand] = { [sku]: cents };
+    return;
+  }
+
+  const current = existingBySku[sku];
+  existingBySku[sku] = (current === undefined ? 0 : current) + cents;
 }
 
 export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandResolver): PnlAllocation {
@@ -102,9 +117,19 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     amazonFbaInventoryReimbursement: {},
     warehousingAwd: {},
   };
+  const skuBreakdownByBucketBrand: Record<PnlBucketKey, Record<string, Record<string, number>>> = {
+    amazonSellerFees: {},
+    amazonFbaFees: {},
+    amazonStorageFees: {},
+    amazonAdvertisingCosts: {},
+    amazonPromotions: {},
+    amazonFbaInventoryReimbursement: {},
+    warehousingAwd: {},
+  };
 
   // Units sold by brand (weights for non-SKU lines)
   const unitsByBrand = new Map<string, number>();
+  const unitsByBrandSku = new Map<string, Map<string, number>>();
   for (const row of rows) {
     const sku = row.sku.trim();
     if (sku === '') continue;
@@ -115,6 +140,14 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     const units = Math.abs(row.quantity);
     const current = unitsByBrand.get(brand);
     unitsByBrand.set(brand, (current === undefined ? 0 : current) + units);
+
+    const brandSkuUnits = unitsByBrandSku.get(brand);
+    if (brandSkuUnits === undefined) {
+      unitsByBrandSku.set(brand, new Map([[sku, units]]));
+      continue;
+    }
+    const skuUnits = brandSkuUnits.get(sku);
+    brandSkuUnits.set(sku, (skuUnits === undefined ? 0 : skuUnits) + units);
   }
 
   for (const row of rows) {
@@ -130,14 +163,28 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     if (sku !== '') {
       const brand = brandResolver.getBrandForSku(sku);
       addCents(allocationsByBucket[bucket], brand, cents);
+      addSkuCents(skuBreakdownByBucketBrand[bucket], brand, sku, cents);
       continue;
     }
 
     const allocations = allocateSignedByUnits(cents, unitsByBrand);
     for (const [brand, allocatedCents] of Object.entries(allocations)) {
       addCents(allocationsByBucket[bucket], brand, allocatedCents);
+
+      const brandSkuUnits = unitsByBrandSku.get(brand);
+      if (brandSkuUnits === undefined) {
+        throw new PnlAllocationNoWeightsError(`Cannot allocate SKU breakdown for brand ${brand}: missing unit weights`);
+      }
+      const skuAllocations = allocateSignedByWeights(
+        allocatedCents,
+        brandSkuUnits,
+        `Cannot allocate SKU breakdown for brand ${brand}: zero unit weights`,
+      );
+      for (const [allocatedSku, allocatedSkuCents] of Object.entries(skuAllocations)) {
+        addSkuCents(skuBreakdownByBucketBrand[bucket], brand, allocatedSku, allocatedSkuCents);
+      }
     }
   }
 
-  return { invoiceId, allocationsByBucket };
+  return { invoiceId, allocationsByBucket, skuBreakdownByBucketBrand };
 }
