@@ -520,11 +520,9 @@ export function StrategyGroupCard({
                       ) : null}
                     </span>
 
-                    {strategy.description ? (
-                      <p className="mt-1 mb-3 line-clamp-2 text-xs text-muted-foreground">
-                        {strategy.description}
-                      </p>
-                    ) : null}
+                    <p className="mt-1 mb-3 line-clamp-2 text-xs text-muted-foreground">
+                      {strategy.description ?? '\u00A0'}
+                    </p>
 
                     <div className="mt-auto flex items-center gap-2 pt-2">
                       {isActive ? (
