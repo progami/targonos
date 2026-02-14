@@ -411,30 +411,31 @@ const STAGE_DOCUMENTS: Record<
   Array<{ id: string; label: string }>
 > = {
   ISSUED: [],
-  MANUFACTURING: [{ id: 'inspection_report', label: 'Inspection Report' }],
-  OCEAN: [
-    { id: 'commercial_invoice', label: 'Commercial Invoice' },
-    { id: 'bill_of_lading', label: 'Bill of Lading' },
+  MANUFACTURING: [
+    { id: 'inspection_report', label: 'Inspection Report' },
     { id: 'packing_list', label: 'Packing List' },
-    { id: 'grs_tc', label: 'GRS TC' },
+    { id: 'bill_of_lading', label: 'Bill of Lading' },
+    { id: 'commercial_invoice', label: 'Commercial Invoice' },
   ],
-  WAREHOUSE: [
+  OCEAN: [
+    { id: 'grs_tc', label: 'GRS TC' },
     { id: 'grn', label: 'GRN' },
     { id: 'custom_declaration', label: 'Customs & Border Patrol Clearance Proof' },
   ],
+  WAREHOUSE: [],
 }
 
 function getStageDocuments(
   stage: Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   lines: PurchaseOrderLineSummary[]
 ): Array<{ id: string; label: string }> {
-  if (stage === 'MANUFACTURING') {
+  if (stage === 'ISSUED') {
     const activeLines = lines.filter(line => line.status !== 'CANCELLED')
     const artworkDocs = activeLines.map(line => ({
       id: `box_artwork_${line.skuCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       label: `Box Artwork — ${line.skuCode}`,
     }))
-    return [...artworkDocs, { id: 'inspection_report', label: 'Inspection Report' }]
+    return artworkDocs
   }
   return STAGE_DOCUMENTS[stage]
 }
@@ -4524,10 +4525,22 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           gateKey: `documents.pi.${entry.docType}`,
                         }))
 
-                      const requiredDocTypes = new Set(requiredPiDocs.map(doc => doc.id))
+                      const artworkDocs = getStageDocuments('ISSUED', order.lines).map(doc => ({
+                        id: doc.id,
+                        label: doc.label,
+                        required: true,
+                        doc: docsByType.get(doc.id),
+                        gateKey: `documents.${doc.id}`,
+                      }))
+
+                      const requiredDocTypes = new Set([
+                        ...requiredPiDocs.map(doc => doc.id),
+                        ...artworkDocs.map(doc => doc.id),
+                      ])
                       const otherDocs = stageDocs.filter(doc => !requiredDocTypes.has(doc.documentType))
                       return [
                         ...requiredPiDocs,
+                        ...artworkDocs,
                         ...otherDocs.map(doc => ({
                           id: doc.documentType,
                           label: getDocumentLabel(stage, doc.documentType),
