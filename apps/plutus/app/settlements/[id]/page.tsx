@@ -1496,16 +1496,18 @@ export default function SettlementDetailPage() {
                             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                               Invoice <span className="font-mono">{adsAllocation.invoiceId}</span> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
                             </div>
-                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              Total source:{' '}
-                              {adsAllocation.totalSource === 'AUDIT_DATA'
-                                ? 'Audit Data (Amazon Advertising Costs rows)'
-                                : adsAllocation.totalSource === 'ADS_REPORT'
-                                  ? 'Legacy inferred from Ads Data (no invoice billing total)'
-                                  : adsAllocation.totalSource === 'SAVED'
-                                    ? 'Saved allocation'
-                                    : 'No source data'}
-                            </div>
+                            {adsAllocation.totalAdsCents !== 0 && (
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                Total source:{' '}
+                                {adsAllocation.totalSource === 'AUDIT_DATA'
+                                  ? 'Audit Data (Amazon Advertising Costs rows)'
+                                  : adsAllocation.totalSource === 'ADS_REPORT'
+                                    ? 'Legacy inferred from Ads Data (no invoice billing total)'
+                                    : adsAllocation.totalSource === 'SAVED'
+                                      ? 'Saved allocation'
+                                      : 'No source data'}
+                              </div>
+                            )}
                             {adsAllocation.adsDataUpload && (
                               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                 Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
@@ -1526,23 +1528,27 @@ export default function SettlementDetailPage() {
                           </div>
                         </div>
 
-                        {!adsAllocationSaveEnabled ? (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Preview allocation &middot; edit weights to simulate and process the settlement to save
-                          </div>
-                        ) : adsAllocation.kind === 'saved' ? (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Saved allocation &middot; weights can be edited and re-saved
-                          </div>
-                        ) : (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Prefilled allocation &middot; review and save to lock it in
-                          </div>
+                        {adsAllocation.totalAdsCents !== 0 && (
+                          <>
+                            {!adsAllocationSaveEnabled ? (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Preview allocation &middot; edit weights to simulate and process the settlement to save
+                              </div>
+                            ) : adsAllocation.kind === 'saved' ? (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Saved allocation &middot; weights can be edited and re-saved
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Prefilled allocation &middot; review and save to lock it in
+                              </div>
+                            )}
+                          </>
                         )}
 
                         {adsAllocation.totalAdsCents === 0 ? (
                           <div className="text-sm text-slate-500 dark:text-slate-400">
-                            No Amazon Advertising Costs rows found in Audit Data for this invoice. Nothing to allocate.
+                            No advertising costs found for this invoice.
                           </div>
                         ) : (
                           <>
