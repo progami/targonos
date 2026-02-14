@@ -393,9 +393,13 @@ async function loadSettlementSkuProfitability(input: {
   });
 }
 
-export async function GET(_req: NextRequest, context: RouteContext) {
+export async function GET(req: NextRequest, context: RouteContext) {
   try {
     const { id: settlementJournalEntryId } = await context.params;
+
+    const requestUrl = new URL(req.url);
+    const previewInvoiceId = requestUrl.searchParams.get('invoiceId');
+    const previewMarketplace = requestUrl.searchParams.get('marketplace');
 
     const processing = await db.settlementProcessing.findUnique({
       where: { qboSettlementJournalEntryId: settlementJournalEntryId },
@@ -403,7 +407,52 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     });
 
     if (!processing) {
-      return NextResponse.json({ error: 'Settlement not processed' }, { status: 400 });
+      const invoiceId = typeof previewInvoiceId === 'string' ? previewInvoiceId.trim() : '';
+      const marketplace = typeof previewMarketplace === 'string' ? previewMarketplace.trim() : '';
+
+      if (invoiceId === '') {
+        return NextResponse.json({ error: 'Missing invoiceId for preview' }, { status: 400 });
+      }
+      if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
+        return NextResponse.json({ error: 'Missing marketplace for preview' }, { status: 400 });
+      }
+
+      const invoiceRange = await loadInvoiceDateRange({ invoiceId, marketplace });
+      const resolvedTotal = await resolveSettlementAdsTotal({
+        marketplace,
+        invoiceId,
+        invoiceStartDate: invoiceRange.startDate,
+        invoiceEndDate: invoiceRange.endDate,
+      });
+
+      const computed = await computeAllocation({
+        marketplace,
+        invoiceId,
+        invoiceStartDate: invoiceRange.startDate,
+        invoiceEndDate: invoiceRange.endDate,
+        totalAdsCents: resolvedTotal.totalAdsCents,
+        adsDataUpload: resolvedTotal.adsDataUpload,
+      });
+
+      return NextResponse.json({
+        kind: 'computed',
+        marketplace,
+        invoiceId,
+        invoiceStartDate: invoiceRange.startDate,
+        invoiceEndDate: invoiceRange.endDate,
+        totalAdsCents: resolvedTotal.totalAdsCents,
+        totalSource: resolvedTotal.totalSource,
+        weightSource: WEIGHT_SOURCE,
+        weightUnit: WEIGHT_UNIT,
+        adsDataUpload: computed.adsDataUpload
+          ? {
+              ...computed.adsDataUpload,
+              uploadedAt: computed.adsDataUpload.uploadedAt.toISOString(),
+            }
+          : null,
+        lines: computed.lines,
+        skuProfitability: null,
+      });
     }
 
     if (processing.marketplace !== 'amazon.com' && processing.marketplace !== 'amazon.co.uk') {

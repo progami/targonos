@@ -128,24 +128,53 @@ export function buildPnlJournalLines(
 ): JournalEntryLinePreview[] {
   const pnlLines: JournalEntryLinePreview[] = [];
 
-  const bucketLabelByKey: Record<string, string> = {
-    amazonSellerFees: 'Amazon Seller Fees',
-    amazonFbaFees: 'Amazon FBA Fees',
-    amazonStorageFees: 'Amazon Storage Fees',
-    amazonAdvertisingCosts: 'Amazon Advertising Costs',
-    amazonPromotions: 'Amazon Promotions',
-    amazonFbaInventoryReimbursement: 'Amazon FBA Inventory Reimbursement',
+  const bucketMetaByKey: Record<
+    string,
+    {
+      label: string;
+      buildSubAccountName: (brand: string) => string;
+    }
+  > = {
+    amazonSellerFees: {
+      label: 'Amazon Seller Fees',
+      buildSubAccountName: (brand) => `Amazon Seller Fees - ${brand}`,
+    },
+    amazonFbaFees: {
+      label: 'Amazon FBA Fees',
+      buildSubAccountName: (brand) => `Amazon FBA Fees - ${brand}`,
+    },
+    amazonStorageFees: {
+      label: 'Amazon Storage Fees',
+      buildSubAccountName: (brand) => `Amazon Storage Fees - ${brand}`,
+    },
+    amazonAdvertisingCosts: {
+      label: 'Amazon Advertising Costs',
+      buildSubAccountName: (brand) => `Amazon Advertising Costs - ${brand}`,
+    },
+    amazonPromotions: {
+      label: 'Amazon Promotions',
+      buildSubAccountName: (brand) => `Amazon Promotions - ${brand}`,
+    },
+    amazonFbaInventoryReimbursement: {
+      label: 'Amazon FBA Inventory Reimbursement',
+      buildSubAccountName: (brand) => `Amazon FBA Inventory Reimbursement - ${brand}`,
+    },
+    warehousingAwd: {
+      label: 'AWD',
+      buildSubAccountName: (brand) => brand,
+    },
   };
 
   for (const [bucketKey, perBrand] of Object.entries(pnlAllocationsByBucket)) {
     const parentAccountId = mapping[bucketKey];
-    const label = bucketLabelByKey[bucketKey];
-    if (!parentAccountId || !label) continue;
+    const bucketMeta = bucketMetaByKey[bucketKey];
+    if (!parentAccountId || !bucketMeta) continue;
+    const label = bucketMeta.label;
 
     for (const [brand, cents] of Object.entries(perBrand)) {
       if (cents === 0) continue;
 
-      const subName = `${label} - ${brand}`;
+      const subName = bucketMeta.buildSubAccountName(brand);
       let brandAccount;
       try {
         brandAccount = findRequiredSubAccountId(accounts, parentAccountId, subName);
