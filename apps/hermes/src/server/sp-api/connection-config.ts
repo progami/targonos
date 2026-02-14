@@ -1,5 +1,16 @@
 import type { SpApiConfig } from "./client";
 
+type HermesConnectionMapping = {
+  connectionId?: string;
+  region?: "NA" | "EU" | "FE";
+  sandbox?: boolean;
+  endpointOverride?: string;
+  awsRegionOverride?: string;
+  lwaRefreshToken?: string;
+  awsRoleArn?: string;
+  userAgent?: string;
+};
+
 function getEnvOrThrow(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} is required for Hermes SP-API calls`);
@@ -10,6 +21,24 @@ function getBool(name: string, fallback: boolean = false): boolean {
   const raw = process.env[name];
   if (!raw) return fallback;
   return raw === "1" || raw.toLowerCase() === "true" || raw.toLowerCase() === "yes";
+}
+
+function parseConnectionMappings(): HermesConnectionMapping[] | null {
+  const mappingRaw = process.env.HERMES_CONNECTIONS_JSON;
+  if (!mappingRaw) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(mappingRaw);
+  } catch {
+    throw new Error("HERMES_CONNECTIONS_JSON must be valid JSON");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("HERMES_CONNECTIONS_JSON must be a JSON array");
+  }
+
+  return parsed as HermesConnectionMapping[];
 }
 
 /**
@@ -24,17 +53,38 @@ function getBool(name: string, fallback: boolean = false): boolean {
  * - do NOT keep refresh tokens in env
  */
 export function loadSpApiConfigForConnection(connectionId: string): SpApiConfig {
-  const mappingRaw = process.env.HERMES_CONNECTIONS_JSON;
-  let mapping: any | undefined;
+  const mappings = parseConnectionMappings();
+  let mapping: HermesConnectionMapping | null = null;
 
-  if (mappingRaw) {
-    try {
-      const parsed = JSON.parse(mappingRaw);
-      if (Array.isArray(parsed)) {
-        mapping = parsed.find((x) => x?.connectionId === connectionId);
+  if (mappings) {
+    for (const item of mappings) {
+      if (item?.connectionId === connectionId) {
+        mapping = item;
+        break;
       }
-    } catch {
-      // ignore
+    }
+
+    if (!mapping) {
+      const configuredIds = mappings
+        .map((item) => {
+          if (typeof item?.connectionId !== "string") return null;
+          const trimmed = item.connectionId.trim();
+          if (!trimmed) return null;
+          return trimmed;
+        })
+        .filter((id): id is string => Boolean(id));
+      const configuredIdsLabel = configuredIds.length > 0 ? configuredIds.join(", ") : "none";
+
+      throw new Error(
+        `Unknown Hermes connectionId "${connectionId}" for SP-API config (configured: ${configuredIdsLabel})`
+      );
+    }
+  } else {
+    const defaultConnectionId = process.env.HERMES_DEFAULT_CONNECTION_ID ?? "default";
+    if (connectionId !== defaultConnectionId) {
+      throw new Error(
+        `Unknown Hermes connectionId "${connectionId}" for SP-API config (expected default "${defaultConnectionId}")`
+      );
     }
   }
 
