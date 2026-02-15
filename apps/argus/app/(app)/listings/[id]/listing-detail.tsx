@@ -297,12 +297,7 @@ export function ListingDetail({
         return
       }
 
-      const doc = iframeDocRef.current
-      const baseline = doc ? (doc as ArgusReplicaDocument).__argusTitleBaseline : undefined
-      const nextDraft = baseline !== undefined
-        ? baseline
-        : (listing ? listing.label : '')
-      setTitleDraft(nextDraft)
+      setTitleDraft(listing ? listing.label : '')
       setTitleEditorOpen(true)
     }
     callbacksRef.current.titleLive = () => {
@@ -346,14 +341,12 @@ export function ListingDetail({
     callbacksRef.current.bulletsNext = () => setBulletsIndex((current) => (current > 0 ? current - 1 : current))
     callbacksRef.current.bulletsEdit = () => {
       const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
-      const doc = iframeDocRef.current
-      const baseline = doc ? (doc as ArgusReplicaDocument).__argusBulletsBaseline : undefined
       setBulletsDraft({
-        bullet1: selected?.bullet1 ?? (baseline?.bullets[0] ?? ''),
-        bullet2: selected?.bullet2 ?? (baseline?.bullets[1] ?? ''),
-        bullet3: selected?.bullet3 ?? (baseline?.bullets[2] ?? ''),
-        bullet4: selected?.bullet4 ?? (baseline?.bullets[3] ?? ''),
-        bullet5: selected?.bullet5 ?? (baseline?.bullets[4] ?? ''),
+        bullet1: selected?.bullet1 ?? '',
+        bullet2: selected?.bullet2 ?? '',
+        bullet3: selected?.bullet3 ?? '',
+        bullet4: selected?.bullet4 ?? '',
+        bullet5: selected?.bullet5 ?? '',
       })
       setBulletsEditorOpen(true)
     }
@@ -696,18 +689,19 @@ export function ListingDetail({
 
     callbacksRef.current.ebcModuleDelete = (sectionType: string, modulePosition: number) => {
       if (!listing) return
-      const key = ebcModulePointerKey(sectionType, modulePosition)
-      const revisionId = ebcModulePointers[key]
-      if (!revisionId) return
-
-      const seq = ebcRevisions.find((rev) => rev.id === revisionId)?.seq
-      if (!window.confirm(`Delete Module v${seq ?? '—'}?`)) return
+      if (!window.confirm('Clear this module?')) return
 
       void (async () => {
-        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ revisionId }),
+        const form = new FormData()
+        form.append('sectionType', sectionType)
+        form.append('modulePosition', String(modulePosition))
+        form.append('headline', '')
+        form.append('bodyText', '')
+        form.append('clearImages', 'true')
+
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+          method: 'POST',
+          body: form,
         })
         if (!res.ok) {
           window.alert(await res.text())
@@ -721,7 +715,7 @@ export function ListingDetail({
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
 
-      router.push(`${basePath}/listings/${normalized}`)
+      router.push(normalized)
     }
   }, [
     listing,
@@ -843,7 +837,7 @@ export function ListingDetail({
     const selectedVideo = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
     const selectedEbc = ebcRevisions.length > ebcIndex ? ebcRevisions[ebcIndex] : null
     const appliedEbc = composeEbcRevision(ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
-    const selectedTitle = selectedTitleRev ? selectedTitleRev.title : null
+    const selectedTitle = selectedTitleRev ? selectedTitleRev.title : (listing ? listing.label : null)
 
     applyTitle(doc, selectedTitle)
     applyPrice(doc, price)
@@ -1896,7 +1890,7 @@ function updateEbcModuleControls(
 
     if (prev) prev.disabled = safeIndex >= history.length - 1
     if (next) next.disabled = safeIndex <= 0
-    if (del) del.disabled = !(key in pointers)
+    if (del) del.disabled = false
   }
 }
 
@@ -2053,6 +2047,13 @@ function injectArgusVersionControls(
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
+      .argus-ebc-placeholder {
+        position: relative !important;
+        min-height: 120px;
+        border: 1px dashed rgba(148, 163, 184, 0.85);
+        border-radius: 10px;
+        background: rgba(248, 250, 252, 0.85);
+      }
       .argus-ebc-placeholder > :not(.argus-vc-ebc-module-controls) { visibility: hidden !important; }
       .argus-ebc-placeholder::after {
         content: attr(data-argus-ebc-placeholder);
@@ -2067,6 +2068,7 @@ function injectArgusVersionControls(
         font-weight: 600;
         font-size: 13px;
         pointer-events: none;
+        z-index: 2;
       }
       a { cursor: default !important; }
     `
@@ -2076,7 +2078,7 @@ function injectArgusVersionControls(
   const imageBlock = doc.querySelector<HTMLElement>('#imageBlock')
   if (imageBlock) {
     ensureTrackControls(doc, imageBlock, 'gallery', 'Images', callbacksRef)
-    ensureGalleryThumbnailSwap(doc)
+    ensureGalleryThumbnailSwap(doc, callbacksRef)
   }
 
   const titleSectionCandidate = doc.querySelector<HTMLElement>('#titleSection')
@@ -2134,6 +2136,7 @@ function injectArgusVersionControls(
 	        e.preventDefault()
 	        e.stopImmediatePropagation()
 	        e.stopPropagation()
+	        applyVariationSelection(doc, asin)
 	        callbacksRef.current?.variationSelect(asin)
 	      },
 	      true,
@@ -2429,7 +2432,7 @@ function ensureEbcModuleControls(
   del.className = 'argus-vc-btn argus-vc-danger'
   del.type = 'button'
   del.textContent = '🗑'
-  del.title = 'Delete version'
+  del.title = 'Clear module'
   del.dataset.action = 'delete'
   del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
 
@@ -2472,22 +2475,9 @@ function updateTrackControls(
 }
 
 function applyTitle(doc: Document, title: string | null) {
-  const storedDoc = doc as ArgusReplicaDocument
   const productTitle = doc.getElementById('productTitle')
   if (!productTitle) return
-
-  if (storedDoc.__argusTitleBaseline === undefined) {
-    storedDoc.__argusTitleBaseline = productTitle.textContent ?? ''
-  }
-
-  if (title === null) {
-    if (storedDoc.__argusTitleBaseline !== undefined) {
-      productTitle.textContent = storedDoc.__argusTitleBaseline
-    }
-    return
-  }
-
-  productTitle.textContent = title
+  productTitle.textContent = title ?? ''
 }
 
 function applyPrice(doc: Document, price: ListingPriceState | null) {
@@ -2582,25 +2572,9 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
   const list = doc.querySelector('#feature-bullets ul')
   if (!list) return
 
-  const storedDoc = doc as ArgusReplicaDocument
-  if (!storedDoc.__argusBulletsBaseline) {
-    const baselineBullets = Array.from(list.querySelectorAll('.a-list-item'))
-      .map((el) => el.textContent?.trim() ?? '')
-      .filter((text) => text.length > 0)
-      .slice(0, 5)
-
-    storedDoc.__argusBulletsBaseline = {
-      html: (list as HTMLElement).innerHTML,
-      bullets: baselineBullets,
-    }
-  }
-
   const template = list.querySelector('li')
   list.querySelectorAll('li').forEach((li) => li.remove())
   if (!rev) {
-    if (storedDoc.__argusBulletsBaseline) {
-      (list as HTMLElement).innerHTML = storedDoc.__argusBulletsBaseline.html
-    }
     return
   }
 
@@ -2618,14 +2592,7 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
   }
 }
 
-interface BulletsBaseline {
-  html: string
-  bullets: string[]
-}
-
 type ArgusReplicaDocument = Document & {
-  __argusTitleBaseline?: string
-  __argusBulletsBaseline?: BulletsBaseline
   __argusMainMediaIndex?: number
   __argusVideoBaseline?: string
 }
@@ -2655,6 +2622,16 @@ function svgPlaceholderDataUrl(label: string): string {
 const ARGUS_GALLERY_PLACEHOLDER_MAIN = svgPlaceholderDataUrl('Upload images')
 const ARGUS_GALLERY_PLACEHOLDER_THUMB = svgPlaceholderDataUrl('Upload')
 const ARGUS_EBC_PLACEHOLDER_IMAGE = svgPlaceholderDataUrl('Upload image')
+const ARGUS_GALLERY_THUMB_SIZE_PX = 48
+
+function sizeGalleryThumbImage(img: HTMLImageElement) {
+  img.width = ARGUS_GALLERY_THUMB_SIZE_PX
+  img.height = ARGUS_GALLERY_THUMB_SIZE_PX
+  img.style.width = `${ARGUS_GALLERY_THUMB_SIZE_PX}px`
+  img.style.height = `${ARGUS_GALLERY_THUMB_SIZE_PX}px`
+  img.style.objectFit = 'contain'
+  img.style.display = 'block'
+}
 
 function itemNoFromElement(el: Element): number | null {
   for (const cls of Array.from(el.classList)) {
@@ -2731,10 +2708,11 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
         .sort((a, b) => (itemNoFromElement(a) ?? 0) - (itemNoFromElement(b) ?? 0))
 
       for (const li of imageLis) {
-        const existingImg = li.querySelector('img')
+        const existingImg = li.querySelector<HTMLImageElement>('img')
         const img = existingImg ? existingImg : doc.createElement('img')
         img.src = ARGUS_GALLERY_PLACEHOLDER_THUMB
         img.setAttribute('data-old-hires', ARGUS_GALLERY_PLACEHOLDER_MAIN)
+        sizeGalleryThumbImage(img)
         if (!li.contains(img)) li.append(img)
         li.style.display = ''
       }
@@ -2772,20 +2750,27 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     .slice()
     .sort((a, b) => (itemNoFromElement(a) ?? 0) - (itemNoFromElement(b) ?? 0))
 
-  for (let i = 0; i < thumbs.length && i < imageLis.length; i++) {
-    const item = thumbs[i]
+  for (let i = 0; i < imageLis.length; i++) {
     const li = imageLis[i]
-    const existingImg = li.querySelector('img')
+    const item = i < thumbs.length ? thumbs[i] : null
+    const existingImg = li.querySelector<HTMLImageElement>('img')
     const img = existingImg ? existingImg : doc.createElement('img')
+
+    if (!item) {
+      img.src = ARGUS_GALLERY_PLACEHOLDER_THUMB
+      img.setAttribute('data-old-hires', ARGUS_GALLERY_PLACEHOLDER_MAIN)
+      sizeGalleryThumbImage(img)
+      if (!li.contains(img)) li.append(img)
+      li.style.display = ''
+      continue
+    }
+
     img.src = resolveImageSrc(item.src)
     const hiRes = item.hiRes ? resolveImageSrc(item.hiRes) : img.src
     img.setAttribute('data-old-hires', hiRes)
+    sizeGalleryThumbImage(img)
     if (!li.contains(img)) li.append(img)
     li.style.display = ''
-  }
-
-  for (let i = thumbs.length; i < imageLis.length; i++) {
-    imageLis[i].style.display = 'none'
   }
 
   const firstVisible = altList.querySelector<HTMLElement>('li.imageThumbnail:not([style*="display: none"])')
@@ -2795,7 +2780,10 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   setDesktopMediaMainViewIndex(doc, 0)
 }
 
-function ensureGalleryThumbnailSwap(doc: Document) {
+function ensureGalleryThumbnailSwap(
+  doc: Document,
+  callbacksRef: RefObject<{ galleryUpload: () => void }>,
+) {
   const altList = doc.querySelector<HTMLElement>('#altImages ul')
   if (!altList) return
 
@@ -2824,7 +2812,7 @@ function ensureGalleryThumbnailSwap(doc: Document) {
       return
     }
 
-    const img = li.querySelector('img')
+    const img = li.querySelector<HTMLImageElement>('img')
     if (!img) return
 
     const landing = doc.getElementById('landingImage') as HTMLImageElement | null
@@ -2836,6 +2824,11 @@ function ensureGalleryThumbnailSwap(doc: Document) {
     e.preventDefault()
     e.stopImmediatePropagation()
     e.stopPropagation()
+
+    if (src === ARGUS_GALLERY_PLACEHOLDER_MAIN) {
+      callbacksRef.current.galleryUpload()
+      return
+    }
 
     storedDoc.__argusMainMediaIndex = 0
     setDesktopMediaMainViewIndex(doc, 0)
