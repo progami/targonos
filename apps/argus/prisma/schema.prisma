@@ -264,11 +264,14 @@ model Listing {
   activeBulletsId String?
   activeGalleryId String?
   activeEbcId     String?
+  activeVideoId   String?
 
   titleRevisions   TitleRevision[]
   bulletsRevisions BulletsRevision[]
   galleryRevisions GalleryRevision[]
   ebcRevisions     EbcRevision[]
+  videoRevisions   VideoRevision[]
+  ebcModulePointers EbcModulePointer[]
   snapshots        Snapshot[]
 
   @@unique([marketplace, asin])
@@ -364,6 +367,8 @@ model MediaAsset {
 
   gallerySlots GallerySlot[]
   ebcImages    EbcImage[]
+  videoMediaRevisions  VideoRevision[] @relation("VideoMedia")
+  videoPosterRevisions VideoRevision[] @relation("VideoPoster")
 }
 
 model EbcRevision {
@@ -376,6 +381,7 @@ model EbcRevision {
   createdAt DateTime       @default(now())
 
   sections EbcSection[]
+  modulePointers EbcModulePointer[]
 
   @@unique([listingId, seq])
   @@index([listingId, createdAt])
@@ -420,4 +426,39 @@ model EbcImage {
   altText  String?
 
   @@unique([moduleId, position])
+}
+
+model EbcModulePointer {
+  id            String     @id @default(cuid())
+  listingId     String
+  listing       Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  sectionType   String
+  modulePosition Int
+  ebcRevisionId String
+  ebcRevision   EbcRevision @relation(fields: [ebcRevisionId], references: [id], onDelete: Restrict)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([listingId, sectionType, modulePosition])
+  @@index([listingId])
+  @@index([ebcRevisionId])
+}
+
+model VideoRevision {
+  id            String         @id @default(cuid())
+  listingId     String
+  listing       Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seq           Int
+  origin        RevisionOrigin
+  note          String?
+  createdAt     DateTime       @default(now())
+
+  mediaId       String
+  media         MediaAsset     @relation("VideoMedia", fields: [mediaId], references: [id], onDelete: Restrict)
+
+  posterMediaId String?
+  posterMedia   MediaAsset?    @relation("VideoPoster", fields: [posterMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([listingId, seq])
+  @@index([listingId, createdAt])
 }

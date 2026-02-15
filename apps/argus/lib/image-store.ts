@@ -112,6 +112,10 @@ function guessMime(ext: string): string {
     '.webp': 'image/webp',
     '.svg': 'image/svg+xml',
     '.avif': 'image/avif',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.m3u8': 'application/x-mpegURL',
+    '.vtt': 'text/vtt',
   }
   return map[ext] ?? 'application/octet-stream'
 }
