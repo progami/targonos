@@ -1,52 +1,134 @@
 import * as React from 'react';
-import { Slot } from '@radix-ui/react-slot';
-import { cva, type VariantProps } from 'class-variance-authority';
+import MuiButton from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import type { SxProps, Theme } from '@mui/material/styles';
 
-import { cn } from '@/lib/utils';
+type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
-  {
-    variants: {
-      variant: {
-        default:
-          'bg-brand-teal-500 text-white shadow-sm hover:bg-brand-teal-600 active:bg-brand-teal-700 dark:bg-brand-cyan dark:text-[#041324] dark:hover:bg-brand-teal-400',
-        destructive:
-          'bg-danger-500 text-white shadow-sm hover:bg-danger-600 dark:bg-danger-600 dark:hover:bg-danger-500',
-        outline:
-          'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 dark:hover:text-white',
-        secondary:
-          'bg-slate-100 text-slate-900 shadow-sm hover:bg-slate-200 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/15',
-        ghost:
-          'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white',
-        link: 'text-brand-teal-600 underline-offset-4 hover:underline dark:text-brand-cyan',
-      },
-      size: {
-        default: 'h-9 px-4 py-2',
-        sm: 'h-8 rounded-lg px-3 text-xs',
-        lg: 'h-11 rounded-lg px-6 text-base',
-        icon: 'h-9 w-9',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
-  },
-);
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
+export interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'color'> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  component?: React.ElementType;
+  href?: string;
+  sx?: SxProps<Theme>;
+  startIcon?: React.ReactNode;
+  endIcon?: React.ReactNode;
 }
 
+const variantMap: Record<ButtonVariant, { muiVariant: 'contained' | 'outlined' | 'text'; sx: object }> = {
+  default: {
+    muiVariant: 'contained',
+    sx: {
+      bgcolor: '#45B3D4',
+      color: '#fff',
+      '&:hover': { bgcolor: '#2fa3c7' },
+      '&:active': { bgcolor: '#2384a1' },
+    },
+  },
+  destructive: {
+    muiVariant: 'contained',
+    sx: {
+      bgcolor: 'error.main',
+      color: '#fff',
+      '&:hover': { bgcolor: 'error.dark' },
+    },
+  },
+  outline: {
+    muiVariant: 'outlined',
+    sx: {
+      borderColor: 'divider',
+      color: 'text.primary',
+      bgcolor: 'background.paper',
+      '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+    },
+  },
+  secondary: {
+    muiVariant: 'contained',
+    sx: {
+      bgcolor: 'action.selected',
+      color: 'text.primary',
+      '&:hover': { bgcolor: 'action.hover' },
+    },
+  },
+  ghost: {
+    muiVariant: 'text',
+    sx: {
+      color: 'text.secondary',
+      '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+    },
+  },
+  link: {
+    muiVariant: 'text',
+    sx: {
+      color: '#2384a1',
+      textDecoration: 'none',
+      '&:hover': { textDecoration: 'underline', bgcolor: 'transparent' },
+      p: 0,
+      minWidth: 'auto',
+    },
+  },
+};
+
+const sizeMap: Record<ButtonSize, object> = {
+  default: { height: 36, px: 2, fontSize: '0.875rem' },
+  sm: { height: 32, px: 1.5, fontSize: '0.75rem' },
+  lg: { height: 44, px: 3, fontSize: '1rem' },
+  icon: { height: 36, width: 36, minWidth: 36, px: 0 },
+};
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : 'button';
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+  ({ variant = 'default', size = 'default', sx, children, component, href, startIcon, endIcon, ...props }, ref) => {
+    const mapped = variantMap[variant];
+    const sizeStyles = sizeMap[size];
+
+    if (size === 'icon') {
+      return (
+        <IconButton
+          ref={ref}
+          component={component as any}
+          href={href}
+          sx={{
+            ...sizeStyles,
+            borderRadius: '8px',
+            ...mapped.sx,
+            ...sx,
+          }}
+          {...(props as any)}
+        >
+          {children}
+        </IconButton>
+      );
+    }
+
+    return (
+      <MuiButton
+        ref={ref}
+        variant={mapped.muiVariant}
+        disableElevation
+        component={component as any}
+        href={href}
+        startIcon={startIcon}
+        endIcon={endIcon}
+        sx={{
+          borderRadius: '8px',
+          textTransform: 'none',
+          fontWeight: 500,
+          gap: 1,
+          whiteSpace: 'nowrap',
+          '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+          '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+          ...sizeStyles,
+          ...mapped.sx,
+          ...sx,
+        }}
+        {...(props as any)}
+      >
+        {children}
+      </MuiButton>
+    );
   },
 );
 Button.displayName = 'Button';
 
-export { Button, buttonVariants };
+export { Button };

@@ -1,12 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  color-scheme: light dark;
-}
-
-/* Custom scrollbar - refined with brand colors */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -23,10 +15,6 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 194, 185, 0.45);
-}
-
-.dark ::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .dark ::-webkit-scrollbar-thumb {
@@ -48,93 +36,35 @@
   color: rgb(204, 251, 241);
 }
 
-/* Typography - Consistent across the app */
-h1,
-.text-h1 {
-  @apply text-2xl font-semibold tracking-tight text-slate-900 dark:text-white;
-}
-
-h2,
-.text-h2 {
-  @apply text-xl font-semibold tracking-tight text-slate-900 dark:text-white;
-}
-
-h3,
-.text-h3 {
-  @apply text-lg font-semibold text-slate-900 dark:text-white;
-}
-
-h4,
-.text-h4 {
-  @apply text-base font-semibold text-slate-900 dark:text-white;
-}
-
-/* Section headers - small caps style */
-.text-section-header {
-  @apply text-xs font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400;
-}
-
-/* Body text */
-.text-body {
-  @apply text-sm text-slate-600 dark:text-slate-400;
-}
-
-.text-body-sm {
-  @apply text-xs text-slate-500 dark:text-slate-500;
-}
-
-.text-body-muted {
-  @apply text-sm text-slate-500 dark:text-slate-400;
-}
-
-/* Focus states with brand cyan */
-.focus-ring {
-  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
-}
-
-/* Glow effects for interactive elements */
-.glow-teal {
-  box-shadow: 0 0 20px rgba(0, 194, 185, 0.15);
-}
-
-.dark .glow-teal {
-  box-shadow: 0 0 24px rgba(0, 194, 185, 0.2);
-}
-
-/* Subtle gradient backgrounds */
-.bg-gradient-subtle {
-  background: linear-gradient(180deg, rgba(248, 250, 252, 1) 0%, rgba(241, 245, 249, 1) 100%);
-}
-
-.dark .bg-gradient-subtle {
-  background: linear-gradient(180deg, rgba(4, 19, 36, 1) 0%, rgba(2, 12, 24, 1) 100%);
-}
-
-/* Card hover enhancement */
-.card-hover {
-  @apply transition-all duration-200;
-}
-
-.card-hover:hover {
-  @apply shadow-soft-lg;
-  transform: translateY(-1px);
-}
-
-.dark .card-hover:hover {
-  box-shadow: 0 8px 32px rgba(0, 194, 185, 0.08);
+/* Smooth expand/collapse */
+@keyframes expandIn {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
 }
 
 /* Table row hover with left accent */
 .table-row-hover {
-  @apply transition-colors duration-150;
+  transition: background-color 0.15s;
 }
 
 .table-row-hover:hover {
-  @apply bg-slate-50/80 dark:bg-white/[0.03];
+  background-color: rgba(248, 250, 252, 0.8);
+}
+
+.dark .table-row-hover:hover {
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .table-row-hover > td:first-child {
-  @apply relative;
+  position: relative;
 }
 
 .table-row-hover > td:first-child::before {
@@ -160,152 +90,4 @@ h4,
 /* Clickable row cursor */
 .cursor-row {
   cursor: pointer;
-}
-
-/* Alternating table rows */
-.table-striped > tbody > tr:nth-child(even) {
-  @apply bg-slate-50/40 dark:bg-white/[0.02];
-}
-
-/* Smooth expand/collapse */
-.expand-content {
-  animation: expandIn 0.2s ease-out;
-  overflow: hidden;
-}
-
-@keyframes expandIn {
-  from {
-    opacity: 0;
-    max-height: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    max-height: 1000px;
-    transform: translateY(0);
-  }
-}
-
-/* Code block styling */
-.code-block {
-  @apply rounded-xl border border-slate-800 bg-slate-950 text-slate-50 p-4 text-sm overflow-x-auto font-mono;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.dark .code-block {
-  @apply border-white/10 bg-black/60;
-}
-
-@layer base {
-  :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 194 62% 55%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 194 62% 55%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 194 62% 55%;
-    --chart-1: 194 62% 55%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 262 83% 58%;
-    --chart-4: 24 95% 53%;
-    --chart-5: 350 89% 60%;
-    --radius: 0.625rem;
-  }
-  .dark {
-    --background: 207 80% 8%;
-    --foreground: 210 40% 98%;
-    --card: 207 70% 10%;
-    --card-foreground: 210 40% 98%;
-    --popover: 207 70% 10%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 194 62% 55%;
-    --primary-foreground: 207 80% 8%;
-    --secondary: 207 50% 15%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 207 50% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 194 62% 55%;
-    --accent-foreground: 207 80% 8%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 200 50% 18%;
-    --input: 200 50% 18%;
-    --ring: 194 62% 55%;
-    --chart-1: 194 62% 62%;
-    --chart-2: 160 84% 45%;
-    --chart-3: 263 70% 70%;
-    --chart-4: 24 95% 64%;
-    --chart-5: 350 89% 65%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply min-h-screen bg-background text-foreground antialiased;
-    font-feature-settings: 'cv11', 'ss01';
-    font-optical-sizing: auto;
-  }
-}
-
-@layer utilities {
-  .animate-in {
-    animation: animate-in 0.2s ease-out;
-  }
-
-  @keyframes animate-in {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Page entrance animation */
-  .page-enter {
-    animation: pageEnter 0.25s ease-out;
-  }
-
-  @keyframes pageEnter {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Monospace numbers for financial data */
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Money positive/negative colors */
-  .money-positive {
-    @apply text-emerald-600 dark:text-emerald-400;
-  }
-
-  .money-negative {
-    @apply text-red-600 dark:text-red-400;
-  }
 }

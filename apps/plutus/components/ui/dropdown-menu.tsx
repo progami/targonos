@@ -1,79 +1,104 @@
 'use client';
 
 import * as React from 'react';
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import Menu from '@mui/material/Menu';
+import MuiMenuItem from '@mui/material/MenuItem';
+import Typography from '@mui/material/Typography';
+import Divider from '@mui/material/Divider';
+import type { SxProps, Theme } from '@mui/material/styles';
 
-import { cn } from '@/lib/utils';
+type DropdownMenuProps = {
+  anchorEl: HTMLElement | null;
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+  sx?: SxProps<Theme>;
+};
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
-const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
-const DropdownMenuGroup = DropdownMenuPrimitive.Group;
-const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
+function DropdownMenu({ anchorEl, open, onClose, children, align = 'left', sx }: DropdownMenuProps) {
+  return (
+    <Menu
+      anchorEl={anchorEl}
+      open={open}
+      onClose={onClose}
+      transformOrigin={{ horizontal: align === 'right' ? 'right' : 'left', vertical: 'top' }}
+      anchorOrigin={{ horizontal: align === 'right' ? 'right' : 'left', vertical: 'bottom' }}
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 3,
+            border: 1,
+            borderColor: 'divider',
+            minWidth: 176,
+            boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+            mt: 0.75,
+            p: 0.5,
+            ...sx,
+          },
+        },
+      }}
+    >
+      {children}
+    </Menu>
+  );
+}
 
-const DropdownMenuContent = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
-  <DropdownMenuPortal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 min-w-44 overflow-hidden rounded-xl border bg-popover p-1 text-popover-foreground shadow-lg',
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-        'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-        className,
-      )}
-      {...props}
-    />
-  </DropdownMenuPortal>
-));
-DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
+type DropdownMenuItemProps = {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  sx?: SxProps<Theme>;
+  component?: React.ElementType;
+  href?: string;
+};
 
-const DropdownMenuItem = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean }
->(({ className, inset, ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
-    ref={ref}
-    className={cn(
-      'relative flex cursor-default select-none items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none transition-colors',
-      'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      inset && 'pl-8',
-      className,
-    )}
-    {...props}
-  />
-));
-DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
+function DropdownMenuItem({ children, onClick, disabled, sx, component, href }: DropdownMenuItemProps) {
+  return (
+    <MuiMenuItem
+      onClick={onClick}
+      disabled={disabled}
+      component={component as any}
+      href={href}
+      sx={{
+        borderRadius: 2,
+        fontSize: '0.875rem',
+        py: 0.75,
+        px: 1,
+        gap: 1,
+        ...sx,
+      }}
+    >
+      {children}
+    </MuiMenuItem>
+  );
+}
 
-const DropdownMenuLabel = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & { inset?: boolean }
->(({ className, inset, ...props }, ref) => (
-  <DropdownMenuPrimitive.Label
-    ref={ref}
-    className={cn('px-2 py-1.5 text-xs font-semibold text-muted-foreground', inset && 'pl-8', className)}
-    {...props}
-  />
-));
-DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName;
+function DropdownMenuLabel({ children, sx }: { children: React.ReactNode; sx?: SxProps<Theme> }) {
+  return (
+    <Typography
+      variant="caption"
+      sx={{
+        display: 'block',
+        px: 1,
+        py: 0.75,
+        fontWeight: 600,
+        color: 'text.secondary',
+        ...sx,
+      }}
+    >
+      {children}
+    </Typography>
+  );
+}
 
-const DropdownMenuSeparator = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
->(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />
-));
-DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
+function DropdownMenuSeparator({ sx }: { sx?: SxProps<Theme> }) {
+  return <Divider sx={{ my: 0.5, mx: -0.5, ...sx }} />;
+}
 
 export {
   DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuGroup,
 };

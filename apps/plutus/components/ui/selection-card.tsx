@@ -1,7 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import ButtonBase from '@mui/material/ButtonBase';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type SelectionCardProps = {
   selected?: boolean;
@@ -11,7 +14,7 @@ type SelectionCardProps = {
   description?: string;
   onClick?: () => void;
   disabled?: boolean;
-  className?: string;
+  sx?: SxProps<Theme>;
 };
 
 export function SelectionCard({
@@ -22,70 +25,93 @@ export function SelectionCard({
   description,
   onClick,
   disabled = false,
-  className,
+  sx,
 }: SelectionCardProps) {
   return (
-    <button
-      type="button"
+    <ButtonBase
       onClick={onClick}
       disabled={disabled}
-      className={cn(
-        'group relative flex flex-col items-center text-center rounded-lg border-2 transition-all duration-200',
-        'w-[240px] min-h-[180px] overflow-hidden',
-        'focus:outline-none focus:ring-2 focus:ring-brand-teal-500/50 focus:ring-offset-2',
-        selected
-          ? 'border-brand-teal-500 shadow-lg dark:border-brand-cyan'
-          : 'border-slate-200 hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:hover:border-white/20',
-        disabled && 'pointer-events-none opacity-50',
-        className,
-      )}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        borderRadius: 2,
+        border: 2,
+        borderColor: selected ? '#00C2B9' : 'divider',
+        width: 240,
+        minHeight: 180,
+        overflow: 'hidden',
+        transition: 'all 0.2s',
+        '&:hover': {
+          borderColor: selected ? '#00C2B9' : 'action.disabled',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        },
+        '&:focus-visible': {
+          outline: '2px solid rgba(0, 194, 185, 0.5)',
+          outlineOffset: 2,
+        },
+        opacity: disabled ? 0.5 : 1,
+        pointerEvents: disabled ? 'none' : 'auto',
+        boxShadow: selected ? '0 4px 16px rgba(0,0,0,0.12)' : 'none',
+        ...sx,
+      }}
     >
-      {/* Badge */}
       {badge && (
-        <div
-          className={cn(
-            'w-full py-2 text-xs font-semibold text-white',
-            'bg-brand-teal-500 dark:bg-brand-cyan dark:text-slate-900',
-          )}
+        <Box
+          sx={{
+            width: '100%',
+            py: 1,
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'white',
+            bgcolor: '#00C2B9',
+          }}
         >
           {badge}
-        </div>
+        </Box>
       )}
 
-      {/* Content */}
-      <div className={cn('flex flex-1 flex-col items-center justify-center p-6', !badge && 'pt-8')}>
-        {/* Icon */}
+      <Box
+        sx={{
+          display: 'flex',
+          flex: 1,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 3,
+          pt: badge ? 3 : 4,
+        }}
+      >
         {icon && (
-          <div
-            className={cn(
-              'mb-4 text-slate-400 transition-colors',
-              selected && 'text-brand-teal-500 dark:text-brand-cyan',
-              !selected && 'group-hover:text-slate-500',
-            )}
+          <Box
+            sx={{
+              mb: 2,
+              color: selected ? '#00C2B9' : 'text.disabled',
+              transition: 'color 0.2s',
+            }}
           >
             {icon}
-          </div>
+          </Box>
         )}
 
-        {/* Title */}
-        <h3
-          className={cn(
-            'text-base font-medium transition-colors',
-            selected
-              ? 'text-brand-teal-600 dark:text-brand-cyan'
-              : 'text-brand-teal-600 dark:text-brand-teal-400',
-          )}
+        <Typography
+          variant="body1"
+          sx={{
+            fontWeight: 500,
+            color: '#2384a1',
+            transition: 'color 0.2s',
+          }}
         >
           {title}
-        </h3>
+        </Typography>
 
-        {/* Description */}
         {description && (
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-[200px]">
+          <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary', maxWidth: 200 }}>
             {description}
-          </p>
+          </Typography>
         )}
-      </div>
-    </button>
+      </Box>
+    </ButtonBase>
   );
 }

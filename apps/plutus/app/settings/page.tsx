@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useSnackbar } from 'notistack';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,13 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectItem } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -208,6 +204,7 @@ const NOTIFICATION_OPTIONS: Array<{
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const [auditPage, setAuditPage] = useState(1);
   const [auditAction, setAuditAction] = useState('all');
 
@@ -221,10 +218,10 @@ export default function SettingsPage() {
     mutationFn: disconnectQbo,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qbo-status'] });
-      toast.success('Disconnected from QuickBooks');
+      enqueueSnackbar('Disconnected from QuickBooks', { variant: 'success' });
     },
     onError: () => {
-      toast.error('Failed to disconnect');
+      enqueueSnackbar('Failed to disconnect', { variant: 'error' });
     },
   });
 
@@ -274,10 +271,10 @@ export default function SettingsPage() {
     onSuccess: (saved) => {
       queryClient.setQueryData(['notification-preferences'], saved);
       setPrefsDirty(false);
-      toast.success('Notification preferences saved');
+      enqueueSnackbar('Notification preferences saved', { variant: 'success' });
     },
     onError: () => {
-      toast.error('Failed to save notification preferences');
+      enqueueSnackbar('Failed to save notification preferences', { variant: 'error' });
     },
   });
 
@@ -285,10 +282,10 @@ export default function SettingsPage() {
     mutationFn: saveAutopostSettings,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autopost-settings'] });
-      toast.success('Autopost settings saved');
+      enqueueSnackbar('Autopost settings saved', { variant: 'success' });
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to save autopost settings');
+      enqueueSnackbar(err instanceof Error ? err.message : 'Failed to save autopost settings', { variant: 'error' });
     },
   });
 
@@ -329,27 +326,27 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader title="Settings" variant="accent" />
 
-        <div className="mt-6 grid gap-6">
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <Box sx={{ mt: 3, display: 'grid', gap: 3 }}>
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 QuickBooks Online
-              </div>
-              <div className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
+              </Typography>
+              <Typography sx={{ mt: 1, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                 {isLoading ? 'Checking…' : status?.connected ? (status.companyName ?? 'Connected') : 'Not connected'}
-              </div>
+              </Typography>
               {status?.connected && status.homeCurrency && (
-                <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Home currency: {status.homeCurrency}</div>
+                <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>Home currency: {status.homeCurrency}</Typography>
               )}
               {!isLoading && status?.connected === false && status.error && (
-                <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{status.error}</div>
+                <Typography sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>{status.error}</Typography>
               )}
 
-              <div className="mt-4 flex items-center gap-2">
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 {status?.connected ? (
                   <Button
                     variant="outline"
@@ -361,36 +358,35 @@ export default function SettingsPage() {
                 ) : (
                   <Button onClick={handleConnect}>Connect to QuickBooks</Button>
                 )}
-              </div>
+              </Box>
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Notification Preferences
-              </div>
-              <div className="mt-4 space-y-4">
+              </Typography>
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {NOTIFICATION_OPTIONS.map((option) => (
-                  <div key={option.key} className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">
+                  <Box key={option.key} sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                         {option.label}
-                      </div>
-                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      </Typography>
+                      <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                         {option.description}
-                      </div>
-                    </div>
+                      </Typography>
+                    </Box>
                     <Switch
                       checked={localPrefs[option.key]}
                       onCheckedChange={() => handleToggle(option.key)}
                       disabled={notifLoading}
-                      aria-label={option.label}
                     />
-                  </div>
+                  </Box>
                 ))}
-              </div>
-              <div className="mt-5 flex items-center gap-3">
+              </Box>
+              <Box sx={{ mt: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Button
                   onClick={() => savePrefsMutation.mutate(localPrefs)}
                   disabled={!prefsDirty || savePrefsMutation.isPending}
@@ -398,72 +394,72 @@ export default function SettingsPage() {
                   {savePrefsMutation.isPending ? 'Saving…' : 'Save Preferences'}
                 </Button>
                 {prefsDirty && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Unsaved changes</span>
+                  <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Unsaved changes</Box>
                 )}
-              </div>
+              </Box>
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Autopost
-              </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                 Automatically process settlements that have matching audit data.
-              </p>
+              </Typography>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-slate-700 dark:text-slate-300">Enable autopost</div>
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>Enable autopost</Typography>
                 <Switch checked={autopostEnabled} onCheckedChange={setAutopostEnabled} />
-              </div>
+              </Box>
 
-              <div className="mt-4 space-y-1.5">
-                <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>
                   Start autoposting from
-                </div>
+                </Typography>
                 <Input
                   type="date"
                   value={autopostStartDate}
                   onChange={(e) => setAutopostStartDate(e.target.value)}
-                  className="max-w-xs"
+                  sx={{ maxWidth: 320 }}
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                   Only process settlements posted on or after this date. Leave empty to process all.
-                </p>
-              </div>
+                </Typography>
+              </Box>
 
-              <div className="mt-4">
+              <Box sx={{ mt: 2 }}>
                 <Button onClick={handleSaveAutopost} disabled={autopostMutation.isPending}>
                   {autopostMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
-              </div>
+              </Box>
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Appearance
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="text-sm text-slate-600 dark:text-slate-400">Theme</div>
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Theme</Typography>
                 <ThemeToggle />
-              </div>
+              </Box>
             </CardContent>
           </Card>
 
           {/* Users */}
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Users
-              </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              </Typography>
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                 Users with access to Plutus
-              </p>
+              </Typography>
 
-              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200/70 dark:border-white/10">
+              <Box sx={{ mt: 2, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider' }}>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -475,21 +471,21 @@ export default function SettingsPage() {
                   <TableBody>
                     {usersLoading ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-sm text-slate-400">
+                        <TableCell colSpan={3} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           Loading...
                         </TableCell>
                       </TableRow>
                     ) : !usersData?.users?.length ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-sm text-slate-400">
+                        <TableCell colSpan={3} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           No users found
                         </TableCell>
                       </TableRow>
                     ) : (
                       usersData.users.map((user) => (
                         <TableRow key={user.id}>
-                          <TableCell className="text-sm font-medium">{user.name}</TableCell>
-                          <TableCell className="text-sm">{user.email}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500 }}>{user.name}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem' }}>{user.email}</TableCell>
                           <TableCell>
                             <Badge variant="secondary">{user.role}</Badge>
                           </TableCell>
@@ -498,80 +494,75 @@ export default function SettingsPage() {
                     )}
                   </TableBody>
                 </Table>
-              </div>
+              </Box>
             </CardContent>
           </Card>
 
           {/* Audit Log */}
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                     Audit Log
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                     Recent activity across Plutus
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
 
-                <div className="w-56">
-                  <Select value={auditAction} onValueChange={handleAuditActionFilterChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by action" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACTION_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                <Box sx={{ width: 224 }}>
+                  <Select value={auditAction} onValueChange={handleAuditActionFilterChange} placeholder="Filter by action">
+                    {ACTION_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
                   </Select>
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200/70 dark:border-white/10">
+              <Box sx={{ mt: 2, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider' }}>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-44">Time</TableHead>
-                      <TableHead className="w-36">User</TableHead>
-                      <TableHead className="w-44">Action</TableHead>
-                      <TableHead className="w-36">Entity</TableHead>
+                      <TableHead sx={{ width: 176 }}>Time</TableHead>
+                      <TableHead sx={{ width: 144 }}>User</TableHead>
+                      <TableHead sx={{ width: 176 }}>Action</TableHead>
+                      <TableHead sx={{ width: 144 }}>Entity</TableHead>
                       <TableHead>Details</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {auditLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-sm text-slate-400">
+                        <TableCell colSpan={5} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           Loading...
                         </TableCell>
                       </TableRow>
                     ) : !auditData?.entries?.length ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-sm text-slate-400">
+                        <TableCell colSpan={5} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           No audit log entries
                         </TableCell>
                       </TableRow>
                     ) : (
                       auditData.entries.map((entry) => (
                         <TableRow key={entry.id}>
-                          <TableCell className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                          <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.75rem', color: 'text.secondary' }}>
                             {formatAuditTimestamp(entry.createdAt)}
                           </TableCell>
-                          <TableCell className="text-sm">{entry.userName}</TableCell>
+                          <TableCell sx={{ fontSize: '0.875rem' }}>{entry.userName}</TableCell>
                           <TableCell>
                             <Badge variant="outline">
                               {ACTION_LABELS[entry.action] ?? entry.action}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                             {entry.entityType}
                             {entry.entityId ? ` #${entry.entityId.slice(0, 8)}` : ''}
                           </TableCell>
-                          <TableCell className="max-w-xs truncate text-xs text-slate-500 dark:text-slate-400">
+                          <TableCell sx={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem', color: 'text.secondary' }}>
                             {formatAuditDetails(entry.details)}
                           </TableCell>
                         </TableRow>
@@ -579,16 +570,16 @@ export default function SettingsPage() {
                     )}
                   </TableBody>
                 </Table>
-              </div>
+              </Box>
 
               {/* Pagination */}
               {auditData && auditData.pagination.totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                     Page {auditData.pagination.page} of {auditData.pagination.totalPages}
                     {' '}({auditData.pagination.totalCount} entries)
-                  </span>
-                  <div className="flex gap-2">
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -605,13 +596,13 @@ export default function SettingsPage() {
                     >
                       Next
                     </Button>
-                  </div>
-                </div>
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </main>
+        </Box>
+      </Box>
+    </Box>
   );
 }
