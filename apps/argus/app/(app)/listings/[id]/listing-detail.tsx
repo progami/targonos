@@ -315,7 +315,8 @@ export function ListingDetail({
       if (!listing) return
       const selected = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
       if (!selected) return
-      if (!window.confirm(`Delete Title v${selected.seq}?`)) return
+      const versionNumber = titleRevisions.length - titleIndex
+      if (!window.confirm(`Delete Title v${versionNumber}?`)) return
 
       void (async () => {
         const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
@@ -365,7 +366,8 @@ export function ListingDetail({
       if (!listing) return
       const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
       if (!selected) return
-      if (!window.confirm(`Delete Bullets v${selected.seq}?`)) return
+      const versionNumber = bulletsRevisions.length - bulletsIndex
+      if (!window.confirm(`Delete Bullets v${versionNumber}?`)) return
 
       void (async () => {
         const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
@@ -441,7 +443,8 @@ export function ListingDetail({
       if (!listing) return
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      if (!window.confirm(`Delete Images v${selected.seq}?`)) return
+      const versionNumber = galleryRevisions.length - galleryIndex
+      if (!window.confirm(`Delete Images v${versionNumber}?`)) return
 
       void (async () => {
         const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
@@ -485,7 +488,8 @@ export function ListingDetail({
       if (!listing) return
       const selected = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
       if (!selected) return
-      if (!window.confirm(`Delete Video v${selected.seq}?`)) return
+      const versionNumber = videoRevisions.length - videoIndex
+      if (!window.confirm(`Delete Video v${versionNumber}?`)) return
 
       void (async () => {
         const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
@@ -848,11 +852,17 @@ export function ListingDetail({
     applyEbc(doc, appliedEbc)
     applyVariationSelection(doc, listing ? listing.asin : null)
 
-    updateTrackControls(doc, 'title', selectedTitleRev?.seq, titleIndex, titleRevisions.length)
-    updateTrackControls(doc, 'bullets', selectedBullets?.seq, bulletsIndex, bulletsRevisions.length)
-    updateTrackControls(doc, 'gallery', selectedGallery?.seq, galleryIndex, galleryRevisions.length)
-    updateTrackControls(doc, 'video', selectedVideo?.seq, videoIndex, videoRevisions.length)
-    updateTrackControls(doc, 'ebc', selectedEbc?.seq, ebcIndex, ebcRevisions.length)
+    const titleVersionNumber = selectedTitleRev ? titleRevisions.length - titleIndex : undefined
+    const bulletsVersionNumber = selectedBullets ? bulletsRevisions.length - bulletsIndex : undefined
+    const galleryVersionNumber = selectedGallery ? galleryRevisions.length - galleryIndex : undefined
+    const videoVersionNumber = selectedVideo ? videoRevisions.length - videoIndex : undefined
+    const ebcVersionNumber = selectedEbc ? ebcRevisions.length - ebcIndex : undefined
+
+    updateTrackControls(doc, 'title', titleVersionNumber, titleIndex, titleRevisions.length)
+    updateTrackControls(doc, 'bullets', bulletsVersionNumber, bulletsIndex, bulletsRevisions.length)
+    updateTrackControls(doc, 'gallery', galleryVersionNumber, galleryIndex, galleryRevisions.length)
+    updateTrackControls(doc, 'video', videoVersionNumber, videoIndex, videoRevisions.length)
+    updateTrackControls(doc, 'ebc', ebcVersionNumber, ebcIndex, ebcRevisions.length)
     updateEbcModuleControls(doc, ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
 
     const height = doc.documentElement.scrollHeight
@@ -881,7 +891,8 @@ export function ListingDetail({
     callbacksRef.current.galleryDownload = () => {
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      void downloadGalleryRevisionZip(selected).catch((err) => console.error(err))
+      const versionNumber = galleryRevisions.length - galleryIndex
+      void downloadGalleryRevisionZip(selected, versionNumber).catch((err) => console.error(err))
     }
 
     callbacksRef.current.ebcDownload = () => {
@@ -1886,8 +1897,7 @@ function updateEbcModuleControls(
 
     const label = control.querySelector<HTMLElement>('.argus-vc-label')
     if (label) {
-      const seq = history[safeIndex]?.seq
-      label.textContent = seq ? `Module v${seq}` : 'Module —'
+      label.textContent = `Module v${history.length - safeIndex}`
     }
 
     const prev = control.querySelector<HTMLButtonElement>('button[data-dir="prev"]')
@@ -1932,7 +1942,7 @@ async function downloadFilesAsZip(
   URL.revokeObjectURL(href)
 }
 
-async function downloadGalleryRevisionZip(rev: GalleryRevision) {
+async function downloadGalleryRevisionZip(rev: GalleryRevision, versionNumber: number) {
   const files = rev.images
     .slice()
     .sort((a, b) => a.position - b.position)
@@ -1942,11 +1952,11 @@ async function downloadGalleryRevisionZip(rev: GalleryRevision) {
       const ext = fileExt(downloadSrc)
       return {
         url: resolveImageSrc(downloadSrc),
-        filename: `gallery_v${rev.seq}_${String(img.position).padStart(2, '0')}${ext}`,
+        filename: `gallery_v${versionNumber}_${String(img.position).padStart(2, '0')}${ext}`,
       }
     })
 
-  await downloadFilesAsZip(`gallery_v${rev.seq}.zip`, files)
+  await downloadFilesAsZip(`gallery_v${versionNumber}.zip`, files)
 }
 
 async function downloadEbcZip(zipName: string, filePrefix: string, rev: EbcRevision) {
@@ -2104,7 +2114,10 @@ function injectArgusVersionControls(
     ensurePriceControls(doc, price, callbacksRef)
   }
 
-  const video = doc.querySelector<HTMLElement>('[data-elementid="vse-vw-dp-widget-container"]') ?? doc.querySelector<HTMLElement>('#ive-hero-video-player')
+  const video = doc.getElementById('video-outer-container') as HTMLElement | null
+    ?? doc.querySelector<HTMLElement>('ul.desktop-media-mainView li[data-csa-c-media-type="VIDEO"]')
+    ?? doc.querySelector<HTMLElement>('[data-elementid="vse-vw-dp-widget-container"]')
+    ?? doc.querySelector<HTMLElement>('#ive-hero-video-player')
   if (video) {
     ensureTrackControls(doc, video, 'video', 'Video', callbacksRef)
   }
@@ -2698,6 +2711,10 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   const altImages = doc.getElementById('altImages') as HTMLElement | null
   const altList = doc.querySelector<HTMLElement>('#altImages ul')
 
+  if (storedDoc.__argusMainMediaIndex === undefined) {
+    storedDoc.__argusMainMediaIndex = 0
+  }
+
   if (!rev || rev.images.length === 0) {
     if (landing) {
       landing.style.visibility = ''
@@ -2780,11 +2797,14 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     li.style.display = ''
   }
 
-  const firstVisible = altList.querySelector<HTMLElement>('li.imageThumbnail:not([style*="display: none"])')
-  setAltImagesSelection(altList, firstVisible)
+  const desiredIndex = storedDoc.__argusMainMediaIndex
+  const desiredLi = typeof desiredIndex === 'number'
+    ? Array.from(altList.querySelectorAll<HTMLElement>('li')).find((li) => itemNoFromElement(li) === desiredIndex) ?? null
+    : null
+  const firstVisible = altList.querySelector<HTMLElement>('li:not([style*="display: none"])')
+  setAltImagesSelection(altList, desiredLi ? desiredLi : firstVisible)
 
-  storedDoc.__argusMainMediaIndex = 0
-  setDesktopMediaMainViewIndex(doc, 0)
+  setDesktopMediaMainViewIndex(doc, typeof desiredIndex === 'number' ? desiredIndex : 0)
 }
 
 function ensureGalleryThumbnailSwap(
@@ -2870,7 +2890,8 @@ function applyVariationSelection(doc: Document, asin: string | null) {
 }
 
 function applyVideo(doc: Document, rev: VideoRevision | null) {
-  const container = doc.querySelector<HTMLElement>('#ive-hero-video-player')
+  const container = doc.getElementById('main-video-container') as HTMLElement | null
+    ?? doc.getElementById('ive-hero-video-player') as HTMLElement | null
   if (!container) return
 
   const storedDoc = doc as ArgusReplicaDocument
@@ -2901,6 +2922,7 @@ function applyVideo(doc: Document, rev: VideoRevision | null) {
     video.style.width = '100%'
     video.style.maxWidth = '100%'
     video.style.height = '100%'
+    video.style.objectFit = 'contain'
     video.setAttribute('playsinline', 'true')
     container.append(video)
   }
