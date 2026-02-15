@@ -40,10 +40,14 @@ export async function GET(
     ? await readFile(filePath, 'utf-8')
     : (await readFile(filePath)).buffer as ArrayBuffer
 
+  const cacheControl = ext === '.html'
+    ? 'public, max-age=0, must-revalidate'
+    : 'public, max-age=31536000, immutable'
+
   return new NextResponse(body, {
     headers: {
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': cacheControl,
     },
   })
 }
