@@ -50,6 +50,9 @@ export async function POST(
   if (entries.length === 0) {
     return NextResponse.json({ error: 'No files provided' }, { status: 400 })
   }
+  if (entries.length > 6) {
+    return NextResponse.json({ error: 'Gallery supports up to 6 images. Upload video separately.' }, { status: 400 })
+  }
 
   const mediaIds: string[] = []
   for (const entry of entries) {

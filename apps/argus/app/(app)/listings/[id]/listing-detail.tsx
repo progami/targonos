@@ -805,6 +805,7 @@ export function ListingDetail({
       }
 
       injectArgusVersionControls(doc, callbacksRef)
+      doc.body.classList.remove('a-meter-animate')
 
       if (doc.documentElement.dataset.argusLinksBound !== 'true') {
         doc.documentElement.dataset.argusLinksBound = 'true'
@@ -1273,7 +1274,7 @@ export function ListingDetail({
                 />
               </MuiButton>
               <Typography variant="caption" color="text.secondary">
-                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select JPG/PNG/WebP/AVIF files.'}
+                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select up to 6 JPG/PNG/WebP/AVIF files.'}
               </Typography>
             </Stack>
           </DialogContent>
@@ -1287,6 +1288,11 @@ export function ListingDetail({
               disabled={galleryFiles.length === 0}
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
+                if (galleryFiles.length > 6) {
+                  window.alert('Gallery supports up to 6 images. Upload video separately.')
+                  return
+                }
+
                 const sizeError = getUploadSizeError(galleryFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
                 if (sizeError) {
                   window.alert(sizeError)
@@ -1930,6 +1936,7 @@ async function downloadGalleryRevisionZip(rev: GalleryRevision) {
   const files = rev.images
     .slice()
     .sort((a, b) => a.position - b.position)
+    .slice(0, 6)
     .map((img) => {
       const downloadSrc = img.hiRes ? img.hiRes : img.src
       const ext = fileExt(downloadSrc)
@@ -2049,12 +2056,12 @@ function injectArgusVersionControls(
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
       .argus-ebc-placeholder {
         position: relative !important;
-        min-height: 120px;
+        min-height: 72px;
         border: 1px dashed rgba(148, 163, 184, 0.85);
         border-radius: 10px;
         background: rgba(248, 250, 252, 0.85);
       }
-      .argus-ebc-placeholder > :not(.argus-vc-ebc-module-controls) { visibility: hidden !important; }
+      .argus-ebc-placeholder > :not(.argus-vc-ebc-module-controls) { display: none !important; }
       .argus-ebc-placeholder::after {
         content: attr(data-argus-ebc-placeholder);
         position: absolute;

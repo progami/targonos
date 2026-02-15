@@ -245,6 +245,8 @@ async function storeGalleryImages(
 ): Promise<string[]> {
   const mediaIds: string[] = []
   for (const img of images) {
+    if (img.isVideo) continue
+    if (mediaIds.length >= 6) break
     const mediaId = await storeSnapshotImage(img.src, assetsDir, {
       sourceUrl: img.hiRes ?? img.src,
       downloadUrl: img.hiRes ?? img.src,
