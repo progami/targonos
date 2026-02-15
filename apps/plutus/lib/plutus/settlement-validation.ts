@@ -219,6 +219,38 @@ export function sumCentsByBrandComponent(costs: Array<{ sku: string; costByCompo
   return byBrand;
 }
 
+export function sumCentsByBrandComponentSku(
+  costs: Array<{ sku: string; costByComponentCents: Record<InventoryComponent, number> }>,
+  skuToBrand: Map<string, string>,
+): Record<string, Record<InventoryComponent, Record<string, number>>> {
+  const byBrand: Record<string, Record<InventoryComponent, Record<string, number>>> = {};
+
+  for (const item of costs) {
+    const brand = skuToBrand.get(item.sku);
+    if (!brand) {
+      throw new Error(`SKU not mapped to brand: ${item.sku}`);
+    }
+
+    const current = byBrand[brand];
+    if (!current) {
+      byBrand[brand] = {
+        manufacturing: {},
+        freight: {},
+        duty: {},
+        mfgAccessories: {},
+      };
+    }
+
+    for (const component of Object.keys(item.costByComponentCents) as InventoryComponent[]) {
+      const brandComponent = byBrand[brand]![component];
+      const existing = brandComponent[item.sku];
+      brandComponent[item.sku] = (existing === undefined ? 0 : existing) + item.costByComponentCents[component];
+    }
+  }
+
+  return byBrand;
+}
+
 export function mergeBrandComponentCents(
   left: Record<string, Record<InventoryComponent, number>>,
   right: Record<string, Record<InventoryComponent, number>>,
@@ -235,6 +267,50 @@ export function mergeBrandComponentCents(
       const a = leftBrand ? leftBrand[component] : 0;
       const b = rightBrand ? rightBrand[component] : 0;
       result[brand]![component] = op === 'add' ? a + b : a - b;
+    }
+  }
+
+  return result;
+}
+
+export function mergeBrandComponentSkuCents(
+  left: Record<string, Record<InventoryComponent, Record<string, number>>>,
+  right: Record<string, Record<InventoryComponent, Record<string, number>>>,
+  op: 'add' | 'sub',
+): Record<string, Record<InventoryComponent, Record<string, number>>> {
+  const result: Record<string, Record<InventoryComponent, Record<string, number>>> = {};
+  const brands = new Set([...Object.keys(left), ...Object.keys(right)]);
+
+  for (const brand of brands) {
+    result[brand] = {
+      manufacturing: {},
+      freight: {},
+      duty: {},
+      mfgAccessories: {},
+    };
+
+    for (const component of Object.keys(result[brand]) as InventoryComponent[]) {
+      const leftComponent = left[brand] ? left[brand]![component] : undefined;
+      const rightComponent = right[brand] ? right[brand]![component] : undefined;
+
+      const skus = new Set([
+        ...(leftComponent ? Object.keys(leftComponent) : []),
+        ...(rightComponent ? Object.keys(rightComponent) : []),
+      ]);
+
+      for (const sku of skus) {
+        let a = 0;
+        if (leftComponent) {
+          const value = leftComponent[sku];
+          a = value === undefined ? 0 : value;
+        }
+        let b = 0;
+        if (rightComponent) {
+          const value = rightComponent[sku];
+          b = value === undefined ? 0 : value;
+        }
+        result[brand]![component][sku] = op === 'add' ? a + b : a - b;
+      }
     }
   }
 

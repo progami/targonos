@@ -25,7 +25,9 @@ import {
   requireAccountMapping,
   matchRefundsToSales,
   sumCentsByBrandComponent,
+  sumCentsByBrandComponentSku,
   mergeBrandComponentCents,
+  mergeBrandComponentSkuCents,
 } from './settlement-validation';
 
 import { buildCogsJournalLines, buildPnlJournalLines } from './journal-builder';
@@ -766,11 +768,22 @@ export async function computeSettlementPreview(input: {
   const salesCogsByBrand = sumCentsByBrandComponent(computedSales, skuToBrand);
   const returnsCogsByBrand = sumCentsByBrandComponent(matchedReturns, skuToBrand);
   const netCogsByBrand = mergeBrandComponentCents(salesCogsByBrand, returnsCogsByBrand, 'sub');
+  const salesCogsByBrandSku = sumCentsByBrandComponentSku(computedSales, skuToBrand);
+  const returnsCogsByBrandSku = sumCentsByBrandComponentSku(matchedReturns, skuToBrand);
+  const netCogsByBrandSku = mergeBrandComponentSkuCents(salesCogsByBrandSku, returnsCogsByBrandSku, 'sub');
 
   // Build JE lines (resolve brand sub-accounts)
   const brandNames = Array.from(new Set(skuToBrand.values())).sort();
 
-  const cogsLines = buildCogsJournalLines(netCogsByBrand, brandNames, mapping, accountsResult.accounts, invoiceId, blocks);
+  const cogsLines = buildCogsJournalLines(
+    netCogsByBrand,
+    brandNames,
+    mapping,
+    accountsResult.accounts,
+    invoiceId,
+    blocks,
+    netCogsByBrandSku,
+  );
   const pnlLines = buildPnlJournalLines(
     pnlAllocation.allocationsByBucket,
     mapping,

@@ -33,7 +33,7 @@ import {
   mapRecurringTransactionsToEvents,
 } from '../lib/plutus/cashflow/qbo-mappers';
 import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
-import { buildPnlJournalLines } from '../lib/plutus/journal-builder';
+import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
 import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
@@ -305,6 +305,77 @@ test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
   assert.equal(lines[1]?.accountId, '238');
   assert.equal(lines[1]?.postingType, 'Credit');
   assert.equal(lines[1]?.amountCents, 12345);
+  assert.equal(blocks.length, 0);
+});
+
+test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '203',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+    },
+    {
+      Id: '211',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+    },
+    {
+      Id: '209',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+      ParentRef: { value: '203', name: 'Manufacturing' },
+    },
+    {
+      Id: '217',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+      ParentRef: { value: '211', name: 'Manufacturing' },
+    },
+  ];
+
+  const lines = buildCogsJournalLines(
+    {
+      'US-PDS': {
+        manufacturing: 12345,
+        freight: 0,
+        duty: 0,
+        mfgAccessories: 0,
+      },
+    },
+    ['US-PDS'],
+    {
+      invManufacturing: '203',
+      cogsManufacturing: '211',
+    },
+    accounts,
+    'INV-COGS-1',
+    blocks,
+    {
+      'US-PDS': {
+        manufacturing: {
+          'CS-007': 8230,
+          'CS-010': 4115,
+        },
+        freight: {},
+        duty: {},
+        mfgAccessories: {},
+      },
+    },
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.description, 'Manufacturing COGS | SKUs CS-007:$82.30, CS-010:$41.15');
+  assert.equal(lines[1]?.description, 'Manufacturing inventory | SKUs CS-007:$82.30, CS-010:$41.15');
   assert.equal(blocks.length, 0);
 });
 
