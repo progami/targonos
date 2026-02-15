@@ -12,6 +12,7 @@ import { fromCents } from '@/lib/inventory/money';
 import { computePnlAllocation, PnlAllocationNoWeightsError } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
 
 import {
   normalizeSku,
@@ -834,35 +835,49 @@ export async function processSettlement(input: {
     return { result: { ok: false, preview: computed.preview }, updatedConnection: computed.updatedConnection };
   }
 
-  const cogs = await createJournalEntry(computed.updatedConnection ? computed.updatedConnection : input.connection, {
-    txnDate: computed.preview.cogsJournalEntry.txnDate,
-    docNumber: computed.preview.cogsJournalEntry.docNumber,
-    privateNote: computed.preview.cogsJournalEntry.privateNote,
-    lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
-      amount: fromCents(line.amountCents),
-      postingType: line.postingType,
-      accountId: line.accountId,
-      description: line.description,
-    })),
-  });
+  let postingConnection = computed.updatedConnection ? computed.updatedConnection : input.connection;
+  let activeConnection = computed.updatedConnection;
 
-  const pnl = await createJournalEntry(cogs.updatedConnection ? cogs.updatedConnection : computed.updatedConnection ? computed.updatedConnection : input.connection, {
-    txnDate: computed.preview.pnlJournalEntry.txnDate,
-    docNumber: computed.preview.pnlJournalEntry.docNumber,
-    privateNote: computed.preview.pnlJournalEntry.privateNote,
-    lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
-      amount: fromCents(line.amountCents),
-      postingType: line.postingType,
-      accountId: line.accountId,
-      description: line.description,
-    })),
-  });
+  let cogsJournalEntryId = buildNoopJournalEntryId('COGS', computed.preview.invoiceId);
+  if (computed.preview.cogsJournalEntry.lines.length > 0) {
+    const cogs = await createJournalEntry(postingConnection, {
+      txnDate: computed.preview.cogsJournalEntry.txnDate,
+      docNumber: computed.preview.cogsJournalEntry.docNumber,
+      privateNote: computed.preview.cogsJournalEntry.privateNote,
+      lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
+        amount: fromCents(line.amountCents),
+        postingType: line.postingType,
+        accountId: line.accountId,
+        description: line.description,
+      })),
+    });
 
-  const activeConnection = pnl.updatedConnection
-    ? pnl.updatedConnection
-    : cogs.updatedConnection
-      ? cogs.updatedConnection
-      : computed.updatedConnection;
+    cogsJournalEntryId = cogs.journalEntry.Id;
+    if (cogs.updatedConnection) {
+      postingConnection = cogs.updatedConnection;
+      activeConnection = cogs.updatedConnection;
+    }
+  }
+
+  let pnlJournalEntryId = buildNoopJournalEntryId('PNL', computed.preview.invoiceId);
+  if (computed.preview.pnlJournalEntry.lines.length > 0) {
+    const pnl = await createJournalEntry(postingConnection, {
+      txnDate: computed.preview.pnlJournalEntry.txnDate,
+      docNumber: computed.preview.pnlJournalEntry.docNumber,
+      privateNote: computed.preview.pnlJournalEntry.privateNote,
+      lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
+        amount: fromCents(line.amountCents),
+        postingType: line.postingType,
+        accountId: line.accountId,
+        description: line.description,
+      })),
+    });
+
+    pnlJournalEntryId = pnl.journalEntry.Id;
+    if (pnl.updatedConnection) {
+      activeConnection = pnl.updatedConnection;
+    }
+  }
 
   // Task 1: Atomic transaction with duplicate check inside
   await db.$transaction(async (tx) => {
@@ -895,43 +910,47 @@ export async function processSettlement(input: {
         invoiceId: computed.preview.invoiceId,
         processingHash: computed.preview.processingHash,
         sourceFilename: input.sourceFilename,
-        qboCogsJournalEntryId: cogs.journalEntry.Id,
-        qboPnlReclassJournalEntryId: pnl.journalEntry.Id,
+        qboCogsJournalEntryId: cogsJournalEntryId,
+        qboPnlReclassJournalEntryId: pnlJournalEntryId,
       },
     });
 
-    // Task 2: Use createMany for bulk inserts
-    await tx.orderSale.createMany({
-      data: computed.preview.sales.map((sale) => ({
-        marketplace: computed.preview.marketplace,
-        orderId: sale.orderId,
-        sku: sale.sku,
-        saleDate: new Date(`${sale.date}T00:00:00Z`),
-        quantity: sale.quantity,
-        principalCents: sale.principalCents,
-        costManufacturingCents: sale.costByComponentCents.manufacturing,
-        costFreightCents: sale.costByComponentCents.freight,
-        costDutyCents: sale.costByComponentCents.duty,
-        costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
-        settlementProcessingId: processing.id,
-      })),
-    });
+    if (computed.preview.sales.length > 0) {
+      // Task 2: Use createMany for bulk inserts
+      await tx.orderSale.createMany({
+        data: computed.preview.sales.map((sale) => ({
+          marketplace: computed.preview.marketplace,
+          orderId: sale.orderId,
+          sku: sale.sku,
+          saleDate: new Date(`${sale.date}T00:00:00Z`),
+          quantity: sale.quantity,
+          principalCents: sale.principalCents,
+          costManufacturingCents: sale.costByComponentCents.manufacturing,
+          costFreightCents: sale.costByComponentCents.freight,
+          costDutyCents: sale.costByComponentCents.duty,
+          costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
+          settlementProcessingId: processing.id,
+        })),
+      });
+    }
 
-    await tx.orderReturn.createMany({
-      data: computed.preview.returns.map((ret) => ({
-        marketplace: computed.preview.marketplace,
-        orderId: ret.orderId,
-        sku: ret.sku,
-        returnDate: new Date(`${ret.date}T00:00:00Z`),
-        quantity: ret.quantity,
-        principalCents: ret.principalCents,
-        costManufacturingCents: ret.costByComponentCents.manufacturing,
-        costFreightCents: ret.costByComponentCents.freight,
-        costDutyCents: ret.costByComponentCents.duty,
-        costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
-        settlementProcessingId: processing.id,
-      })),
-    });
+    if (computed.preview.returns.length > 0) {
+      await tx.orderReturn.createMany({
+        data: computed.preview.returns.map((ret) => ({
+          marketplace: computed.preview.marketplace,
+          orderId: ret.orderId,
+          sku: ret.sku,
+          returnDate: new Date(`${ret.date}T00:00:00Z`),
+          quantity: ret.quantity,
+          principalCents: ret.principalCents,
+          costManufacturingCents: ret.costByComponentCents.manufacturing,
+          costFreightCents: ret.costByComponentCents.freight,
+          costDutyCents: ret.costByComponentCents.duty,
+          costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
+          settlementProcessingId: processing.id,
+        })),
+      });
+    }
   });
 
   return {
@@ -939,8 +958,8 @@ export async function processSettlement(input: {
       ok: true,
       preview: computed.preview,
       posted: {
-        cogsJournalEntryId: cogs.journalEntry.Id,
-        pnlJournalEntryId: pnl.journalEntry.Id,
+        cogsJournalEntryId,
+        pnlJournalEntryId,
       },
     },
     updatedConnection: activeConnection,
