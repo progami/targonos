@@ -3,6 +3,18 @@
 import { useRef, useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  Box,
+  Button as MuiButton,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -649,329 +661,545 @@ export function ListingDetail({
         sandbox="allow-same-origin"
       />
       {titleEditorOpen && listing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
-            <div className="px-4 py-3 border-b">
-              <div className="text-sm font-semibold">New title version</div>
-              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
-            </div>
-            <div className="p-4 space-y-3">
-              <textarea
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                rows={4}
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="Enter a new title…"
+        <Dialog
+          open={titleEditorOpen}
+          onClose={() => setTitleEditorOpen(false)}
+          fullWidth
+          maxWidth="md"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Box>
+                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                  New title version
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Write a concise, keyword-rich title for better search rank.
+                </Typography>
+              </Box>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
               />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setTitleEditorOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
-                  disabled={titleDraft.trim().length === 0}
-                  onClick={async () => {
-                    const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ title: titleDraft }),
-                    })
-                    if (!res.ok) {
-                      window.alert(await res.text())
-                      return
-                    }
-                    setTitleEditorOpen(false)
-                    setRefreshKey((current) => current + 1)
-                  }}
-                >
-                  Save new version
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <TextField
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              multiline
+              minRows={4}
+              maxRows={8}
+              fullWidth
+              placeholder="Enter a new title..."
+              sx={{
+                '& .MuiInputBase-root': {
+                  alignItems: 'flex-start',
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                  borderRadius: 2,
+                },
+              }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setTitleEditorOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              disabled={titleDraft.trim().length === 0}
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ title: titleDraft }),
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setTitleEditorOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Save new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
       )}
       {bulletsEditorOpen && listing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
-            <div className="px-4 py-3 border-b">
-              <div className="text-sm font-semibold">New bullets version</div>
-              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
-            </div>
-            <div className="p-4 space-y-3">
+        <Dialog
+          open={bulletsEditorOpen}
+          onClose={() => setBulletsEditorOpen(false)}
+          fullWidth
+          maxWidth="md"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Box>
+                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                  New bullets version
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Improve readability and keep each point conversion-focused.
+                </Typography>
+              </Box>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={2}>
               {([
                 ['bullet1', 'Bullet 1'],
                 ['bullet2', 'Bullet 2'],
                 ['bullet3', 'Bullet 3'],
                 ['bullet4', 'Bullet 4'],
                 ['bullet5', 'Bullet 5'],
-              ] as const).map(([key, label]) => (
-                <div key={key}>
-                  <div className="text-xs text-muted-foreground mb-1">{label}</div>
-                  <textarea
-                    value={bulletsDraft[key]}
-                    onChange={(e) => setBulletsDraft((current) => ({ ...current, [key]: e.target.value }))}
-                    rows={2}
-                    className="w-full rounded border px-3 py-2 text-sm"
-                    placeholder="Enter bullet text…"
-                  />
-                </div>
-              ))}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setBulletsEditorOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white"
-                  onClick={async () => {
-                    const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        bullet1: bulletsDraft.bullet1,
-                        bullet2: bulletsDraft.bullet2,
-                        bullet3: bulletsDraft.bullet3,
-                        bullet4: bulletsDraft.bullet4,
-                        bullet5: bulletsDraft.bullet5,
-                      }),
-                    })
-                    if (!res.ok) {
-                      window.alert(await res.text())
-                      return
-                    }
-                    setBulletsEditorOpen(false)
-                    setRefreshKey((current) => current + 1)
-                  }}
-                >
-                  Save new version
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+              ] as const).map(([key, label]) => {
+                const charCount = bulletsDraft[key].trim().length
+
+                return (
+                  <Box key={key}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {label}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {charCount} chars
+                      </Typography>
+                    </Stack>
+                    <TextField
+                      value={bulletsDraft[key]}
+                      onChange={(e) => setBulletsDraft((current) => ({ ...current, [key]: e.target.value }))}
+                      multiline
+                      minRows={3}
+                      maxRows={7}
+                      fullWidth
+                      placeholder="Enter bullet text..."
+                      variant="outlined"
+                      sx={{
+                        '& .MuiInputBase-root': {
+                          alignItems: 'flex-start',
+                          fontSize: 14,
+                          lineHeight: 1.45,
+                          borderRadius: 2,
+                          backgroundColor: 'background.paper',
+                        },
+                      }}
+                    />
+                  </Box>
+                )
+              })}
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setBulletsEditorOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    bullet1: bulletsDraft.bullet1,
+                    bullet2: bulletsDraft.bullet2,
+                    bullet3: bulletsDraft.bullet3,
+                    bullet4: bulletsDraft.bullet4,
+                    bullet5: bulletsDraft.bullet5,
+                  }),
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setBulletsEditorOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Save new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
       )}
       {galleryUploaderOpen && listing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
-            <div className="px-4 py-3 border-b">
-              <div className="text-sm font-semibold">New gallery version</div>
-              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
-            </div>
-            <div className="p-4 space-y-3">
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="block w-full text-sm"
-                onChange={(e) => {
-                  const list = e.target.files ? Array.from(e.target.files) : []
-                  setGalleryFiles(list)
-                }}
+        <Dialog
+          open={galleryUploaderOpen}
+          onClose={() => setGalleryUploaderOpen(false)}
+          fullWidth
+          maxWidth="sm"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                New gallery version
+              </Typography>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
               />
-              <div className="text-xs text-muted-foreground">
-                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select JPG/PNG/WebP/AVIF files.'}
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setGalleryUploaderOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
-                  disabled={galleryFiles.length === 0}
-                  onClick={async () => {
-                    const form = new FormData()
-                    for (const file of galleryFiles) {
-                      form.append('files', file)
-                    }
-
-                    const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
-                      method: 'POST',
-                      body: form,
-                    })
-                    if (!res.ok) {
-                      window.alert(await res.text())
-                      return
-                    }
-                    setGalleryUploaderOpen(false)
-                    setRefreshKey((current) => current + 1)
-                  }}
-                >
-                  Upload new version
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {videoUploaderOpen && listing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
-            <div className="px-4 py-3 border-b">
-              <div className="text-sm font-semibold">New video version</div>
-              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Video file</div>
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={1.5}>
+              <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
+                Select images
                 <input
-                  type="file"
-                  accept="video/mp4,video/webm"
-                  className="block w-full text-sm"
-                  onChange={(e) => {
-                    const file = e.target.files ? e.target.files[0] : null
-                    setVideoFile(file)
-                  }}
-                />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Poster image (optional)</div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="block w-full text-sm"
-                  onChange={(e) => {
-                    const file = e.target.files ? e.target.files[0] : null
-                    setVideoPosterFile(file)
-                  }}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setVideoUploaderOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
-                  disabled={!videoFile}
-                  onClick={async () => {
-                    if (!videoFile) return
-                    const form = new FormData()
-                    form.append('file', videoFile)
-                    if (videoPosterFile) form.append('poster', videoPosterFile)
-
-                    const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
-                      method: 'POST',
-                      body: form,
-                    })
-                    if (!res.ok) {
-                      window.alert(await res.text())
-                      return
-                    }
-                    setVideoUploaderOpen(false)
-                    setRefreshKey((current) => current + 1)
-                  }}
-                >
-                  Upload new version
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {ebcModuleEditorOpen && listing && ebcModuleEditorTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
-            <div className="px-4 py-3 border-b">
-              <div className="text-sm font-semibold">New A+ module version</div>
-              <div className="text-xs text-muted-foreground">
-                {ebcModuleEditorTarget.sectionType} · Module {ebcModuleEditorTarget.modulePosition + 1}
-              </div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Headline</div>
-                <textarea
-                  value={ebcModuleDraft.headline}
-                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, headline: e.target.value }))}
-                  rows={2}
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  placeholder="Enter headline…"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Body</div>
-                <textarea
-                  value={ebcModuleDraft.bodyText}
-                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, bodyText: e.target.value }))}
-                  rows={5}
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  placeholder="Enter body text…"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Images (optional)</div>
-                <input
+                  hidden
                   type="file"
                   accept="image/*"
                   multiple
-                  className="block w-full text-sm"
                   onChange={(e) => {
                     const list = e.target.files ? Array.from(e.target.files) : []
-                    setEbcModuleFiles(list)
+                    setGalleryFiles(list)
                   }}
                 />
-                <div className="text-xs text-muted-foreground mt-1">
-                  {ebcModuleFiles.length > 0 ? `${ebcModuleFiles.length} file(s) selected` : 'Leave empty to keep current images.'}
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setEbcModuleEditorOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white"
-                  onClick={async () => {
-                    const form = new FormData()
-                    form.append('sectionType', ebcModuleEditorTarget.sectionType)
-                    form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
-                    form.append('headline', ebcModuleDraft.headline)
-                    form.append('bodyText', ebcModuleDraft.bodyText)
-                    for (const file of ebcModuleFiles) {
-                      form.append('files', file)
-                    }
+              </MuiButton>
+              <Typography variant="caption" color="text.secondary">
+                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select JPG/PNG/WebP/AVIF files.'}
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setGalleryUploaderOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              disabled={galleryFiles.length === 0}
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const form = new FormData()
+                for (const file of galleryFiles) {
+                  form.append('files', file)
+                }
 
-                    const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
-                      method: 'POST',
-                      body: form,
-                    })
-                    if (!res.ok) {
-                      window.alert(await res.text())
-                      return
-                    }
-                    setEbcModuleEditorOpen(false)
-                    setRefreshKey((current) => current + 1)
-                  }}
-                >
-                  Save new version
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+                  method: 'POST',
+                  body: form,
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setGalleryUploaderOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Upload new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
+      )}
+      {videoUploaderOpen && listing && (
+        <Dialog
+          open={videoUploaderOpen}
+          onClose={() => setVideoUploaderOpen(false)}
+          fullWidth
+          maxWidth="sm"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                New video version
+              </Typography>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Video file
+                </Typography>
+                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
+                  Select video
+                  <input
+                    hidden
+                    type="file"
+                    accept="video/mp4,video/webm"
+                    onChange={(e) => {
+                      const file = e.target.files ? e.target.files[0] : null
+                      setVideoFile(file)
+                    }}
+                  />
+                </MuiButton>
+                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
+                  {videoFile ? videoFile.name : 'Accepted formats: MP4, WebM'}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Poster image (optional)
+                </Typography>
+                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
+                  Select poster
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files ? e.target.files[0] : null
+                      setVideoPosterFile(file)
+                    }}
+                  />
+                </MuiButton>
+                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
+                  {videoPosterFile ? videoPosterFile.name : 'Optional image shown before playback'}
+                </Typography>
+              </Box>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setVideoUploaderOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              disabled={!videoFile}
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                if (!videoFile) return
+                const form = new FormData()
+                form.append('file', videoFile)
+                if (videoPosterFile) form.append('poster', videoPosterFile)
+
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+                  method: 'POST',
+                  body: form,
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setVideoUploaderOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Upload new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
+      )}
+      {ebcModuleEditorOpen && listing && ebcModuleEditorTarget && (
+        <Dialog
+          open={ebcModuleEditorOpen}
+          onClose={() => setEbcModuleEditorOpen(false)}
+          fullWidth
+          maxWidth="md"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Box>
+                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                  New A+ module version
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {ebcModuleEditorTarget.sectionType} • Module {ebcModuleEditorTarget.modulePosition + 1}
+                </Typography>
+              </Box>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
+                  Headline
+                </Typography>
+                <TextField
+                  value={ebcModuleDraft.headline}
+                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, headline: e.target.value }))}
+                  multiline
+                  minRows={2}
+                  maxRows={4}
+                  fullWidth
+                  placeholder="Enter headline..."
+                />
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
+                  Body
+                </Typography>
+                <TextField
+                  value={ebcModuleDraft.bodyText}
+                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, bodyText: e.target.value }))}
+                  multiline
+                  minRows={5}
+                  maxRows={10}
+                  fullWidth
+                  placeholder="Enter body text..."
+                />
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Images (optional)
+                </Typography>
+                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
+                  Select images
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => {
+                      const list = e.target.files ? Array.from(e.target.files) : []
+                      setEbcModuleFiles(list)
+                    }}
+                  />
+                </MuiButton>
+                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
+                  {ebcModuleFiles.length > 0 ? `${ebcModuleFiles.length} file(s) selected` : 'Leave empty to keep current images.'}
+                </Typography>
+              </Box>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setEbcModuleEditorOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const form = new FormData()
+                form.append('sectionType', ebcModuleEditorTarget.sectionType)
+                form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
+                form.append('headline', ebcModuleDraft.headline)
+                form.append('bodyText', ebcModuleDraft.bodyText)
+                for (const file of ebcModuleFiles) {
+                  form.append('files', file)
+                }
+
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+                  method: 'POST',
+                  body: form,
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setEbcModuleEditorOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Save new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
       )}
     </div>
   )
