@@ -37,6 +37,7 @@ import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journ
 import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
+import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
@@ -174,7 +175,24 @@ test('parseSpAdvertisedProductCsv accepts Excel date serials', () => {
   assert.equal(parsed.rows[0]?.date, '2025-12-21');
 });
 
-test('computePnlAllocation uses absolute sales quantities for weights', () => {
+test('parseAwdFeeCsv parses monthly SKU fee rows', () => {
+  const csv = [
+    'month_of_,year_of_ch,msku,country_c,fee_type,fee_amoun,currency',
+    'January,2026,cs-007,US,STORAGE_F,11.78,USD',
+    'January,2026,cs-010,US,STORAGE_F,7.17,USD',
+  ].join('\n');
+
+  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
+  assert.equal(parsed.rawRowCount, 2);
+  assert.equal(parsed.skuCount, 2);
+  assert.equal(parsed.minDate, '2026-01-01');
+  assert.equal(parsed.maxDate, '2026-01-31');
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0]?.sku, 'CS-007');
+  assert.equal(parsed.rows[0]?.feeCents, 1178);
+});
+
+test('computePnlAllocation leaves SKU-less fees unallocated without deterministic source', () => {
   const rows = [
     {
       invoice: 'INV-1',
@@ -212,11 +230,14 @@ test('computePnlAllocation uses absolute sales quantities for weights', () => {
     getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
   });
 
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -600);
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, -300);
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, undefined);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 1);
+  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.bucket, 'amazonSellerFees');
+  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.totalCents, -900);
 });
 
-test('computePnlAllocation routes AWD rows into warehousingAwd bucket', () => {
+test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
   const rows = [
     {
       invoice: 'INV-1',
@@ -260,14 +281,26 @@ test('computePnlAllocation routes AWD rows into warehousingAwd bucket', () => {
     },
   ];
 
-  const allocation = computePnlAllocation(rows, {
-    getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
-  });
+  const allocation = computePnlAllocation(
+    rows,
+    {
+      getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
+    },
+    {
+      skuAllocationsByBucket: {
+        warehousingAwd: {
+          'SKU-A': -600,
+          'SKU-B': -300,
+        },
+      },
+    },
+  );
 
   assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandA, -900);
   assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandB, -300);
   assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
   assert.equal(allocation.allocationsByBucket.amazonStorageFees.BrandA, undefined);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
 });
 
 test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
@@ -379,7 +412,7 @@ test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(blocks.length, 0);
 });
 
-test('computePnlAllocation tracks SKU breakdown for SKU-less fee rows', () => {
+test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee rows', () => {
   const rows = [
     {
       invoice: 'INV-2',
@@ -413,13 +446,25 @@ test('computePnlAllocation tracks SKU breakdown for SKU-less fee rows', () => {
     },
   ];
 
-  const allocation = computePnlAllocation(rows, {
-    getBrandForSku: () => 'BrandA',
-  });
+  const allocation = computePnlAllocation(
+    rows,
+    {
+      getBrandForSku: () => 'BrandA',
+    },
+    {
+      skuAllocationsByBucket: {
+        amazonSellerFees: {
+          'SKU-A': -200,
+          'SKU-B': -100,
+        },
+      },
+    },
+  );
 
   assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -300);
   assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -200);
   assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-B'], -100);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
 });
 
 test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
