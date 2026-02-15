@@ -356,6 +356,17 @@ export function ListingDetail({
 
     async function persistEbcModulePointer(sectionType: string, modulePosition: number, ebcRevisionId: string) {
       if (!listing) return
+
+      const live = activePointers?.activeEbcId
+      if (live && ebcRevisionId === live) {
+        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sectionType, modulePosition }),
+        })
+        return
+      }
+
       await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -380,11 +391,16 @@ export function ListingDetail({
 
       const nextPointers: Record<string, string> = { ...ebcModulePointers }
       const updates: Promise<void>[] = []
+      const live = activePointers?.activeEbcId
 
       for (const section of layout.sections) {
         for (let mi = 0; mi < section.modules.length; mi++) {
           const key = ebcModulePointerKey(section.sectionType, mi)
-          nextPointers[key] = revisionId
+          if (live && revisionId === live) {
+            if (key in nextPointers) delete nextPointers[key]
+          } else {
+            nextPointers[key] = revisionId
+          }
           updates.push(persistEbcModulePointer(section.sectionType, mi, revisionId))
         }
       }
@@ -454,7 +470,17 @@ export function ListingDetail({
       const safeIndex = index >= 0 ? index : 0
       const nextIndex = safeIndex < history.length - 1 ? safeIndex + 1 : safeIndex
       const nextRevisionId = history[nextIndex].revisionId
-      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      const live = activePointers?.activeEbcId
+      setEbcModulePointers((current) => {
+        const next = { ...current }
+        if (live && nextRevisionId === live) {
+          if (key in next) delete next[key]
+          return next
+        }
+        next[key] = nextRevisionId
+        return next
+      })
       void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
     }
 
@@ -468,7 +494,17 @@ export function ListingDetail({
       const safeIndex = index >= 0 ? index : 0
       const nextIndex = safeIndex > 0 ? safeIndex - 1 : safeIndex
       const nextRevisionId = history[nextIndex].revisionId
-      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      const live = activePointers?.activeEbcId
+      setEbcModulePointers((current) => {
+        const next = { ...current }
+        if (live && nextRevisionId === live) {
+          if (key in next) delete next[key]
+          return next
+        }
+        next[key] = nextRevisionId
+        return next
+      })
       void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
     }
 
@@ -478,7 +514,13 @@ export function ListingDetail({
       const nextRevisionId = activeId ? activeId : (fallback ? fallback.id : null)
       if (!nextRevisionId) return
 
-      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      setEbcModulePointers((current) => {
+        if (!(key in current)) return current
+        const next = { ...current }
+        delete next[key]
+        return next
+      })
       void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
     }
 
@@ -503,26 +545,24 @@ export function ListingDetail({
 
     callbacksRef.current.ebcModuleDelete = (sectionType: string, modulePosition: number) => {
       if (!listing) return
-      if (!window.confirm('Clear this module override?')) return
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      const revisionId = ebcModulePointers[key]
+      if (!revisionId) return
+
+      const seq = ebcRevisions.find((rev) => rev.id === revisionId)?.seq
+      if (!window.confirm(`Delete Module v${seq ?? '—'}?`)) return
 
       void (async () => {
-        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sectionType, modulePosition }),
+          body: JSON.stringify({ revisionId }),
         })
         if (!res.ok) {
           window.alert(await res.text())
           return
         }
-
-        const key = ebcModulePointerKey(sectionType, modulePosition)
-        setEbcModulePointers((current) => {
-          if (!(key in current)) return current
-          const next = { ...current }
-          delete next[key]
-          return next
-        })
+        setRefreshKey((current) => current + 1)
       })()
     }
 
@@ -591,7 +631,11 @@ export function ListingDetail({
       setGalleryRevisions(gallery.map(toGalleryRevision))
       setVideoRevisions(video.map(toVideoRevision))
       setEbcRevisions(ebc.map(toEbcRevision))
+      const liveEbcId = meta.activeEbcId
       setEbcModulePointers(pointers.reduce<Record<string, string>>((acc, pointer) => {
+        if (liveEbcId && pointer.ebcRevisionId === liveEbcId) {
+          return acc
+        }
         acc[ebcModulePointerKey(pointer.sectionType, pointer.modulePosition)] = pointer.ebcRevisionId
         return acc
       }, {}))
@@ -654,6 +698,7 @@ export function ListingDetail({
     applyGallery(doc, selectedGallery)
     applyVideo(doc, selectedVideo)
     applyEbc(doc, appliedEbc)
+    applyVariationSelection(doc, listing ? listing.asin : null)
 
     updateTrackControls(doc, 'title', selectedTitleRev?.seq, titleIndex, titleRevisions.length)
     updateTrackControls(doc, 'bullets', selectedBullets?.seq, bulletsIndex, bulletsRevisions.length)
@@ -701,7 +746,7 @@ export function ListingDetail({
     <div className="flex flex-col h-screen bg-white">
       <iframe
         ref={iframeRef}
-        src={`${basePath}/api/fixture/replica.html`}
+        src={`${basePath}/api/fixture/listingpage.html`}
         className="w-full border-0"
         style={{ height: iframeHeight }}
         title={listing ? listing.label : listingId}
@@ -1460,6 +1505,9 @@ function resolveImageSrc(src: string): string {
   if (src.startsWith('./listingpage_files/') || src.startsWith('listingpage_files/')) {
     return `${basePath}/api/fixture/${src.replace('./', '')}`
   }
+  if (src.startsWith('./6pk_files/') || src.startsWith('6pk_files/')) {
+    return `${basePath}/api/fixture/${src.replace('./', '')}`
+  }
   if (src.startsWith('media/')) {
     return `${basePath}/api/media/${src.replace('media/', '')}`
   }
@@ -1579,9 +1627,11 @@ function updateEbcModuleControls(
 
     const prev = control.querySelector<HTMLButtonElement>('button[data-dir="prev"]')
     const next = control.querySelector<HTMLButtonElement>('button[data-dir="next"]')
+    const del = control.querySelector<HTMLButtonElement>('button[data-action="delete"]')
 
     if (prev) prev.disabled = safeIndex >= history.length - 1
     if (next) next.disabled = safeIndex <= 0
+    if (del) del.disabled = !(key in pointers)
   }
 }
 
@@ -2047,7 +2097,8 @@ function ensureEbcModuleControls(
   del.className = 'argus-vc-btn argus-vc-danger'
   del.type = 'button'
   del.textContent = '🗑'
-  del.title = 'Clear override'
+  del.title = 'Delete version'
+  del.dataset.action = 'delete'
   del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
 
   controls.append(prev, label, next, live, edit, del)
@@ -2118,17 +2169,173 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
   }
 }
 
+interface GalleryBaselineThumb {
+  liDisplay: string
+  imgSrc: string | null
+  imgOldHires: string | null
+}
+
+interface GalleryBaseline {
+  landingSrc: string | null
+  landingOldHires: string | null
+  landingVisibility: string
+  altImagesDisplay: string
+  thumbs: GalleryBaselineThumb[]
+  selectedThumbIndex: number
+}
+
+type ArgusGalleryDocument = Document & {
+  __argusGalleryBaseline?: GalleryBaseline
+  __argusMainMediaIndex?: number
+}
+
+function itemNoFromElement(el: Element): number | null {
+  for (const cls of Array.from(el.classList)) {
+    const match = /^itemNo(\d+)$/iu.exec(cls)
+    if (!match) continue
+    const value = Number(match[1])
+    return Number.isFinite(value) ? value : null
+  }
+  return null
+}
+
+function setDesktopMediaMainViewIndex(doc: Document, index: number) {
+  const mainView = doc.querySelector<HTMLElement>('ul.desktop-media-mainView')
+  if (!mainView) return
+
+  const items = Array.from(mainView.querySelectorAll<HTMLElement>('li'))
+  if (items.length === 0) return
+
+  const target = items.find((li) => itemNoFromElement(li) === index) ?? null
+  if (!target) return
+
+  for (const li of items) {
+    const isSelected = li === target
+    li.style.display = isSelected ? '' : 'none'
+    if (isSelected) {
+      li.classList.add('selected')
+    } else {
+      li.classList.remove('selected')
+    }
+  }
+}
+
+function setAltImagesSelection(altList: Element, selectedLi: Element | null) {
+  const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
+  for (const button of buttons) {
+    button.classList.remove('a-button-selected')
+  }
+
+  const radioButtons = Array.from(altList.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
+  for (const radio of radioButtons) {
+    radio.setAttribute('aria-checked', 'false')
+  }
+
+  if (!selectedLi) return
+
+  const selectedButton = selectedLi.querySelector<HTMLElement>('.a-button-thumbnail')
+  if (selectedButton) selectedButton.classList.add('a-button-selected')
+
+  const selectedRadio = selectedLi.querySelector<HTMLButtonElement>('button[role="radio"]')
+  if (selectedRadio) selectedRadio.setAttribute('aria-checked', 'true')
+}
+
+function captureGalleryBaseline(doc: Document): GalleryBaseline | null {
+  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+  const altImages = doc.getElementById('altImages') as HTMLElement | null
+  const altList = doc.querySelector<HTMLElement>('#altImages ul')
+
+  if (!landing || !altImages || !altList) return null
+
+  const lis = Array.from(altList.querySelectorAll<HTMLElement>('li'))
+  const thumbs: GalleryBaselineThumb[] = lis.map((li) => {
+    const img = li.querySelector<HTMLImageElement>('img')
+    return {
+      liDisplay: li.style.display,
+      imgSrc: img ? img.getAttribute('src') : null,
+      imgOldHires: img ? img.getAttribute('data-old-hires') : null,
+    }
+  })
+
+  const selectedByClass = lis.findIndex((li) => li.querySelector('.a-button-thumbnail')?.classList.contains('a-button-selected') ?? false)
+  const selectedByRadio = lis.findIndex((li) => li.querySelector<HTMLButtonElement>('button[role="radio"]')?.getAttribute('aria-checked') === 'true')
+  const selectedThumbIndex = selectedByClass >= 0 ? selectedByClass : (selectedByRadio >= 0 ? selectedByRadio : 0)
+
+  return {
+    landingSrc: landing.getAttribute('src'),
+    landingOldHires: landing.getAttribute('data-old-hires'),
+    landingVisibility: landing.style.visibility,
+    altImagesDisplay: altImages.style.display,
+    thumbs,
+    selectedThumbIndex,
+  }
+}
+
+function restoreGalleryBaseline(doc: Document, baseline: GalleryBaseline) {
+  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+  const altImages = doc.getElementById('altImages') as HTMLElement | null
+  const altList = doc.querySelector<HTMLElement>('#altImages ul')
+
+  if (landing) {
+    landing.style.visibility = baseline.landingVisibility
+    if (baseline.landingSrc) {
+      landing.setAttribute('src', baseline.landingSrc)
+    } else {
+      landing.removeAttribute('src')
+    }
+    if (baseline.landingOldHires) {
+      landing.setAttribute('data-old-hires', baseline.landingOldHires)
+    } else {
+      landing.removeAttribute('data-old-hires')
+    }
+  }
+
+  if (altImages) {
+    altImages.style.display = baseline.altImagesDisplay
+  }
+
+  if (!altList) return
+
+  const lis = Array.from(altList.querySelectorAll<HTMLElement>('li'))
+  for (let i = 0; i < baseline.thumbs.length && i < lis.length; i++) {
+    const li = lis[i]
+    const base = baseline.thumbs[i]
+    li.style.display = base.liDisplay
+    const img = li.querySelector<HTMLImageElement>('img')
+    if (!img) continue
+    if (base.imgSrc) {
+      img.setAttribute('src', base.imgSrc)
+    } else {
+      img.removeAttribute('src')
+    }
+    if (base.imgOldHires) {
+      img.setAttribute('data-old-hires', base.imgOldHires)
+    } else {
+      img.removeAttribute('data-old-hires')
+    }
+  }
+
+  const selected = lis.length > baseline.selectedThumbIndex ? lis[baseline.selectedThumbIndex] : (lis.length > 0 ? lis[0] : null)
+  setAltImagesSelection(altList, selected)
+}
+
 function applyGallery(doc: Document, rev: GalleryRevision | null) {
+  const storedDoc = doc as ArgusGalleryDocument
+  if (!storedDoc.__argusGalleryBaseline) {
+    const baseline = captureGalleryBaseline(doc)
+    if (baseline) storedDoc.__argusGalleryBaseline = baseline
+  }
+
   const landing = doc.getElementById('landingImage') as HTMLImageElement | null
   const altImages = doc.getElementById('altImages') as HTMLElement | null
 
   if (!rev || rev.images.length === 0) {
-    if (landing) {
-      landing.style.visibility = 'hidden'
-      landing.removeAttribute('src')
-      landing.removeAttribute('data-old-hires')
+    if (storedDoc.__argusGalleryBaseline) {
+      restoreGalleryBaseline(doc, storedDoc.__argusGalleryBaseline)
     }
-    if (altImages) altImages.style.display = 'none'
+
+    const mainIndex = typeof storedDoc.__argusMainMediaIndex === 'number' ? storedDoc.__argusMainMediaIndex : 0
+    if (Number.isFinite(mainIndex)) setDesktopMediaMainViewIndex(doc, mainIndex)
     return
   }
 
@@ -2150,17 +2357,16 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     landing.setAttribute('data-old-hires', hiRes)
   }
 
-  const altList = doc.querySelector('#altImages ul')
+  const altList = doc.querySelector<HTMLElement>('#altImages ul')
   if (!altList) return
 
-  const templateLi = altList.querySelector('li')
-  const existingLis = Array.from(altList.querySelectorAll('li'))
+  const imageLis = Array.from(altList.querySelectorAll<HTMLLIElement>('li.imageThumbnail'))
+    .slice()
+    .sort((a, b) => (itemNoFromElement(a) ?? 0) - (itemNoFromElement(b) ?? 0))
 
-  for (let i = 0; i < thumbs.length; i++) {
+  for (let i = 0; i < thumbs.length && i < imageLis.length; i++) {
     const item = thumbs[i]
-    const li = existingLis[i]
-      ? existingLis[i]
-      : (templateLi ? templateLi.cloneNode(true) as HTMLLIElement : doc.createElement('li'))
+    const li = imageLis[i]
     const existingImg = li.querySelector('img')
     const img = existingImg ? existingImg : doc.createElement('img')
     img.src = resolveImageSrc(item.src)
@@ -2168,28 +2374,17 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     img.setAttribute('data-old-hires', hiRes)
     if (!li.contains(img)) li.append(img)
     li.style.display = ''
-    if (!existingLis[i]) altList.append(li)
   }
 
-  for (let i = thumbs.length; i < existingLis.length; i++) {
-    existingLis[i].style.display = 'none'
+  for (let i = thumbs.length; i < imageLis.length; i++) {
+    imageLis[i].style.display = 'none'
   }
 
-  const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
-  for (const button of buttons) {
-    button.classList.remove('a-button-selected')
-  }
+  const firstVisible = altList.querySelector<HTMLElement>('li.imageThumbnail:not([style*="display: none"])')
+  setAltImagesSelection(altList, firstVisible)
 
-  const radioButtons = Array.from(altList.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
-  for (const radio of radioButtons) {
-    radio.setAttribute('aria-checked', 'false')
-  }
-
-  const firstVisible = altList.querySelector<HTMLElement>('li:not([style*="display: none"])')
-  const firstButton = firstVisible?.querySelector<HTMLElement>('.a-button-thumbnail')
-  if (firstButton) firstButton.classList.add('a-button-selected')
-  const firstRadio = firstVisible?.querySelector<HTMLButtonElement>('button[role="radio"]')
-  if (firstRadio) firstRadio.setAttribute('aria-checked', 'true')
+  storedDoc.__argusMainMediaIndex = 0
+  setDesktopMediaMainViewIndex(doc, 0)
 }
 
 function ensureGalleryThumbnailSwap(doc: Document) {
@@ -2204,6 +2399,22 @@ function ensureGalleryThumbnailSwap(doc: Document) {
     if (!(target instanceof Element)) return
     const li = target.closest('li')
     if (!li) return
+
+    const storedDoc = doc as ArgusGalleryDocument
+
+    if (li.classList.contains('videoThumbnail')) {
+      const videoIndex = itemNoFromElement(li)
+      if (typeof videoIndex !== 'number') return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      storedDoc.__argusMainMediaIndex = videoIndex
+      setDesktopMediaMainViewIndex(doc, videoIndex)
+      setAltImagesSelection(altList, li)
+      return
+    }
+
     const img = li.querySelector('img')
     if (!img) return
 
@@ -2216,26 +2427,36 @@ function ensureGalleryThumbnailSwap(doc: Document) {
     e.preventDefault()
     e.stopPropagation()
 
+    storedDoc.__argusMainMediaIndex = 0
+    setDesktopMediaMainViewIndex(doc, 0)
+
     landing.style.visibility = ''
     landing.src = src
     landing.setAttribute('data-old-hires', src)
 
-    const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
-    for (const button of buttons) {
-      button.classList.remove('a-button-selected')
-    }
+    setAltImagesSelection(altList, li)
+  }, true)
+}
 
-    const radioButtons = Array.from(altList.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
-    for (const radio of radioButtons) {
-      radio.setAttribute('aria-checked', 'false')
-    }
+function applyVariationSelection(doc: Document, asin: string | null) {
+  if (!asin) return
+  const swatches = Array.from(doc.querySelectorAll<HTMLElement>('#twister_feature_div li[data-asin]'))
+  if (swatches.length === 0) return
 
-    const selectedButton = li.querySelector<HTMLElement>('.a-button-thumbnail')
-    if (selectedButton) selectedButton.classList.add('a-button-selected')
+  for (const swatch of swatches) {
+    const button = swatch.querySelector<HTMLElement>('.a-button.a-button-toggle')
+    if (button) button.classList.remove('a-button-selected')
+    const input = swatch.querySelector<HTMLInputElement>('input[role="radio"]')
+    if (input) input.setAttribute('aria-checked', 'false')
+  }
 
-    const selectedRadio = li.querySelector<HTMLButtonElement>('button[role="radio"]')
-    if (selectedRadio) selectedRadio.setAttribute('aria-checked', 'true')
-  })
+  const selected = swatches.find((swatch) => swatch.getAttribute('data-asin') === asin) ?? null
+  if (!selected) return
+
+  const selectedButton = selected.querySelector<HTMLElement>('.a-button.a-button-toggle')
+  if (selectedButton) selectedButton.classList.add('a-button-selected')
+  const selectedInput = selected.querySelector<HTMLInputElement>('input[role="radio"]')
+  if (selectedInput) selectedInput.setAttribute('aria-checked', 'true')
 }
 
 function applyVideo(doc: Document, rev: VideoRevision | null) {
