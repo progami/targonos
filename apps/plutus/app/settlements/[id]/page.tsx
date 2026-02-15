@@ -251,6 +251,12 @@ function formatMoney(amount: number, currency: string): string {
   return formatted;
 }
 
+function displaySettlementDocNumber(docNumber: string): string {
+  const raw = docNumber.trim();
+  const normalized = raw.replace(/^.*#(LMB-[A-Z]{2}-)/, '$1');
+  return normalized.startsWith('LMB-') ? normalized.slice('LMB-'.length) : normalized;
+}
+
 function formatBlockDetails(details: Record<string, string | number> | undefined): string | null {
   if (!details) return null;
   const entries = Object.entries(details).filter(([key]) => key !== 'error');
@@ -269,8 +275,8 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Chip label="LMB Posted" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
-  return <Chip label={`LMB ${status}`} size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
+  if (status === 'Posted') return <Chip label="Posted" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
+  return <Chip label={status} size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
@@ -570,7 +576,7 @@ function ProcessSettlementDialog({
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data available</Typography>
                 <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  Upload the LMB Audit Data CSV on the Audit Data page first.
+                  Upload Audit Data on the Data Sources page (UK) or sync the settlement from Amazon (US).
                 </Typography>
               </Box>
             </Box>
@@ -1321,11 +1327,11 @@ export default function SettlementDetailPage() {
         <PageHeader
           sx={{ mt: 2 }}
           title="Settlement Details"
-          kicker={settlement ? settlement.marketplace.label : 'Link My Books'}
+          kicker={settlement ? settlement.marketplace.label : 'QBO'}
           description={
             settlement ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>{settlement.docNumber}</Typography>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>{displaySettlementDocNumber(settlement.docNumber)}</Typography>
                 <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                   {formatPeriod(settlement.periodStart, settlement.periodEnd)} &middot; Posted{' '}
                   {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
@@ -1387,7 +1393,7 @@ export default function SettlementDetailPage() {
             <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
                 <MuiTabs value={tab} onChange={handleTabChange} sx={tabsSx}>
-                  <MuiTab value="sales" label="LMB Settlement" sx={tabSx} />
+                  <MuiTab value="sales" label="Settlement JE" sx={tabSx} />
                   {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
                     <MuiTab value="plutus-preview" label="Plutus Settlement" sx={tabSx} />
                   )}
@@ -1822,7 +1828,7 @@ export default function SettlementDetailPage() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
                       <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data uploaded</Typography>
                       <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Upload the LMB Audit Data CSV on the{' '}
+                        Upload Audit Data on the{' '}
                         <Box
                           component={Link}
                           href="/audit-data"
