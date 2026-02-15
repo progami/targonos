@@ -13,7 +13,8 @@ const DEPLOYABLE_APPS = [
   { id: 'kairos', key: 'kairos' },
   { id: 'atlas', key: 'atlas' },
   { id: 'plutus', key: 'plutus' },
-  { id: 'hermes', key: 'hermes' }
+  { id: 'hermes', key: 'hermes' },
+  { id: 'argus', key: 'argus' }
 ]
 
 const deployableAppKeysById = new Map(DEPLOYABLE_APPS.map((app) => [app.id, app.key]))
