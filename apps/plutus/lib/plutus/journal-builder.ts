@@ -3,6 +3,38 @@ import type { InventoryComponent } from '@/lib/inventory/ledger';
 import type { ProcessingBlock, JournalEntryLinePreview } from './settlement-types';
 import { findRequiredSubAccountId } from './settlement-validation';
 
+function formatCents(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  return `${sign}$${(abs / 100).toFixed(2)}`;
+}
+
+function buildSkuBreakdownSuffix(skuBreakdown: Record<string, number> | undefined): string {
+  if (!skuBreakdown) {
+    return '';
+  }
+
+  const entries = Object.entries(skuBreakdown).filter((entry) => entry[1] !== 0);
+  if (entries.length === 0) {
+    return '';
+  }
+
+  entries.sort((a, b) => {
+    const delta = Math.abs(b[1]) - Math.abs(a[1]);
+    if (delta !== 0) return delta;
+    return a[0].localeCompare(b[0]);
+  });
+
+  const maxShown = 4;
+  const shown = entries.slice(0, maxShown).map((entry) => `${entry[0]}:${formatCents(entry[1])}`);
+  const hiddenCount = entries.length - shown.length;
+  if (hiddenCount > 0) {
+    shown.push(`+${hiddenCount} more`);
+  }
+
+  return ` | SKUs ${shown.join(', ')}`;
+}
+
 export function buildCogsJournalLines(
   netCogsByBrand: Record<string, Record<InventoryComponent, number>>,
   brandNames: string[],
@@ -10,6 +42,7 @@ export function buildCogsJournalLines(
   accounts: QboAccount[],
   _invoiceId: string,
   blocks: ProcessingBlock[],
+  skuBreakdownByBrandComponent?: Record<string, Record<InventoryComponent, Record<string, number>>>,
 ): JournalEntryLinePreview[] {
   const cogsLines: JournalEntryLinePreview[] = [];
 
@@ -80,6 +113,9 @@ export function buildCogsJournalLines(
       }
 
       const absCents = Math.abs(cents);
+      const componentBreakdown = skuBreakdownByBrandComponent ? skuBreakdownByBrandComponent[brand] : undefined;
+      const skuBreakdown = componentBreakdown ? componentBreakdown[component] : undefined;
+      const skuSuffix = buildSkuBreakdownSuffix(skuBreakdown);
       if (cents > 0) {
         // Sale: Debit COGS, Credit Inventory
         cogsLines.push({
@@ -89,7 +125,7 @@ export function buildCogsJournalLines(
           accountNumber: cogsAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${cogsLabel} COGS`,
+          description: `${cogsLabel} COGS${skuSuffix}`,
         });
         cogsLines.push({
           accountId: invAccount.id,
@@ -98,7 +134,7 @@ export function buildCogsJournalLines(
           accountNumber: invAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${invLabel} inventory`,
+          description: `${invLabel} inventory${skuSuffix}`,
         });
       } else {
         // Return: Debit Inventory, Credit COGS
@@ -109,7 +145,7 @@ export function buildCogsJournalLines(
           accountNumber: invAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invLabel} inventory (return)`,
+          description: `${invLabel} inventory (return)${skuSuffix}`,
         });
         cogsLines.push({
           accountId: cogsAccount.id,
@@ -118,7 +154,7 @@ export function buildCogsJournalLines(
           accountNumber: cogsAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${cogsLabel} COGS (return)`,
+          description: `${cogsLabel} COGS (return)${skuSuffix}`,
         });
       }
     }
@@ -137,38 +173,6 @@ export function buildPnlJournalLines(
 ): JournalEntryLinePreview[] {
   const pnlLines: JournalEntryLinePreview[] = [];
   const accountsById = new Map(accounts.map((account) => [account.Id, account]));
-
-  function formatCents(cents: number): string {
-    const sign = cents < 0 ? '-' : '';
-    const abs = Math.abs(cents);
-    return `${sign}$${(abs / 100).toFixed(2)}`;
-  }
-
-  function buildSkuBreakdownSuffix(skuBreakdown: Record<string, number> | undefined): string {
-    if (!skuBreakdown) {
-      return '';
-    }
-
-    const entries = Object.entries(skuBreakdown).filter((entry) => entry[1] !== 0);
-    if (entries.length === 0) {
-      return '';
-    }
-
-    entries.sort((a, b) => {
-      const delta = Math.abs(b[1]) - Math.abs(a[1]);
-      if (delta !== 0) return delta;
-      return a[0].localeCompare(b[0]);
-    });
-
-    const maxShown = 4;
-    const shown = entries.slice(0, maxShown).map((entry) => `${entry[0]}:${formatCents(entry[1])}`);
-    const hiddenCount = entries.length - shown.length;
-    if (hiddenCount > 0) {
-      shown.push(`+${hiddenCount} more`);
-    }
-
-    return ` | SKUs ${shown.join(', ')}`;
-  }
 
   const bucketMetaByKey: Record<
     string,
