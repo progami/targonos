@@ -54,6 +54,18 @@ async function main() {
   const html = readFileSync(HTML_PATH, 'utf-8')
   const extracted = extractAll(html)
 
+  // ─── Title ────────────────────────────────────────────────────
+  const titleText = extracted.title ? extracted.title : LISTING_LABEL
+  const titleRev = await prisma.titleRevision.create({
+    data: {
+      listingId: listing.id,
+      seq: 1,
+      title: titleText,
+      origin: 'CAPTURED_SNAPSHOT',
+    },
+  })
+  console.log('Created title revision v1')
+
   // ─── Bullets ─────────────────────────────────────────────────
   const bulletsRev = await prisma.bulletsRevision.create({
     data: {
@@ -142,6 +154,7 @@ async function main() {
   await prisma.listing.update({
     where: { id: listing.id },
     data: {
+      activeTitleId: titleRev.id,
       activeBulletsId: bulletsRev.id,
       activeGalleryId: galleryRev.id,
       activeEbcId: ebcRev.id,
@@ -155,6 +168,7 @@ async function main() {
       seq: 1,
       capturedAt: new Date(),
       rawHtmlPath: HTML_PATH,
+      titleRevisionId: titleRev.id,
       bulletsRevisionId: bulletsRev.id,
       galleryRevisionId: galleryRev.id,
       ebcRevisionId: ebcRev.id,

@@ -11,7 +11,7 @@ export default async function ListingsPage() {
       asin: true,
       label: true,
       brandName: true,
-      _count: { select: { snapshots: true, bulletsRevisions: true, galleryRevisions: true, ebcRevisions: true } },
+      _count: { select: { snapshots: true, titleRevisions: true, bulletsRevisions: true, galleryRevisions: true, ebcRevisions: true } },
     },
   })
 
@@ -21,7 +21,7 @@ export default async function ListingsPage() {
 
       {listings.length > 0 ? (
         <div className="space-y-3">
-          {listings.map((listing: { id: string; asin: string; label: string; brandName: string | null; _count: { snapshots: number; bulletsRevisions: number; galleryRevisions: number; ebcRevisions: number } }) => (
+          {listings.map((listing: { id: string; asin: string; label: string; brandName: string | null; _count: { snapshots: number; titleRevisions: number; bulletsRevisions: number; galleryRevisions: number; ebcRevisions: number } }) => (
             <div key={listing.id} className="border rounded-lg p-6 hover:bg-muted/50 transition-colors">
               <Link href={`/listings/${listing.id}`} className="block">
                 <div className="flex items-start gap-4">
@@ -37,6 +37,9 @@ export default async function ListingsPage() {
                     <div className="flex gap-2 mt-2">
                       <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
                         {listing._count.snapshots} snapshot{listing._count.snapshots !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                        T v{listing._count.titleRevisions}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
                         B v{listing._count.bulletsRevisions}
