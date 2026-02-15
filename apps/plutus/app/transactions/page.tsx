@@ -44,7 +44,7 @@ import {
   normalizePurchaseSku,
   parsePurchaseAllocationDescription,
 } from '@/lib/plutus/purchases/description';
-import { cn } from '@/lib/utils';
+
 import { useTransactionsStore } from '@/lib/store/transactions';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -1201,16 +1201,17 @@ function CreateBillModal({
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { lg: '2fr 1fr' } }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Vendor</Box>
-                <select
-                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
+                <Box
+                  component="select"
+                  sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, py: 1, fontSize: '0.875rem' }}
                   value={vendorId}
-                  onChange={(event) => setVendorId(event.target.value)}
+                  onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setVendorId(event.target.value)}
                 >
                   <option value="">Select vendor</option>
                   {context.vendors.map((vendor) => (
                     <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                   ))}
-                </select>
+                </Box>
               </Box>
 
               <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider', p: 1.5 }}>
@@ -1233,16 +1234,17 @@ function CreateBillModal({
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' } }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Terms</Box>
-                <select
-                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
+                <Box
+                  component="select"
+                  sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, py: 1, fontSize: '0.875rem' }}
                   value={termId}
-                  onChange={(event) => handleTermChange(event.target.value)}
+                  onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleTermChange(event.target.value)}
                 >
                   <option value="">Select terms</option>
                   {termOptions.map((term) => (
                     <option key={term.id} value={term.id}>{term.name}</option>
                   ))}
-                </select>
+                </Box>
               </Box>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
@@ -1282,26 +1284,28 @@ function CreateBillModal({
               {trackedLineCount > 0 && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                   <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Brand (tracked lines)</Box>
-                  <select
-                    style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
+                  <Box
+                    component="select"
+                    sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, py: 1, fontSize: '0.875rem' }}
                     value={brandId}
-                    onChange={(event) => setBrandId(event.target.value)}
+                    onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setBrandId(event.target.value)}
                   >
                     <option value="">Select brand</option>
                     {brandOptions.map((brand) => (
                       <option key={brand.id} value={brand.id}>{brand.name}</option>
                     ))}
-                  </select>
+                  </Box>
                 </Box>
               )}
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Currency</Box>
-                <select
-                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem', ...(!multiCurrencyEnabled ? { opacity: 0.6 } : {}) }}
+                <Box
+                  component="select"
+                  sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, py: 1, fontSize: '0.875rem', ...(!multiCurrencyEnabled ? { opacity: 0.6 } : {}) }}
                   value={transactionCurrency}
                   disabled={!multiCurrencyEnabled}
-                  onChange={(event) => setCurrencyCode(event.target.value)}
+                  onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setCurrencyCode(event.target.value)}
                 >
                   {!multiCurrencyEnabled && <option value={homeCurrency}>{homeCurrency}</option>}
                   {multiCurrencyEnabled && context.currencies.map((currency) => (
@@ -1309,7 +1313,7 @@ function CreateBillModal({
                       {currency.code}{currency.name ? ` - ${currency.name}` : ''}
                     </option>
                   ))}
-                </select>
+                </Box>
               </Box>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
@@ -1327,31 +1331,32 @@ function CreateBillModal({
               </Box>
             </Box>
 
-            <div className="rounded-md border border-slate-200 dark:border-white/10">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-white/[0.03]">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Category</th>
-                      <th className="px-3 py-2 text-left font-semibold">Description</th>
-                      <th className="px-3 py-2 text-left font-semibold">Amount ({transactionCurrency})</th>
-                      <th className="px-3 py-2 text-left font-semibold">SKU</th>
-                      <th className="px-3 py-2 text-left font-semibold">Qty</th>
-                      <th className="w-10 px-3 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
+            <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider' }}>
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: '100%', fontSize: '0.875rem' }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 600 }}>Category</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 600 }}>Description</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 600 }}>Amount ({transactionCurrency})</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 600 }}>SKU</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 600 }}>Qty</TableCell>
+                      <TableCell sx={{ width: 40, px: 1.5, py: 1 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {lines.map((line) => {
                       const account = line.accountId !== '' ? accountsById.get(line.accountId) : undefined;
                       const isManufacturing = account?.component === 'manufacturing';
 
                       return (
-                        <tr key={line.id} className="border-t border-slate-200 dark:border-white/10">
-                          <td className="px-3 py-2 align-top">
-                            <select
-                              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-white/5"
+                        <TableRow key={line.id} sx={{ borderTop: 1, borderColor: 'divider' }}>
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top' }}>
+                            <Box
+                              component="select"
+                              sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, py: 0.75, fontSize: '0.875rem' }}
                               value={line.accountId}
-                              onChange={(event) => {
+                              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
                                 const nextAccountId = event.target.value;
                                 const nextAccount = nextAccountId !== '' ? accountsById.get(nextAccountId) : undefined;
                                 const nextDescription = line.description.trim() === ''
@@ -1370,10 +1375,10 @@ function CreateBillModal({
                                   {option.fullyQualifiedName}
                                 </option>
                               ))}
-                            </select>
-                          </td>
+                            </Box>
+                          </TableCell>
 
-                          <td className="px-3 py-2 align-top">
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top' }}>
                             <TextField
                               size="small"
                               fullWidth
@@ -1381,9 +1386,9 @@ function CreateBillModal({
                               onChange={(event) => updateLine(line.id, { description: event.target.value })}
                               placeholder="Line description"
                             />
-                          </td>
+                          </TableCell>
 
-                          <td className="px-3 py-2 align-top">
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top' }}>
                             <TextField
                               type="number"
                               size="small"
@@ -1393,15 +1398,16 @@ function CreateBillModal({
                               onChange={(event) => updateLine(line.id, { amount: event.target.value })}
                               placeholder="0.00"
                             />
-                          </td>
+                          </TableCell>
 
-                          <td className="px-3 py-2 align-top">
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top' }}>
                             {isManufacturing ? (
-                              <select
-                                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
+                              <Box
+                                component="select"
+                                sx={{ width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, py: 0.75, fontSize: '0.875rem', '&:disabled': { opacity: 0.6 } }}
                                 value={line.sku}
                                 disabled={brandId === ''}
-                                onChange={(event) => updateLine(line.id, { sku: event.target.value })}
+                                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateLine(line.id, { sku: event.target.value })}
                               >
                                 <option value="">{brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
                                 {filteredSkus.map((sku) => (
@@ -1409,13 +1415,13 @@ function CreateBillModal({
                                     {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
                                   </option>
                                 ))}
-                              </select>
+                              </Box>
                             ) : (
                               <TextField size="small" fullWidth value="" disabled placeholder="Manufacturing only" />
                             )}
-                          </td>
+                          </TableCell>
 
-                          <td className="px-3 py-2 align-top">
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top' }}>
                             {isManufacturing ? (
                               <TextField
                                 type="number"
@@ -1429,70 +1435,74 @@ function CreateBillModal({
                             ) : (
                               <TextField size="small" fullWidth value="" disabled placeholder="-" />
                             )}
-                          </td>
+                          </TableCell>
 
-                          <td className="px-3 py-2 align-top text-right">
+                          <TableCell sx={{ px: 1.5, py: 1, verticalAlign: 'top', textAlign: 'right' }}>
                             <IconButton
                               size="small"
                               onClick={() => removeLine(line.id)}
                             >
                               <CloseIcon sx={{ fontSize: 14 }} />
                             </IconButton>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-200 p-3 dark:border-white/10">
+                  </TableBody>
+                </Table>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: 1, borderColor: 'divider', p: 1.5 }}>
                 <Button type="button" variant="outlined" size="small" onClick={addLine} sx={{ borderColor: 'divider', color: 'text.primary', gap: 0.75 }}>
                   <AddIcon sx={{ fontSize: 14 }} />
                   Add lines
                 </Button>
-                <div className="text-right text-sm">
-                  <div className="font-medium text-slate-900 dark:text-white">
+                <Box sx={{ textAlign: 'right', fontSize: '0.875rem' }}>
+                  <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
                     Total ({transactionCurrency}): {formatMoneySafe(transactionTotal, transactionCurrency)}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  </Box>
+                  <Box sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                     Total ({homeCurrency}): {homeTotal === null ? 'Add exchange rate' : formatMoneySafe(homeTotal, homeCurrency)}
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Memo</div>
-              <textarea
-                className="w-full min-h-[96px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>Memo</Box>
+              <TextField
+                multiline
+                rows={4}
+                fullWidth
                 value={memo}
                 onChange={(event) => setMemo(event.target.value)}
                 placeholder="Optional memo"
+                sx={{ '& .MuiInputBase-input': { fontSize: '0.875rem' } }}
               />
-            </div>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Attachments</div>
-              <input
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>Attachments</Box>
+              <Box
+                component="input"
                 type="file"
                 multiple
-                onChange={(event) => {
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
                   const files = Array.from(event.target.files ?? []);
                   if (files.length === 0) return;
                   setAttachments((prev) => [...prev, ...files]);
                   event.currentTarget.value = '';
                 }}
-                className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                sx={{ display: 'block', width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, py: 1, fontSize: '0.875rem' }}
               />
-              <div className="text-xs text-slate-500 dark:text-slate-400">Max 20 files, 20MB each.</div>
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Max 20 files, 20MB each.</Typography>
               {attachments.length > 0 && (
-                <div className="rounded-md border border-slate-200 dark:border-white/10">
-                  <ul className="divide-y divide-slate-200 dark:divide-white/10">
+                <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider' }}>
+                  <Box component="ul" sx={{ '& > *:not(:last-child)': { borderBottom: 1, borderColor: 'divider' } }}>
                     {attachments.map((file, index) => (
-                      <li key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <span className="truncate text-slate-700 dark:text-slate-300">
+                      <Box component="li" key={`${file.name}-${file.size}-${index}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, fontSize: '0.875rem' }}>
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.primary' }}>
                           {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                        </span>
+                        </Box>
                         <Button
                           type="button"
                           variant="text"
@@ -1502,15 +1512,15 @@ function CreateBillModal({
                         >
                           Remove
                         </Button>
-                      </li>
+                      </Box>
                     ))}
-                  </ul>
-                </div>
+                  </Box>
+                </Box>
               )}
-            </div>
+            </Box>
 
             {formError && (
-              <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
+              <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{formError}</Typography>
             )}
           </Box>
         )}
@@ -1636,10 +1646,10 @@ function CreatePurchaseModal({
         </Box>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Create a new QBO purchase transaction for card/bank spend.</Typography>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Date</Typography>
               <TextField
                 type="date"
                 size="small"
@@ -1647,35 +1657,37 @@ function CreatePurchaseModal({
                 value={createState.txnDate}
                 onChange={(event) => setCreateState((prev) => ({ ...prev, txnDate: event.target.value }))}
               />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payment Account</label>
-              <select
+            </Box>
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Payment Account</Typography>
+              <Box
+                component="select"
                 value={createState.paymentAccountId}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, paymentAccountId: event.target.value }))}
-                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setCreateState((prev) => ({ ...prev, paymentAccountId: event.target.value }))}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
               >
                 <option value="">{createContextLoading ? 'Loading accounts…' : 'Select payment account'}</option>
                 {paymentAccounts.map((account) => (
                   <option key={account.id} value={account.id}>{account.fullyQualifiedName}</option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Payee (optional)</label>
-              <select
+              </Box>
+            </Box>
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Payee (optional)</Typography>
+              <Box
+                component="select"
                 value={createState.vendorId}
-                onChange={(event) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
-                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
               >
                 <option value="">{createContextLoading ? 'Loading vendors…' : 'No payee'}</option>
                 {vendors.map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Memo (optional)</label>
+              </Box>
+            </Box>
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Memo (optional)</Typography>
               <TextField
                 size="small"
                 fullWidth
@@ -1683,10 +1695,10 @@ function CreatePurchaseModal({
                 onChange={(event) => setCreateState((prev) => ({ ...prev, memo: event.target.value }))}
                 placeholder="Internal note"
               />
-            </div>
-          </div>
+            </Box>
+          </Box>
 
-          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+          <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'action.hover' }}>
@@ -1700,9 +1712,10 @@ function CreatePurchaseModal({
                 {createState.lines.map((line) => (
                   <TableRow key={line.id}>
                     <TableCell>
-                      <select
+                      <Box
+                        component="select"
                         value={line.accountId}
-                        onChange={(event) => {
+                        onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
                           const nextAccountId = event.target.value;
                           const nextAccount = lineAccountById.get(nextAccountId);
                           updateLine(line.id, {
@@ -1710,7 +1723,7 @@ function CreatePurchaseModal({
                             description: nextAccount ? nextAccount.fullyQualifiedName : '',
                           });
                         }}
-                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' } }}
                       >
                         <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
                         {lineAccounts.map((account) => (
@@ -1718,7 +1731,7 @@ function CreatePurchaseModal({
                             {account.fullyQualifiedName}
                           </option>
                         ))}
-                      </select>
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <TextField
@@ -1755,18 +1768,18 @@ function CreatePurchaseModal({
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </Box>
 
-          <div className="flex justify-between">
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Button type="button" variant="outlined" size="small" onClick={addLine} sx={{ borderColor: 'divider', color: 'text.primary', gap: 0.75 }}>
               <AddIcon sx={{ fontSize: 14 }} />
               Add Line
             </Button>
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {createError && (
-          <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
+          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{createError}</Typography>
         )}
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
@@ -1948,17 +1961,18 @@ function EditBillModal({
       <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <DialogTitle sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flex: 1 }}>
-            <span className="truncate">{bill.entityName}</span>
-            <a
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bill.entityName}</Box>
+            <Box
+              component="a"
               href={qboTransactionUrl(bill)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
               title="Open in QuickBooks"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
             >
               <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
-            </a>
+            </Box>
           </DialogTitle>
           <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
         </Box>
@@ -1968,11 +1982,11 @@ function EditBillModal({
           {mappedBrandName ? ` \u00b7 ${mappedBrandName}` : ''}
         </Typography>
 
-        <div className="space-y-4">
-          <div className={cn('grid gap-3', requiresManufacturingPo ? 'grid-cols-2' : 'grid-cols-1')}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: requiresManufacturingPo ? 'repeat(2, 1fr)' : '1fr' }}>
             {requiresManufacturingPo && (
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
+              <Box>
+                <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>PO Number</Typography>
                 <TextField
                   size="small"
                   fullWidth
@@ -1981,28 +1995,29 @@ function EditBillModal({
                   placeholder="e.g. PO-2026-001"
                   sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
                 />
-              </div>
+              </Box>
             )}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Brand</label>
-              <select
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Brand</Typography>
+              <Box
+                component="select"
                 value={editState.brandId}
-                onChange={(event) => handleBrandChange(event.target.value)}
-                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-teal-500/40"
+                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleBrandChange(event.target.value)}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
               >
                 <option value="">Select brand</option>
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>{brand.name}</option>
                 ))}
-              </select>
-            </div>
-          </div>
+              </Box>
+            </Box>
+          </Box>
 
-          <div>
-            <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
               Tracked Lines
-            </h3>
-            <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+            </Typography>
+            <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
@@ -2024,17 +2039,18 @@ function EditBillModal({
 
                     return (
                       <TableRow key={trackedLine.lineId}>
-                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">{trackedLine.account}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{trackedLine.account}</TableCell>
                         <TableCell>
                           {isManufacturing && lineState.mode === 'split' ? (
-                            <div className="space-y-1">
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                               {lineState.splits.map((split) => (
-                                <div key={split.id} className="flex items-center gap-2">
-                                  <select
+                                <Box key={split.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Box
+                                    component="select"
                                     value={split.sku}
-                                    onChange={(event) => updateSplit(trackedLine.lineId, split.id, { sku: event.target.value })}
+                                    onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateSplit(trackedLine.lineId, split.id, { sku: event.target.value })}
                                     disabled={editState.brandId === ''}
-                                    className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+                                    sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' }, '&:disabled': { opacity: 0.5 } }}
                                   >
                                     <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
                                     {filteredSkus.map((sku) => (
@@ -2042,7 +2058,7 @@ function EditBillModal({
                                         {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
                                       </option>
                                     ))}
-                                  </select>
+                                  </Box>
                                   <TextField
                                     type="number"
                                     size="small"
@@ -2053,22 +2069,24 @@ function EditBillModal({
                                     sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                                   />
                                   {lineState.splits.length > 2 && (
-                                    <button
+                                    <IconButton
+                                      size="small"
                                       onClick={() => removeSplit(trackedLine.lineId, split.id)}
-                                      className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                      sx={{ width: 24, height: 24, color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: 'rgba(239,68,68,0.08)' } }}
                                     >
                                       <CloseIcon sx={{ fontSize: 14 }} />
-                                    </button>
+                                    </IconButton>
                                   )}
-                                </div>
+                                </Box>
                               ))}
-                            </div>
+                            </Box>
                           ) : (
-                            <select
+                            <Box
+                              component="select"
                               value={lineState.sku}
-                              onChange={(event) => updateLine(trackedLine.lineId, { sku: event.target.value })}
+                              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateLine(trackedLine.lineId, { sku: event.target.value })}
                               disabled={editState.brandId === ''}
-                              className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500 disabled:opacity-50"
+                              sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' }, '&:disabled': { opacity: 0.5 } }}
                             >
                               <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
                               {filteredSkus.map((sku) => (
@@ -2076,13 +2094,13 @@ function EditBillModal({
                                   {sku.sku}{sku.productName ? ` - ${sku.productName}` : ''}
                                 </option>
                               ))}
-                            </select>
+                            </Box>
                           )}
                         </TableCell>
                         <TableCell>
                           {isManufacturing ? (
                             lineState.mode === 'split' ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
+                              <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Split by rows</Box>
                             ) : (
                               <TextField
                                 type="number"
@@ -2095,20 +2113,20 @@ function EditBillModal({
                               />
                             )
                           ) : (
-                            <span className="text-xs text-slate-400">&mdash;</span>
+                            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>&mdash;</Box>
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          <Box component="span" sx={{ display: 'inline-flex', borderRadius: 1, bgcolor: 'action.selected', px: 0.75, py: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                             {COMPONENT_LABELS[trackedLine.component] ? COMPONENT_LABELS[trackedLine.component] : trackedLine.component}
-                          </span>
+                          </Box>
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-medium">
+                        <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '0.75rem', fontWeight: 500 }}>
                           {formatCurrency(trackedLine.amount)}
                         </TableCell>
                         <TableCell>
                           {isManufacturing && (
-                            <div className="flex gap-1">
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
                               <Button
                                 type="button"
                                 variant="outlined"
@@ -2126,7 +2144,7 @@ function EditBillModal({
                                   <AddIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
                               )}
-                            </div>
+                            </Box>
                           )}
                         </TableCell>
                       </TableRow>
@@ -2134,12 +2152,12 @@ function EditBillModal({
                   })}
                 </TableBody>
               </Table>
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
 
         {saveError && (
-          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{saveError}</Typography>
         )}
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
@@ -2320,17 +2338,18 @@ function EditPurchaseModal({
       <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <DialogTitle sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flex: 1 }}>
-            <span className="truncate">{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</span>
-            <a
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</Box>
+            <Box
+              component="a"
               href={qboTransactionUrl(purchase)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
               title="Open in QuickBooks"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
             >
               <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
-            </a>
+            </Box>
           </DialogTitle>
           <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
         </Box>
@@ -2339,11 +2358,11 @@ function EditPurchaseModal({
           {purchase.docNumber.trim() !== '' ? ` \u00b7 ${purchase.docNumber}` : ''}
         </Typography>
 
-        <div>
-          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
             Purchase Lines
-          </h3>
-          <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+          </Typography>
+          <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'action.hover' }}>
@@ -2367,10 +2386,11 @@ function EditPurchaseModal({
                 {editableLines.map((lineState) => (
                   <TableRow key={lineState.qboLineId}>
                     <TableCell>
-                      <select
+                      <Box
+                        component="select"
                         value={lineState.accountId}
-                        onChange={(event) => updateLine(lineState.qboLineId, { accountId: event.target.value })}
-                        className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-teal-500"
+                        onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateLine(lineState.qboLineId, { accountId: event.target.value })}
+                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' } }}
                       >
                         <option value="">Select account</option>
                         {accounts.map((account) => (
@@ -2378,13 +2398,13 @@ function EditPurchaseModal({
                             {account.fullyQualifiedName}
                           </option>
                         ))}
-                      </select>
+                      </Box>
                     </TableCell>
                     <TableCell>
                       {lineState.mode === 'split' ? (
-                        <div className="space-y-1">
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                           {lineState.splits.map((split) => (
-                            <div key={split.id} className="flex items-center gap-2">
+                            <Box key={split.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <TextField
                                 size="small"
                                 fullWidth
@@ -2411,17 +2431,17 @@ function EditPurchaseModal({
                                 sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                               />
                               {lineState.splits.length > 2 && (
-                                <button
-                                  type="button"
+                                <IconButton
+                                  size="small"
                                   onClick={() => removeSplit(lineState.qboLineId, split.id)}
-                                  className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                  sx={{ width: 24, height: 24, color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: 'rgba(239,68,68,0.08)' } }}
                                 >
                                   <CloseIcon sx={{ fontSize: 14 }} />
-                                </button>
+                                </IconButton>
                               )}
-                            </div>
+                            </Box>
                           ))}
-                        </div>
+                        </Box>
                       ) : (
                         <TextField
                           size="small"
@@ -2436,7 +2456,7 @@ function EditPurchaseModal({
                     </TableCell>
                     <TableCell>
                       {lineState.mode === 'split' ? (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Split rows include region</span>
+                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Split rows include region</Box>
                       ) : (
                         <TextField
                           size="small"
@@ -2450,7 +2470,7 @@ function EditPurchaseModal({
                     </TableCell>
                     <TableCell>
                       {lineState.mode === 'split' ? (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
+                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Split by rows</Box>
                       ) : (
                         <TextField
                           type="number"
@@ -2463,11 +2483,11 @@ function EditPurchaseModal({
                         />
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-xs font-medium">
+                    <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '0.75rem', fontWeight: 500 }}>
                       {formatCurrency(lineState.amountCents / 100)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <Button
                           type="button"
                           variant="outlined"
@@ -2485,14 +2505,14 @@ function EditPurchaseModal({
                             <AddIcon sx={{ fontSize: 12 }} />
                           </IconButton>
                         )}
-                      </div>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         <datalist id={`purchase-skus-${purchase.id}`}>
           {skus.map((sku) => (
@@ -2503,7 +2523,7 @@ function EditPurchaseModal({
         </datalist>
 
         {saveError && (
-          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{saveError}</Typography>
         )}
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
@@ -2628,11 +2648,11 @@ export default function TransactionsPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" className="page-enter" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader title="Transactions" variant="accent" />
 
-        <div className="mt-6 grid gap-4">
+        <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           <Tabs
             value={tab}
             onChange={(_, value) => {
@@ -2649,17 +2669,21 @@ export default function TransactionsPage() {
 
           <Card sx={{ borderColor: 'divider' }}>
             <CardContent sx={{ p: 2 }}>
-              <div className={cn(
-                'grid gap-3 md:items-end',
-                tab === 'purchase'
-                  ? 'md:grid-cols-[1.15fr,0.52fr,0.52fr,0.7fr,0.42fr,auto]'
-                  : 'md:grid-cols-[1.25fr,0.55fr,0.55fr,0.45fr,auto]',
-              )}>
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+              <Box sx={{
+                display: 'grid',
+                gap: 1.5,
+                alignItems: { md: 'flex-end' },
+                gridTemplateColumns: {
+                  md: tab === 'purchase'
+                    ? '1.15fr 0.52fr 0.52fr 0.7fr 0.42fr auto'
+                    : '1.25fr 0.55fr 0.55fr 0.45fr auto',
+                },
+              }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Search
-                  </div>
-                  <div className="relative">
+                  </Box>
+                  <Box sx={{ position: 'relative' }}>
                     <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', pointerEvents: 'none' }} />
                     <TextField
                       size="small"
@@ -2669,13 +2693,13 @@ export default function TransactionsPage() {
                       placeholder="Doc number..."
                       sx={{ '& .MuiInputBase-input': { pl: 4.5 } }}
                     />
-                  </div>
-                </div>
+                  </Box>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Start date
-                  </div>
+                  </Box>
                   <TextField
                     type="date"
                     size="small"
@@ -2687,12 +2711,12 @@ export default function TransactionsPage() {
                       setPage(1);
                     }}
                   />
-                </div>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     End date
-                  </div>
+                  </Box>
                   <TextField
                     type="date"
                     size="small"
@@ -2704,12 +2728,12 @@ export default function TransactionsPage() {
                       setPage(1);
                     }}
                   />
-                </div>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Rows
-                  </div>
+                  </Box>
                   <FormControl size="small" fullWidth>
                     <MuiSelect
                       value={String(pageSize)}
@@ -2726,13 +2750,13 @@ export default function TransactionsPage() {
                       <MenuItem value="500">500</MenuItem>
                     </MuiSelect>
                   </FormControl>
-                </div>
+                </Box>
 
                 {tab === 'purchase' && (
-                  <div className="space-y-1.5">
-                    <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                       Payment account
-                    </div>
+                    </Box>
                     <FormControl size="small" fullWidth>
                       <MuiSelect
                         value={purchaseAccountId === '' ? ALL_PURCHASE_ACCOUNTS : purchaseAccountId}
@@ -2751,10 +2775,10 @@ export default function TransactionsPage() {
                         ))}
                       </MuiSelect>
                     </FormControl>
-                  </div>
+                  </Box>
                 )}
 
-                <div className="flex items-center gap-2">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {tab === 'bill' && (
                     <Button
                       onClick={() => setCreateBillOpen(true)}
@@ -2786,16 +2810,16 @@ export default function TransactionsPage() {
                   >
                     Clear
                   </Button>
-                </div>
-              </div>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
 
           <Card sx={{ borderColor: 'divider', overflow: 'hidden' }}>
             <CardContent sx={{ p: 0 }}>
               {tab === 'bill' ? (
-                <div className="overflow-x-auto">
-                  <Table size="small" className="table-striped" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'action.hover' }}>
                         <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
@@ -2813,7 +2837,7 @@ export default function TransactionsPage() {
                         <>
                           {Array.from({ length: 8 }).map((_, index) => (
                             <TableRow key={index}>
-                              <TableCell colSpan={8} className="py-3">
+                              <TableCell colSpan={8} sx={{ py: 1.5 }}>
                                 <Skeleton variant="rectangular" height={40} width="100%" />
                               </TableCell>
                             </TableRow>
@@ -2823,7 +2847,7 @@ export default function TransactionsPage() {
 
                       {!isLoading && error && (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                          <TableCell colSpan={8} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                             {error instanceof Error ? error.message : String(error)}
                           </TableCell>
                         </TableRow>
@@ -2848,52 +2872,53 @@ export default function TransactionsPage() {
                         return (
                           <TableRow
                             key={row.id}
-                            className={cn(
-                              'transition-colors',
-                              row.isTrackedBill
-                                ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-white/[0.02]'
-                                : 'opacity-90',
-                            )}
+                            sx={{
+                              transition: 'background-color 0.15s',
+                              ...(row.isTrackedBill
+                                ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }
+                                : { opacity: 0.9 }),
+                            }}
                             onClick={() => {
                               if (row.isTrackedBill) {
                                 setEditBill(row);
                               }
                             }}
                           >
-                            <TableCell className="whitespace-nowrap text-sm">{row.txnDate}</TableCell>
-                            <TableCell className="text-sm font-medium text-slate-900 dark:text-white">{row.entityName.trim() === '' ? '—' : row.entityName}</TableCell>
-                            <TableCell className="font-mono text-sm text-slate-600 dark:text-slate-400">
-                              {row.mapping && row.mapping.poNumber.trim() !== '' ? row.mapping.poNumber : <span className="text-slate-300 dark:text-slate-600">&mdash;</span>}
+                            <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.875rem' }}>{row.txnDate}</TableCell>
+                            <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{row.entityName.trim() === '' ? '—' : row.entityName}</TableCell>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                              {row.mapping && row.mapping.poNumber.trim() !== '' ? row.mapping.poNumber : <Box component="span" sx={{ color: 'text.disabled' }}>&mdash;</Box>}
                             </TableCell>
-                            <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                              {brandName ? brandName : <span className="text-slate-300 dark:text-slate-600">&mdash;</span>}
+                            <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                              {brandName ? brandName : <Box component="span" sx={{ color: 'text.disabled' }}>&mdash;</Box>}
                             </TableCell>
                             <TableCell><BillStatusBadge status={status} /></TableCell>
-                            <TableCell className="text-right tabular-nums text-sm font-medium text-slate-900 dark:text-white">
+                            <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                               {formatMoney(row.totalAmount, currency)}
                             </TableCell>
-                            <TableCell className="text-sm text-slate-600 dark:text-slate-400">{accountSummary}</TableCell>
-                            <TableCell className="text-center">
-                              <a
+                            <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{accountSummary}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>
+                              <Box
+                                component="a"
                                 href={qboTransactionUrl(row)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                onClick={(event) => event.stopPropagation()}
-                                className="inline-flex items-center justify-center h-7 w-7 rounded text-slate-400 hover:text-brand-teal-500 hover:bg-brand-teal-50 dark:hover:bg-brand-teal-900/20 transition-colors"
+                                onClick={(event: React.MouseEvent) => event.stopPropagation()}
                                 title="Open in QuickBooks"
+                                sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, borderRadius: 1, color: 'text.disabled', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
                               >
                                 <OpenInNewIcon sx={{ fontSize: 14 }} />
-                              </a>
+                              </Box>
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                </div>
+                </Box>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table size="small" className="table-striped" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'action.hover' }}>
                         <TableCell sx={{ width: 40 }}> </TableCell>
@@ -2911,7 +2936,7 @@ export default function TransactionsPage() {
                         <>
                           {Array.from({ length: 8 }).map((_, index) => (
                             <TableRow key={index}>
-                              <TableCell colSpan={8} className="py-3">
+                              <TableCell colSpan={8} sx={{ py: 1.5 }}>
                                 <Skeleton variant="rectangular" height={40} width="100%" />
                               </TableCell>
                             </TableRow>
@@ -2921,7 +2946,7 @@ export default function TransactionsPage() {
 
                       {!isLoading && error && (
                         <TableRow>
-                          <TableCell colSpan={8} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                          <TableCell colSpan={8} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                             {error instanceof Error ? error.message : String(error)}
                           </TableCell>
                         </TableRow>
@@ -2965,9 +2990,10 @@ export default function TransactionsPage() {
 
                         return (
                           <Fragment key={row.id}>
-                            <TableRow className="table-row-hover group">
-                              <TableCell className="align-top">
-                                <button
+                            <TableRow sx={{ transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' }, '& td:first-of-type': { position: 'relative' }, '& .show-on-hover': { opacity: 0, transition: 'opacity 0.2s' }, '&:hover .show-on-hover': { opacity: 1 } }}>
+                              <TableCell sx={{ verticalAlign: 'top' }}>
+                                <Box
+                                  component="button"
                                   type="button"
                                   onClick={() =>
                                     setExpanded((prev) => ({
@@ -2975,8 +3001,8 @@ export default function TransactionsPage() {
                                       [row.id]: !(prev[row.id] === true),
                                     }))
                                   }
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:bg-white/5"
                                   aria-expanded={isExpanded}
+                                  sx={{ display: 'inline-flex', height: 28, width: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', color: 'text.secondary', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.15s', '&:hover': { bgcolor: 'action.hover', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' } }}
                                 >
                                   <ExpandMoreIcon
                                     sx={{
@@ -2985,17 +3011,17 @@ export default function TransactionsPage() {
                                       transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                                     }}
                                   />
-                                </button>
+                                </Box>
                               </TableCell>
-                              <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
+                              <TableCell sx={{ verticalAlign: 'top', fontSize: '0.75rem', color: 'text.primary' }}>
                                 {new Date(`${row.txnDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC' })}
                               </TableCell>
-                              <TableCell className="align-top">
+                              <TableCell sx={{ verticalAlign: 'top' }}>
                                 <TypeBadge type={row.type} />
                               </TableCell>
-                              <TableCell className="align-top">
-                                <div className="flex items-start gap-2">
-                                  <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
+                              <TableCell sx={{ verticalAlign: 'top' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                  <Box sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.primary' }}>{docNumber}</Box>
                                   {isPurchaseRow(row) && (
                                     <Button
                                       variant="text"
@@ -3005,55 +3031,57 @@ export default function TransactionsPage() {
                                         event.stopPropagation();
                                         setEditPurchase(row);
                                       }}
-                                      sx={{ color: 'text.secondary', height: 28, px: 1, fontSize: '0.625rem', opacity: 0, transition: 'opacity 200ms', '.group:hover &': { opacity: 1 } }}
-                                      className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                      className="show-on-hover"
+                                      sx={{ color: 'text.secondary', height: 28, px: 1, fontSize: '0.625rem', '&:focus-visible': { opacity: 1 } }}
                                     >
                                       Map
                                     </Button>
                                   )}
-                                  <a
+                                  <Box
+                                    component="a"
                                     href={qboTransactionUrl(row)}
                                     target="_blank"
                                     rel="noreferrer"
                                     aria-label="Open in QuickBooks"
                                     title="Open in QuickBooks"
-                                    className="inline-flex items-center justify-center h-7 w-7 -mt-0.5 rounded opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 text-slate-400 hover:text-brand-teal-500 hover:bg-brand-teal-50 dark:hover:bg-brand-teal-900/20"
+                                    className="show-on-hover"
+                                    sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, mt: -0.25, borderRadius: 1, color: 'text.disabled', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' }, '&:focus-within': { opacity: 1 } }}
                                   >
                                     <OpenInNewIcon sx={{ fontSize: 16 }} />
-                                  </a>
-                                </div>
+                                  </Box>
+                                </Box>
                               </TableCell>
-                              <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
+                              <TableCell sx={{ verticalAlign: 'top', fontSize: '0.75rem', color: 'text.primary' }}>
                                 {row.entityName.trim() === '' ? '—' : row.entityName}
                               </TableCell>
                               <TableCell
-                                className="align-top text-xs text-slate-700 dark:text-slate-200 max-w-[200px] truncate"
+                                sx={{ verticalAlign: 'top', fontSize: '0.75rem', color: 'text.primary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                                 title={memo === '—' ? undefined : memo}
                               >
                                 {memo}
                               </TableCell>
                               <TableCell
-                                className="align-top text-xs text-slate-700 dark:text-slate-200 max-w-[200px] truncate"
+                                sx={{ verticalAlign: 'top', fontSize: '0.75rem', color: 'text.primary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                                 title={accountLabel === '—' ? undefined : accountLabel}
                               >
                                 {accountLabel}
                               </TableCell>
-                              <TableCell className="align-top text-right text-xs font-semibold tabular-nums text-slate-900 dark:text-white">
+                              <TableCell sx={{ verticalAlign: 'top', textAlign: 'right', fontSize: '0.75rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
                                 {formatMoney(row.totalAmount, currency)}
                               </TableCell>
                             </TableRow>
 
                             {isExpanded && (
-                              <TableRow className="bg-slate-50/50 dark:bg-white/[0.03]">
-                                <TableCell colSpan={8} className="p-0">
-                                  <div className="expand-content p-4">
-                                    <div className="rounded-xl border border-slate-200/70 bg-white dark:border-white/10 dark:bg-slate-950/40 overflow-hidden shadow-sm">
-                                      <div className="px-4 py-3 border-b border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02]">
-                                        <div className="text-2xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                              <TableRow sx={{ bgcolor: 'action.hover' }}>
+                                <TableCell colSpan={8} sx={{ p: 0 }}>
+                                  <Box className="expand-content" sx={{ p: 2 }}>
+                                    <Box sx={{ borderRadius: 3, border: 1, borderColor: 'divider', bgcolor: 'background.paper', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                                        <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                                           Line items
-                                        </div>
-                                      </div>
-                                      <div className="overflow-x-auto">
+                                        </Box>
+                                      </Box>
+                                      <Box sx={{ overflowX: 'auto' }}>
                                         <Table size="small" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
                                           <TableHead>
                                             <TableRow>
@@ -3069,7 +3097,7 @@ export default function TransactionsPage() {
                                               <TableRow>
                                                 <TableCell
                                                   colSpan={5}
-                                                  className="py-8 text-center text-sm text-slate-500 dark:text-slate-400"
+                                                  sx={{ py: 4, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}
                                                 >
                                                   No line items found for this transaction.
                                                 </TableCell>
@@ -3087,34 +3115,37 @@ export default function TransactionsPage() {
 
                                               return (
                                                 <TableRow key={line.id}>
-                                                  <TableCell className="min-w-[340px]">
-                                                    <div className="text-xs font-medium text-slate-900 dark:text-white line-clamp-1" title={lineAccountLabel}>
+                                                  <TableCell sx={{ minWidth: 340 }}>
+                                                    <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={lineAccountLabel}>
                                                       {lineAccountLabel}
-                                                    </div>
+                                                    </Box>
                                                   </TableCell>
                                                   <TableCell
-                                                    className="min-w-[280px] text-xs text-slate-700 dark:text-slate-200 line-clamp-1"
+                                                    sx={{ minWidth: 280, fontSize: '0.75rem', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                                                     title={line.description && line.description.trim() !== '' ? line.description : undefined}
                                                   >
                                                     {line.description && line.description.trim() !== '' ? line.description : '—'}
                                                   </TableCell>
-                                                  <TableCell className="text-xs text-slate-600 dark:text-slate-300">
+                                                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                                                     {line.accountType ? line.accountType : '—'}
                                                   </TableCell>
-                                                  <TableCell className="text-xs">
+                                                  <TableCell sx={{ fontSize: '0.75rem' }}>
                                                     {line.postingType ? (
-                                                      <span className={cn(
-                                                        'font-medium',
-                                                        line.postingType === 'Debit' ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400',
-                                                      )}>
+                                                      <Box component="span" sx={{
+                                                        fontWeight: 500,
+                                                        color: line.postingType === 'Debit' ? 'text.primary' : 'text.secondary',
+                                                      }}>
                                                         {line.postingType}
-                                                      </span>
+                                                      </Box>
                                                     ) : '—'}
                                                   </TableCell>
-                                                  <TableCell className={cn(
-                                                    'text-right text-xs font-semibold tabular-nums',
-                                                    signedAmount >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-600 dark:text-red-400',
-                                                  )}>
+                                                  <TableCell sx={{
+                                                    textAlign: 'right',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 600,
+                                                    fontVariantNumeric: 'tabular-nums',
+                                                    color: signedAmount >= 0 ? 'text.primary' : 'error.main',
+                                                  }}>
                                                     {formatMoney(signedAmount, currency)}
                                                   </TableCell>
                                                 </TableRow>
@@ -3122,9 +3153,9 @@ export default function TransactionsPage() {
                                             })}
                                           </TableBody>
                                         </Table>
-                                      </div>
-                                    </div>
-                                  </div>
+                                      </Box>
+                                    </Box>
+                                  </Box>
                                 </TableCell>
                               </TableRow>
                             )}
@@ -3133,15 +3164,15 @@ export default function TransactionsPage() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
+                </Box>
               )}
 
               {data && data.pagination.totalCount > 0 && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                     Showing {(data.pagination.page - 1) * data.pagination.pageSize + 1}–{Math.min(data.pagination.page * data.pagination.pageSize, data.pagination.totalCount)} of {data.pagination.totalCount}
-                  </p>
-                  <div className="flex items-center gap-1">
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <IconButton size="small" disabled={page <= 1} onClick={() => setPage(page - 1)} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, width: 32, height: 32 }}>
                       <ChevronLeftIcon sx={{ fontSize: 16 }} />
                     </IconButton>
@@ -3153,12 +3184,12 @@ export default function TransactionsPage() {
                     >
                       <ChevronRightIcon sx={{ fontSize: 16 }} />
                     </IconButton>
-                  </div>
-                </div>
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>
-        </div>
+        </Box>
 
         <CreatePurchaseModal
           open={createPurchaseOpen}
@@ -3202,7 +3233,7 @@ export default function TransactionsPage() {
             queryClient.invalidateQueries({ queryKey: ['plutus-transactions'] });
           }}
         />
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

@@ -27,9 +27,9 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { type Marketplace, useMarketplaceStore } from '@/lib/store/marketplace';
 import type { SvgIconComponent } from '@mui/icons-material';
 
-function LogoIcon({ className }: { className?: string }) {
+function LogoIcon() {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20 }}>
+    <svg fill="none" viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20 }}>
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" opacity="0.3" />
       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
       <path

@@ -610,7 +610,7 @@ export default function ChartOfAccountsPage() {
                       !isCheckingConnection &&
                       !error &&
                       filteredAccounts.map((account) => (
-                        <TableRow key={account.id} className="table-row-hover">
+                        <TableRow key={account.id} sx={{ transition: 'background-color 0.15s', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}>
                           {/* Code */}
                           <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.acctNum ? account.acctNum : '—'}
