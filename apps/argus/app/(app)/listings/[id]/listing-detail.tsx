@@ -16,7 +16,28 @@ import {
   Typography,
 } from '@mui/material'
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+function normalizeBasePath(value: string): string {
+  const raw = value.trim()
+  if (raw.length === 0) return ''
+
+  const prefixed = raw.startsWith('/') ? raw : `/${raw}`
+  const withoutTrailingSlash = prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed
+  const segments = withoutTrailingSlash.split('/').filter(Boolean)
+
+  const halfLen = Math.floor(segments.length / 2)
+  const hasDuplicatedSegments =
+    segments.length > 0 &&
+    segments.length % 2 === 0 &&
+    segments.slice(0, halfLen).join('/') === segments.slice(halfLen).join('/')
+
+  const normalized = hasDuplicatedSegments
+    ? `/${segments.slice(0, halfLen).join('/')}`
+    : withoutTrailingSlash
+
+  return normalized === '/' ? '' : normalized
+}
+
+const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
 
 interface ListingSummary {
   id: string
