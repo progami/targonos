@@ -19,6 +19,21 @@ const OUTPUT = join(FIXTURE_DIR, 'replica.html')
 
 let html = readFileSync(INPUT, 'utf-8')
 
+// Rewrite asset folder path to ./listingpage_files/
+// Chrome "Save As Complete" names the folder after the page title, which varies.
+// Detect the actual folder name from the first stylesheet href and rewrite all references.
+const folderMatch = html.match(/href="\.\/([^"]+?)\/[^/"]+\.css/)
+if (folderMatch && folderMatch[1] !== 'listingpage_files') {
+  const originalFolder = folderMatch[1]
+  // Escape HTML entities in the folder name (Chrome uses &#39; for apostrophes etc.)
+  const escaped = originalFolder.replace(/&/g, '&amp;')
+  html = html.replaceAll(`./${originalFolder}/`, './listingpage_files/')
+  if (escaped !== originalFolder) {
+    html = html.replaceAll(`./${escaped}/`, './listingpage_files/')
+  }
+  console.log(`  Rewrote asset path: "${originalFolder.slice(0, 60)}..." → "listingpage_files"`)
+}
+
 // Strip all <script> tags (they phone home to Amazon and break without their context)
 html = html.replace(/<script[\s\S]*?<\/script>/g, '')
 
