@@ -730,8 +730,7 @@ export default function SettlementsPage() {
                       settlements.map((s) => (
                         <MuiTableRow
                           key={s.id}
-                          className="table-row-hover"
-                          sx={{ ...rowHoverSx, cursor: 'pointer' }}
+                          sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}
                           onClick={() => router.push(`/settlements/${s.id}`)}
                         >
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
