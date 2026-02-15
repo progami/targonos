@@ -1,70 +1,111 @@
-'use client'
+import prisma from '@/lib/db'
+import { ListingDetail } from './listing-detail'
 
-import { useRef, useEffect, useState } from 'react'
+interface Props {
+  params: Promise<{ id: string }>
+}
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+export default async function ListingDetailPage({ params }: Props) {
+  const { id } = await params
 
-export default function ListingDetailPage() {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [iframeHeight, setIframeHeight] = useState(3000)
+  // Try to find the listing in the DB by ID or ASIN
+  const listing = await prisma.listing.findFirst({
+    where: { OR: [{ id }, { asin: id }] },
+    include: {
+      bulletsRevisions: { orderBy: { seq: 'desc' }, take: 1 },
+      galleryRevisions: {
+        orderBy: { seq: 'desc' },
+        take: 1,
+        include: {
+          slots: {
+            orderBy: { position: 'asc' },
+            include: { media: true },
+          },
+        },
+      },
+      ebcRevisions: {
+        orderBy: { seq: 'desc' },
+        take: 1,
+        include: {
+          sections: {
+            orderBy: { position: 'asc' },
+            include: {
+              modules: {
+                orderBy: { position: 'asc' },
+                include: {
+                  images: {
+                    orderBy: { position: 'asc' },
+                    include: { media: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      _count: { select: { snapshots: true } },
+    },
+  })
 
-  useEffect(() => {
-    const iframe = iframeRef.current
-    if (!iframe) return
+  // If no DB listing exists, fall back to iframe-only view
+  if (!listing) {
+    return <ListingDetail listingId={id} />
+  }
 
-    const handleLoad = () => {
-      const doc = iframe.contentDocument
-      if (!doc) return
+  // Shape the data for the client
+  const activeBullets = listing.bulletsRevisions[0] ?? null
+  const activeGallery = listing.galleryRevisions[0] ?? null
+  const activeEbc = listing.ebcRevisions[0] ?? null
 
-      // Resize iframe to fit content
-      const height = doc.documentElement.scrollHeight
-      if (height > 0) {
-        setIframeHeight(height)
-      }
+  const galleryImages = activeGallery?.slots.map((slot: { position: number; media: { filePath: string; sourceUrl: string | null } }) => ({
+    position: slot.position,
+    src: slot.media.filePath,
+    hiRes: slot.media.sourceUrl,
+    isVideo: false,
+  })) ?? []
 
-      // Remove all <a> navigation (prevent clicking away)
-      const links = doc.querySelectorAll('a')
-      for (const link of links) {
-        link.addEventListener('click', (e) => e.preventDefault())
-        link.style.cursor = 'default'
-      }
-    }
-
-    iframe.addEventListener('load', handleLoad)
-    return () => iframe.removeEventListener('load', handleLoad)
-  }, [])
+  const ebcSections = activeEbc?.sections.map((section: { sectionType: string; heading: string | null; modules: { moduleType: string; headline: string | null; bodyText: string | null; images: { media: { filePath: string }; altText: string | null }[] }[] }) => ({
+    sectionType: section.sectionType,
+    heading: section.heading,
+    modules: section.modules.map((mod: { moduleType: string; headline: string | null; bodyText: string | null; images: { media: { filePath: string }; altText: string | null }[] }) => ({
+      moduleType: mod.moduleType,
+      headline: mod.headline,
+      bodyText: mod.bodyText,
+      images: mod.images.map((img: { media: { filePath: string }; altText: string | null }) => ({
+        src: img.media.filePath,
+        alt: img.altText,
+      })),
+    })),
+  })) ?? []
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b bg-white shrink-0">
-        <div className="flex items-center gap-4">
-          <a
-            href={`${basePath}/listings`}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            &larr; Listings
-          </a>
-          <h1 className="text-lg font-semibold">PDP Replica</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-            Read-only reference
-          </span>
-        </div>
-      </div>
-
-      {/* Replica iframe */}
-      <div className="flex-1 overflow-auto bg-white">
-        <iframe
-          ref={iframeRef}
-          src={`${basePath}/api/fixture/replica.html`}
-          className="w-full border-0"
-          style={{ height: iframeHeight }}
-          title="Amazon PDP Replica"
-          sandbox="allow-same-origin"
-        />
-      </div>
-    </div>
+    <ListingDetail
+      listingId={id}
+      listing={{
+        id: listing.id,
+        asin: listing.asin,
+        label: listing.label,
+      }}
+      bullets={activeBullets ? {
+        bullet1: activeBullets.bullet1,
+        bullet2: activeBullets.bullet2,
+        bullet3: activeBullets.bullet3,
+        bullet4: activeBullets.bullet4,
+        bullet5: activeBullets.bullet5,
+        seq: activeBullets.seq,
+        createdAt: activeBullets.createdAt.toISOString(),
+      } : null}
+      gallery={activeGallery ? {
+        images: galleryImages,
+        seq: activeGallery.seq,
+        createdAt: activeGallery.createdAt.toISOString(),
+      } : null}
+      ebc={activeEbc ? {
+        sections: ebcSections,
+        seq: activeEbc.seq,
+        createdAt: activeEbc.createdAt.toISOString(),
+      } : null}
+      totalSnapshots={listing._count.snapshots}
+    />
   )
 }
