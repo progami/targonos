@@ -149,6 +149,91 @@ CREATE INDEX IF NOT EXISTS hermes_orders_purchase_idx
   ON hermes_orders (connection_id, purchase_date DESC);
 
 
+-- Manual product-review ingest (user-provided review text per ASIN)
+CREATE TABLE IF NOT EXISTS hermes_manual_reviews (
+  id                 TEXT PRIMARY KEY,
+  connection_id      TEXT NOT NULL,
+  marketplace_id     TEXT NOT NULL,
+  asin               TEXT NOT NULL,
+
+  source             TEXT NOT NULL DEFAULT 'manual',
+  external_review_id TEXT,
+  review_date        TIMESTAMPTZ,
+  rating             NUMERIC(3,2),
+  title              TEXT,
+  body               TEXT NOT NULL,
+  review_hash        TEXT NOT NULL,
+  raw                JSONB,
+
+  imported_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS external_review_id TEXT;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS review_date TIMESTAMPTZ;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS rating NUMERIC(3,2);
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS review_hash TEXT;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS raw JSONB;
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE IF EXISTS hermes_manual_reviews DROP CONSTRAINT IF EXISTS hermes_manual_reviews_rating_check;
+ALTER TABLE IF EXISTS hermes_manual_reviews
+  ADD CONSTRAINT hermes_manual_reviews_rating_check
+  CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5));
+
+CREATE UNIQUE INDEX IF NOT EXISTS hermes_manual_reviews_unique_hash
+  ON hermes_manual_reviews (connection_id, marketplace_id, asin, review_hash);
+
+CREATE INDEX IF NOT EXISTS hermes_manual_reviews_lookup_idx
+  ON hermes_manual_reviews (connection_id, marketplace_id, asin, imported_at DESC);
+
+
+-- Customer Feedback API snapshots (ASIN review topics/trends)
+CREATE TABLE IF NOT EXISTS hermes_asin_review_insights (
+  connection_id               TEXT NOT NULL,
+  marketplace_id              TEXT NOT NULL,
+  asin                        TEXT NOT NULL,
+
+  item_name                   TEXT,
+  country_code                TEXT,
+  topics_mentions             JSONB,
+  topics_star_rating_impact   JSONB,
+  review_trends               JSONB,
+  topics_date_start           TIMESTAMPTZ,
+  topics_date_end             TIMESTAMPTZ,
+  trends_date_start           TIMESTAMPTZ,
+  trends_date_end             TIMESTAMPTZ,
+  last_sync_error             TEXT,
+  last_sync_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  PRIMARY KEY (connection_id, marketplace_id, asin)
+);
+
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS item_name TEXT;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS country_code TEXT;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS topics_mentions JSONB;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS topics_star_rating_impact JSONB;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS review_trends JSONB;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS topics_date_start TIMESTAMPTZ;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS topics_date_end TIMESTAMPTZ;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS trends_date_start TIMESTAMPTZ;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS trends_date_end TIMESTAMPTZ;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS last_sync_error TEXT;
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE IF EXISTS hermes_asin_review_insights ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS hermes_asin_review_insights_sync_idx
+  ON hermes_asin_review_insights (connection_id, last_sync_at DESC);
+
+
 -- Job state (lightweight KV) for background jobs like hourly Orders sync
 CREATE TABLE IF NOT EXISTS hermes_job_state (
   connection_id TEXT NOT NULL,
