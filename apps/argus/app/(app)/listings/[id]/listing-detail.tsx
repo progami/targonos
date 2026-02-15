@@ -415,7 +415,7 @@ function toGalleryRevision(rev: GalleryApiRevision): GalleryRevision {
     .sort((a, b) => a.position - b.position)
     .map((slot) => ({
       position: slot.position,
-      src: slot.media.filePath,
+      src: slot.media.sourceUrl === null ? slot.media.filePath : slot.media.sourceUrl,
       hiRes: slot.media.sourceUrl,
       isVideo: false,
     }))
