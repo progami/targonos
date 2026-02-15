@@ -94,6 +94,7 @@ export async function POST(
   const sectionType = String(form.get('sectionType') ?? '').trim()
   const modulePositionValue = String(form.get('modulePosition') ?? '').trim()
   const modulePosition = Number(modulePositionValue)
+  const clearImages = String(form.get('clearImages') ?? '').trim().toLowerCase() === 'true'
 
   if (sectionType.length === 0 || !Number.isFinite(modulePosition)) {
     return NextResponse.json({ error: 'sectionType and modulePosition are required' }, { status: 400 })
@@ -191,12 +192,16 @@ export async function POST(
       let nextHeadline = sourceModule.headline
       let nextBodyText = sourceModule.bodyText
       if (isTarget) {
-        nextHeadline = typeof headline === 'string' ? String(headline).trim() : null
-        nextBodyText = typeof bodyText === 'string' ? String(bodyText).trim() : null
+        const nextHeadlineRaw = typeof headline === 'string' ? String(headline).trim() : ''
+        const nextBodyTextRaw = typeof bodyText === 'string' ? String(bodyText).trim() : ''
+        nextHeadline = nextHeadlineRaw.length > 0 ? nextHeadlineRaw : null
+        nextBodyText = nextBodyTextRaw.length > 0 ? nextBodyTextRaw : null
       }
 
       const nextImagesCreate = []
-      if (isTarget && uploadedFiles.length > 0) {
+      if (isTarget && clearImages) {
+        // Explicitly clear images for this module.
+      } else if (isTarget && uploadedFiles.length > 0) {
         for (let i = 0; i < uploadedFiles.length; i++) {
           const entry = uploadedFiles[i]
           if (!(entry instanceof File)) continue
