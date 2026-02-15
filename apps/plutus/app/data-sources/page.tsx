@@ -32,7 +32,7 @@ if (basePath === undefined) {
 }
 
 /* ================================================================
-   Config — add a new entry here to create a new data source card.
+   Config — add a new entry here to support a new report type.
    ================================================================ */
 
 type DataSourceField = { type: 'marketplace' } | { type: 'dateRange' };
@@ -48,7 +48,6 @@ type DataSourceConfig = {
   listEndpoint: string;
   queryKey: string;
   fields: DataSourceField[];
-  /** How to extract marketplace/range from a returned upload for the history table. */
   mapUpload: (u: any) => { marketplace: string; range: string };
 };
 
@@ -141,17 +140,38 @@ const dateFieldSx = {
 } as const;
 
 /* ================================================================
-   DataSourceCard — one card per config entry, owns its own state
+   Page
    ================================================================ */
 
-function DataSourceCard({ config, connected }: { config: DataSourceConfig; connected: boolean }) {
+async function fetchConnectionStatus(): Promise<ConnectionStatus> {
+  const res = await fetch(`${basePath}/api/qbo/status`);
+  return res.json();
+}
+
+export default function DataSourcesPage() {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /* ---- connection ---- */
+  const { data: connection, isLoading: connectionLoading } = useQuery({
+    queryKey: ['qbo-status'],
+    queryFn: fetchConnectionStatus,
+    staleTime: 30 * 1000,
+  });
+
+  const connected = connection !== undefined && connection.connected === true;
+
+  /* ---- selected report type ---- */
+  const [selectedKey, setSelectedKey] = useState(DATA_SOURCES[0].key);
+  const config = DATA_SOURCES.find((s) => s.key === selectedKey)!;
+
+  /* ---- upload state ---- */
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /* ---- field state ---- */
   const [marketplace, setMarketplace] = useState<MarketplaceId>('amazon.com');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -159,16 +179,21 @@ function DataSourceCard({ config, connected }: { config: DataSourceConfig; conne
   const hasMarketplace = config.fields.some((f) => f.type === 'marketplace');
   const hasDateRange = config.fields.some((f) => f.type === 'dateRange');
 
-  const { data, isLoading } = useQuery({
-    queryKey: [config.queryKey],
-    queryFn: async () => {
-      const res = await fetch(`${basePath}${config.listEndpoint}`);
-      return res.json() as Promise<{ uploads: any[] }>;
-    },
-    enabled: connected,
-    staleTime: 10 * 1000,
-  });
+  /* ---- Fetch all source lists for history table ---- */
+  const sourceQueries = DATA_SOURCES.map((src) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useQuery({
+      queryKey: [src.queryKey],
+      queryFn: async () => {
+        const res = await fetch(`${basePath}${src.listEndpoint}`);
+        return res.json() as Promise<{ uploads: any[] }>;
+      },
+      enabled: connected,
+      staleTime: 10 * 1000,
+    }),
+  );
 
+  /* ---- upload handler ---- */
   const handleUpload = useCallback(
     async (file: File) => {
       if (hasDateRange) {
@@ -230,211 +255,20 @@ function DataSourceCard({ config, connected }: { config: DataSourceConfig; conne
     [handleUpload],
   );
 
-  return (
-    <Card sx={{ borderColor: 'divider' }}>
-      <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{config.label}</Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.25 }}>{config.description}</Typography>
-        </Box>
+  /* ---- reset banners when switching report type ---- */
+  const handleReportChange = useCallback((key: string) => {
+    setSelectedKey(key);
+    setSuccess(null);
+    setError(null);
+  }, []);
 
-        {/* Fields (marketplace, date range) */}
-        {config.fields.length > 0 && (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: {
-                xs: '1fr',
-                md: hasDateRange ? '180px 1fr 1fr' : '180px',
-              },
-              gap: 1.5,
-              mb: 2,
-            }}
-          >
-            {hasMarketplace && (
-              <FormControl size="small">
-                <InputLabel>Marketplace</InputLabel>
-                <Select label="Marketplace" value={marketplace} onChange={(e) => setMarketplace(e.target.value as MarketplaceId)} sx={selectSx}>
-                  <MenuItem value="amazon.com">US</MenuItem>
-                  <MenuItem value="amazon.co.uk">UK</MenuItem>
-                </Select>
-              </FormControl>
-            )}
-            {hasDateRange && (
-              <>
-                <TextField
-                  size="small"
-                  label="Start Date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true }, input: { sx: { fontSize: '0.875rem', height: 40 } } }}
-                  sx={dateFieldSx}
-                />
-                <TextField
-                  size="small"
-                  label="End Date"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true }, input: { sx: { fontSize: '0.875rem', height: 40 } } }}
-                  sx={dateFieldSx}
-                />
-              </>
-            )}
-          </Box>
-        )}
-
-        {/* Drop zone */}
-        <Box
-          sx={{
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 3,
-            border: 2,
-            borderStyle: 'dashed',
-            px: 3,
-            py: 5,
-            transition: 'all 0.2s',
-            ...(isDragging
-              ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
-              : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
-          }}
-          onDragOver={(e: React.DragEvent) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={onDrop}
-        >
-          <input ref={inputRef} type="file" accept={config.accept} onChange={onFileChange} style={{ display: 'none' }} />
-          {isUploading ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
-              <Box
-                sx={{
-                  height: 40,
-                  width: 40,
-                  borderRadius: '50%',
-                  border: 4,
-                  borderColor: 'divider',
-                  borderTopColor: '#45B3D4',
-                  animation: 'spin 1s linear infinite',
-                  '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
-                }}
-              />
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>Uploading...</Typography>
-            </Box>
-          ) : (
-            <>
-              <Box
-                sx={{
-                  mb: 2,
-                  display: 'flex',
-                  height: 56,
-                  width: 56,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 3,
-                  bgcolor: 'rgba(69, 179, 212, 0.08)',
-                  color: '#45B3D4',
-                }}
-              >
-                <UploadIcon sx={{ fontSize: 28 }} />
-              </Box>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{config.dropLabel}</Typography>
-              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>{config.hint}</Typography>
-              <Box
-                component="button"
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                sx={{
-                  mt: 2,
-                  borderRadius: 2,
-                  bgcolor: '#45B3D4',
-                  px: 2,
-                  py: 1,
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  color: '#fff',
-                  boxShadow: 1,
-                  transition: 'background-color 0.2s',
-                  border: 'none',
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: '#2fa3c7' },
-                }}
-              >
-                Choose File
-              </Box>
-            </>
-          )}
-        </Box>
-
-        {error !== null && (
-          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, bgcolor: 'rgba(239, 68, 68, 0.06)', px: 2, py: 1.5, fontSize: '0.875rem', color: 'error.main' }}>
-            <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
-            {error}
-          </Box>
-        )}
-        {success !== null && (
-          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, border: 1, borderColor: 'rgba(16, 185, 129, 0.3)', bgcolor: 'rgba(16, 185, 129, 0.06)', px: 2, py: 1.5, fontSize: '0.875rem', fontWeight: 500, color: 'success.dark' }}>
-            <CheckCircleIcon sx={{ fontSize: 16, flexShrink: 0 }} />
-            {success}
-          </Box>
-        )}
-
-        <Typography sx={{ mt: 2, fontSize: '0.75rem', color: 'text.secondary' }}>
-          {isLoading ? 'Loading...' : `${data?.uploads.length ?? 0} upload${(data?.uploads.length ?? 0) === 1 ? '' : 's'} stored`}
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ================================================================
-   Page
-   ================================================================ */
-
-async function fetchConnectionStatus(): Promise<ConnectionStatus> {
-  const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
-}
-
-export default function DataSourcesPage() {
-  const { data: connection, isLoading: connectionLoading } = useQuery({
-    queryKey: ['qbo-status'],
-    queryFn: fetchConnectionStatus,
-    staleTime: 30 * 1000,
-  });
-
-  const connected = connection !== undefined && connection.connected === true;
-
-  // Fetch all source lists for the combined history table
-  const sourceQueries = DATA_SOURCES.map((config) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useQuery({
-      queryKey: [config.queryKey],
-      queryFn: async () => {
-        const res = await fetch(`${basePath}${config.listEndpoint}`);
-        return res.json() as Promise<{ uploads: any[] }>;
-      },
-      enabled: connected,
-      staleTime: 10 * 1000,
-    }),
-  );
-
+  /* ---- loading ---- */
   if (connectionLoading) {
     return (
       <Box component="main" sx={{ flex: 1 }}>
         <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
           <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: 200, bgcolor: 'action.hover', borderRadius: 1 }} />
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
-            {DATA_SOURCES.map((config) => (
-              <Skeleton key={config.key} variant="rectangular" animation="pulse" sx={{ height: 200, width: '100%', bgcolor: 'action.hover', borderRadius: 2 }} />
-            ))}
-          </Box>
+          <Skeleton variant="rectangular" animation="pulse" sx={{ height: 320, width: '100%', bgcolor: 'action.hover', borderRadius: 2, mt: 3 }} />
         </Box>
       </Box>
     );
@@ -444,16 +278,17 @@ export default function DataSourcesPage() {
     return <NotConnectedScreen title="Data Sources" error={connection.error} />;
   }
 
+  /* ---- history table data ---- */
   const isTableLoading = sourceQueries.some((q) => q.isLoading);
-  const allUploads = DATA_SOURCES.flatMap((config, idx) => {
+  const allUploads = DATA_SOURCES.flatMap((src, idx) => {
     const uploads = sourceQueries[idx]?.data?.uploads ?? [];
     return uploads.slice(0, 5).map((u: any) => ({
       id: u.id as string,
-      type: config.label,
+      type: src.label,
       filename: u.filename as string,
       rowCount: u.rowCount as number,
       uploadedAt: u.uploadedAt as string,
-      ...config.mapUpload(u),
+      ...src.mapUpload(u),
     }));
   });
 
@@ -467,9 +302,176 @@ export default function DataSourcesPage() {
         />
 
         <Box sx={{ display: 'grid', gap: 3, mt: 3 }}>
-          {DATA_SOURCES.map((config) => (
-            <DataSourceCard key={config.key} config={config} connected={connected} />
-          ))}
+          {/* ---- Upload Card ---- */}
+          <Card sx={{ borderColor: 'divider' }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+              {/* Report type selector */}
+              <Box sx={{ mb: 2 }}>
+                <FormControl size="small" sx={{ minWidth: 240 }}>
+                  <InputLabel>Report Type</InputLabel>
+                  <Select
+                    label="Report Type"
+                    value={selectedKey}
+                    onChange={(e) => handleReportChange(e.target.value)}
+                    sx={selectSx}
+                  >
+                    {DATA_SOURCES.map((src) => (
+                      <MenuItem key={src.key} value={src.key}>{src.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 2 }}>{config.description}</Typography>
+
+              {/* Dynamic fields based on selected report */}
+              {config.fields.length > 0 && (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      md: hasDateRange ? '180px 1fr 1fr' : '180px',
+                    },
+                    gap: 1.5,
+                    mb: 2,
+                  }}
+                >
+                  {hasMarketplace && (
+                    <FormControl size="small">
+                      <InputLabel>Marketplace</InputLabel>
+                      <Select label="Marketplace" value={marketplace} onChange={(e) => setMarketplace(e.target.value as MarketplaceId)} sx={selectSx}>
+                        <MenuItem value="amazon.com">US</MenuItem>
+                        <MenuItem value="amazon.co.uk">UK</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+                  {hasDateRange && (
+                    <>
+                      <TextField
+                        size="small"
+                        label="Start Date"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        slotProps={{ inputLabel: { shrink: true }, input: { sx: { fontSize: '0.875rem', height: 40 } } }}
+                        sx={dateFieldSx}
+                      />
+                      <TextField
+                        size="small"
+                        label="End Date"
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        slotProps={{ inputLabel: { shrink: true }, input: { sx: { fontSize: '0.875rem', height: 40 } } }}
+                        sx={dateFieldSx}
+                      />
+                    </>
+                  )}
+                </Box>
+              )}
+
+              {/* Drop zone */}
+              <Box
+                sx={{
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 3,
+                  border: 2,
+                  borderStyle: 'dashed',
+                  px: 3,
+                  py: 5,
+                  transition: 'all 0.2s',
+                  ...(isDragging
+                    ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
+                    : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
+                }}
+                onDragOver={(e: React.DragEvent) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+              >
+                <input ref={inputRef} type="file" accept={config.accept} onChange={onFileChange} style={{ display: 'none' }} />
+                {isUploading ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                    <Box
+                      sx={{
+                        height: 40,
+                        width: 40,
+                        borderRadius: '50%',
+                        border: 4,
+                        borderColor: 'divider',
+                        borderTopColor: '#45B3D4',
+                        animation: 'spin 1s linear infinite',
+                        '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
+                      }}
+                    />
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>Uploading...</Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <Box
+                      sx={{
+                        mb: 2,
+                        display: 'flex',
+                        height: 56,
+                        width: 56,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 3,
+                        bgcolor: 'rgba(69, 179, 212, 0.08)',
+                        color: '#45B3D4',
+                      }}
+                    >
+                      <UploadIcon sx={{ fontSize: 28 }} />
+                    </Box>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{config.dropLabel}</Typography>
+                    <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>{config.hint}</Typography>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      sx={{
+                        mt: 2,
+                        borderRadius: 2,
+                        bgcolor: '#45B3D4',
+                        px: 2,
+                        py: 1,
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: '#fff',
+                        boxShadow: 1,
+                        transition: 'background-color 0.2s',
+                        border: 'none',
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: '#2fa3c7' },
+                      }}
+                    >
+                      Choose File
+                    </Box>
+                  </>
+                )}
+              </Box>
+
+              {error !== null && (
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, bgcolor: 'rgba(239, 68, 68, 0.06)', px: 2, py: 1.5, fontSize: '0.875rem', color: 'error.main' }}>
+                  <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
+                  {error}
+                </Box>
+              )}
+              {success !== null && (
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, border: 1, borderColor: 'rgba(16, 185, 129, 0.3)', bgcolor: 'rgba(16, 185, 129, 0.06)', px: 2, py: 1.5, fontSize: '0.875rem', fontWeight: 500, color: 'success.dark' }}>
+                  <CheckCircleIcon sx={{ fontSize: 16, flexShrink: 0 }} />
+                  {success}
+                </Box>
+              )}
+            </CardContent>
+          </Card>
 
           {/* ---- Recent Uploads ---- */}
           <Card sx={{ borderColor: 'divider', overflow: 'hidden' }}>
