@@ -65,6 +65,29 @@ function getUploadSizeError(files: File[], maxBytes: number): string | null {
   return null
 }
 
+function formatUsdFromCents(cents: number): string {
+  const whole = Math.floor(cents / 100)
+  const fraction = String(Math.abs(cents % 100)).padStart(2, '0')
+  return `${whole}.${fraction}`
+}
+
+function parseUsdToCents(value: string): number | null {
+  const raw = value.trim()
+  if (raw.length === 0) return null
+
+  const cleaned = raw.replaceAll('$', '').replaceAll(',', '')
+  const match = /^(\d+)(?:\.(\d{0,2}))?$/.exec(cleaned)
+  if (!match) return null
+
+  const dollars = Number(match[1])
+  if (!Number.isFinite(dollars)) return null
+
+  const fractionRaw = match[2] ?? ''
+  const fraction = fractionRaw.padEnd(2, '0')
+  const cents = dollars * 100 + Number(fraction)
+  return Number.isFinite(cents) ? cents : null
+}
+
 interface ListingSummary {
   id: string
   asin: string
@@ -77,6 +100,12 @@ interface ListingActivePointers {
   activeGalleryId: string | null
   activeEbcId: string | null
   activeVideoId: string | null
+}
+
+interface ListingPriceState {
+  priceCents: number | null
+  pricePerUnitCents: number | null
+  pricePerUnitUnit: string | null
 }
 
 interface ListingDetailProps {
@@ -112,6 +141,7 @@ export function ListingDetail({
   const [ebcModulePointers, setEbcModulePointers] = useState<Record<string, string>>({})
 
   const [activePointers, setActivePointers] = useState<ListingActivePointers | null>(null)
+  const [price, setPrice] = useState<ListingPriceState | null>(null)
 
   const [bulletsIndex, setBulletsIndex] = useState(0)
   const [galleryIndex, setGalleryIndex] = useState(0)
@@ -128,6 +158,13 @@ export function ListingDetail({
     bullet3: '',
     bullet4: '',
     bullet5: '',
+  })
+
+  const [priceEditorOpen, setPriceEditorOpen] = useState(false)
+  const [priceDraft, setPriceDraft] = useState({
+    price: '',
+    perUnitPrice: '',
+    perUnitUnit: 'count',
   })
 
   const [galleryUploaderOpen, setGalleryUploaderOpen] = useState(false)
@@ -153,6 +190,8 @@ export function ListingDetail({
     bulletsEdit: () => {},
     bulletsLive: () => {},
     bulletsDelete: () => {},
+    priceEdit: () => {},
+    priceDelete: () => {},
     galleryPrev: () => {},
     galleryNext: () => {},
     galleryLive: () => {},
@@ -194,6 +233,7 @@ export function ListingDetail({
 
     setListing(null)
     setActivePointers(null)
+    setPrice(null)
     setTitleRevisions([])
     setBulletsRevisions([])
     setGalleryRevisions([])
@@ -257,12 +297,7 @@ export function ListingDetail({
         return
       }
 
-      const doc = iframeDocRef.current
-      const baseline = doc ? (doc as ArgusReplicaDocument).__argusTitleBaseline : undefined
-      const nextDraft = baseline !== undefined
-        ? baseline
-        : (listing ? listing.label : '')
-      setTitleDraft(nextDraft)
+      setTitleDraft(listing ? listing.label : '')
       setTitleEditorOpen(true)
     }
     callbacksRef.current.titleLive = () => {
@@ -306,14 +341,12 @@ export function ListingDetail({
     callbacksRef.current.bulletsNext = () => setBulletsIndex((current) => (current > 0 ? current - 1 : current))
     callbacksRef.current.bulletsEdit = () => {
       const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
-      const doc = iframeDocRef.current
-      const baseline = doc ? (doc as ArgusReplicaDocument).__argusBulletsBaseline : undefined
       setBulletsDraft({
-        bullet1: selected?.bullet1 ?? (baseline?.bullets[0] ?? ''),
-        bullet2: selected?.bullet2 ?? (baseline?.bullets[1] ?? ''),
-        bullet3: selected?.bullet3 ?? (baseline?.bullets[2] ?? ''),
-        bullet4: selected?.bullet4 ?? (baseline?.bullets[3] ?? ''),
-        bullet5: selected?.bullet5 ?? (baseline?.bullets[4] ?? ''),
+        bullet1: selected?.bullet1 ?? '',
+        bullet2: selected?.bullet2 ?? '',
+        bullet3: selected?.bullet3 ?? '',
+        bullet4: selected?.bullet4 ?? '',
+        bullet5: selected?.bullet5 ?? '',
       })
       setBulletsEditorOpen(true)
     }
@@ -340,6 +373,39 @@ export function ListingDetail({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
+        setRefreshKey((current) => current + 1)
+      })()
+    }
+
+    callbacksRef.current.priceEdit = () => {
+      const nextPrice = price && typeof price.priceCents === 'number'
+        ? formatUsdFromCents(price.priceCents)
+        : ''
+      const nextPerUnitPrice = price && typeof price.pricePerUnitCents === 'number'
+        ? formatUsdFromCents(price.pricePerUnitCents)
+        : ''
+      const nextPerUnitUnit = typeof price?.pricePerUnitUnit === 'string' && price.pricePerUnitUnit.trim().length > 0
+        ? price.pricePerUnitUnit
+        : 'count'
+
+      setPriceDraft({
+        price: nextPrice,
+        perUnitPrice: nextPerUnitPrice,
+        perUnitUnit: nextPerUnitUnit,
+      })
+      setPriceEditorOpen(true)
+    }
+
+    callbacksRef.current.priceDelete = () => {
+      if (!listing) return
+      if (!window.confirm('Clear price override?')) return
+
+      void (async () => {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/price`, { method: 'DELETE' })
         if (!res.ok) {
           window.alert(await res.text())
           return
@@ -609,16 +675,13 @@ export function ListingDetail({
       const revisionId = getEffectiveEbcRevisionIdForModule(sectionType, modulePosition)
       const fallbackRevision = ebcRevisions.length > 0 ? ebcRevisions[0] : null
       const selectedRevision = revisionId ? ebcRevisions.find((rev) => rev.id === revisionId) ?? fallbackRevision : fallbackRevision
-      if (!selectedRevision) return
-
-      const section = selectedRevision.sections.find((s) => s.sectionType === sectionType) ?? null
+      const section = selectedRevision ? selectedRevision.sections.find((s) => s.sectionType === sectionType) ?? null : null
       const mod = section ? section.modules[modulePosition] ?? null : null
-      if (!mod) return
 
       setEbcModuleEditorTarget({ sectionType, modulePosition })
       setEbcModuleDraft({
-        headline: mod.headline ?? '',
-        bodyText: mod.bodyText ?? '',
+        headline: mod?.headline ?? '',
+        bodyText: mod?.bodyText ?? '',
       })
       setEbcModuleFiles([])
       setEbcModuleEditorOpen(true)
@@ -626,18 +689,19 @@ export function ListingDetail({
 
     callbacksRef.current.ebcModuleDelete = (sectionType: string, modulePosition: number) => {
       if (!listing) return
-      const key = ebcModulePointerKey(sectionType, modulePosition)
-      const revisionId = ebcModulePointers[key]
-      if (!revisionId) return
-
-      const seq = ebcRevisions.find((rev) => rev.id === revisionId)?.seq
-      if (!window.confirm(`Delete Module v${seq ?? '—'}?`)) return
+      if (!window.confirm('Clear this module?')) return
 
       void (async () => {
-        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ revisionId }),
+        const form = new FormData()
+        form.append('sectionType', sectionType)
+        form.append('modulePosition', String(modulePosition))
+        form.append('headline', '')
+        form.append('bodyText', '')
+        form.append('clearImages', 'true')
+
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+          method: 'POST',
+          body: form,
         })
         if (!res.ok) {
           window.alert(await res.text())
@@ -651,11 +715,12 @@ export function ListingDetail({
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
 
-      router.push(`${basePath}/listings/${normalized}`)
+      router.push(normalized)
     }
   }, [
     listing,
     activePointers,
+    price,
     ebcIndex,
     galleryIndex,
     router,
@@ -677,7 +742,7 @@ export function ListingDetail({
     const abortController = new AbortController()
 
     async function loadRevisions() {
-      const [meta, titles, bullets, gallery, video, ebc, pointers] = await Promise.all([
+      const [meta, titles, bullets, gallery, video, ebc, pointers, priceData] = await Promise.all([
         fetch(`${basePath}/api/listings/${listingDbId}`, { signal: abortController.signal })
           .then((res) => res.json()) as Promise<ListingActivePointers>,
         fetch(`${basePath}/api/listings/${listingDbId}/title`, { signal: abortController.signal })
@@ -692,9 +757,12 @@ export function ListingDetail({
           .then((res) => res.json()) as Promise<EbcApiRevision[]>,
         fetch(`${basePath}/api/listings/${listingDbId}/ebc/pointers`, { signal: abortController.signal })
           .then((res) => res.json()) as Promise<EbcModulePointerApi[]>,
+        fetch(`${basePath}/api/listings/${listingDbId}/price`, { signal: abortController.signal })
+          .then((res) => res.json()) as Promise<ListingPriceState>,
       ])
 
       setActivePointers(meta)
+      setPrice(priceData)
       setTitleRevisions(titles)
       setBulletsRevisions(bullets)
       setGalleryRevisions(gallery.map(toGalleryRevision))
@@ -769,9 +837,10 @@ export function ListingDetail({
     const selectedVideo = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
     const selectedEbc = ebcRevisions.length > ebcIndex ? ebcRevisions[ebcIndex] : null
     const appliedEbc = composeEbcRevision(ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
-    const selectedTitle = selectedTitleRev ? selectedTitleRev.title : null
+    const selectedTitle = selectedTitleRev ? selectedTitleRev.title : (listing ? listing.label : null)
 
     applyTitle(doc, selectedTitle)
+    applyPrice(doc, price)
     applyBullets(doc, selectedBullets)
     applyGallery(doc, selectedGallery)
     applyVideo(doc, selectedVideo)
@@ -793,6 +862,7 @@ export function ListingDetail({
     iframeEpoch,
     listing,
     activePointers,
+    price,
     titleIndex,
     titleRevisions,
     bulletsRevisions,
@@ -1035,6 +1105,117 @@ export function ListingDetail({
               }}
             >
               Save new version
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
+      )}
+      {priceEditorOpen && listing && (
+        <Dialog
+          open={priceEditorOpen}
+          onClose={() => setPriceEditorOpen(false)}
+          fullWidth
+          maxWidth="sm"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                Edit price
+              </Typography>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={2}>
+              <TextField
+                label="Price (USD)"
+                value={priceDraft.price}
+                onChange={(e) => setPriceDraft((current) => ({ ...current, price: e.target.value }))}
+                placeholder="8.99"
+              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  label="Unit price (optional)"
+                  value={priceDraft.perUnitPrice}
+                  onChange={(e) => setPriceDraft((current) => ({ ...current, perUnitPrice: e.target.value }))}
+                  placeholder="1.50"
+                  fullWidth
+                />
+                <TextField
+                  label="Unit (optional)"
+                  value={priceDraft.perUnitUnit}
+                  onChange={(e) => setPriceDraft((current) => ({ ...current, perUnitUnit: e.target.value }))}
+                  placeholder="count"
+                  fullWidth
+                />
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                Unit price renders like <strong>($1.50 / count)</strong>.
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton type="button" variant="text" color="inherit" onClick={() => setPriceEditorOpen(false)}>
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              disabled={priceDraft.price.trim().length === 0}
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const nextPriceCents = parseUsdToCents(priceDraft.price)
+                if (nextPriceCents === null) {
+                  window.alert('Enter a valid price (e.g. 8.99).')
+                  return
+                }
+
+                const nextPerUnitCents = parseUsdToCents(priceDraft.perUnitPrice)
+                const nextPerUnitUnit = priceDraft.perUnitUnit.trim()
+                if (nextPerUnitCents !== null && nextPerUnitUnit.length === 0) {
+                  window.alert('Unit is required when unit price is set (e.g. count).')
+                  return
+                }
+
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/price`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    priceCents: nextPriceCents,
+                    pricePerUnitCents: nextPerUnitCents,
+                    pricePerUnitUnit: nextPerUnitCents !== null ? nextPerUnitUnit : null,
+                  }),
+                })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
+                setPriceEditorOpen(false)
+                setRefreshKey((current) => current + 1)
+              }}
+            >
+              Save
             </MuiButton>
           </DialogActions>
         </Dialog>
@@ -1709,7 +1890,7 @@ function updateEbcModuleControls(
 
     if (prev) prev.disabled = safeIndex >= history.length - 1
     if (next) next.disabled = safeIndex <= 0
-    if (del) del.disabled = !(key in pointers)
+    if (del) del.disabled = false
   }
 }
 
@@ -1794,6 +1975,8 @@ function injectArgusVersionControls(
     bulletsEdit: () => void
     bulletsLive: () => void
     bulletsDelete: () => void
+    priceEdit: () => void
+    priceDelete: () => void
     galleryPrev: () => void
     galleryNext: () => void
     galleryLive: () => void
@@ -1864,6 +2047,29 @@ function injectArgusVersionControls(
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
+      .argus-ebc-placeholder {
+        position: relative !important;
+        min-height: 120px;
+        border: 1px dashed rgba(148, 163, 184, 0.85);
+        border-radius: 10px;
+        background: rgba(248, 250, 252, 0.85);
+      }
+      .argus-ebc-placeholder > :not(.argus-vc-ebc-module-controls) { visibility: hidden !important; }
+      .argus-ebc-placeholder::after {
+        content: attr(data-argus-ebc-placeholder);
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        text-align: center;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 13px;
+        pointer-events: none;
+        z-index: 2;
+      }
       a { cursor: default !important; }
     `
     doc.head.append(style)
@@ -1872,7 +2078,7 @@ function injectArgusVersionControls(
   const imageBlock = doc.querySelector<HTMLElement>('#imageBlock')
   if (imageBlock) {
     ensureTrackControls(doc, imageBlock, 'gallery', 'Images', callbacksRef)
-    ensureGalleryThumbnailSwap(doc)
+    ensureGalleryThumbnailSwap(doc, callbacksRef)
   }
 
   const titleSectionCandidate = doc.querySelector<HTMLElement>('#titleSection')
@@ -1884,6 +2090,11 @@ function injectArgusVersionControls(
   const bullets = doc.querySelector<HTMLElement>('#feature-bullets')
   if (bullets) {
     ensureTrackControls(doc, bullets, 'bullets', 'Bullets', callbacksRef)
+  }
+
+  const price = doc.querySelector<HTMLElement>('#corePrice_feature_div') ?? doc.querySelector<HTMLElement>('#corePriceDisplay_desktop_feature_div')
+  if (price) {
+    ensurePriceControls(doc, price, callbacksRef)
   }
 
   const video = doc.querySelector<HTMLElement>('[data-elementid="vse-vw-dp-widget-container"]') ?? doc.querySelector<HTMLElement>('#ive-hero-video-player')
@@ -1925,12 +2136,56 @@ function injectArgusVersionControls(
 	        e.preventDefault()
 	        e.stopImmediatePropagation()
 	        e.stopPropagation()
+	        applyVariationSelection(doc, asin)
 	        callbacksRef.current?.variationSelect(asin)
 	      },
 	      true,
 	    )
 	  }
 	}
+
+function ensurePriceControls(
+  doc: Document,
+  target: HTMLElement,
+  callbacksRef: RefObject<{
+    priceEdit: () => void
+    priceDelete: () => void
+  }>,
+) {
+  target.classList.add('argus-vc-highlight')
+  if (!target.style.position) {
+    target.style.position = 'relative'
+  }
+
+  const controlsId = 'argus-vc-controls-price'
+  if (doc.getElementById(controlsId)) return
+
+  const controls = doc.createElement('div')
+  controls.id = controlsId
+  controls.className = 'argus-vc-controls'
+
+  const label = doc.createElement('span')
+  label.id = 'argus-vc-label-price'
+  label.className = 'argus-vc-label'
+  label.textContent = 'Price —'
+
+  const edit = doc.createElement('button')
+  edit.className = 'argus-vc-btn'
+  edit.type = 'button'
+  edit.textContent = '✎'
+  edit.title = 'Edit price'
+  edit.addEventListener('click', () => callbacksRef.current?.priceEdit())
+
+  const del = doc.createElement('button')
+  del.className = 'argus-vc-btn argus-vc-danger'
+  del.type = 'button'
+  del.textContent = '🗑'
+  del.title = 'Clear price override'
+  del.addEventListener('click', () => callbacksRef.current?.priceDelete())
+
+  controls.append(label, edit, del)
+  target.append(controls)
+}
 
 function ensureTrackControls(
   doc: Document,
@@ -2177,7 +2432,7 @@ function ensureEbcModuleControls(
   del.className = 'argus-vc-btn argus-vc-danger'
   del.type = 'button'
   del.textContent = '🗑'
-  del.title = 'Delete version'
+  del.title = 'Clear module'
   del.dataset.action = 'delete'
   del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
 
@@ -2220,47 +2475,106 @@ function updateTrackControls(
 }
 
 function applyTitle(doc: Document, title: string | null) {
-  const storedDoc = doc as ArgusReplicaDocument
   const productTitle = doc.getElementById('productTitle')
   if (!productTitle) return
+  productTitle.textContent = title ?? ''
+}
 
-  if (storedDoc.__argusTitleBaseline === undefined) {
-    storedDoc.__argusTitleBaseline = productTitle.textContent ?? ''
+function applyPrice(doc: Document, price: ListingPriceState | null) {
+  const cents = price?.priceCents ?? null
+  const perUnitCents = price?.pricePerUnitCents ?? null
+  const perUnitUnit = price?.pricePerUnitUnit ?? null
+
+  const label = doc.getElementById('argus-vc-label-price')
+  if (label) {
+    label.textContent = cents !== null ? `Price $${formatUsdFromCents(cents)}` : 'Price —'
   }
 
-  if (title === null) {
-    if (storedDoc.__argusTitleBaseline !== undefined) {
-      productTitle.textContent = storedDoc.__argusTitleBaseline
+  function setWhole(whole: HTMLElement, next: string) {
+    const decimal = whole.querySelector<HTMLElement>('.a-price-decimal')
+    if (!decimal) {
+      whole.textContent = next
+      return
     }
-    return
+
+    const textNode = Array.from(whole.childNodes).find((node): node is Text => node.nodeType === Node.TEXT_NODE) ?? null
+    if (textNode) {
+      textNode.textContent = next
+      return
+    }
+
+    whole.insertBefore(doc.createTextNode(next), decimal)
   }
 
-  productTitle.textContent = title
+  const priceToPayNodes = Array.from(doc.querySelectorAll<HTMLElement>('.apex-pricetopay-value'))
+  for (const node of priceToPayNodes) {
+    const symbol = node.querySelector<HTMLElement>('.a-price-symbol')
+    if (symbol) symbol.textContent = '$'
+
+    const whole = node.querySelector<HTMLElement>('.a-price-whole')
+    const fraction = node.querySelector<HTMLElement>('.a-price-fraction')
+    const decimal = whole ? whole.querySelector<HTMLElement>('.a-price-decimal') : null
+
+    if (!whole || !fraction) continue
+
+    if (cents === null) {
+      setWhole(whole, '—')
+      if (decimal) decimal.style.display = 'none'
+      fraction.textContent = ''
+      fraction.style.display = 'none'
+      continue
+    }
+
+    const [wholePart, fractionPart] = formatUsdFromCents(cents).split('.')
+    setWhole(whole, wholePart)
+    if (decimal) decimal.style.display = ''
+    fraction.textContent = fractionPart
+    fraction.style.display = ''
+  }
+
+  const accessibilityLabel = doc.getElementById('apex-pricetopay-accessibility-label')
+  if (accessibilityLabel) {
+    accessibilityLabel.textContent = cents !== null ? `$${formatUsdFromCents(cents)}` : '—'
+  }
+
+  const showPerUnit = perUnitCents !== null && typeof perUnitUnit === 'string' && perUnitUnit.trim().length > 0
+  const perUnitWrappers = Array.from(doc.querySelectorAll<HTMLElement>('.contains-ppu'))
+  for (const wrapper of perUnitWrappers) {
+    wrapper.style.display = showPerUnit ? '' : 'none'
+  }
+
+  if (!showPerUnit || perUnitCents === null || !perUnitUnit) return
+
+  const perUnitText = `$${formatUsdFromCents(perUnitCents)}`
+
+  const perUnitLabels = Array.from(doc.querySelectorAll<HTMLElement>('.apex-priceperunit-accessibility-label'))
+  for (const perUnitLabel of perUnitLabels) {
+    perUnitLabel.textContent = `${perUnitText} per ${perUnitUnit}`
+  }
+
+  const perUnitValues = Array.from(doc.querySelectorAll<HTMLElement>('.apex-priceperunit-value'))
+  for (const perUnitValue of perUnitValues) {
+    const offscreen = perUnitValue.querySelector<HTMLElement>('.a-offscreen')
+    if (offscreen) offscreen.textContent = perUnitText
+    const visible = perUnitValue.querySelector<HTMLElement>('[aria-hidden="true"]')
+    if (visible) visible.textContent = perUnitText
+  }
+
+  const perUnitContainers = Array.from(doc.querySelectorAll<HTMLElement>('.pricePerUnit'))
+  for (const perUnitContainer of perUnitContainers) {
+    const textNodes = Array.from(perUnitContainer.childNodes).filter((node): node is Text => node.nodeType === Node.TEXT_NODE)
+    const tail = textNodes.length > 0 ? textNodes[textNodes.length - 1] : null
+    if (tail) tail.textContent = ` / ${perUnitUnit})`
+  }
 }
 
 function applyBullets(doc: Document, rev: BulletsRevision | null) {
   const list = doc.querySelector('#feature-bullets ul')
   if (!list) return
 
-  const storedDoc = doc as ArgusReplicaDocument
-  if (!storedDoc.__argusBulletsBaseline) {
-    const baselineBullets = Array.from(list.querySelectorAll('.a-list-item'))
-      .map((el) => el.textContent?.trim() ?? '')
-      .filter((text) => text.length > 0)
-      .slice(0, 5)
-
-    storedDoc.__argusBulletsBaseline = {
-      html: (list as HTMLElement).innerHTML,
-      bullets: baselineBullets,
-    }
-  }
-
   const template = list.querySelector('li')
   list.querySelectorAll('li').forEach((li) => li.remove())
   if (!rev) {
-    if (storedDoc.__argusBulletsBaseline) {
-      (list as HTMLElement).innerHTML = storedDoc.__argusBulletsBaseline.html
-    }
     return
   }
 
@@ -2278,48 +2592,45 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
   }
 }
 
-interface GalleryBaselineThumb {
-  liDisplay: string
-  imgSrc: string | null
-  imgOldHires: string | null
-}
-
-interface GalleryBaseline {
-  landingSrc: string | null
-  landingOldHires: string | null
-  landingVisibility: string
-  altImagesDisplay: string
-  thumbs: GalleryBaselineThumb[]
-  selectedThumbIndex: number
-}
-
-interface BulletsBaseline {
-  html: string
-  bullets: string[]
-}
-
-interface EbcBaselineModule {
-  display: string
-  html: string
-}
-
-interface EbcBaselineContainer {
-  display: string
-  modules: EbcBaselineModule[]
-}
-
-interface EbcBaseline {
-  brand: EbcBaselineContainer | null
-  description: EbcBaselineContainer | null
-}
-
 type ArgusReplicaDocument = Document & {
-  __argusTitleBaseline?: string
-  __argusBulletsBaseline?: BulletsBaseline
-  __argusGalleryBaseline?: GalleryBaseline
   __argusMainMediaIndex?: number
   __argusVideoBaseline?: string
-  __argusEbcBaseline?: EbcBaseline
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+function svgPlaceholderDataUrl(label: string): string {
+  const text = escapeSvgText(label)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" role="img" aria-label="${text}">
+  <rect width="800" height="800" fill="#f3f4f6"/>
+  <rect x="44" y="44" width="712" height="712" rx="28" fill="#ffffff" stroke="#d1d5db" stroke-width="4"/>
+  <path d="M260 360h280v16H260zm0 48h280v16H260z" fill="#c7cdd6"/>
+  <circle cx="320" cy="300" r="32" fill="#c7cdd6"/>
+  <text x="400" y="520" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#6b7280">${text}</text>
+</svg>`
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+const ARGUS_GALLERY_PLACEHOLDER_MAIN = svgPlaceholderDataUrl('Upload images')
+const ARGUS_GALLERY_PLACEHOLDER_THUMB = svgPlaceholderDataUrl('Upload')
+const ARGUS_EBC_PLACEHOLDER_IMAGE = svgPlaceholderDataUrl('Upload image')
+const ARGUS_GALLERY_THUMB_SIZE_PX = 48
+
+function sizeGalleryThumbImage(img: HTMLImageElement) {
+  img.width = ARGUS_GALLERY_THUMB_SIZE_PX
+  img.height = ARGUS_GALLERY_THUMB_SIZE_PX
+  img.style.width = `${ARGUS_GALLERY_THUMB_SIZE_PX}px`
+  img.style.height = `${ARGUS_GALLERY_THUMB_SIZE_PX}px`
+  img.style.objectFit = 'contain'
+  img.style.display = 'block'
 }
 
 function itemNoFromElement(el: Element): number | null {
@@ -2373,102 +2684,45 @@ function setAltImagesSelection(altList: Element, selectedLi: Element | null) {
   if (selectedRadio) selectedRadio.setAttribute('aria-checked', 'true')
 }
 
-function captureGalleryBaseline(doc: Document): GalleryBaseline | null {
-  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
-  const altImages = doc.getElementById('altImages') as HTMLElement | null
-  const altList = doc.querySelector<HTMLElement>('#altImages ul')
-
-  if (!landing || !altImages || !altList) return null
-
-  const lis = Array.from(altList.querySelectorAll<HTMLElement>('li'))
-  const thumbs: GalleryBaselineThumb[] = lis.map((li) => {
-    const img = li.querySelector<HTMLImageElement>('img')
-    return {
-      liDisplay: li.style.display,
-      imgSrc: img ? img.getAttribute('src') : null,
-      imgOldHires: img ? img.getAttribute('data-old-hires') : null,
-    }
-  })
-
-  const selectedByClass = lis.findIndex((li) => li.querySelector('.a-button-thumbnail')?.classList.contains('a-button-selected') ?? false)
-  const selectedByRadio = lis.findIndex((li) => li.querySelector<HTMLButtonElement>('button[role="radio"]')?.getAttribute('aria-checked') === 'true')
-  const selectedThumbIndex = selectedByClass >= 0 ? selectedByClass : (selectedByRadio >= 0 ? selectedByRadio : 0)
-
-  return {
-    landingSrc: landing.getAttribute('src'),
-    landingOldHires: landing.getAttribute('data-old-hires'),
-    landingVisibility: landing.style.visibility,
-    altImagesDisplay: altImages.style.display,
-    thumbs,
-    selectedThumbIndex,
-  }
-}
-
-function restoreGalleryBaseline(doc: Document, baseline: GalleryBaseline) {
-  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
-  const altImages = doc.getElementById('altImages') as HTMLElement | null
-  const altList = doc.querySelector<HTMLElement>('#altImages ul')
-
-  if (landing) {
-    landing.style.visibility = baseline.landingVisibility
-    if (baseline.landingSrc) {
-      landing.setAttribute('src', baseline.landingSrc)
-    } else {
-      landing.removeAttribute('src')
-    }
-    if (baseline.landingOldHires) {
-      landing.setAttribute('data-old-hires', baseline.landingOldHires)
-    } else {
-      landing.removeAttribute('data-old-hires')
-    }
-  }
-
-  if (altImages) {
-    altImages.style.display = baseline.altImagesDisplay
-  }
-
-  if (!altList) return
-
-  const lis = Array.from(altList.querySelectorAll<HTMLElement>('li'))
-  for (let i = 0; i < baseline.thumbs.length && i < lis.length; i++) {
-    const li = lis[i]
-    const base = baseline.thumbs[i]
-    li.style.display = base.liDisplay
-    const img = li.querySelector<HTMLImageElement>('img')
-    if (!img) continue
-    if (base.imgSrc) {
-      img.setAttribute('src', base.imgSrc)
-    } else {
-      img.removeAttribute('src')
-    }
-    if (base.imgOldHires) {
-      img.setAttribute('data-old-hires', base.imgOldHires)
-    } else {
-      img.removeAttribute('data-old-hires')
-    }
-  }
-
-  const selected = lis.length > baseline.selectedThumbIndex ? lis[baseline.selectedThumbIndex] : (lis.length > 0 ? lis[0] : null)
-  setAltImagesSelection(altList, selected)
-}
-
 function applyGallery(doc: Document, rev: GalleryRevision | null) {
   const storedDoc = doc as ArgusReplicaDocument
-  if (!storedDoc.__argusGalleryBaseline) {
-    const baseline = captureGalleryBaseline(doc)
-    if (baseline) storedDoc.__argusGalleryBaseline = baseline
-  }
 
   const landing = doc.getElementById('landingImage') as HTMLImageElement | null
   const altImages = doc.getElementById('altImages') as HTMLElement | null
+  const altList = doc.querySelector<HTMLElement>('#altImages ul')
 
   if (!rev || rev.images.length === 0) {
-    if (storedDoc.__argusGalleryBaseline) {
-      restoreGalleryBaseline(doc, storedDoc.__argusGalleryBaseline)
+    if (landing) {
+      landing.style.visibility = ''
+      landing.src = ARGUS_GALLERY_PLACEHOLDER_MAIN
+      landing.setAttribute('data-old-hires', ARGUS_GALLERY_PLACEHOLDER_MAIN)
     }
 
-    const mainIndex = typeof storedDoc.__argusMainMediaIndex === 'number' ? storedDoc.__argusMainMediaIndex : 0
-    if (Number.isFinite(mainIndex)) setDesktopMediaMainViewIndex(doc, mainIndex)
+    if (altImages) {
+      altImages.style.display = ''
+    }
+
+    if (altList) {
+      const imageLis = Array.from(altList.querySelectorAll<HTMLLIElement>('li.imageThumbnail'))
+        .slice()
+        .sort((a, b) => (itemNoFromElement(a) ?? 0) - (itemNoFromElement(b) ?? 0))
+
+      for (const li of imageLis) {
+        const existingImg = li.querySelector<HTMLImageElement>('img')
+        const img = existingImg ? existingImg : doc.createElement('img')
+        img.src = ARGUS_GALLERY_PLACEHOLDER_THUMB
+        img.setAttribute('data-old-hires', ARGUS_GALLERY_PLACEHOLDER_MAIN)
+        sizeGalleryThumbImage(img)
+        if (!li.contains(img)) li.append(img)
+        li.style.display = ''
+      }
+
+      const first = imageLis.length > 0 ? imageLis[0] : null
+      setAltImagesSelection(altList, first)
+    }
+
+    storedDoc.__argusMainMediaIndex = 0
+    setDesktopMediaMainViewIndex(doc, 0)
     return
   }
 
@@ -2490,27 +2744,33 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     landing.setAttribute('data-old-hires', hiRes)
   }
 
-  const altList = doc.querySelector<HTMLElement>('#altImages ul')
   if (!altList) return
 
   const imageLis = Array.from(altList.querySelectorAll<HTMLLIElement>('li.imageThumbnail'))
     .slice()
     .sort((a, b) => (itemNoFromElement(a) ?? 0) - (itemNoFromElement(b) ?? 0))
 
-  for (let i = 0; i < thumbs.length && i < imageLis.length; i++) {
-    const item = thumbs[i]
+  for (let i = 0; i < imageLis.length; i++) {
     const li = imageLis[i]
-    const existingImg = li.querySelector('img')
+    const item = i < thumbs.length ? thumbs[i] : null
+    const existingImg = li.querySelector<HTMLImageElement>('img')
     const img = existingImg ? existingImg : doc.createElement('img')
+
+    if (!item) {
+      img.src = ARGUS_GALLERY_PLACEHOLDER_THUMB
+      img.setAttribute('data-old-hires', ARGUS_GALLERY_PLACEHOLDER_MAIN)
+      sizeGalleryThumbImage(img)
+      if (!li.contains(img)) li.append(img)
+      li.style.display = ''
+      continue
+    }
+
     img.src = resolveImageSrc(item.src)
     const hiRes = item.hiRes ? resolveImageSrc(item.hiRes) : img.src
     img.setAttribute('data-old-hires', hiRes)
+    sizeGalleryThumbImage(img)
     if (!li.contains(img)) li.append(img)
     li.style.display = ''
-  }
-
-  for (let i = thumbs.length; i < imageLis.length; i++) {
-    imageLis[i].style.display = 'none'
   }
 
   const firstVisible = altList.querySelector<HTMLElement>('li.imageThumbnail:not([style*="display: none"])')
@@ -2520,7 +2780,10 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   setDesktopMediaMainViewIndex(doc, 0)
 }
 
-function ensureGalleryThumbnailSwap(doc: Document) {
+function ensureGalleryThumbnailSwap(
+  doc: Document,
+  callbacksRef: RefObject<{ galleryUpload: () => void }>,
+) {
   const altList = doc.querySelector<HTMLElement>('#altImages ul')
   if (!altList) return
 
@@ -2549,7 +2812,7 @@ function ensureGalleryThumbnailSwap(doc: Document) {
       return
     }
 
-    const img = li.querySelector('img')
+    const img = li.querySelector<HTMLImageElement>('img')
     if (!img) return
 
     const landing = doc.getElementById('landingImage') as HTMLImageElement | null
@@ -2561,6 +2824,11 @@ function ensureGalleryThumbnailSwap(doc: Document) {
     e.preventDefault()
     e.stopImmediatePropagation()
     e.stopPropagation()
+
+    if (src === ARGUS_GALLERY_PLACEHOLDER_MAIN) {
+      callbacksRef.current.galleryUpload()
+      return
+    }
 
     storedDoc.__argusMainMediaIndex = 0
     setDesktopMediaMainViewIndex(doc, 0)
@@ -2644,30 +2912,21 @@ function applyVideo(doc: Document, rev: VideoRevision | null) {
 }
 
 function applyEbc(doc: Document, rev: EbcRevision | null) {
-  const storedDoc = doc as ArgusReplicaDocument
   const brandContainer = doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
   const descriptionContainer = doc.querySelector<HTMLElement>('#aplus_feature_div')
 
-  if (!storedDoc.__argusEbcBaseline) {
-    const brand = brandContainer ? captureEbcContainerBaseline(brandContainer) : null
-    const description = descriptionContainer ? captureEbcContainerBaseline(descriptionContainer) : null
-    storedDoc.__argusEbcBaseline = { brand, description }
-  }
-
   if (!rev || rev.sections.length === 0) {
-    if (brandContainer && storedDoc.__argusEbcBaseline.brand) {
-      const marker = brandContainer.dataset.argusEbcApplied
-      if (marker !== undefined || brandContainer.style.display === 'none') {
-        restoreEbcContainerBaseline(brandContainer, storedDoc.__argusEbcBaseline.brand)
-        delete brandContainer.dataset.argusEbcApplied
-      }
+    if (brandContainer) {
+      brandContainer.style.display = ''
+      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
+      delete brandContainer.dataset.argusEbcApplied
     }
-    if (descriptionContainer && storedDoc.__argusEbcBaseline.description) {
-      const marker = descriptionContainer.dataset.argusEbcApplied
-      if (marker !== undefined || descriptionContainer.style.display === 'none') {
-        restoreEbcContainerBaseline(descriptionContainer, storedDoc.__argusEbcBaseline.description)
-        delete descriptionContainer.dataset.argusEbcApplied
-      }
+    if (descriptionContainer) {
+      descriptionContainer.style.display = ''
+      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
+      delete descriptionContainer.dataset.argusEbcApplied
     }
     return
   }
@@ -2678,13 +2937,12 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
   if (brandContainer) {
     if (!brandSection) {
       brandContainer.style.display = ''
-      if (storedDoc.__argusEbcBaseline.brand) {
-        restoreEbcContainerBaseline(brandContainer, storedDoc.__argusEbcBaseline.brand)
-      }
+      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
       delete brandContainer.dataset.argusEbcApplied
     } else {
       brandContainer.style.display = ''
-      applyEbcSection(brandContainer, brandSection, storedDoc.__argusEbcBaseline.brand)
+      applyEbcSection(brandContainer, brandSection)
       brandContainer.dataset.argusEbcApplied = rev.id
     }
   }
@@ -2692,54 +2950,29 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
   if (descriptionContainer) {
     if (!descriptionSection) {
       descriptionContainer.style.display = ''
-      if (storedDoc.__argusEbcBaseline.description) {
-        restoreEbcContainerBaseline(descriptionContainer, storedDoc.__argusEbcBaseline.description)
-      }
+      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
       delete descriptionContainer.dataset.argusEbcApplied
     } else {
       descriptionContainer.style.display = ''
-      applyEbcSection(descriptionContainer, descriptionSection, storedDoc.__argusEbcBaseline.description)
+      applyEbcSection(descriptionContainer, descriptionSection)
       descriptionContainer.dataset.argusEbcApplied = rev.id
     }
   }
 }
 
-function captureEbcContainerBaseline(container: HTMLElement): EbcBaselineContainer {
-  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
-  const baselines: EbcBaselineModule[] = modules.map((mod) => {
-    const clone = mod.cloneNode(true) as HTMLElement
-    clone.querySelectorAll('.argus-vc-ebc-module-controls').forEach((el) => el.remove())
-    return {
-      display: mod.style.display,
-      html: clone.innerHTML,
-    }
-  })
-
-  return {
-    display: container.style.display,
-    modules: baselines,
+function setEbcModulePlaceholder(target: HTMLElement, label: string | null) {
+  if (label === null) {
+    target.classList.remove('argus-ebc-placeholder')
+    target.removeAttribute('data-argus-ebc-placeholder')
+    return
   }
+
+  target.classList.add('argus-ebc-placeholder')
+  target.setAttribute('data-argus-ebc-placeholder', label)
 }
 
-function restoreEbcContainerBaseline(container: HTMLElement, baseline: EbcBaselineContainer) {
-  container.style.display = baseline.display
-  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
-  for (let i = 0; i < modules.length && i < baseline.modules.length; i++) {
-    restoreEbcModuleBaseline(modules[i], baseline.modules[i])
-  }
-}
-
-function restoreEbcModuleBaseline(target: HTMLElement, baseline: EbcBaselineModule) {
-  const controls = target.querySelector<HTMLElement>('.argus-vc-ebc-module-controls')
-  if (controls) controls.remove()
-
-  target.innerHTML = baseline.html
-  target.style.display = baseline.display
-
-  if (controls) target.append(controls)
-}
-
-function applyEbcSection(container: HTMLElement, section: EbcSection, baseline: EbcBaselineContainer | null) {
+function applyEbcSection(container: HTMLElement, section: EbcSection) {
   const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
 
   for (let mi = 0; mi < modules.length; mi++) {
@@ -2749,37 +2982,56 @@ function applyEbcSection(container: HTMLElement, section: EbcSection, baseline: 
 
     const srcMod = section.modules[mi]
     if (!srcMod) {
-      const baselineModule = baseline ? baseline.modules[mi] ?? null : null
-      if (baselineModule) restoreEbcModuleBaseline(target, baselineModule)
+      setEbcModulePlaceholder(target, 'Upload A+ module')
       continue
     }
 
+    const hasContent = Boolean(
+      (srcMod.headline && srcMod.headline.trim().length > 0) ||
+      (srcMod.bodyText && srcMod.bodyText.trim().length > 0) ||
+      srcMod.images.length > 0,
+    )
+    setEbcModulePlaceholder(target, hasContent ? null : 'Upload A+ module')
+
     const headings = Array.from(target.querySelectorAll('h3, h4, .aplus-module-heading'))
-    if (headings.length > 0 && srcMod.headline) {
-      headings[0].textContent = srcMod.headline
+    if (headings.length > 0) {
+      headings[0].textContent = srcMod.headline ? srcMod.headline : ''
     }
 
     const paragraphs = Array.from(target.querySelectorAll('p'))
-    if (paragraphs.length > 0 && srcMod.bodyText) {
-      const lines = srcMod.bodyText.split('\n').filter(Boolean)
-      for (let i = 0; i < lines.length; i++) {
-        const p = paragraphs[i] ? paragraphs[i] : paragraphs[0].cloneNode(true) as HTMLParagraphElement
-        p.textContent = lines[i]
-        if (!paragraphs[i]) {
-          paragraphs[0].parentElement?.append(p)
-          paragraphs.push(p)
+    if (paragraphs.length > 0) {
+      if (srcMod.bodyText) {
+        const lines = srcMod.bodyText.split('\n').filter(Boolean)
+        for (let i = 0; i < lines.length; i++) {
+          const p = paragraphs[i] ? paragraphs[i] : paragraphs[0].cloneNode(true) as HTMLParagraphElement
+          p.textContent = lines[i]
+          if (!paragraphs[i]) {
+            paragraphs[0].parentElement?.append(p)
+            paragraphs.push(p)
+          }
         }
-      }
-      for (let i = lines.length; i < paragraphs.length; i++) {
-        paragraphs[i].textContent = ''
+        for (let i = lines.length; i < paragraphs.length; i++) {
+          paragraphs[i].textContent = ''
+        }
+      } else {
+        for (const p of paragraphs) {
+          p.textContent = ''
+        }
       }
     }
 
     const images = Array.from(target.querySelectorAll('img'))
-    for (let ii = 0; ii < srcMod.images.length; ii++) {
-      const srcImg = srcMod.images[ii]
+    for (let ii = 0; ii < images.length; ii++) {
       const img = images[ii]
       if (!img) continue
+
+      const srcImg = srcMod.images[ii]
+      if (!srcImg) {
+        img.src = ARGUS_EBC_PLACEHOLDER_IMAGE
+        img.alt = 'Upload image'
+        continue
+      }
+
       img.src = resolveImageSrc(srcImg.src)
       if (srcImg.alt) img.alt = srcImg.alt
     }
