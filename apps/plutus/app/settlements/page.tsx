@@ -1,19 +1,26 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
+import Checkbox from '@mui/material/Checkbox';
 import Box from '@mui/material/Box';
 import MuiButton from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Skeleton from '@mui/material/Skeleton';
 import MuiTable from '@mui/material/Table';
 import MuiTableBody from '@mui/material/TableBody';
@@ -113,7 +120,7 @@ function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
   if (status === 'Posted')
     return (
       <Chip
-        label="LMB Posted"
+        label="Posted"
         size="small"
         color="success"
         variant="filled"
@@ -122,13 +129,108 @@ function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
     );
   return (
     <Chip
-      label={`LMB ${status}`}
+      label={status}
       size="small"
       color="default"
       variant="filled"
       sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
     />
   );
+}
+
+function displaySettlementDocNumber(docNumber: string): string {
+  const raw = docNumber.trim();
+  const normalized = raw.replace(/^.*#(LMB-[A-Z]{2}-)/, '$1');
+  return normalized.startsWith('LMB-') ? normalized.slice('LMB-'.length) : normalized;
+}
+
+function extractSettlementIdFromMemo(memo: string): string | null {
+  const matchSpapi = memo.match(/Settlement:\s*([0-9]+)/);
+  if (matchSpapi) return matchSpapi[1]!;
+
+  const matchLmb = memo.match(/downloadAuditFile\/\d+-([0-9]+)/);
+  if (matchLmb) return matchLmb[1]!;
+
+  return null;
+}
+
+function isoDaySubtractDays(isoDay: string, days: number): string {
+  const date = new Date(`${isoDay}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error(`Invalid iso day: ${isoDay}`);
+  }
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+type UsSpApiSettlementSyncSegmentResult = {
+  settlementId: string;
+  eventGroupId: string;
+  docNumber: string;
+  txnDate: string;
+  qboJournalEntryId: string | null;
+  qboAction: 'existing' | 'posted' | 'skipped' | 'error';
+  processed: boolean;
+  reason?: string;
+  error?: string;
+};
+
+type UsSpApiSettlementSyncResult = {
+  totals: {
+    settlements: number;
+    segments: number;
+    posted: number;
+    existing: number;
+    processed: number;
+    skipped: number;
+    errors: number;
+  };
+  segments: UsSpApiSettlementSyncSegmentResult[];
+};
+
+function readStringField(payload: unknown, key: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const value = (payload as Record<string, unknown>)[key];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+async function syncUsSettlementsFromAmazon(input: {
+  startDate: string;
+  endDate: string | null;
+  settlementIds: string[];
+  postToQbo: boolean;
+  process: boolean;
+}): Promise<UsSpApiSettlementSyncResult> {
+  const payload: Record<string, unknown> = {
+    startDate: input.startDate,
+    postToQbo: input.postToQbo,
+    process: input.process,
+  };
+  if (input.endDate !== null) payload.endDate = input.endDate;
+  if (input.settlementIds.length > 0) payload.settlementIds = input.settlementIds;
+
+  const res = await fetch(`${basePath}/api/plutus/settlements/spapi/us/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json()) as unknown;
+  if (!res.ok) {
+    const details = readStringField(data, 'details');
+    if (details) {
+      throw new Error(details);
+    }
+
+    const error = readStringField(data, 'error');
+    if (error) {
+      throw new Error(error);
+    }
+
+    throw new Error('Sync failed');
+  }
+  return data as UsSpApiSettlementSyncResult;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
@@ -508,6 +610,31 @@ export default function SettlementsPage() {
     return { total, processed, pending, hasAnyTotal, totalAmount, primaryCurrency };
   }, [data, settlements]);
 
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncStartDate, setSyncStartDate] = useState(() => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - 30);
+    return date.toISOString().slice(0, 10);
+  });
+  const [syncEndDate, setSyncEndDate] = useState<string>('');
+  const [syncSettlementIds, setSyncSettlementIds] = useState<string>('');
+  const [syncPostToQbo, setSyncPostToQbo] = useState(true);
+  const [syncProcess, setSyncProcess] = useState(false);
+  const [syncResult, setSyncResult] = useState<UsSpApiSettlementSyncResult | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: syncUsSettlementsFromAmazon,
+    onSuccess: (result) => {
+      setSyncResult(result);
+      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['plutus-audit-data'] });
+      enqueueSnackbar(`Synced ${result.totals.segments} segment${result.totals.segments === 1 ? '' : 's'}`, { variant: 'success' });
+    },
+    onError: (err) => {
+      enqueueSnackbar(err instanceof Error ? err.message : 'Sync failed', { variant: 'error' });
+    },
+  });
+
   const autoprocessMutation = useMutation({
     mutationFn: runAutopostCheck,
     onSuccess: (result) => {
@@ -529,6 +656,40 @@ export default function SettlementsPage() {
     },
   });
 
+  const openSyncDialog = (options?: { settlementId?: string; postedDate?: string }) => {
+    setSyncResult(null);
+
+    const settlementId = options?.settlementId ? options.settlementId.trim() : '';
+    setSyncSettlementIds(settlementId);
+
+    const postedDate = options?.postedDate ? options.postedDate.trim() : '';
+    if (postedDate !== '' && /^\d{4}-\d{2}-\d{2}$/.test(postedDate)) {
+      setSyncStartDate(isoDaySubtractDays(postedDate, 45));
+      setSyncEndDate(postedDate);
+    } else {
+      setSyncEndDate('');
+    }
+
+    setSyncPostToQbo(true);
+    setSyncProcess(false);
+    setSyncOpen(true);
+  };
+
+  const runSync = () => {
+    const settlementIds = syncSettlementIds
+      .split(/[\s,]+/)
+      .map((id) => id.trim())
+      .filter((id) => id !== '');
+
+    syncMutation.mutate({
+      startDate: syncStartDate.trim(),
+      endDate: syncEndDate.trim() === '' ? null : syncEndDate.trim(),
+      settlementIds,
+      postToQbo: syncPostToQbo,
+      process: syncProcess,
+    });
+  };
+
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlements" error={connection.error} />;
   }
@@ -539,19 +700,33 @@ export default function SettlementsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
+            description="Process settlement journal entries posted to QBO. Prereqs: upload Audit Data (or sync from Amazon for US) and map Bills so Plutus can compute COGS + allocate fees by brand."
             variant="accent"
           />
-          <MuiButton
-            variant="outlined"
-            disableElevation
-            onClick={() => autoprocessMutation.mutate()}
-            disabled={autoprocessMutation.isPending}
-            startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-            sx={{ ...outlineSx, ...defaultSize }}
-          >
-            {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
-          </MuiButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {marketplace === 'US' && (
+              <MuiButton
+                variant="outlined"
+                disableElevation
+                onClick={() => openSyncDialog()}
+                disabled={syncMutation.isPending}
+                startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
+                sx={{ ...outlineSx, ...defaultSize }}
+              >
+                {syncMutation.isPending ? 'Syncing…' : 'Sync from Amazon'}
+              </MuiButton>
+            )}
+            <MuiButton
+              variant="outlined"
+              disableElevation
+              onClick={() => autoprocessMutation.mutate()}
+              disabled={autoprocessMutation.isPending}
+              startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+              sx={{ ...outlineSx, ...defaultSize }}
+            >
+              {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
+            </MuiButton>
+          </Box>
         </Box>
 
         {/* KPI Strip */}
@@ -687,7 +862,7 @@ export default function SettlementsPage() {
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>LMB</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Audit Data</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus</MuiTableCell>
                     </MuiTableRow>
@@ -727,12 +902,15 @@ export default function SettlementsPage() {
 
                     {!isLoading &&
                       !error &&
-                      settlements.map((s) => (
-                        <MuiTableRow
-                          key={s.id}
-                          sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}
-                          onClick={() => router.push(`/settlements/${s.id}`)}
-                        >
+                      settlements.map((s) => {
+                        const settlementId = extractSettlementIdFromMemo(s.memo);
+
+                        return (
+                          <MuiTableRow
+                            key={s.id}
+                            sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}
+                            onClick={() => router.push(`/settlements/${s.id}`)}
+                          >
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                               <MarketplaceFlag region={s.marketplace.region} />
@@ -741,7 +919,7 @@ export default function SettlementsPage() {
                                   {s.marketplace.label}
                                 </Box>
                                 <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
-                                  {s.docNumber}
+                                  {displaySettlementDocNumber(s.docNumber)}
                                 </Box>
                               </Box>
                             </Box>
@@ -779,8 +957,20 @@ export default function SettlementsPage() {
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
-                                  { label: 'LMB Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-settlement`) },
+                                  { label: 'Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-settlement`) },
                                   { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus-settlement`) },
+                                  ...(s.marketplace.region === 'US' && settlementId !== null
+                                    ? [
+                                        {
+                                          label: 'Sync from Amazon',
+                                          onClick: () =>
+                                            openSyncDialog({
+                                              settlementId,
+                                              postedDate: s.postedDate,
+                                            }),
+                                        },
+                                      ]
+                                    : []),
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
@@ -788,8 +978,9 @@ export default function SettlementsPage() {
                               </SplitButton>
                             </Box>
                           </MuiTableCell>
-                        </MuiTableRow>
-                      ))}
+                          </MuiTableRow>
+                        );
+                      })}
                   </MuiTableBody>
                 </MuiTable>
               </Box>
@@ -849,6 +1040,136 @@ export default function SettlementsPage() {
               )}
             </CardContent>
           </Card>
+
+          <Dialog
+            open={syncOpen}
+            onClose={() => setSyncOpen(false)}
+            maxWidth="md"
+            fullWidth
+            slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+          >
+            <DialogTitle>Sync from Amazon (US)</DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                Pulls settlements from Amazon SP-API Finances, generates settlement JEs + Audit Data, and optionally processes them in Plutus.
+              </Typography>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                <TextField
+                  label="Start date"
+                  type="date"
+                  value={syncStartDate}
+                  onChange={(e) => setSyncStartDate(e.target.value)}
+                  sx={textFieldSx}
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  label="End date (optional)"
+                  type="date"
+                  value={syncEndDate}
+                  onChange={(e) => setSyncEndDate(e.target.value)}
+                  sx={textFieldSx}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+
+              <TextField
+                label="Settlement IDs (optional)"
+                placeholder="25223291971 25223291972"
+                value={syncSettlementIds}
+                onChange={(e) => setSyncSettlementIds(e.target.value)}
+                helperText="Comma or space-separated. Leave empty to sync everything in the date range."
+                multiline
+                minRows={2}
+                sx={textFieldSx}
+              />
+
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <FormControlLabel
+                  control={<Checkbox checked={syncPostToQbo} onChange={(e) => setSyncPostToQbo(e.target.checked)} />}
+                  label="Post missing JEs to QBO"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={syncProcess} onChange={(e) => setSyncProcess(e.target.checked)} />}
+                  label="Process in Plutus"
+                />
+              </Box>
+
+              {syncMutation.isPending && (
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Syncing…</Typography>
+              )}
+
+              {syncMutation.error && (
+                <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                  {syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed'}
+                </Typography>
+              )}
+
+              {syncResult && (
+                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                      Results
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {syncResult.totals.settlements} settlement{syncResult.totals.settlements === 1 ? '' : 's'} &middot;{' '}
+                      {syncResult.totals.segments} segment{syncResult.totals.segments === 1 ? '' : 's'} &middot;{' '}
+                      posted {syncResult.totals.posted}, existing {syncResult.totals.existing}, processed {syncResult.totals.processed}, skipped {syncResult.totals.skipped}, errors {syncResult.totals.errors}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ overflow: 'auto' }}>
+                    <MuiTable size="small" sx={{ width: '100%', fontSize: '0.875rem' }}>
+                      <MuiTableHead sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                        <MuiTableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Doc #</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Plutus</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Note</MuiTableCell>
+                        </MuiTableRow>
+                      </MuiTableHead>
+                      <MuiTableBody>
+                        {syncResult.segments.map((seg, idx) => (
+                          <MuiTableRow key={`${seg.docNumber}-${idx}`} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                            <MuiTableCell sx={{ ...tdSx, fontFamily: 'monospace' }}>{displaySettlementDocNumber(seg.docNumber)}</MuiTableCell>
+                            <MuiTableCell sx={tdSx}>
+                              {seg.qboAction === 'posted' && <Chip label="Posted" size="small" color="success" sx={chipBase} />}
+                              {seg.qboAction === 'existing' && <Chip label="Existing" size="small" color="default" sx={chipBase} />}
+                              {seg.qboAction === 'skipped' && <Chip label="Skipped" size="small" color="default" sx={chipBase} />}
+                              {seg.qboAction === 'error' && <Chip label="Error" size="small" color="error" sx={chipBase} />}
+                            </MuiTableCell>
+                            <MuiTableCell sx={tdSx}>
+                              {seg.processed ? (
+                                <Chip label="Processed" size="small" color="success" sx={chipBase} />
+                              ) : (
+                                <Chip label="Not processed" size="small" color="default" sx={chipBase} />
+                              )}
+                            </MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, color: seg.qboAction === 'error' ? 'error.main' : 'text.secondary' }}>
+                              {seg.reason ? seg.reason : seg.error ? seg.error : null}
+                            </MuiTableCell>
+                          </MuiTableRow>
+                        ))}
+                      </MuiTableBody>
+                    </MuiTable>
+                  </Box>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <MuiButton variant="outlined" disableElevation onClick={() => setSyncOpen(false)} sx={{ ...outlineSx, ...defaultSize }}>
+                Close
+              </MuiButton>
+              <MuiButton
+                variant="contained"
+                disableElevation
+                onClick={() => runSync()}
+                disabled={syncMutation.isPending || syncStartDate.trim() === ''}
+                sx={{ ...defaultBtnSx, ...defaultSize }}
+              >
+                Run sync
+              </MuiButton>
+            </DialogActions>
+          </Dialog>
         </Box>
       </Box>
     </Box>

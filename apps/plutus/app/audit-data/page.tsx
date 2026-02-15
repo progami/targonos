@@ -206,7 +206,7 @@ export default function AuditDataPage() {
       <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Audit Data"
-          description="Upload Link My Books Audit Data (CSV/ZIP). Plutus uses it to compute per-SKU unit movements, COGS, and brand allocation for fees."
+          description="Upload Audit Data (CSV/ZIP). For UK, this is the Link My Books Audit Data export. For US, Audit Data is generated automatically when syncing settlements from Amazon."
           variant="accent"
         />
 
@@ -279,7 +279,7 @@ export default function AuditDataPage() {
                     <UploadIcon sx={{ fontSize: 28 }} />
                   </Box>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
-                    Drop your LMB Audit Data file here
+                    Drop your Audit Data file here
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                     CSV or ZIP &middot; One file covers all settlements in the date range
@@ -429,7 +429,7 @@ export default function AuditDataPage() {
                         <EmptyState
                           icon={<UploadSvgIcon />}
                           title="No audit data uploaded"
-                          description="Upload an LMB Audit Data CSV above. One file covers all settlements in the date range."
+                          description="Upload an Audit Data file above. For UK, one file covers all settlements in the date range."
                         />
                       </TableCell>
                     </TableRow>

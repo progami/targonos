@@ -54,9 +54,9 @@ type DataSourceConfig = {
 const DATA_SOURCES: DataSourceConfig[] = [
   {
     key: 'audit',
-    label: 'LMB Audit Data',
-    description: 'Upload Link My Books Audit Data (CSV or ZIP). One file covers all settlements in the date range.',
-    dropLabel: 'Drop your LMB Audit Data file here',
+    label: 'Audit Data (UK)',
+    description: 'Upload Audit Data (CSV or ZIP). For UK, this is the Link My Books Audit Data export. For US, Audit Data is generated automatically when syncing settlements from Amazon.',
+    dropLabel: 'Drop your Audit Data file here',
     accept: '.csv,.zip',
     hint: 'CSV or ZIP',
     uploadEndpoint: '/api/plutus/audit-data/upload',

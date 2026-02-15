@@ -174,3 +174,49 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
   const groupId = matches[0]!.groupId;
   return groupId;
 }
+
+export async function listSettlementEventGroupsFromTransactions(input: {
+  tenantCode: TenantCode;
+  postedAfterIso: string;
+  postedBeforeIso: string;
+}): Promise<Map<string, string>> {
+  const callAmazonApi = await getCallAmazonApi();
+
+  const settlementToGroupId = new Map<string, string>();
+
+  let nextToken: string | undefined;
+  for (let page = 0; page < 500; page++) {
+    const res = await callAmazonApi<SpApiListTransactionsResponse>(input.tenantCode, {
+      operation: 'listTransactions',
+      endpoint: 'finances',
+      options: { version: '2024-06-19' },
+      query: {
+        postedAfter: input.postedAfterIso,
+        postedBefore: input.postedBeforeIso,
+        nextToken,
+      },
+    });
+
+    const txs = Array.isArray(res.transactions) ? res.transactions : [];
+    for (const tx of txs) {
+      const settlementId = getRelatedIdentifierValue(tx.relatedIdentifiers, 'SETTLEMENT_ID');
+      if (!settlementId) continue;
+
+      const groupId = getRelatedIdentifierValue(tx.relatedIdentifiers, 'FINANCIAL_EVENT_GROUP_ID');
+      if (!groupId) continue;
+
+      const existing = settlementToGroupId.get(settlementId);
+      if (existing !== undefined && existing !== groupId) {
+        throw new Error(`SettlementId ${settlementId} maps to multiple event groups: ${existing}, ${groupId}`);
+      }
+
+      settlementToGroupId.set(settlementId, groupId);
+    }
+
+    const token = res.nextToken;
+    if (typeof token !== 'string' || token.trim() === '') break;
+    nextToken = token;
+  }
+
+  return settlementToGroupId;
+}
