@@ -25,7 +25,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const { path: segments } = await params
+  const { path } = await params
+  const segments = path.length > 0 && path[0] === '6pk_files'
+    ? ['listingpage_files', ...path.slice(1)]
+    : path
+
   const filePath = join(FIXTURES_DIR, ...segments)
 
   // Prevent directory traversal
