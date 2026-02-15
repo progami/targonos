@@ -824,7 +824,7 @@ export function ListingDetail({
     <div className="flex flex-col h-screen bg-white">
       <iframe
         ref={iframeRef}
-        src={`${basePath}/api/fixture/listingpage.html`}
+        src={`${basePath}/api/fixture/replica.html`}
         className="w-full border-0"
         style={{ height: iframeHeight }}
         title={listing ? listing.label : listingId}
