@@ -383,7 +383,7 @@ interface EbcApiRevision {
       images: {
         position: number
         altText: string | null
-        media: { filePath: string }
+        media: { filePath: string; sourceUrl: string | null }
       }[]
     }[]
   }[]
@@ -450,7 +450,7 @@ function toEbcRevision(rev: EbcApiRevision): EbcRevision {
               .slice()
               .sort((a, b) => a.position - b.position)
               .map((img) => ({
-                src: img.media.filePath,
+                src: img.media.sourceUrl === null ? img.media.filePath : img.media.sourceUrl,
                 alt: img.altText,
               })),
           })),
