@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import MuiButton from '@mui/material/Button';
+import Button from '@mui/material/Button';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import Box from '@mui/material/Box';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 type DropdownItem = {
   label: string;
@@ -35,7 +36,7 @@ export function SplitButton({
   return (
     <Box sx={{ display: 'inline-flex', ...sx }}>
       <ButtonGroup variant="contained" disableElevation disabled={disabled}>
-        <MuiButton
+        <Button
           onClick={onClick}
           sx={{
             bgcolor: '#45B3D4',
@@ -50,8 +51,8 @@ export function SplitButton({
           }}
         >
           {children}
-        </MuiButton>
-        <MuiButton
+        </Button>
+        <Button
           size="small"
           onClick={(e) => setAnchorEl(e.currentTarget)}
           sx={{
@@ -63,18 +64,19 @@ export function SplitButton({
           }}
         >
           <ExpandMoreIcon sx={{ fontSize: 18 }} />
-        </MuiButton>
+        </Button>
       </ButtonGroup>
 
-      <DropdownMenu
+      <Menu
         anchorEl={anchorEl}
         open={menuOpen}
         onClose={() => setAnchorEl(null)}
-        align="right"
-        sx={{ minWidth: 140 }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        slotProps={{ paper: { sx: { minWidth: 140, mt: 0.75, p: 0.5 } } }}
       >
         {dropdownItems.map((item, index) => (
-          <DropdownMenuItem
+          <MenuItem
             key={index}
             onClick={() => {
               item.onClick();
@@ -84,9 +86,9 @@ export function SplitButton({
             sx={item.variant === 'destructive' ? { color: 'error.main' } : undefined}
           >
             {item.label}
-          </DropdownMenuItem>
+          </MenuItem>
         ))}
-      </DropdownMenu>
+      </Menu>
     </Box>
   );
 }

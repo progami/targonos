@@ -10,18 +10,23 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
 import Box from '@mui/material/Box';
+import MuiButton from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
+import MuiTable from '@mui/material/Table';
+import MuiTableBody from '@mui/material/TableBody';
+import MuiTableCell from '@mui/material/TableCell';
+import MuiTableHead from '@mui/material/TableHead';
+import MuiTableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
@@ -64,6 +69,9 @@ type ConnectionStatus = { connected: boolean; error?: string };
 type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
 type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
 
+/* ── shared chip styles ── */
+const chipBase = { height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px' } as const;
+
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
 
@@ -102,26 +110,92 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
-  return <Badge variant="secondary">LMB {status}</Badge>;
+  if (status === 'Posted')
+    return (
+      <Chip
+        label="LMB Posted"
+        size="small"
+        color="success"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+      />
+    );
+  return (
+    <Chip
+      label={`LMB ${status}`}
+      size="small"
+      color="default"
+      variant="filled"
+      sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
+    />
+  );
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
-  if (status === 'Blocked') return <Badge variant="destructive">Plutus Blocked</Badge>;
-  return <Badge variant="destructive">Plutus Pending</Badge>;
+  if (status === 'Processed')
+    return (
+      <Chip
+        label="Plutus Processed"
+        size="small"
+        color="success"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+      />
+    );
+  if (status === 'RolledBack')
+    return (
+      <Chip
+        label="Plutus Rolled Back"
+        size="small"
+        color="default"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
+      />
+    );
+  if (status === 'Blocked')
+    return (
+      <Chip
+        label="Plutus Blocked"
+        size="small"
+        color="error"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+      />
+    );
+  return (
+    <Chip
+      label="Plutus Pending"
+      size="small"
+      color="error"
+      variant="filled"
+      sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+    />
+  );
 }
 
 function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
   if (!match) {
-    return <Badge variant="outline">—</Badge>;
+    return (
+      <Chip
+        label="—"
+        size="small"
+        color="default"
+        variant="outlined"
+        sx={chipBase}
+      />
+    );
   }
 
   if (match.kind === 'match') {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
-        <Badge variant="success">Audit Ready</Badge>
+        <Chip
+          label="Audit Ready"
+          size="small"
+          color="success"
+          variant="filled"
+          sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+        />
         <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>{match.invoiceId}</Box>
       </Box>
     );
@@ -131,22 +205,39 @@ function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
     const count = match.candidateInvoiceIds.length;
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
-        <Badge
-          variant="secondary"
-          sx={{ bgcolor: 'rgba(251, 191, 36, 0.1)', color: '#b45309' }}
-        >
-          Multiple ({count})
-        </Badge>
+        <Chip
+          label={`Multiple (${count})`}
+          size="small"
+          color="default"
+          variant="filled"
+          sx={{ ...chipBase, bgcolor: 'rgba(251, 191, 36, 0.1)', color: '#b45309' }}
+        />
         <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Select in detail</Box>
       </Box>
     );
   }
 
   if (match.kind === 'missing_period') {
-    return <Badge variant="outline">Unknown</Badge>;
+    return (
+      <Chip
+        label="Unknown"
+        size="small"
+        color="default"
+        variant="outlined"
+        sx={chipBase}
+      />
+    );
   }
 
-  return <Badge variant="outline">No Audit</Badge>;
+  return (
+    <Chip
+      label="No Audit"
+      size="small"
+      color="default"
+      variant="outlined"
+      sx={chipBase}
+    />
+  );
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
@@ -267,6 +358,74 @@ async function runAutopostCheck(): Promise<AutopostCheckResult> {
   return res.json();
 }
 
+/* ── shared table-cell styles ── */
+const thSx = {
+  height: 44,
+  px: 1.5,
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+} as const;
+
+const tdSx = {
+  px: 1.5,
+  py: 1.5,
+  color: 'text.primary',
+  fontVariantNumeric: 'tabular-nums',
+} as const;
+
+const rowHoverSx = {
+  borderBottom: 1,
+  borderColor: 'divider',
+  transition: 'background-color 0.15s',
+  '&:hover': { bgcolor: 'action.hover' },
+} as const;
+
+/* ── shared button style helpers ── */
+const btnBase = {
+  borderRadius: '8px',
+  textTransform: 'none',
+  fontWeight: 500,
+  gap: 1,
+  whiteSpace: 'nowrap',
+  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+} as const;
+
+const outlineSx = {
+  ...btnBase,
+  borderColor: 'divider',
+  color: 'text.primary',
+  bgcolor: 'background.paper',
+  '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+} as const;
+
+const defaultBtnSx = {
+  ...btnBase,
+  bgcolor: '#45B3D4',
+  color: '#fff',
+  '&:hover': { bgcolor: '#2fa3c7' },
+  '&:active': { bgcolor: '#2384a1' },
+} as const;
+
+const smSize = { height: 32, px: 1.5, fontSize: '0.75rem' } as const;
+const defaultSize = { height: 36, px: 2, fontSize: '0.875rem' } as const;
+
+/* ── shared TextField styles ── */
+const textFieldSx = {
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '8px',
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+  },
+} as const;
+
+const textFieldInputSlotProps = {
+  input: { sx: { fontSize: '0.875rem', height: 36 } },
+} as const;
+
 export default function SettlementsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -383,14 +542,16 @@ export default function SettlementsPage() {
             description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
             variant="accent"
           />
-          <Button
-            variant="outline"
+          <MuiButton
+            variant="outlined"
+            disableElevation
             onClick={() => autoprocessMutation.mutate()}
             disabled={autoprocessMutation.isPending}
             startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+            sx={{ ...outlineSx, ...defaultSize }}
           >
             {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
-          </Button>
+          </MuiButton>
         </Box>
 
         {/* KPI Strip */}
@@ -426,19 +587,29 @@ export default function SettlementsPage() {
         <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Filter Bar */}
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2 }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr auto' }, alignItems: { md: 'end' } }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                   <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Search
                   </Typography>
                   <Box sx={{ position: 'relative' }}>
-                    <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled' }} />
-                    <Input
+                    <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+                    <TextField
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Doc number, memo…"
-                      sx={{ '& .MuiOutlinedInput-root': { '& input': { pl: 4.5 } } }}
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      slotProps={textFieldInputSlotProps}
+                      sx={{
+                        ...textFieldSx,
+                        '& .MuiOutlinedInput-root': {
+                          ...textFieldSx['& .MuiOutlinedInput-root'],
+                          '& input': { pl: 4.5 },
+                        },
+                      }}
                     />
                   </Box>
                 </Box>
@@ -447,7 +618,7 @@ export default function SettlementsPage() {
                   <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Start date
                   </Typography>
-                  <Input
+                  <TextField
                     type="date"
                     value={startDate}
                     onChange={(e) => {
@@ -455,6 +626,11 @@ export default function SettlementsPage() {
                       setStartDate(value);
                       setPage(1);
                     }}
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    slotProps={textFieldInputSlotProps}
+                    sx={textFieldSx}
                   />
                 </Box>
 
@@ -462,7 +638,7 @@ export default function SettlementsPage() {
                   <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     End date
                   </Typography>
-                  <Input
+                  <TextField
                     type="date"
                     value={endDate}
                     onChange={(e) => {
@@ -470,19 +646,26 @@ export default function SettlementsPage() {
                       setEndDate(value);
                       setPage(1);
                     }}
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    slotProps={textFieldInputSlotProps}
+                    sx={textFieldSx}
                   />
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Button
-                    variant="outline"
+                  <MuiButton
+                    variant="outlined"
+                    disableElevation
                     onClick={() => {
                       clear();
                     }}
                     disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
+                    sx={{ ...outlineSx, ...defaultSize }}
                   >
                     Clear
-                  </Button>
+                  </MuiButton>
                 </Box>
               </Box>
             </CardContent>
@@ -490,62 +673,68 @@ export default function SettlementsPage() {
 
           {/* Table */}
           <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-            <CardContent sx={{ p: 0 }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ overflow: 'auto' }}>
-                <Table>
-                  <TableHeader>
-                    <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
-                      <TableHead sx={{ fontWeight: 600 }}>Marketplace</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>Period</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>Settlement Total</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>LMB</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>Audit Data</TableHead>
-                      <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Plutus</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
+                  <MuiTableHead
+                    sx={{
+                      bgcolor: 'rgba(248, 250, 252, 0.8)',
+                      '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                      '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                    }}
+                  >
+                    <MuiTableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>LMB</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Audit Data</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus</MuiTableCell>
+                    </MuiTableRow>
+                  </MuiTableHead>
+                  <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
                     {isLoading && (
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell colSpan={6} sx={{ py: 2 }}>
-                              <Skeleton sx={{ height: 40, width: '100%' }} />
-                            </TableCell>
-                          </TableRow>
+                          <MuiTableRow key={idx} sx={rowHoverSx}>
+                            <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 2 }}>
+                              <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
+                            </MuiTableCell>
+                          </MuiTableRow>
                         ))}
                       </>
                     )}
 
                     {!isLoading && error && (
-                      <TableRow>
-                        <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
+                      <MuiTableRow sx={rowHoverSx}>
+                        <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
-                        </TableCell>
-                      </TableRow>
+                        </MuiTableCell>
+                      </MuiTableRow>
                     )}
 
                     {!isLoading && !error && settlements.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6}>
+                      <MuiTableRow sx={rowHoverSx}>
+                        <MuiTableCell colSpan={6} sx={tdSx}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
                             description="No settlements match your current filters. Try adjusting the date range or search terms."
                           />
-                        </TableCell>
-                      </TableRow>
+                        </MuiTableCell>
+                      </MuiTableRow>
                     )}
 
                     {!isLoading &&
                       !error &&
                       settlements.map((s) => (
-                        <TableRow
+                        <MuiTableRow
                           key={s.id}
                           className="table-row-hover"
-                          sx={{ cursor: 'pointer' }}
+                          sx={{ ...rowHoverSx, cursor: 'pointer' }}
                           onClick={() => router.push(`/settlements/${s.id}`)}
                         >
-                          <TableCell sx={{ verticalAlign: 'top' }}>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                               <MarketplaceFlag region={s.marketplace.region} />
                               <Box sx={{ minWidth: 0 }}>
@@ -557,19 +746,19 @@ export default function SettlementsPage() {
                                 </Box>
                               </Box>
                             </Box>
-                          </TableCell>
-                          <TableCell sx={{ verticalAlign: 'top', fontSize: '0.875rem' }}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
                             <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
                               {formatPeriod(s.periodStart, s.periodEnd)}
                             </Box>
                             <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
                               Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                             </Box>
-                          </TableCell>
-                          <TableCell sx={{ verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                          </TableCell>
-                          <TableCell sx={{ verticalAlign: 'top' }}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <Box
                               component="a"
                               href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
@@ -581,11 +770,11 @@ export default function SettlementsPage() {
                               <StatusPill status={s.lmbStatus} />
                               <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }} />
                             </Box>
-                          </TableCell>
-                          <TableCell sx={{ verticalAlign: 'top' }}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
-                          </TableCell>
-                          <TableCell sx={{ verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
                               <PlutusPill status={s.plutusStatus} />
                               <SplitButton
@@ -599,11 +788,11 @@ export default function SettlementsPage() {
                                 Action
                               </SplitButton>
                             </Box>
-                          </TableCell>
-                        </TableRow>
+                          </MuiTableCell>
+                        </MuiTableRow>
                       ))}
-                  </TableBody>
-                </Table>
+                  </MuiTableBody>
+                </MuiTable>
               </Box>
 
               {data && data.pagination.totalPages > 1 && (
@@ -612,42 +801,50 @@ export default function SettlementsPage() {
                     Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <MuiButton
+                      variant="outlined"
+                      disableElevation
                       disabled={page <= 1}
                       onClick={() => setPage(page - 1)}
-                      sx={{ height: 32, width: 32, p: 0, minWidth: 32 }}
+                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
                       <ChevronLeftIcon sx={{ fontSize: 16 }} />
-                    </Button>
+                    </MuiButton>
                     {/* Page number buttons */}
                     {Array.from({ length: Math.min(data.pagination.totalPages, 5) }).map((_, idx) => {
                       const pageNum = idx + 1;
                       return (
-                        <Button
+                        <MuiButton
                           key={pageNum}
-                          variant={page === pageNum ? 'default' : 'outline'}
-                          size="sm"
+                          variant={page === pageNum ? 'contained' : 'outlined'}
+                          disableElevation
                           onClick={() => setPage(pageNum)}
-                          sx={{ height: 32, width: 32, p: 0, minWidth: 32, fontVariantNumeric: 'tabular-nums' }}
+                          sx={{
+                            ...(page === pageNum ? defaultBtnSx : outlineSx),
+                            ...smSize,
+                            height: 32,
+                            width: 32,
+                            p: 0,
+                            minWidth: 32,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
                         >
                           {pageNum}
-                        </Button>
+                        </MuiButton>
                       );
                     })}
                     {data.pagination.totalPages > 5 && (
                       <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <MuiButton
+                      variant="outlined"
+                      disableElevation
                       disabled={page >= data.pagination.totalPages}
                       onClick={() => setPage(page + 1)}
-                      sx={{ height: 32, width: 32, p: 0, minWidth: 32 }}
+                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
                       <ChevronRightIcon sx={{ fontSize: 16 }} />
-                    </Button>
+                    </MuiButton>
                   </Box>
                 </Box>
               )}

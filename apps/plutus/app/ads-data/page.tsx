@@ -4,26 +4,29 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CloseIcon from '@mui/icons-material/Close';
 import UploadIcon from '@mui/icons-material/Upload';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
+import Skeleton from '@mui/material/Skeleton';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -115,6 +118,50 @@ function readErrorMessage(responseBody: unknown): string {
 
   return 'Upload failed';
 }
+
+/** Shared sx for table header cells (th) */
+const thSx = {
+  height: 44,
+  px: 1.5,
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+} as const;
+
+/** Shared sx for table body cells (td) */
+const tdSx = {
+  px: 1.5,
+  py: 1.5,
+  color: 'text.primary',
+  fontVariantNumeric: 'tabular-nums',
+} as const;
+
+/** Shared sx for table header section */
+const theadSx = {
+  bgcolor: 'rgba(248, 250, 252, 0.8)',
+  '[data-mui-color-scheme="dark"] &, .dark &': {
+    bgcolor: 'rgba(255, 255, 255, 0.05)',
+  },
+  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+} as const;
+
+/** Shared sx for table body section */
+const tbodySx = {
+  '& .MuiTableRow-root:last-child': { borderBottom: 0 },
+} as const;
+
+/** Shared sx for table rows */
+const trSx = {
+  borderBottom: 1,
+  borderColor: 'divider',
+  transition: 'background-color 0.15s',
+  '&:hover': { bgcolor: 'action.hover' },
+  '&[data-state="selected"]': {
+    bgcolor: 'rgba(69, 179, 212, 0.08)',
+  },
+} as const;
 
 export default function AdsDataPage() {
   const queryClient = useQueryClient();
@@ -302,7 +349,7 @@ export default function AdsDataPage() {
         />
 
         <Card sx={{ mt: 3, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <CardContent sx={{ p: 3, '&:last-child': { pb: 3 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Box
               sx={{
                 borderRadius: 2,
@@ -453,25 +500,48 @@ export default function AdsDataPage() {
 
         <Dialog
           open={reviewOpen}
-          onOpenChange={(open) => {
+          onClose={() => {
             if (isUploading) {
               return;
             }
-            if (!open) {
-              clearPendingReview();
-              return;
-            }
-            setReviewOpen(true);
+            clearPendingReview();
           }}
           maxWidth="lg"
+          fullWidth
+          slotProps={{
+            backdrop: {
+              sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' },
+            },
+          }}
         >
-          <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
-            <DialogHeader>
-              <DialogTitle>Review detected report details</DialogTitle>
-              <DialogDescription>
+          <DialogContent sx={{ position: 'relative', p: 3, maxHeight: '85vh', overflowY: 'auto' }}>
+            <IconButton
+              onClick={() => {
+                if (!isUploading) {
+                  clearPendingReview();
+                }
+              }}
+              size="small"
+              sx={{
+                position: 'absolute',
+                right: 12,
+                top: 12,
+                color: 'text.disabled',
+                '&:hover': { color: 'text.secondary', bgcolor: 'action.hover' },
+              }}
+              aria-label="Close"
+            >
+              <CloseIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, textAlign: { xs: 'center', sm: 'left' } }}>
+              <DialogTitle sx={{ p: 0, fontWeight: 600, lineHeight: 1, letterSpacing: '-0.01em', color: 'text.primary' }}>
+                Review detected report details
+              </DialogTitle>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {pendingFilename === '' ? 'Detected report details.' : `Detected from ${pendingFilename}. Adjust ranges if needed, then upload.`}
-              </DialogDescription>
-            </DialogHeader>
+              </Typography>
+            </Box>
 
             <Box
               sx={{
@@ -490,22 +560,22 @@ export default function AdsDataPage() {
             </Box>
 
             <Box sx={{ overflowX: 'auto', mt: 2 }}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Include</TableHead>
-                    <TableHead>Marketplace</TableHead>
-                    <TableHead>Start date</TableHead>
-                    <TableHead>End date</TableHead>
-                    <TableHead sx={{ textAlign: 'right' }}>Rows</TableHead>
-                    <TableHead sx={{ textAlign: 'right' }}>SKUs</TableHead>
-                    <TableHead>Status</TableHead>
+              <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+                <TableHead sx={theadSx}>
+                  <TableRow sx={trSx}>
+                    <TableCell component="th" sx={thSx}>Include</TableCell>
+                    <TableCell component="th" sx={thSx}>Marketplace</TableCell>
+                    <TableCell component="th" sx={thSx}>Start date</TableCell>
+                    <TableCell component="th" sx={thSx}>End date</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, textAlign: 'right' }}>Rows</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, textAlign: 'right' }}>SKUs</TableCell>
+                    <TableCell component="th" sx={thSx}>Status</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </TableHead>
+                <TableBody sx={tbodySx}>
                   {pendingTargets.map((target, index) => (
-                    <TableRow key={target.marketplace}>
-                      <TableCell>
+                    <TableRow key={target.marketplace} sx={trSx}>
+                      <TableCell sx={tdSx}>
                         <input
                           type="checkbox"
                           checked={target.selected}
@@ -516,13 +586,21 @@ export default function AdsDataPage() {
                           }}
                         />
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" sx={{ fontSize: '10px' }}>
-                          {marketplaceLabel(target.marketplace)} ({target.marketplace})
-                        </Badge>
+                      <TableCell sx={tdSx}>
+                        <Chip
+                          label={`${marketplaceLabel(target.marketplace)} (${target.marketplace})`}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            height: 22,
+                            fontSize: '10px',
+                            fontWeight: 500,
+                            borderRadius: '6px',
+                          }}
+                        />
                       </TableCell>
-                      <TableCell>
-                        <Input
+                      <TableCell sx={tdSx}>
+                        <TextField
                           type="date"
                           value={target.startDate}
                           onChange={(event) => {
@@ -532,10 +610,33 @@ export default function AdsDataPage() {
                             );
                           }}
                           disabled={!target.selected || isUploading}
+                          size="small"
+                          variant="outlined"
+                          fullWidth
+                          slotProps={{
+                            input: {
+                              sx: {
+                                fontSize: '0.875rem',
+                                height: 36,
+                              },
+                            },
+                          }}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: '8px',
+                              '&:hover .MuiOutlinedInput-notchedOutline': {
+                                borderColor: '#45B3D4',
+                              },
+                              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                borderColor: '#00C2B9',
+                                borderWidth: 2,
+                              },
+                            },
+                          }}
                         />
                       </TableCell>
-                      <TableCell>
-                        <Input
+                      <TableCell sx={tdSx}>
+                        <TextField
                           type="date"
                           value={target.endDate}
                           onChange={(event) => {
@@ -543,11 +644,34 @@ export default function AdsDataPage() {
                             setPendingTargets((prev) => prev.map((row, rowIdx) => (rowIdx === index ? { ...row, endDate } : row)));
                           }}
                           disabled={!target.selected || isUploading}
+                          size="small"
+                          variant="outlined"
+                          fullWidth
+                          slotProps={{
+                            input: {
+                              sx: {
+                                fontSize: '0.875rem',
+                                height: 36,
+                              },
+                            },
+                          }}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: '8px',
+                              '&:hover .MuiOutlinedInput-notchedOutline': {
+                                borderColor: '#45B3D4',
+                              },
+                              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                borderColor: '#00C2B9',
+                                borderWidth: 2,
+                              },
+                            },
+                          }}
                         />
                       </TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.rowCount.toLocaleString()}</TableCell>
-                      <TableCell sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.skuCount.toLocaleString()}</TableCell>
-                      <TableCell sx={{ fontSize: '0.75rem' }}>
+                      <TableCell sx={{ ...tdSx, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.rowCount.toLocaleString()}</TableCell>
+                      <TableCell sx={{ ...tdSx, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{target.skuCount.toLocaleString()}</TableCell>
+                      <TableCell sx={{ ...tdSx, fontSize: '0.75rem' }}>
                         {target.isRecentEnough ? (
                           <Box component="span" sx={{ color: 'success.dark' }}>OK</Box>
                         ) : (
@@ -593,18 +717,56 @@ export default function AdsDataPage() {
             )}
           </DialogContent>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={clearPendingReview} disabled={isUploading}>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+            <Button
+              variant="outlined"
+              onClick={clearPendingReview}
+              disabled={isUploading}
+              disableElevation
+              sx={{
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                height: 36,
+                px: 2,
+                fontSize: '0.875rem',
+                borderColor: 'divider',
+                color: 'text.primary',
+                bgcolor: 'background.paper',
+                '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+                '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+              }}
+            >
               Cancel
             </Button>
-            <Button onClick={() => void submitDetectedUpload()} disabled={isUploading || selectedTargets.length === 0 || hasInvalidSelectedDates}>
+            <Button
+              variant="contained"
+              onClick={() => void submitDetectedUpload()}
+              disabled={isUploading || selectedTargets.length === 0 || hasInvalidSelectedDates}
+              disableElevation
+              sx={{
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                height: 36,
+                px: 2,
+                fontSize: '0.875rem',
+                bgcolor: '#45B3D4',
+                color: '#fff',
+                '&:hover': { bgcolor: '#2fa3c7' },
+                '&:active': { bgcolor: '#2384a1' },
+                '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+              }}
+            >
               {isUploading ? 'Uploading...' : `Upload ${selectedTargets.length} marketplace${selectedTargets.length === 1 ? '' : 's'}`}
             </Button>
-          </DialogFooter>
+          </DialogActions>
         </Dialog>
 
         <Card sx={{ mt: 3, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 3 }}>
+          <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
             <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
               <Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Uploads</Typography>
@@ -614,9 +776,9 @@ export default function AdsDataPage() {
 
             {isLoading && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <Skeleton sx={{ height: 20, width: 192 }} />
-                <Skeleton sx={{ height: 40, width: '100%' }} />
-                <Skeleton sx={{ height: 40, width: '100%' }} />
+                <Skeleton variant="rectangular" animation="pulse" sx={{ height: 20, width: 192, bgcolor: 'action.hover', borderRadius: 1 }} />
+                <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
+                <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
               </Box>
             )}
 
@@ -629,41 +791,49 @@ export default function AdsDataPage() {
 
             {!isLoading && data?.uploads?.length ? (
               <Box sx={{ overflowX: 'auto' }}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Report</TableHead>
-                      <TableHead>Marketplace</TableHead>
-                      <TableHead>Declared range</TableHead>
-                      <TableHead>Parsed range</TableHead>
-                      <TableHead sx={{ textAlign: 'right' }}>Rows</TableHead>
-                      <TableHead sx={{ textAlign: 'right' }}>SKUs</TableHead>
-                      <TableHead sx={{ textAlign: 'right' }}>Uploaded</TableHead>
+                <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+                  <TableHead sx={theadSx}>
+                    <TableRow sx={trSx}>
+                      <TableCell component="th" sx={thSx}>Report</TableCell>
+                      <TableCell component="th" sx={thSx}>Marketplace</TableCell>
+                      <TableCell component="th" sx={thSx}>Declared range</TableCell>
+                      <TableCell component="th" sx={thSx}>Parsed range</TableCell>
+                      <TableCell component="th" sx={{ ...thSx, textAlign: 'right' }}>Rows</TableCell>
+                      <TableCell component="th" sx={{ ...thSx, textAlign: 'right' }}>SKUs</TableCell>
+                      <TableCell component="th" sx={{ ...thSx, textAlign: 'right' }}>Uploaded</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                  </TableHead>
+                  <TableBody sx={tbodySx}>
                     {data.uploads.map((upload) => (
-                      <TableRow key={upload.id}>
-                        <TableCell sx={{ fontSize: '0.875rem' }}>
+                      <TableRow key={upload.id} sx={trSx}>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem' }}>
                           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                             <Box component="span" sx={{ fontWeight: 500, color: 'text.primary' }}>{upload.reportType}</Box>
                             <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{upload.filename}</Box>
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem' }}>
-                          <Badge variant="outline" sx={{ fontSize: '10px' }}>
-                            {marketplaceLabel(upload.marketplace)}
-                          </Badge>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem' }}>
+                          <Chip
+                            label={marketplaceLabel(upload.marketplace)}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              height: 22,
+                              fontSize: '10px',
+                              fontWeight: 500,
+                              borderRadius: '6px',
+                            }}
+                          />
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
                           {upload.startDate} &ndash; {upload.endDate}
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
                           {upload.minDate} &ndash; {upload.maxDate}
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.rowCount.toLocaleString()}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.skuCount.toLocaleString()}</TableCell>
-                        <TableCell sx={{ textAlign: 'right', fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+                        <TableCell sx={{ ...tdSx, textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.rowCount.toLocaleString()}</TableCell>
+                        <TableCell sx={{ ...tdSx, textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{upload.skuCount.toLocaleString()}</TableCell>
+                        <TableCell sx={{ ...tdSx, textAlign: 'right', fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                           {new Date(upload.uploadedAt).toLocaleString('en-US')}
                         </TableCell>
                       </TableRow>

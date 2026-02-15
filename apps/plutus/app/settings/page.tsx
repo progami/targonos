@@ -5,22 +5,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import Switch from '@mui/material/Switch';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { ThemeToggle } from '@/components/theme-toggle';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Select, SelectItem } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -332,7 +332,7 @@ export default function SettingsPage() {
 
         <Box sx={{ mt: 3, display: 'grid', gap: 3 }}>
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 QuickBooks Online
               </Typography>
@@ -349,21 +349,22 @@ export default function SettingsPage() {
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 {status?.connected ? (
                   <Button
-                    variant="outline"
+                    variant="outlined"
+                    sx={{ borderColor: 'divider', color: 'text.primary' }}
                     onClick={() => disconnectMutation.mutate()}
                     disabled={disconnectMutation.isPending}
                   >
                     {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
                   </Button>
                 ) : (
-                  <Button onClick={handleConnect}>Connect to QuickBooks</Button>
+                  <Button variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={handleConnect}>Connect to QuickBooks</Button>
                 )}
               </Box>
             </CardContent>
           </Card>
 
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Notification Preferences
               </Typography>
@@ -380,7 +381,7 @@ export default function SettingsPage() {
                     </Box>
                     <Switch
                       checked={localPrefs[option.key]}
-                      onCheckedChange={() => handleToggle(option.key)}
+                      onChange={(_, checked) => handleToggle(option.key)}
                       disabled={notifLoading}
                     />
                   </Box>
@@ -388,6 +389,8 @@ export default function SettingsPage() {
               </Box>
               <Box sx={{ mt: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Button
+                  variant="contained"
+                  sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
                   onClick={() => savePrefsMutation.mutate(localPrefs)}
                   disabled={!prefsDirty || savePrefsMutation.isPending}
                 >
@@ -401,7 +404,7 @@ export default function SettingsPage() {
           </Card>
 
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Autopost
               </Typography>
@@ -411,14 +414,14 @@ export default function SettingsPage() {
 
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>Enable autopost</Typography>
-                <Switch checked={autopostEnabled} onCheckedChange={setAutopostEnabled} />
+                <Switch checked={autopostEnabled} onChange={(_, checked) => setAutopostEnabled(checked)} />
               </Box>
 
               <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.secondary' }}>
                   Start autoposting from
                 </Typography>
-                <Input
+                <TextField
                   type="date"
                   value={autopostStartDate}
                   onChange={(e) => setAutopostStartDate(e.target.value)}
@@ -430,7 +433,12 @@ export default function SettingsPage() {
               </Box>
 
               <Box sx={{ mt: 2 }}>
-                <Button onClick={handleSaveAutopost} disabled={autopostMutation.isPending}>
+                <Button
+                  variant="contained"
+                  sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+                  onClick={handleSaveAutopost}
+                  disabled={autopostMutation.isPending}
+                >
                   {autopostMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
               </Box>
@@ -438,7 +446,7 @@ export default function SettingsPage() {
           </Card>
 
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Appearance
               </Typography>
@@ -451,7 +459,7 @@ export default function SettingsPage() {
 
           {/* Users */}
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Users
               </Typography>
@@ -461,13 +469,13 @@ export default function SettingsPage() {
 
               <Box sx={{ mt: 2, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider' }}>
                 <Table>
-                  <TableHeader>
+                  <TableHead>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>Email</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>Role</TableCell>
                     </TableRow>
-                  </TableHeader>
+                  </TableHead>
                   <TableBody>
                     {usersLoading ? (
                       <TableRow>
@@ -487,7 +495,7 @@ export default function SettingsPage() {
                           <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500 }}>{user.name}</TableCell>
                           <TableCell sx={{ fontSize: '0.875rem' }}>{user.email}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary">{user.role}</Badge>
+                            <Chip label={user.role} size="small" color="default" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />
                           </TableCell>
                         </TableRow>
                       ))
@@ -500,7 +508,7 @@ export default function SettingsPage() {
 
           {/* Audit Log */}
           <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                 <Box>
                   <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
@@ -512,27 +520,37 @@ export default function SettingsPage() {
                 </Box>
 
                 <Box sx={{ width: 224 }}>
-                  <Select value={auditAction} onValueChange={handleAuditActionFilterChange} placeholder="Filter by action">
-                    {ACTION_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </Select>
+                  <FormControl size="small" fullWidth>
+                    <Select
+                      value={auditAction}
+                      onChange={(e) => handleAuditActionFilterChange(e.target.value as string)}
+                      displayEmpty
+                      renderValue={(selected) => {
+                        const found = ACTION_OPTIONS.find((opt) => opt.value === selected);
+                        return found ? found.label : 'Filter by action';
+                      }}
+                    >
+                      {ACTION_OPTIONS.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Box>
               </Box>
 
               <Box sx={{ mt: 2, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider' }}>
                 <Table>
-                  <TableHeader>
+                  <TableHead>
                     <TableRow>
-                      <TableHead sx={{ width: 176 }}>Time</TableHead>
-                      <TableHead sx={{ width: 144 }}>User</TableHead>
-                      <TableHead sx={{ width: 176 }}>Action</TableHead>
-                      <TableHead sx={{ width: 144 }}>Entity</TableHead>
-                      <TableHead>Details</TableHead>
+                      <TableCell sx={{ width: 176, color: 'text.secondary' }}>Time</TableCell>
+                      <TableCell sx={{ width: 144, color: 'text.secondary' }}>User</TableCell>
+                      <TableCell sx={{ width: 176, color: 'text.secondary' }}>Action</TableCell>
+                      <TableCell sx={{ width: 144, color: 'text.secondary' }}>Entity</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>Details</TableCell>
                     </TableRow>
-                  </TableHeader>
+                  </TableHead>
                   <TableBody>
                     {auditLoading ? (
                       <TableRow>
@@ -554,9 +572,7 @@ export default function SettingsPage() {
                           </TableCell>
                           <TableCell sx={{ fontSize: '0.875rem' }}>{entry.userName}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              {ACTION_LABELS[entry.action] ?? entry.action}
-                            </Badge>
+                            <Chip label={ACTION_LABELS[entry.action] ?? entry.action} size="small" variant="outlined" />
                           </TableCell>
                           <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                             {entry.entityType}
@@ -581,16 +597,18 @@ export default function SettingsPage() {
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="outlined"
+                      size="small"
+                      sx={{ borderColor: 'divider', color: 'text.primary' }}
                       disabled={auditData.pagination.page <= 1}
                       onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
                     >
                       Previous
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="outlined"
+                      size="small"
+                      sx={{ borderColor: 'divider', color: 'text.primary' }}
                       disabled={auditData.pagination.page >= auditData.pagination.totalPages}
                       onClick={() => setAuditPage((p) => p + 1)}
                     >

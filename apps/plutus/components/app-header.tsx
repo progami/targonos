@@ -1,12 +1,17 @@
 'use client';
 
-import { Suspense, useState, type ComponentType } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import type { SelectChangeEvent } from '@mui/material/Select';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -19,8 +24,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { DropdownMenu, DropdownMenuItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
-import { Select, SelectItem } from '@/components/ui/select';
 import { type Marketplace, useMarketplaceStore } from '@/lib/store/marketplace';
 import type { SvgIconComponent } from '@mui/icons-material';
 
@@ -84,18 +87,20 @@ function MarketplaceSelector() {
   const current = MARKETPLACE_OPTIONS.find((o) => o.value === marketplace);
 
   return (
-    <Select
-      value={marketplace}
-      onValueChange={(v) => setMarketplace(v as Marketplace)}
-      renderValue={() => (current?.flag ? `${current.flag} ${current.shortLabel}` : current?.shortLabel ?? '')}
-      sx={{ height: 32, fontSize: '0.75rem', fontWeight: 500, '& .MuiSelect-select': { py: 0.5 } }}
-    >
-      {MARKETPLACE_OPTIONS.map((opt) => (
-        <SelectItem key={opt.value} value={opt.value}>
-          {opt.flag ? `${opt.flag}  ${opt.label}` : opt.label}
-        </SelectItem>
-      ))}
-    </Select>
+    <FormControl size="small" sx={{ minWidth: 80 }}>
+      <Select
+        value={marketplace}
+        onChange={(e: SelectChangeEvent) => setMarketplace(e.target.value as Marketplace)}
+        renderValue={() => (current?.flag ? `${current.flag} ${current.shortLabel}` : current?.shortLabel ?? '')}
+        sx={{ height: 32, fontSize: '0.75rem', fontWeight: 500, '& .MuiSelect-select': { py: 0.5 } }}
+      >
+        {MARKETPLACE_OPTIONS.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.flag ? `${opt.flag}  ${opt.label}` : opt.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
   );
 }
 
@@ -182,13 +187,18 @@ function NavDropdown({ item, pathname }: { item: Extract<NavItem, { items: any[]
           />
         )}
       </Box>
-      <DropdownMenu anchorEl={anchorEl} open={menuOpen} onClose={() => setAnchorEl(null)} sx={{ minWidth: 220 }}>
+      <Menu
+        anchorEl={anchorEl}
+        open={menuOpen}
+        onClose={() => setAnchorEl(null)}
+        slotProps={{ paper: { sx: { minWidth: 220, mt: 0.75, p: 0.5 } } }}
+      >
         {item.items.map((submenu) => (
-          <DropdownMenuItem key={submenu.href} component={Link} href={submenu.href} onClick={() => setAnchorEl(null)}>
+          <MenuItem key={submenu.href} component={Link} href={submenu.href} onClick={() => setAnchorEl(null)}>
             {submenu.label}
-          </DropdownMenuItem>
+          </MenuItem>
         ))}
-      </DropdownMenu>
+      </Menu>
     </>
   );
 }
@@ -316,10 +326,19 @@ export function AppHeader() {
           >
             <NotificationsIcon sx={{ fontSize: 18 }} />
           </IconButton>
-          <DropdownMenu anchorEl={notifAnchor} open={Boolean(notifAnchor)} onClose={() => setNotifAnchor(null)} align="right" sx={{ width: 288 }}>
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuItem disabled>No notifications</DropdownMenuItem>
-          </DropdownMenu>
+          <Menu
+            anchorEl={notifAnchor}
+            open={Boolean(notifAnchor)}
+            onClose={() => setNotifAnchor(null)}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            slotProps={{ paper: { sx: { width: 288, mt: 0.75, p: 0.5 } } }}
+          >
+            <Typography variant="caption" sx={{ display: 'block', px: 1, py: 0.75, fontWeight: 600, color: 'text.secondary' }}>
+              Notifications
+            </Typography>
+            <MenuItem disabled>No notifications</MenuItem>
+          </Menu>
 
           <Suspense fallback={<QboStatusFallback />}>
             <QboStatusIndicator />

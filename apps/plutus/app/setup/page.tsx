@@ -8,11 +8,19 @@ import CheckIcon from '@mui/icons-material/Check';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Select, SelectItem } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import { PageHeader } from '@/components/page-header';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -408,29 +416,39 @@ function BrandsSection({
 
       {brands.length > 0 && (
         <Card sx={{ border: 1, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 0 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ overflowX: 'auto' }}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Marketplace</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
+              <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+                <TableHead
+                  sx={{
+                    bgcolor: 'rgba(248, 250, 252, 0.8)',
+                    '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                    '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                  }}
+                >
+                  <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
+                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Marketplace</TableCell>
+                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Currency</TableCell>
+                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </TableHead>
+                <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
                   {brands.map((brand, i) => (
-                    <TableRow key={i}>
-                      <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{brand.name}</TableCell>
-                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                    <TableRow key={i} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>{brand.name}</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>
                         {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
                       </TableCell>
-                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{brand.currency}</TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>
-                        <Button variant="ghost" size="icon" onClick={() => removeBrand(i)} aria-label={`Remove brand ${brand.name}`}>
+                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>{brand.currency}</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                        <IconButton
+                          onClick={() => removeBrand(i)}
+                          aria-label={`Remove brand ${brand.name}`}
+                          sx={{ height: 36, width: 36, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
+                        >
                           <CloseIcon sx={{ fontSize: 16 }} />
-                        </Button>
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -442,33 +460,101 @@ function BrandsSection({
       )}
 
       <Card sx={{ border: 1, borderColor: 'divider' }}>
-        <CardContent sx={{ p: 2 }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: '1fr 240px auto' }, alignItems: { sm: 'end' } }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
               <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Brand name
               </Box>
-              <Input
+              <TextField
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => (e.key === 'Enter' ? addBrand() : undefined)}
                 placeholder="US-Dust Sheets"
+                size="small"
+                variant="outlined"
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: {
+                      fontSize: '0.875rem',
+                      height: 36,
+                    },
+                  },
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '8px',
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                  },
+                }}
               />
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
               <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                 Marketplace
               </Box>
-              <Select value={newMarketplace} onValueChange={setNewMarketplace} placeholder="Select marketplace...">
-                {MARKETPLACES.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </Select>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={newMarketplace}
+                  onChange={(e) => setNewMarketplace(e.target.value as string)}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected) return <span style={{ color: '#94a3b8' }}>Select marketplace...</span>;
+                    return selected as string;
+                  }}
+                  sx={{
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                  }}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        borderRadius: 3,
+                        border: 1,
+                        borderColor: 'divider',
+                        boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                        mt: 0.5,
+                      },
+                    },
+                  }}
+                >
+                  {MARKETPLACES.map((m) => (
+                    <MenuItem key={m.id} value={m.id} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
+                      {m.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button onClick={addBrand} disabled={!newName.trim()} startIcon={<AddIcon sx={{ fontSize: 16 }} />}>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={addBrand}
+                disabled={!newName.trim()}
+                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                sx={{
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  gap: 1,
+                  whiteSpace: 'nowrap',
+                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+                  height: 36,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  bgcolor: '#45B3D4',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#2fa3c7' },
+                  '&:active': { bgcolor: '#2384a1' },
+                }}
+              >
                 Add Brand
               </Button>
             </Box>
@@ -497,35 +583,54 @@ function AccountRow({
   const selected = accounts.find((a) => a.id === accountId);
 
   return (
-    <TableRow>
-      <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+    <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>
         {label}
       </TableCell>
-      <TableCell>
-        <Select
-          value={accountId}
-          onValueChange={onChange}
-          placeholder="Select parent account..."
-          sx={{
-            bgcolor: 'background.paper',
-            ...(selected && {
+      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+        <FormControl size="small" fullWidth>
+          <Select
+            value={accountId}
+            onChange={(e) => onChange(e.target.value as string)}
+            displayEmpty
+            renderValue={(sel) => {
+              if (!sel) return <span style={{ color: '#94a3b8' }}>Select parent account...</span>;
+              return sel as string;
+            }}
+            sx={{
+              borderRadius: '8px',
+              fontSize: '0.875rem',
+              bgcolor: 'background.paper',
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#45B3D4',
+                borderColor: selected ? '#45B3D4' : 'divider',
               },
-            }),
-          }}
-        >
-          {filtered.map((a) => {
-            const label = a.acctNum ? `${a.acctNum} \u00B7 ${a.fullyQualifiedName}` : a.fullyQualifiedName;
-            return (
-              <SelectItem key={a.id} value={a.id}>
-                {label}
-              </SelectItem>
-            );
-          })}
-        </Select>
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  borderRadius: 3,
+                  border: 1,
+                  borderColor: 'divider',
+                  boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                  mt: 0.5,
+                },
+              },
+            }}
+          >
+            {filtered.map((a) => {
+              const label = a.acctNum ? `${a.acctNum} \u00B7 ${a.fullyQualifiedName}` : a.fullyQualifiedName;
+              return (
+                <MenuItem key={a.id} value={a.id} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
+                  {label}
+                </MenuItem>
+              );
+            })}
+          </Select>
+        </FormControl>
       </TableCell>
-      <TableCell sx={{ width: 48, textAlign: 'right' }}>
+      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', width: 48, textAlign: 'right' }}>
         {selected && <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />}
       </TableCell>
     </TableRow>
@@ -633,7 +738,7 @@ function AccountsSection({
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
         <Card sx={{ maxWidth: 448, width: '100%', border: 1, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 3, textAlign: 'center' }}>
+          <CardContent sx={{ p: 3, textAlign: 'center', '&:last-child': { pb: 3 } }}>
             <Box
               sx={{
                 mx: 'auto',
@@ -655,13 +760,15 @@ function AccountsSection({
             </Box>
             <Box sx={{ mt: 2.5 }}>
               <Button
+                variant="contained"
+                disableElevation
                 onClick={handleConnect}
                 sx={{
                   width: '100%',
                   borderRadius: 3,
                   bgcolor: '#45B3D4',
-                  '&:hover': { bgcolor: '#2fa3c7' },
                   color: '#fff',
+                  '&:hover': { bgcolor: '#2fa3c7' },
                   boxShadow: '0 4px 14px -3px rgba(69,179,212,0.25)',
                 }}
               >
@@ -684,7 +791,7 @@ function AccountsSection({
 
   const renderAccountGroup = (title: string, accountList: Array<{ key: string; label: string; type: string }>) => (
     <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-      <CardContent sx={{ p: 0 }}>
+      <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
         <Box
           sx={{
             display: 'flex',
@@ -702,15 +809,21 @@ function AccountsSection({
         </Box>
 
         <Box sx={{ overflowX: 'auto' }}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>QBO parent account</TableHead>
-                <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
+          <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+            <TableHead
+              sx={{
+                bgcolor: 'rgba(248, 250, 252, 0.8)',
+                '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+              }}
+            >
+              <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Category</TableCell>
+                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>QBO parent account</TableCell>
+                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
+            </TableHead>
+            <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
               {accountList.map((acc) => (
                 <AccountRow
                   key={acc.key}
@@ -791,9 +904,27 @@ function AccountsSection({
       )}
 
       <Button
+        variant="contained"
+        disableElevation
         onClick={createAccounts}
         disabled={!allMapped || creating}
-        sx={{ width: '100%' }}
+        sx={{
+          borderRadius: '8px',
+          textTransform: 'none',
+          fontWeight: 500,
+          gap: 1,
+          whiteSpace: 'nowrap',
+          '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+          '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+          height: 36,
+          px: 2,
+          fontSize: '0.875rem',
+          bgcolor: '#45B3D4',
+          color: '#fff',
+          '&:hover': { bgcolor: '#2fa3c7' },
+          '&:active': { bgcolor: '#2384a1' },
+          width: '100%',
+        }}
       >
         {creating ? 'Ensuring...' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
       </Button>
@@ -962,7 +1093,7 @@ function SkusSection({
       </Box>
 
       <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-        <CardContent sx={{ p: 0 }}>
+        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
           <Box
             sx={{
               display: 'flex',
@@ -981,18 +1112,24 @@ function SkusSection({
           </Box>
 
           <Box sx={{ overflowX: 'auto' }}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Product name</TableHead>
-                  <TableHead>ASIN</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Brand</TableHead>
-                  <TableHead sx={{ width: 48, textAlign: 'right' }}> </TableHead>
+            <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+              <TableHead
+                sx={{
+                  bgcolor: 'rgba(248, 250, 252, 0.8)',
+                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                }}
+              >
+                <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>SKU</TableCell>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Product name</TableCell>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>ASIN</TableCell>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Country</TableCell>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
+                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
+              </TableHead>
+              <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
                 {draftSkus.length > 0 ? (
                   draftSkus
                     .map((sku) => {
@@ -1002,17 +1139,35 @@ function SkusSection({
                     })
                     .sort((a, b) => a.key.localeCompare(b.key))
                     .map(({ sku, key, country }) => (
-                      <TableRow key={key}>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.primary', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
-                        <TableCell sx={{ minWidth: 220 }}>
-                          <Input
+                      <TableRow key={key} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
+                          <TextField
                             value={sku.productName}
                             onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
                             placeholder="Product name"
+                            size="small"
+                            variant="outlined"
+                            fullWidth
+                            slotProps={{
+                              input: {
+                                sx: {
+                                  fontSize: '0.875rem',
+                                  height: 36,
+                                },
+                              },
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: '8px',
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                              },
+                            }}
                           />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 170 }}>
-                          <Input
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 170 }}>
+                          <TextField
                             value={sku.asin ? sku.asin : ''}
                             onChange={(e) =>
                               handleUpdateConfiguredSku(
@@ -1021,9 +1176,27 @@ function SkusSection({
                               )
                             }
                             placeholder="ASIN"
+                            size="small"
+                            variant="outlined"
+                            fullWidth
+                            slotProps={{
+                              input: {
+                                sx: {
+                                  fontSize: '0.875rem',
+                                  height: 36,
+                                },
+                              },
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: '8px',
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                              },
+                            }}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
                           <Box
                             component="span"
                             sx={{
@@ -1042,25 +1215,58 @@ function SkusSection({
                             {country}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ minWidth: 220 }}>
-                          <Select value={sku.brand} onValueChange={(value) => handleUpdateConfiguredSku(key, { brand: value })} placeholder="Select brand..." sx={{ width: 220 }}>
-                            {brandsForCountry(country).map((b) => (
-                              <SelectItem key={b.name} value={b.name}>
-                                {b.name}
-                              </SelectItem>
-                            ))}
-                          </Select>
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={sku.brand}
+                              onChange={(e) => handleUpdateConfiguredSku(key, { brand: e.target.value as string })}
+                              displayEmpty
+                              renderValue={(selected) => {
+                                if (!selected) return <span style={{ color: '#94a3b8' }}>Select brand...</span>;
+                                return selected as string;
+                              }}
+                              sx={{
+                                borderRadius: '8px',
+                                fontSize: '0.875rem',
+                                width: 220,
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                              }}
+                              MenuProps={{
+                                PaperProps: {
+                                  sx: {
+                                    borderRadius: 3,
+                                    border: 1,
+                                    borderColor: 'divider',
+                                    boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                                    mt: 0.5,
+                                  },
+                                },
+                              }}
+                            >
+                              {brandsForCountry(country).map((b) => (
+                                <MenuItem key={b.name} value={b.name} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
+                                  {b.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'right' }}>
-                          <Button variant="ghost" size="icon" onClick={() => handleRemoveConfiguredSku(key)} aria-label={`Remove SKU ${sku.sku}`}>
+                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                          <IconButton
+                            onClick={() => handleRemoveConfiguredSku(key)}
+                            aria-label={`Remove SKU ${sku.sku}`}
+                            sx={{ height: 36, width: 36, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
+                          >
                             <CloseIcon sx={{ fontSize: 16 }} />
-                          </Button>
+                          </IconButton>
                         </TableCell>
                       </TableRow>
                     ))
                 ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}>
+                  <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell colSpan={6} sx={{ px: 1.5, py: 5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', textAlign: 'center', fontSize: '0.875rem' }}>
                       No SKUs configured yet.
                     </TableCell>
                   </TableRow>
@@ -1073,39 +1279,142 @@ function SkusSection({
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.2fr 2fr 1.2fr 1.2fr auto' }, alignItems: { md: 'end' } }}>
               <Box>
                 <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>SKU</Box>
-                <Input
+                <TextField
                   value={manualSku.sku}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, sku: e.target.value }))}
                   placeholder="e.g. CSTDS001002"
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      sx: {
+                        fontSize: '0.875rem',
+                        height: 36,
+                      },
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                    },
+                  }}
                 />
               </Box>
               <Box>
                 <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Product name</Box>
-                <Input
+                <TextField
                   value={manualSku.productName}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, productName: e.target.value }))}
                   placeholder="Optional"
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      sx: {
+                        fontSize: '0.875rem',
+                        height: 36,
+                      },
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                    },
+                  }}
                 />
               </Box>
               <Box>
                 <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>ASIN</Box>
-                <Input
+                <TextField
                   value={manualSku.asin}
                   onChange={(e) => setManualSku((prev) => ({ ...prev, asin: e.target.value }))}
                   placeholder="Optional"
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      sx: {
+                        fontSize: '0.875rem',
+                        height: 36,
+                      },
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                    },
+                  }}
                 />
               </Box>
               <Box>
                 <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Brand</Box>
-                <Select value={manualSku.brand} onValueChange={(value) => setManualSku((prev) => ({ ...prev, brand: value }))} placeholder="Select brand...">
-                  {supportedBrands.map((b) => (
-                    <SelectItem key={b.name} value={b.name}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </Select>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    value={manualSku.brand}
+                    onChange={(e) => setManualSku((prev) => ({ ...prev, brand: e.target.value as string }))}
+                    displayEmpty
+                    renderValue={(selected) => {
+                      if (!selected) return <span style={{ color: '#94a3b8' }}>Select brand...</span>;
+                      return selected as string;
+                    }}
+                    sx={{
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+                    }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          borderRadius: 3,
+                          border: 1,
+                          borderColor: 'divider',
+                          boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                          mt: 0.5,
+                        },
+                      },
+                    }}
+                  >
+                    {supportedBrands.map((b) => (
+                      <MenuItem key={b.name} value={b.name} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
+                        {b.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Box>
-              <Button onClick={handleAddManualSku} disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={handleAddManualSku}
+                disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}
+                sx={{
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  gap: 1,
+                  whiteSpace: 'nowrap',
+                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+                  height: 36,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  bgcolor: '#45B3D4',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#2fa3c7' },
+                  '&:active': { bgcolor: '#2384a1' },
+                }}
+              >
                 Add SKU
               </Button>
             </Box>
@@ -1117,7 +1426,27 @@ function SkusSection({
         <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
           {draftSkus.length} configured SKU{draftSkus.length !== 1 ? 's' : ''}
         </Typography>
-        <Button onClick={handleSave}>
+        <Button
+          variant="contained"
+          disableElevation
+          onClick={handleSave}
+          sx={{
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 500,
+            gap: 1,
+            whiteSpace: 'nowrap',
+            '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+            '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+            height: 36,
+            px: 2,
+            fontSize: '0.875rem',
+            bgcolor: '#45B3D4',
+            color: '#fff',
+            '&:hover': { bgcolor: '#2fa3c7' },
+            '&:active': { bgcolor: '#2384a1' },
+          }}
+        >
           Save SKUs
         </Button>
       </Box>
@@ -1314,7 +1643,7 @@ export default function SetupPage() {
           />
           <Box sx={{ mt: 3 }}>
             <Card sx={{ border: 1, borderColor: 'divider' }}>
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
                 <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Loading setup...</Box>
               </CardContent>
             </Card>
@@ -1334,7 +1663,7 @@ export default function SetupPage() {
 
         {connectionStatus?.connected !== true && (
           <Card sx={{ mt: 3, border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2 }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
                 <Box
                   sx={{
@@ -1363,7 +1692,7 @@ export default function SetupPage() {
         )}
 
         <Card sx={{ mt: 3, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 0 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
               <Sidebar
                 section={state.section}
