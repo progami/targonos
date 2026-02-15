@@ -2,18 +2,18 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Plus,
-  Save,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import SearchIcon from '@mui/icons-material/Search';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CloseIcon from '@mui/icons-material/Close';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectItem } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,8 +38,8 @@ import {
   normalizePurchaseSku,
   parsePurchaseAllocationDescription,
 } from '@/lib/plutus/purchases/description';
-import { useTransactionsStore } from '@/lib/store/transactions';
 import { cn } from '@/lib/utils';
+import { useTransactionsStore } from '@/lib/store/transactions';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -367,17 +367,17 @@ function formatMoney(amount: number, currency: string): string {
 
 function TypeBadge({ type }: { type: TransactionRow['type'] }) {
   const config = {
-    JournalEntry: { label: 'Journal Entry', className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' },
-    Bill: { label: 'Bill', className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
-    Purchase: { label: 'Expense', className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
+    JournalEntry: { label: 'Journal Entry', sx: { bgcolor: 'rgba(59,130,246,0.08)', color: '#1d4ed8' } },
+    Bill: { label: 'Bill', sx: { bgcolor: 'rgba(16,185,129,0.08)', color: '#047857' } },
+    Purchase: { label: 'Expense', sx: { bgcolor: 'rgba(245,158,11,0.08)', color: '#b45309' } },
   };
 
-  const { label, className } = config[type];
+  const { label, sx } = config[type];
 
   return (
-    <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', className)}>
+    <Box component="span" sx={{ display: 'inline-flex', borderRadius: 1.5, px: 1, py: 0.25, fontSize: '0.75rem', fontWeight: 500, ...sx }}>
       {label}
-    </span>
+    </Box>
   );
 }
 
@@ -388,27 +388,27 @@ function getBillStatus(row: BillRow): MappingStatus {
 }
 
 function BillStatusBadge({ status }: { status: MappingStatus }) {
-  const config: Record<MappingStatus, { style: string; label: string }> = {
+  const config: Record<MappingStatus, { sx: object; label: string }> = {
     unmapped: {
-      style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+      sx: { bgcolor: 'action.selected', color: 'text.secondary' },
       label: 'Unmapped',
     },
     saved: {
-      style: 'bg-slate-100/70 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300',
+      sx: { bgcolor: 'action.hover', color: 'text.primary' },
       label: 'Saved',
     },
     synced: {
-      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+      sx: { bgcolor: 'rgba(16,185,129,0.12)', color: '#047857' },
       label: 'Synced',
     },
   };
 
-  const { style, label } = config[status];
+  const { sx, label } = config[status];
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', style)}>
-      {status === 'synced' && <CheckCircle2 className="h-3 w-3" />}
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, borderRadius: 99, px: 1.25, py: 0.25, fontSize: '0.75rem', fontWeight: 500, ...sx }}>
+      {status === 'synced' && <CheckCircleIcon sx={{ fontSize: 12 }} />}
       {label}
-    </span>
+    </Box>
   );
 }
 
@@ -1166,8 +1166,8 @@ function CreateBillModal({
   const selectedTerm = termOptions.find((term) => term.id === termId) ?? null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto border-slate-200/70 dark:border-white/10">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="xl">
+      <DialogContent sx={{ maxWidth: 1280, maxHeight: '95vh', overflowY: 'auto' }} onClose={() => onOpenChange(false)}>
         <DialogHeader>
           <DialogTitle>Create Bill</DialogTitle>
           <DialogDescription>
@@ -1176,26 +1176,26 @@ function CreateBillModal({
         </DialogHeader>
 
         {isContextLoading && (
-          <div className="space-y-3">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
-          </div>
+          </Box>
         )}
 
         {!isContextLoading && contextError && (
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
             {contextError instanceof Error ? contextError.message : String(contextError)}
-          </p>
+          </Typography>
         )}
 
         {!isContextLoading && !contextError && context && (
-          <div className="space-y-5">
-            <div className="grid gap-3 lg:grid-cols-[2fr,1fr]">
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Vendor</div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { lg: '2fr 1fr' } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Vendor</Box>
                 <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
                   value={vendorId}
                   onChange={(event) => setVendorId(event.target.value)}
                 >
@@ -1204,30 +1204,30 @@ function CreateBillModal({
                     <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                   ))}
                 </select>
-              </div>
+              </Box>
 
-              <div className="rounded-md border border-slate-200 p-3 dark:border-white/10">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Balance due</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+              <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider', p: 1.5 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Balance due</Box>
+                <Box sx={{ mt: 0.5, fontSize: '1.5rem', fontWeight: 600, color: 'text.primary' }}>
                   {formatMoneySafe(transactionTotal, transactionCurrency)}
-                </div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                   Home total: {homeTotal === null ? 'Add exchange rate' : formatMoneySafe(homeTotal, homeCurrency)}
-                </div>
-              </div>
-            </div>
+                </Box>
+              </Box>
+            </Box>
 
-            <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-700 dark:border-white/10 dark:text-slate-300 whitespace-pre-line min-h-[64px]">
+            <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider', p: 1.5, fontSize: '0.875rem', color: 'text.secondary', whiteSpace: 'pre-line', minHeight: 64 }}>
               {selectedVendor?.billAddress && selectedVendor.billAddress.trim() !== ''
                 ? selectedVendor.billAddress
                 : 'Mailing address unavailable'}
-            </div>
+            </Box>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Terms</div>
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Terms</Box>
                 <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
                   value={termId}
                   onChange={(event) => handleTermChange(event.target.value)}
                 >
@@ -1236,10 +1236,10 @@ function CreateBillModal({
                     <option key={term.id} value={term.id}>{term.name}</option>
                   ))}
                 </select>
-              </div>
+              </Box>
 
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Bill date</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Bill date</Box>
                 <Input
                   type="date"
                   value={txnDate}
@@ -1251,30 +1251,30 @@ function CreateBillModal({
                     }
                   }}
                 />
-              </div>
+              </Box>
 
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Due date</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Due date</Box>
                 <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-              </div>
+              </Box>
 
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Bill no.</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Bill no.</Box>
                 <Input value={docNumber} onChange={(event) => setDocNumber(event.target.value)} placeholder="Vendor invoice no." />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">{poLabel}</div>
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>{poLabel}</Box>
                 <Input value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="PO-..." />
-              </div>
+              </Box>
 
               {trackedLineCount > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Brand (tracked lines)</div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Brand (tracked lines)</Box>
                   <select
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
+                    style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem' }}
                     value={brandId}
                     onChange={(event) => setBrandId(event.target.value)}
                   >
@@ -1283,13 +1283,13 @@ function CreateBillModal({
                       <option key={brand.id} value={brand.id}>{brand.name}</option>
                     ))}
                   </select>
-                </div>
+                </Box>
               )}
 
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Currency</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Currency</Box>
                 <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
+                  style={{ width: '100%', borderRadius: 6, border: '1px solid', borderColor: 'var(--mui-palette-divider)', backgroundColor: 'var(--mui-palette-background-paper)', padding: '8px 12px', fontSize: '0.875rem', ...(!multiCurrencyEnabled ? { opacity: 0.6 } : {}) }}
                   value={transactionCurrency}
                   disabled={!multiCurrencyEnabled}
                   onChange={(event) => setCurrencyCode(event.target.value)}
@@ -1301,10 +1301,10 @@ function CreateBillModal({
                     </option>
                   ))}
                 </select>
-              </div>
+              </Box>
 
-              <div className="space-y-1.5">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">Exchange rate</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Exchange rate</Box>
                 <Input
                   type="number"
                   step="0.000001"
@@ -1314,8 +1314,8 @@ function CreateBillModal({
                   onChange={(event) => setExchangeRate(event.target.value)}
                   placeholder={transactionCurrency === homeCurrency ? '1.000000' : `1 ${transactionCurrency} = ? ${homeCurrency}`}
                 />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             <div className="rounded-md border border-slate-200 dark:border-white/10">
               <div className="overflow-x-auto">
@@ -1424,7 +1424,7 @@ function CreateBillModal({
                               size="sm"
                               onClick={() => removeLine(line.id)}
                             >
-                              <X className="h-3.5 w-3.5" />
+                              <CloseIcon sx={{ fontSize: 14 }} />
                             </Button>
                           </td>
                         </tr>
@@ -1435,7 +1435,7 @@ function CreateBillModal({
               </div>
               <div className="flex items-center justify-between border-t border-slate-200 p-3 dark:border-white/10">
                 <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />
+                  <AddIcon sx={{ fontSize: 14 }} />
                   Add lines
                 </Button>
                 <div className="text-right text-sm">
@@ -1499,7 +1499,7 @@ function CreateBillModal({
             {formError && (
               <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
             )}
-          </div>
+          </Box>
         )}
 
         <DialogFooter>
@@ -1509,7 +1509,7 @@ function CreateBillModal({
             disabled={isContextLoading || !!contextError || createMutation.isPending}
             className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
+            <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Save bill'}
           </Button>
         </DialogFooter>
@@ -1614,8 +1614,8 @@ function CreatePurchaseModal({
   const lineAccounts = createContext?.lineAccounts ?? [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[88vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
+      <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
         <DialogHeader>
           <DialogTitle>Create Expense</DialogTitle>
           <DialogDescription>Create a new QBO purchase transaction for card/bank spend.</DialogDescription>
@@ -1730,7 +1730,7 @@ function CreatePurchaseModal({
                         disabled={createState.lines.length <= 1}
                         className="h-7 px-2 text-xs"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <DeleteIcon sx={{ fontSize: 14 }} />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -1741,7 +1741,7 @@ function CreatePurchaseModal({
 
           <div className="flex justify-between">
             <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
+              <AddIcon sx={{ fontSize: 14 }} />
               Add Line
             </Button>
           </div>
@@ -1758,7 +1758,7 @@ function CreatePurchaseModal({
             disabled={!canSave || createMutation.isPending || createContextLoading}
             className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
+            <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Create Expense'}
           </Button>
         </DialogFooter>
@@ -1925,10 +1925,10 @@ function EditBillModal({
   const mappedBrandName = brands.find((brand) => brand.id === bill.mapping?.brandId)?.name;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="md">
+      <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-3">
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
             <span className="truncate">{bill.entityName}</span>
             <a
               href={qboTransactionUrl(bill)}
@@ -1937,7 +1937,7 @@ function EditBillModal({
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
               title="Open in QuickBooks"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
             </a>
           </DialogTitle>
@@ -2035,7 +2035,7 @@ function EditBillModal({
                                       onClick={() => removeSplit(trackedLine.lineId, split.id)}
                                       className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                     >
-                                      <X className="h-3.5 w-3.5" />
+                                      <CloseIcon sx={{ fontSize: 14 }} />
                                     </button>
                                   )}
                                 </div>
@@ -2104,7 +2104,7 @@ function EditBillModal({
                                   onClick={() => addSplit(trackedLine.lineId)}
                                   className="h-7 px-2 text-xs"
                                 >
-                                  <Plus className="h-3 w-3" />
+                                  <AddIcon sx={{ fontSize: 12 }} />
                                 </Button>
                               )}
                             </div>
@@ -2130,7 +2130,7 @@ function EditBillModal({
             disabled={!canSave || saveMutation.isPending}
             className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
+            <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </DialogFooter>
@@ -2296,10 +2296,10 @@ function EditPurchaseModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
+      <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-3">
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
             <span className="truncate">{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</span>
             <a
               href={qboTransactionUrl(purchase)}
@@ -2308,7 +2308,7 @@ function EditPurchaseModal({
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-brand-teal-600 hover:bg-brand-teal-50 dark:text-slate-400 dark:hover:text-brand-teal-300 dark:hover:bg-brand-teal-900/20 transition-colors"
               title="Open in QuickBooks"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
             </a>
           </DialogTitle>
@@ -2392,7 +2392,7 @@ function EditPurchaseModal({
                                   onClick={() => removeSplit(lineState.qboLineId, split.id)}
                                   className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                 >
-                                  <X className="h-3.5 w-3.5" />
+                                  <CloseIcon sx={{ fontSize: 14 }} />
                                 </button>
                               )}
                             </div>
@@ -2457,7 +2457,7 @@ function EditPurchaseModal({
                             onClick={() => addSplit(lineState.qboLineId)}
                             className="h-7 px-2 text-xs"
                           >
-                            <Plus className="h-3 w-3" />
+                            <AddIcon sx={{ fontSize: 12 }} />
                           </Button>
                         )}
                       </div>
@@ -2488,7 +2488,7 @@ function EditPurchaseModal({
             disabled={!canSave || saveMutation.isPending}
             className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
+            <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </DialogFooter>
@@ -2635,7 +2635,7 @@ export default function TransactionsPage() {
                     Search
                   </div>
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', pointerEvents: 'none' }} />
                     <Input
                       value={searchInput}
                       onChange={(event) => setSearchInput(event.target.value)}
@@ -2686,16 +2686,12 @@ export default function TransactionsPage() {
                       setExpanded({});
                       setPage(1);
                     }}
+                    placeholder="Rows…"
                   >
-                    <SelectTrigger className="bg-white dark:bg-white/5">
-                      <SelectValue placeholder="Rows…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                      <SelectItem value="250">250</SelectItem>
-                      <SelectItem value="500">500</SelectItem>
-                    </SelectContent>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="250">250</SelectItem>
+                    <SelectItem value="500">500</SelectItem>
                   </Select>
                 </div>
 
@@ -2710,18 +2706,14 @@ export default function TransactionsPage() {
                         setPurchaseAccountId(value === ALL_PURCHASE_ACCOUNTS ? '' : value);
                         setPage(1);
                       }}
+                      placeholder="All accounts"
                     >
-                      <SelectTrigger className="bg-white dark:bg-white/5">
-                        <SelectValue placeholder="All accounts" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</SelectItem>
-                        {purchasePaymentAccounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {account.fullyQualifiedName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</SelectItem>
+                      {purchasePaymentAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.fullyQualifiedName}
+                        </SelectItem>
+                      ))}
                     </Select>
                   </div>
                 )}
@@ -2732,7 +2724,7 @@ export default function TransactionsPage() {
                       onClick={() => setCreateBillOpen(true)}
                       className="gap-1.5"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <AddIcon sx={{ fontSize: 14 }} />
                       New Bill
                     </Button>
                   )}
@@ -2742,7 +2734,7 @@ export default function TransactionsPage() {
                       onClick={() => setCreatePurchaseOpen(true)}
                       className="gap-1.5"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <AddIcon sx={{ fontSize: 14 }} />
                       New Expense
                     </Button>
                   )}
@@ -2852,7 +2844,7 @@ export default function TransactionsPage() {
                                 className="inline-flex items-center justify-center h-7 w-7 rounded text-slate-400 hover:text-brand-teal-500 hover:bg-brand-teal-50 dark:hover:bg-brand-teal-900/20 transition-colors"
                                 title="Open in QuickBooks"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <OpenInNewIcon sx={{ fontSize: 14 }} />
                               </a>
                             </TableCell>
                           </TableRow>
@@ -2948,11 +2940,12 @@ export default function TransactionsPage() {
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:bg-white/5"
                                   aria-expanded={isExpanded}
                                 >
-                                  <ChevronDown
-                                    className={cn(
-                                      'h-3.5 w-3.5 transition-transform duration-200',
-                                      isExpanded ? 'rotate-180' : 'rotate-0',
-                                    )}
+                                  <ExpandMoreIcon
+                                    sx={{
+                                      fontSize: 14,
+                                      transition: 'transform 200ms',
+                                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    }}
                                   />
                                 </button>
                               </TableCell>
@@ -2979,22 +2972,16 @@ export default function TransactionsPage() {
                                       Map
                                     </Button>
                                   )}
-                                  <Button
-                                    asChild
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 -mt-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                                  <a
+                                    href={qboTransactionUrl(row)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label="Open in QuickBooks"
+                                    title="Open in QuickBooks"
+                                    className="inline-flex items-center justify-center h-7 w-7 -mt-0.5 rounded opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 text-slate-400 hover:text-brand-teal-500 hover:bg-brand-teal-50 dark:hover:bg-brand-teal-900/20"
                                   >
-                                    <a
-                                      href={qboTransactionUrl(row)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      aria-label="Open in QuickBooks"
-                                      title="Open in QuickBooks"
-                                    >
-                                      <ExternalLink className="h-4 w-4" />
-                                    </a>
-                                  </Button>
+                                    <OpenInNewIcon sx={{ fontSize: 16 }} />
+                                  </a>
                                 </div>
                               </TableCell>
                               <TableCell className="align-top text-xs text-slate-700 dark:text-slate-200">
@@ -3117,7 +3104,7 @@ export default function TransactionsPage() {
                   </p>
                   <div className="flex items-center gap-1">
                     <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 w-8 p-0">
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeftIcon sx={{ fontSize: 16 }} />
                     </Button>
                     <Button
                       variant="outline"
@@ -3126,7 +3113,7 @@ export default function TransactionsPage() {
                       onClick={() => setPage(page + 1)}
                       className="h-8 w-8 p-0"
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRightIcon sx={{ fontSize: 16 }} />
                     </Button>
                   </div>
                 </div>

@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Download,
-  Plus,
-  RefreshCcw,
-  Settings2,
-  TrendingDown,
-  Wallet,
-} from 'lucide-react';
-import { toast } from 'sonner';
+import { useSnackbar } from 'notistack';
+import DownloadIcon from '@mui/icons-material/Download';
+import AddIcon from '@mui/icons-material/Add';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import SettingsIcon from '@mui/icons-material/Settings';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import {
   CartesianGrid,
   Line,
@@ -133,7 +133,7 @@ function formatWeekRange(start: string, end: string): string {
 
 function formatDateTime(iso: string | undefined): string {
   if (iso === undefined) {
-    return '—';
+    return '\u2014';
   }
 
   const d = new Date(iso);
@@ -263,16 +263,16 @@ function CashflowChart({ snapshot }: { snapshot: CashflowSnapshotPayload }) {
   }));
 
   return (
-    <Card className="border-slate-200/70 dark:border-white/10">
-      <CardContent className="p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Projected Ending Cash</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">13-week horizon</p>
-          </div>
-        </div>
+    <Card sx={{ borderColor: 'rgba(203,213,225,0.7)' }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Projected Ending Cash</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>13-week horizon</Typography>
+          </Box>
+        </Box>
 
-        <div className="h-72 w-full">
+        <Box sx={{ height: 288, width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeOpacity={0.35} />
@@ -303,7 +303,7 @@ function CashflowChart({ snapshot }: { snapshot: CashflowSnapshotPayload }) {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </Box>
       </CardContent>
     </Card>
   );
@@ -311,6 +311,7 @@ function CashflowChart({ snapshot }: { snapshot: CashflowSnapshotPayload }) {
 
 export default function CashflowPage() {
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
@@ -376,30 +377,30 @@ export default function CashflowPage() {
     mutationFn: () => fetchSnapshot(true),
     onSuccess: (snapshot) => {
       queryClient.setQueryData(['cashflow-snapshot'], snapshot);
-      toast.success('Cashflow snapshot refreshed');
+      enqueueSnackbar('Cashflow snapshot refreshed', { variant: 'success' });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to refresh cashflow snapshot');
+      enqueueSnackbar(error instanceof Error ? error.message : 'Failed to refresh cashflow snapshot', { variant: 'error' });
     },
   });
 
   const saveConfigMutation = useMutation({
     mutationFn: (body: ConfigFormState) => updateCashflowConfigRequest(body),
     onSuccess: () => {
-      toast.success('Cashflow config updated');
+      enqueueSnackbar('Cashflow config updated', { variant: 'success' });
       setConfigDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['cashflow-config'] });
       refreshMutation.mutate();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to update config');
+      enqueueSnackbar(error instanceof Error ? error.message : 'Failed to update config', { variant: 'error' });
     },
   });
 
   const createAdjustmentMutation = useMutation({
     mutationFn: createAdjustmentRequest,
     onSuccess: () => {
-      toast.success('Adjustment created');
+      enqueueSnackbar('Adjustment created', { variant: 'success' });
       setAdjustmentDialogOpen(false);
       setAdjustmentForm({
         date: todayDateString(),
@@ -411,7 +412,7 @@ export default function CashflowPage() {
       refreshMutation.mutate();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to create adjustment');
+      enqueueSnackbar(error instanceof Error ? error.message : 'Failed to create adjustment', { variant: 'error' });
     },
   });
 
@@ -432,38 +433,74 @@ export default function CashflowPage() {
 
   if (checkingConnection) {
     return (
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-72 w-full" />
-      </main>
+      <Box
+        component="main"
+        sx={{
+          mx: 'auto',
+          display: 'flex',
+          width: '100%',
+          maxWidth: '80rem',
+          flex: 1,
+          flexDirection: 'column',
+          gap: 3,
+          px: { xs: 2, sm: 3, lg: 4 },
+          py: 3,
+        }}
+      >
+        <Skeleton sx={{ height: 64, width: '100%' }} />
+        <Skeleton sx={{ height: 288, width: '100%' }} />
+      </Box>
     );
   }
 
   if (connection !== undefined && connection.connected !== true) {
     return (
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <Box
+        component="main"
+        sx={{
+          mx: 'auto',
+          width: '100%',
+          maxWidth: '80rem',
+          flex: 1,
+          px: { xs: 2, sm: 3, lg: 4 },
+          py: 3,
+        }}
+      >
         <NotConnectedScreen title="cashflow forecast" error={connection.error} />
-      </main>
+      </Box>
     );
   }
 
   const isLoading = snapshotQuery.isLoading || snapshot === undefined;
   const configForHeader = configQuery.data?.config;
 
-  let autoRefreshStatus = 'Auto refresh: —';
+  let autoRefreshStatus = 'Auto refresh: \u2014';
   if (configForHeader !== undefined) {
-    autoRefreshStatus = `Auto refresh: ${configForHeader.autoRefreshEnabled ? 'On' : 'Off'} • Time: ${configForHeader.autoRefreshTimeLocal}`;
+    autoRefreshStatus = `Auto refresh: ${configForHeader.autoRefreshEnabled ? 'On' : 'Off'} \u2022 Time: ${configForHeader.autoRefreshTimeLocal}`;
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <Box
+      component="main"
+      sx={{
+        mx: 'auto',
+        display: 'flex',
+        width: '100%',
+        maxWidth: '80rem',
+        flex: 1,
+        flexDirection: 'column',
+        gap: 3,
+        px: { xs: 2, sm: 3, lg: 4 },
+        py: 3,
+      }}
+    >
       <PageHeader
         title="Cashflow (13-Week)"
         description={(
-          <div className="space-y-0.5">
-            <div>{`Last refreshed: ${formatDateTime(snapshot?.createdAt)}`}</div>
-            <div>{autoRefreshStatus}</div>
-          </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+            <Box>{`Last refreshed: ${formatDateTime(snapshot?.createdAt)}`}</Box>
+            <Box>{autoRefreshStatus}</Box>
+          </Box>
         )}
         actions={(
           <>
@@ -472,54 +509,48 @@ export default function CashflowPage() {
               onClick={() => refreshMutation.mutate()}
               disabled={refreshMutation.isPending}
             >
-              <RefreshCcw className="mr-2 h-4 w-4" />
+              <RefreshIcon sx={{ fontSize: 16, mr: 1 }} />
               Refresh
             </Button>
             <Button
               variant="outline"
               onClick={() => setConfigDialogOpen(true)}
             >
-              <Settings2 className="mr-2 h-4 w-4" />
+              <SettingsIcon sx={{ fontSize: 16, mr: 1 }} />
               Configure Cash Accounts
             </Button>
             <Button
               variant="outline"
               onClick={() => setAdjustmentDialogOpen(true)}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <AddIcon sx={{ fontSize: 16, mr: 1 }} />
               Add Adjustment
             </Button>
             <Button
-              asChild
+              component="a"
               variant="outline"
               disabled={snapshot === undefined}
+              href={
+                snapshot === undefined
+                  ? '#'
+                  : `${basePath}/api/plutus/cashflow/export?format=csv&snapshotId=${encodeURIComponent(snapshot.id === undefined ? '' : snapshot.id)}`
+              }
             >
-              <a
-                href={
-                  snapshot === undefined
-                    ? '#'
-                    : `${basePath}/api/plutus/cashflow/export?format=csv&snapshotId=${encodeURIComponent(snapshot.id === undefined ? '' : snapshot.id)}`
-                }
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-              </a>
+              <DownloadIcon sx={{ fontSize: 16, mr: 1 }} />
+              Export CSV
             </Button>
             <Button
-              asChild
+              component="a"
               variant="outline"
               disabled={snapshot === undefined}
+              href={
+                snapshot === undefined
+                  ? '#'
+                  : `${basePath}/api/plutus/cashflow/export?format=json&snapshotId=${encodeURIComponent(snapshot.id === undefined ? '' : snapshot.id)}`
+              }
             >
-              <a
-                href={
-                  snapshot === undefined
-                    ? '#'
-                    : `${basePath}/api/plutus/cashflow/export?format=json&snapshotId=${encodeURIComponent(snapshot.id === undefined ? '' : snapshot.id)}`
-                }
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Export JSON
-              </a>
+              <DownloadIcon sx={{ fontSize: 16, mr: 1 }} />
+              Export JSON
             </Button>
           </>
         )}
@@ -527,26 +558,26 @@ export default function CashflowPage() {
 
       {isLoading ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-          </div>
-          <Skeleton className="h-72 w-full" />
-          <Skeleton className="h-96 w-full" />
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' } }}>
+            <Skeleton sx={{ height: 112, width: '100%' }} />
+            <Skeleton sx={{ height: 112, width: '100%' }} />
+            <Skeleton sx={{ height: 112, width: '100%' }} />
+          </Box>
+          <Skeleton sx={{ height: 288, width: '100%' }} />
+          <Skeleton sx={{ height: 384, width: '100%' }} />
         </>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' } }}>
             <StatCard
               label="Current Starting Cash"
               value={formatMoneyFromCents(snapshot.forecast.startingCashCents, snapshot.currencyCode)}
-              icon={<Wallet className="h-5 w-5" />}
+              icon={<AccountBalanceWalletIcon sx={{ fontSize: 20 }} />}
             />
             <StatCard
               label="Minimum Projected Ending Cash"
               value={formatMoneyFromCents(snapshot.forecast.summary.minCashCents, snapshot.currencyCode)}
-              icon={<TrendingDown className="h-5 w-5" />}
+              icon={<TrendingDownIcon sx={{ fontSize: 20 }} />}
               trend={{
                 direction: snapshot.forecast.summary.minCashCents < 0 ? 'down' : 'neutral',
                 label: `Week of ${formatDateLabel(snapshot.forecast.summary.minCashWeekStart)}`,
@@ -555,27 +586,27 @@ export default function CashflowPage() {
             <StatCard
               label="Week 13 Ending Cash"
               value={formatMoneyFromCents(snapshot.forecast.summary.endCashCents, snapshot.currencyCode)}
-              icon={<Wallet className="h-5 w-5" />}
+              icon={<AccountBalanceWalletIcon sx={{ fontSize: 20 }} />}
             />
-          </div>
+          </Box>
 
           <CashflowChart key={chartKey} snapshot={snapshot} />
 
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-0">
-              <div className="border-b border-slate-200/70 px-5 py-4 dark:border-white/10">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Weekly Forecast</h3>
-              </div>
+          <Card sx={{ borderColor: 'rgba(203,213,225,0.7)' }}>
+            <CardContent sx={{ p: 0 }}>
+              <Box sx={{ borderBottom: 1, borderColor: 'rgba(203,213,225,0.7)', px: 2.5, py: 2 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Weekly Forecast</Typography>
+              </Box>
 
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[220px]">Week</TableHead>
+                    <TableHead sx={{ width: 220 }}>Week</TableHead>
                     <TableHead>Starting</TableHead>
                     <TableHead>Inflows</TableHead>
                     <TableHead>Outflows</TableHead>
                     <TableHead>Ending</TableHead>
-                    <TableHead className="w-[120px]">Details</TableHead>
+                    <TableHead sx={{ width: 120 }}>Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -586,15 +617,15 @@ export default function CashflowPage() {
                     return (
                       <>
                         <TableRow key={week.weekStart}>
-                          <TableCell className="font-medium">{formatWeekRange(week.weekStart, week.weekEnd)}</TableCell>
+                          <TableCell sx={{ fontWeight: 500 }}>{formatWeekRange(week.weekStart, week.weekEnd)}</TableCell>
                           <TableCell>{formatMoneyFromCents(week.startingCashCents, snapshot.currencyCode)}</TableCell>
-                          <TableCell className="text-emerald-700 dark:text-emerald-300">
+                          <TableCell sx={{ color: '#15803d' }}>
                             {formatMoneyFromCents(week.inflowsCents, snapshot.currencyCode)}
                           </TableCell>
-                          <TableCell className="text-red-700 dark:text-red-300">
+                          <TableCell sx={{ color: '#b91c1c' }}>
                             {formatMoneyFromCents(week.outflowsCents, snapshot.currencyCode)}
                           </TableCell>
-                          <TableCell className={week.endingCashCents < 0 ? 'text-red-700 dark:text-red-300' : ''}>
+                          <TableCell sx={{ ...(week.endingCashCents < 0 && { color: '#b91c1c' }) }}>
                             {formatMoneyFromCents(week.endingCashCents, snapshot.currencyCode)}
                           </TableCell>
                           <TableCell>
@@ -610,37 +641,50 @@ export default function CashflowPage() {
 
                         {expanded && (
                           <TableRow>
-                            <TableCell colSpan={6} className="bg-slate-50/70 dark:bg-slate-900/40">
+                            <TableCell colSpan={6} sx={{ bgcolor: 'rgba(248,250,252,0.7)' }}>
                               {groupedEvents.length === 0 ? (
-                                <div className="text-sm text-slate-500 dark:text-slate-400">No events scheduled for this week.</div>
+                                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No events scheduled for this week.</Typography>
                               ) : (
-                                <div className="space-y-4 py-1">
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 0.5 }}>
                                   {groupedEvents.map((group) => (
-                                    <div key={group.source}>
-                                      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    <Box key={group.source}>
+                                      <Typography sx={{ mb: 0.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                                         {group.source === 'projected_settlement'
                                           ? `${CASHFLOW_SOURCE_LABELS[group.source]} (Projected)`
                                           : CASHFLOW_SOURCE_LABELS[group.source]}
-                                      </div>
-                                      <div className="space-y-1">
+                                      </Typography>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                         {group.events.map((event, index) => (
-                                          <div
+                                          <Box
                                             key={`${group.source}-${event.date}-${index}`}
-                                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200/60 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
+                                            sx={{
+                                              display: 'flex',
+                                              flexWrap: 'wrap',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              gap: 1,
+                                              borderRadius: 1.5,
+                                              border: 1,
+                                              borderColor: 'rgba(203,213,225,0.6)',
+                                              bgcolor: 'background.paper',
+                                              px: 1.5,
+                                              py: 1,
+                                              fontSize: '0.875rem',
+                                            }}
                                           >
-                                            <div className="min-w-0">
-                                              <div className="font-medium text-slate-900 dark:text-white">{event.label}</div>
-                                              <div className="text-xs text-slate-500 dark:text-slate-400">{formatDateLabel(event.date)}</div>
-                                            </div>
-                                            <div className={event.amountCents < 0 ? 'text-red-700 dark:text-red-300 font-medium' : 'text-emerald-700 dark:text-emerald-300 font-medium'}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                              <Typography sx={{ fontWeight: 500, color: 'text.primary', fontSize: '0.875rem' }}>{event.label}</Typography>
+                                              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{formatDateLabel(event.date)}</Typography>
+                                            </Box>
+                                            <Typography sx={{ fontWeight: 500, color: event.amountCents < 0 ? '#b91c1c' : '#15803d', fontSize: '0.875rem' }}>
                                               {formatMoneyFromCents(event.amountCents, snapshot.currencyCode)}
-                                            </div>
-                                          </div>
+                                            </Typography>
+                                          </Box>
                                         ))}
-                                      </div>
-                                    </div>
+                                      </Box>
+                                    </Box>
                                   ))}
-                                </div>
+                                </Box>
                               )}
                             </TableCell>
                           </TableRow>
@@ -654,25 +698,25 @@ export default function CashflowPage() {
           </Card>
 
           {snapshot.warnings.length > 0 && (
-            <Card className="border-amber-200/70 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20">
-              <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Warnings</h3>
-                <div className="mt-2 space-y-2">
+            <Card sx={{ borderColor: 'rgba(217,169,80,0.7)', bgcolor: 'rgba(255,251,235,0.5)' }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#92400e' }}>Warnings</Typography>
+                <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {snapshot.warnings.map((warning, index) => (
-                    <div key={`${warning.code}-${index}`} className="text-sm text-amber-900/90 dark:text-amber-200/90">
-                      <span className="font-medium">{warning.message}</span>
-                      {warning.detail && <span className="ml-2 text-amber-700 dark:text-amber-300">{warning.detail}</span>}
-                    </div>
+                    <Box key={`${warning.code}-${index}`} sx={{ fontSize: '0.875rem', color: 'rgba(120,53,15,0.9)' }}>
+                      <Box component="span" sx={{ fontWeight: 500 }}>{warning.message}</Box>
+                      {warning.detail && <Box component="span" sx={{ ml: 1, color: '#92400e' }}>{warning.detail}</Box>}
+                    </Box>
                   ))}
-                </div>
+                </Box>
               </CardContent>
             </Card>
           )}
         </>
       )}
 
-      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen} maxWidth="md">
+        <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
           <DialogHeader>
             <DialogTitle>Configure Cash Accounts</DialogTitle>
             <DialogDescription>
@@ -681,30 +725,31 @@ export default function CashflowPage() {
           </DialogHeader>
 
           {configQuery.isLoading ? (
-            <Skeleton className="h-56 w-full" />
+            <Skeleton sx={{ height: 224, width: '100%' }} />
           ) : configQuery.data ? (
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Cash On Hand Accounts</div>
-                <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-white/10">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Cash On Hand Accounts</Typography>
+                <Box sx={{ maxHeight: 288, display: 'flex', flexDirection: 'column', gap: 1, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider', p: 1.5 }}>
                   {configQuery.data.candidates.map((candidate) => {
                     const checked = configForm.cashAccountIds.includes(candidate.id);
 
                     return (
-                      <label
+                      <Box
+                        component="label"
                         key={candidate.id}
-                        className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5"
+                        sx={{ display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: 1.5, px: 1, py: 0.75, '&:hover': { bgcolor: 'action.hover' } }}
                       >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">{candidate.name}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{candidate.name}</Typography>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                             {candidate.accountType}
-                            {candidate.accountSubType === null ? '' : ` • ${candidate.accountSubType}`}
-                            {candidate.currencyCode === null ? '' : ` • ${candidate.currencyCode}`}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-xs text-slate-600 dark:text-slate-300">
+                            {candidate.accountSubType === null ? '' : ` \u2022 ${candidate.accountSubType}`}
+                            {candidate.currencyCode === null ? '' : ` \u2022 ${candidate.currencyCode}`}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
                             {formatMoneyFromCents(
                               candidate.currentBalanceCents,
                               candidate.currencyCode === null
@@ -713,10 +758,10 @@ export default function CashflowPage() {
                                   : snapshot.currencyCode
                                 : candidate.currencyCode,
                             )}
-                          </div>
+                          </Typography>
                           <input
                             type="checkbox"
-                            className="h-4 w-4"
+                            style={{ height: 16, width: 16 }}
                             checked={checked}
                             onChange={(event) => {
                               setConfigForm((current) => {
@@ -738,42 +783,42 @@ export default function CashflowPage() {
                               });
                             }}
                           />
-                        </div>
-                      </label>
+                        </Box>
+                      </Box>
                     );
                   })}
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <div className="space-y-3">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Included Inputs</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Included Inputs</Typography>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-white/10">
-                  <span className="text-sm text-slate-800 dark:text-slate-200">Open Bills</span>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 2, border: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Open Bills</Typography>
                   <Switch
                     checked={configForm.includeOpenBills}
                     onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeOpenBills: value }))}
                   />
-                </div>
+                </Box>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-white/10">
-                  <span className="text-sm text-slate-800 dark:text-slate-200">Open Invoices</span>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 2, border: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Open Invoices</Typography>
                   <Switch
                     checked={configForm.includeOpenInvoices}
                     onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeOpenInvoices: value }))}
                   />
-                </div>
+                </Box>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-white/10">
-                  <span className="text-sm text-slate-800 dark:text-slate-200">Recurring Transactions</span>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 2, border: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Recurring Transactions</Typography>
                   <Switch
                     checked={configForm.includeRecurring}
                     onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeRecurring: value }))}
                   />
-                </div>
+                </Box>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-white/10">
-                  <span className="text-sm text-slate-800 dark:text-slate-200">Projected Amazon Settlements</span>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 2, border: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Projected Amazon Settlements</Typography>
                   <Switch
                     checked={configForm.includeProjectedSettlements}
                     onCheckedChange={(value) =>
@@ -783,14 +828,14 @@ export default function CashflowPage() {
                       }))
                     }
                   />
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <div className="space-y-3">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">Daily Auto Refresh</div>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Daily Auto Refresh</Typography>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-white/10">
-                  <span className="text-sm text-slate-800 dark:text-slate-200">Enabled</span>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 2, border: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Enabled</Typography>
                   <Switch
                     checked={configForm.autoRefreshEnabled}
                     onCheckedChange={(value) =>
@@ -800,13 +845,13 @@ export default function CashflowPage() {
                       }))
                     }
                   />
-                </div>
+                </Box>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                       Time (Local)
-                    </div>
+                    </Typography>
                     <Input
                       type="time"
                       value={configForm.autoRefreshTimeLocal}
@@ -817,11 +862,11 @@ export default function CashflowPage() {
                         }))
                       }
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                       Min Snapshot Age (minutes)
-                    </div>
+                    </Typography>
                     <Input
                       type="number"
                       min="0"
@@ -839,12 +884,12 @@ export default function CashflowPage() {
                         }));
                       }}
                     />
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
           ) : (
-            <div className="text-sm text-slate-500 dark:text-slate-400">Unable to load config.</div>
+            <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Unable to load config.</Typography>
           )}
 
           <DialogFooter>
@@ -862,7 +907,7 @@ export default function CashflowPage() {
       </Dialog>
 
       <Dialog open={adjustmentDialogOpen} onOpenChange={setAdjustmentDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Adjustment</DialogTitle>
             <DialogDescription>
@@ -870,18 +915,18 @@ export default function CashflowPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Date</div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Date</Typography>
               <Input
                 type="date"
                 value={adjustmentForm.date}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, date: event.target.value }))}
               />
-            </div>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Amount</div>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Amount</Typography>
               <Input
                 type="number"
                 inputMode="decimal"
@@ -891,11 +936,11 @@ export default function CashflowPage() {
                 value={adjustmentForm.amount}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
               />
-            </div>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Direction</div>
-              <div className="grid grid-cols-2 gap-2">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Direction</Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
                 <Button
                   type="button"
                   variant={adjustmentForm.direction === 'inflow' ? 'default' : 'outline'}
@@ -910,27 +955,27 @@ export default function CashflowPage() {
                 >
                   Outflow
                 </Button>
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Description</div>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Description</Typography>
               <Input
                 placeholder="Description"
                 value={adjustmentForm.description}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, description: event.target.value }))}
               />
-            </div>
+            </Box>
 
-            <div className="space-y-1.5">
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Notes (optional)</div>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Notes (optional)</Typography>
               <Input
                 placeholder="Optional note"
                 value={adjustmentForm.notes}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, notes: event.target.value }))}
               />
-            </div>
-          </div>
+            </Box>
+          </Box>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdjustmentDialogOpen(false)}>
@@ -956,7 +1001,7 @@ export default function CashflowPage() {
                     notes: notesTrimmed === '' ? undefined : notesTrimmed,
                   });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : 'Invalid adjustment');
+                  enqueueSnackbar(error instanceof Error ? error.message : 'Invalid adjustment', { variant: 'error' });
                 }
               }}
               disabled={createAdjustmentMutation.isPending}
@@ -966,6 +1011,6 @@ export default function CashflowPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </main>
+    </Box>
   );
 }

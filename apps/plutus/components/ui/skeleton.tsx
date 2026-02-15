@@ -1,32 +1,38 @@
 import * as React from 'react';
-
-import { cn } from '@/lib/utils';
+import MuiSkeleton from '@mui/material/Skeleton';
+import Box from '@mui/material/Box';
 import { TableCell, TableRow } from './table';
 
-interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {}
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+  sx?: object;
+}
 
-function Skeleton({ className, ...props }: SkeletonProps) {
+function Skeleton({ className, sx, ...props }: SkeletonProps) {
   return (
-    <div
-      className={cn(
-        'animate-pulse rounded-md bg-slate-200 dark:bg-white/10',
-        className,
-      )}
-      {...props}
+    <MuiSkeleton
+      variant="rectangular"
+      animation="pulse"
+      sx={{
+        bgcolor: 'action.hover',
+        borderRadius: 1,
+        ...sx,
+      }}
+      className={className}
+      {...(props as any)}
     />
   );
 }
 
-function SkeletonText({ className, ...props }: SkeletonProps) {
-  return <Skeleton className={cn('h-4 w-full rounded', className)} {...props} />;
+function SkeletonText({ sx, ...props }: SkeletonProps) {
+  return <Skeleton sx={{ height: 16, width: '100%', borderRadius: 0.5, ...sx }} {...props} />;
 }
 
 function SkeletonTableRow({ columns = 5 }: { columns?: number }) {
   return (
-    <TableRow className="hover:bg-transparent">
+    <TableRow sx={{ '&:hover': { bgcolor: 'transparent' } }}>
       {Array.from({ length: columns }).map((_, i) => (
         <TableCell key={i}>
-          <Skeleton className="h-4 w-full max-w-[120px]" />
+          <Skeleton sx={{ height: 16, width: '100%', maxWidth: 120 }} />
         </TableCell>
       ))}
     </TableRow>
@@ -43,24 +49,28 @@ function SkeletonTable({ rows = 5, columns = 5 }: { rows?: number; columns?: num
   );
 }
 
-function SkeletonCard({ className, ...props }: SkeletonProps) {
+function SkeletonCard({ sx, ...props }: { sx?: object } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn(
-        'rounded-2xl border border-slate-200/80 bg-white p-6 dark:border-white/10 dark:bg-[#06182b]/85',
-        className,
-      )}
-      {...props}
+    <Box
+      sx={{
+        borderRadius: 4,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        p: 3,
+        ...sx,
+      }}
+      {...(props as any)}
     >
-      <div className="space-y-4">
-        <Skeleton className="h-5 w-1/3" />
-        <Skeleton className="h-4 w-2/3" />
-        <div className="space-y-2 pt-2">
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-4/5" />
-        </div>
-      </div>
-    </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Skeleton sx={{ height: 20, width: '33%' }} />
+        <Skeleton sx={{ height: 16, width: '66%' }} />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 1 }}>
+          <Skeleton sx={{ height: 12, width: '100%' }} />
+          <Skeleton sx={{ height: 12, width: '80%' }} />
+        </Box>
+      </Box>
+    </Box>
   );
 }
 

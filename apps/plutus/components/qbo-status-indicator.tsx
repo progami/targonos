@@ -3,10 +3,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { useSnackbar } from 'notistack';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import type { QboConnectionStatus } from '@/lib/qbo/types';
-import { cn } from '@/lib/utils';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -26,7 +27,9 @@ async function disconnectQbo(): Promise<{ success: boolean }> {
 export function QboStatusIndicator() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [showMenu, setShowMenu] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const menuOpen = Boolean(anchorEl);
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['qbo-status'],
@@ -38,11 +41,11 @@ export function QboStatusIndicator() {
     mutationFn: disconnectQbo,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qbo-status'] });
-      toast.success('Disconnected from QuickBooks');
-      setShowMenu(false);
+      enqueueSnackbar('Disconnected from QuickBooks', { variant: 'success' });
+      setAnchorEl(null);
     },
     onError: () => {
-      toast.error('Failed to disconnect');
+      enqueueSnackbar('Failed to disconnect', { variant: 'error' });
     },
   });
 
@@ -52,7 +55,7 @@ export function QboStatusIndicator() {
 
     if (connected === 'true') {
       queryClient.invalidateQueries({ queryKey: ['qbo-status'] });
-      toast.success('Successfully connected to QuickBooks!');
+      enqueueSnackbar('Successfully connected to QuickBooks!', { variant: 'success' });
       window.history.replaceState({}, '', window.location.pathname);
     } else if (error) {
       const errorMessages: Record<string, string> = {
@@ -62,10 +65,10 @@ export function QboStatusIndicator() {
         connect_failed: 'Failed to initiate connection.',
       };
       const message = errorMessages[error];
-      toast.error(message === undefined ? 'Connection failed' : message);
+      enqueueSnackbar(message === undefined ? 'Connection failed' : message, { variant: 'error' });
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [searchParams, queryClient]);
+  }, [searchParams, queryClient, enqueueSnackbar]);
 
   const handleConnect = () => {
     window.location.href = `${basePath}/api/qbo/connect`;
@@ -75,86 +78,132 @@ export function QboStatusIndicator() {
     disconnectMutation.mutate();
   };
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!showMenu) return;
-    const handleClick = () => setShowMenu(false);
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [showMenu]);
-
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-white/10">
-        <div className="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600 animate-pulse" />
-        <span className="text-sm text-slate-400 dark:text-slate-500">QBO</span>
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.5,
+          py: 0.75,
+          borderRadius: 99,
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Box
+          sx={{
+            height: 10,
+            width: 10,
+            borderRadius: '50%',
+            bgcolor: 'action.disabled',
+            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            '@keyframes pulse': {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.5 },
+            },
+          }}
+        />
+        <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+          QBO
+        </Typography>
+      </Box>
     );
   }
 
   if (status?.connected) {
     return (
-      <div className="relative">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
+      <>
+        <Box
+          component="button"
+          onClick={(e: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(e.currentTarget)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            py: 0.75,
+            borderRadius: 99,
+            bgcolor: 'rgba(34, 197, 94, 0.08)',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'background-color 0.15s',
+            '&:hover': { bgcolor: 'rgba(34, 197, 94, 0.15)' },
           }}
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors',
-            'bg-emerald-50 dark:bg-emerald-900/30',
-            'hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-          )}
         >
-          <div className="relative">
-            <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping opacity-50" />
-          </div>
-          <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          <Box sx={{ position: 'relative' }}>
+            <Box sx={{ height: 10, width: 10, borderRadius: '50%', bgcolor: '#22c55e' }} />
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                height: 10,
+                width: 10,
+                borderRadius: '50%',
+                bgcolor: '#22c55e',
+                animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite',
+                opacity: 0.5,
+                '@keyframes ping': {
+                  '75%, 100%': { transform: 'scale(2)', opacity: 0 },
+                },
+              }}
+            />
+          </Box>
+          <Typography variant="body2" sx={{ fontWeight: 500, color: '#15803d' }}>
             QBO
-          </span>
-        </button>
+          </Typography>
+        </Box>
 
-        {showMenu && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl z-50"
-          >
-            <div className="p-3 border-b border-slate-100 dark:border-white/5">
-              <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                Connected to
-              </p>
-              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                {status.companyName}
-              </p>
-            </div>
-            <div className="p-2">
-              <button
-                onClick={handleDisconnect}
-                disabled={disconnectMutation.isPending}
-                className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        <DropdownMenu
+          anchorEl={anchorEl}
+          open={menuOpen}
+          onClose={() => setAnchorEl(null)}
+          align="right"
+          sx={{ width: 224 }}
+        >
+          <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+              Connected to
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {status.companyName}
+            </Typography>
+          </Box>
+          <Box sx={{ p: 0.5 }}>
+            <DropdownMenuItem
+              onClick={handleDisconnect}
+              disabled={disconnectMutation.isPending}
+              sx={{ color: 'error.main' }}
+            >
+              {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+            </DropdownMenuItem>
+          </Box>
+        </DropdownMenu>
+      </>
     );
   }
 
   return (
-    <button
+    <Box
+      component="button"
       onClick={handleConnect}
-      className={cn(
-        'flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors',
-        'bg-slate-100 dark:bg-white/10',
-        'hover:bg-slate-200 dark:hover:bg-white/20'
-      )}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1.5,
+        py: 0.75,
+        borderRadius: 99,
+        bgcolor: 'action.hover',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.15s',
+        '&:hover': { bgcolor: 'action.selected' },
+      }}
     >
-      <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary' }}>
         Connect QBO
-      </span>
-    </button>
+      </Typography>
+    </Box>
   );
 }

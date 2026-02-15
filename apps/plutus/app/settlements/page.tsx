@@ -3,8 +3,14 @@
 import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, ExternalLink, Play, Search } from 'lucide-react';
+import { useSnackbar } from 'notistack';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SearchIcon from '@mui/icons-material/Search';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -114,25 +120,25 @@ function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
 
   if (match.kind === 'match') {
     return (
-      <div className="flex flex-col items-start gap-1">
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
         <Badge variant="success">Audit Ready</Badge>
-        <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{match.invoiceId}</span>
-      </div>
+        <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>{match.invoiceId}</Box>
+      </Box>
     );
   }
 
   if (match.kind === 'ambiguous') {
     const count = match.candidateInvoiceIds.length;
     return (
-      <div className="flex flex-col items-start gap-1">
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
         <Badge
           variant="secondary"
-          className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+          sx={{ bgcolor: 'rgba(251, 191, 36, 0.1)', color: '#b45309' }}
         >
           Multiple ({count})
         </Badge>
-        <span className="text-xs text-slate-500 dark:text-slate-400">Select in detail</span>
-      </div>
+        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Select in detail</Box>
+      </Box>
     );
   }
 
@@ -146,25 +152,51 @@ function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
   if (region === 'US') {
     return (
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-xs dark:bg-blue-950/40" title="United States">
-        <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="3" width="14" height="10" rx="1.5" className="fill-blue-600" />
-          <path d="M1 5h14M1 7h14M1 9h14M1 11h14" className="stroke-white" strokeWidth="0.6" />
-          <rect x="1" y="3" width="6" height="5" className="fill-blue-800" />
+      <Box
+        component="span"
+        title="United States"
+        sx={{
+          display: 'inline-flex',
+          height: 24,
+          width: 24,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 99,
+          bgcolor: 'rgba(59, 130, 246, 0.05)',
+          fontSize: '0.75rem',
+        }}
+      >
+        <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#2563eb" />
+          <path d="M1 5h14M1 7h14M1 9h14M1 11h14" stroke="white" strokeWidth="0.6" />
+          <rect x="1" y="3" width="6" height="5" fill="#1e40af" />
         </svg>
-      </span>
+      </Box>
     );
   }
   return (
-    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-50 text-xs dark:bg-red-950/40" title="United Kingdom">
-      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="3" width="14" height="10" rx="1.5" className="fill-blue-700" />
-        <path d="M1 3l14 10M15 3L1 13" className="stroke-white" strokeWidth="1.5" />
-        <path d="M1 3l14 10M15 3L1 13" className="stroke-red-600" strokeWidth="0.8" />
-        <path d="M8 3v10M1 8h14" className="stroke-white" strokeWidth="2.5" />
-        <path d="M8 3v10M1 8h14" className="stroke-red-600" strokeWidth="1.5" />
+    <Box
+      component="span"
+      title="United Kingdom"
+      sx={{
+        display: 'inline-flex',
+        height: 24,
+        width: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 99,
+        bgcolor: 'rgba(239, 68, 68, 0.05)',
+        fontSize: '0.75rem',
+      }}
+    >
+      <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#1d4ed8" />
+        <path d="M1 3l14 10M15 3L1 13" stroke="white" strokeWidth="1.5" />
+        <path d="M1 3l14 10M15 3L1 13" stroke="#dc2626" strokeWidth="0.8" />
+        <path d="M8 3v10M1 8h14" stroke="white" strokeWidth="2.5" />
+        <path d="M8 3v10M1 8h14" stroke="#dc2626" strokeWidth="1.5" />
       </svg>
-    </span>
+    </Box>
   );
 }
 
@@ -213,9 +245,9 @@ async function fetchSettlements({
 
 function SettlementsEmptyIcon() {
   return (
-    <svg className="h-10 w-10" viewBox="0 0 48 48" fill="none">
-      <rect x="8" y="6" width="32" height="36" rx="4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <path d="M16 16h16M16 22h12M16 28h8" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" strokeLinecap="round" />
+    <svg style={{ height: 40, width: 40 }} viewBox="0 0 48 48" fill="none">
+      <rect x="8" y="6" width="32" height="36" rx="4" stroke="#cbd5e1" strokeWidth="2" />
+      <path d="M16 16h16M16 22h12M16 28h8" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -238,6 +270,7 @@ async function runAutopostCheck(): Promise<AutopostCheckResult> {
 export default function SettlementsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
@@ -325,15 +358,15 @@ export default function SettlementsPage() {
       const errorCount = result.errors.length;
 
       if (processedCount > 0) {
-        toast.success(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`);
+        enqueueSnackbar(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`, { variant: 'success' });
       } else if (errorCount > 0) {
-        toast.error(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`);
+        enqueueSnackbar(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`, { variant: 'error' });
       } else {
-        toast.info(`No settlements to auto-process (${skippedCount} skipped)`);
+        enqueueSnackbar(`No settlements to auto-process (${skippedCount} skipped)`, { variant: 'info' });
       }
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Auto-process failed');
+      enqueueSnackbar(err instanceof Error ? err.message : 'Auto-process failed', { variant: 'error' });
     },
   });
 
@@ -342,9 +375,9 @@ export default function SettlementsPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
             description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
@@ -354,20 +387,20 @@ export default function SettlementsPage() {
             variant="outline"
             onClick={() => autoprocessMutation.mutate()}
             disabled={autoprocessMutation.isPending}
+            startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
           >
-            <Play className="mr-1.5 h-3.5 w-3.5" />
             {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
           </Button>
-        </div>
+        </Box>
 
         {/* KPI Strip */}
         {!isLoading && data && (
-          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
             <StatCard
               label="Total"
               value={stats.total}
               icon={
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none">
+                <svg style={{ height: 20, width: 20 }} viewBox="0 0 20 20" fill="none">
                   <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M7 6h6M7 10h4M7 14h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
@@ -387,33 +420,33 @@ export default function SettlementsPage() {
               value={stats.pending}
               dotColor="bg-amber-500"
             />
-          </div>
+          </Box>
         )}
 
-        <div className="mt-6 grid gap-4">
+        <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Filter Bar */}
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1.4fr,0.55fr,0.55fr,auto] md:items-end">
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr auto' }, alignItems: { md: 'end' } }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Search
-                  </div>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </Typography>
+                  <Box sx={{ position: 'relative' }}>
+                    <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled' }} />
                     <Input
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Doc number, memo…"
-                      className="pl-9"
+                      sx={{ '& .MuiOutlinedInput-root': { '& input': { pl: 4.5 } } }}
                     />
-                  </div>
-                </div>
+                  </Box>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Start date
-                  </div>
+                  </Typography>
                   <Input
                     type="date"
                     value={startDate}
@@ -423,12 +456,12 @@ export default function SettlementsPage() {
                       setPage(1);
                     }}
                   />
-                </div>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     End date
-                  </div>
+                  </Typography>
                   <Input
                     type="date"
                     value={endDate}
@@ -438,9 +471,9 @@ export default function SettlementsPage() {
                       setPage(1);
                     }}
                   />
-                </div>
+                </Box>
 
-                <div className="flex items-center gap-2">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -450,24 +483,24 @@ export default function SettlementsPage() {
                   >
                     Clear
                   </Button>
-                </div>
-              </div>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
 
           {/* Table */}
-          <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table className="table-striped">
+          <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+            <CardContent sx={{ p: 0 }}>
+              <Box sx={{ overflow: 'auto' }}>
+                <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                      <TableHead className="font-semibold">Marketplace</TableHead>
-                      <TableHead className="font-semibold">Period</TableHead>
-                      <TableHead className="font-semibold">Settlement Total</TableHead>
-                      <TableHead className="font-semibold">LMB</TableHead>
-                      <TableHead className="font-semibold">Audit Data</TableHead>
-                      <TableHead className="font-semibold text-right">Plutus</TableHead>
+                    <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                      <TableHead sx={{ fontWeight: 600 }}>Marketplace</TableHead>
+                      <TableHead sx={{ fontWeight: 600 }}>Period</TableHead>
+                      <TableHead sx={{ fontWeight: 600 }}>Settlement Total</TableHead>
+                      <TableHead sx={{ fontWeight: 600 }}>LMB</TableHead>
+                      <TableHead sx={{ fontWeight: 600 }}>Audit Data</TableHead>
+                      <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Plutus</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -475,8 +508,8 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={6} className="py-4">
-                              <Skeleton className="h-10 w-full" />
+                            <TableCell colSpan={6} sx={{ py: 2 }}>
+                              <Skeleton sx={{ height: 40, width: '100%' }} />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -485,7 +518,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -508,50 +541,52 @@ export default function SettlementsPage() {
                       settlements.map((s) => (
                         <TableRow
                           key={s.id}
-                          className="table-row-hover cursor-row group"
+                          className="table-row-hover"
+                          sx={{ cursor: 'pointer' }}
                           onClick={() => router.push(`/settlements/${s.id}`)}
                         >
-                          <TableCell className="align-top">
-                            <div className="flex items-center gap-2.5">
+                          <TableCell sx={{ verticalAlign: 'top' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                               <MarketplaceFlag region={s.marketplace.region} />
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white group-hover:text-brand-teal-600 dark:group-hover:text-brand-cyan transition-colors">
+                              <Box sx={{ minWidth: 0 }}>
+                                <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
                                   {s.marketplace.label}
-                                </div>
-                                <div className="mt-0.5 truncate font-mono text-sm text-slate-700 dark:text-slate-300">
+                                </Box>
+                                <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
                                   {s.docNumber}
-                                </div>
-                              </div>
-                            </div>
+                                </Box>
+                              </Box>
+                            </Box>
                           </TableCell>
-                          <TableCell className="align-top text-sm">
-                            <div className="font-medium text-slate-900 dark:text-white">
+                          <TableCell sx={{ verticalAlign: 'top', fontSize: '0.875rem' }}>
+                            <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
                               {formatPeriod(s.periodStart, s.periodEnd)}
-                            </div>
-                            <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                            </Box>
+                            <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
                               Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
+                            </Box>
                           </TableCell>
-                          <TableCell className="align-top text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                          <TableCell sx={{ verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
                           </TableCell>
-                          <TableCell className="align-top">
-                            <a
+                          <TableCell sx={{ verticalAlign: 'top' }}>
+                            <Box
+                              component="a"
                               href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 group"
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, textDecoration: 'none' }}
                             >
                               <StatusPill status={s.lmbStatus} />
-                              <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                            </a>
+                              <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }} />
+                            </Box>
                           </TableCell>
-                          <TableCell className="align-top">
+                          <TableCell sx={{ verticalAlign: 'top' }}>
                             <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
                           </TableCell>
-                          <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-2">
+                          <TableCell sx={{ verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
                               <PlutusPill status={s.plutusStatus} />
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
@@ -563,28 +598,28 @@ export default function SettlementsPage() {
                               >
                                 Action
                               </SplitButton>
-                            </div>
+                            </Box>
                           </TableCell>
                         </TableRow>
                       ))}
                   </TableBody>
                 </Table>
-              </div>
+              </Box>
 
               {data && data.pagination.totalPages > 1 && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                     Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
-                  </p>
-                  <div className="flex items-center gap-1">
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={page <= 1}
                       onClick={() => setPage(page - 1)}
-                      className="h-8 w-8 p-0"
+                      sx={{ height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeftIcon sx={{ fontSize: 16 }} />
                     </Button>
                     {/* Page number buttons */}
                     {Array.from({ length: Math.min(data.pagination.totalPages, 5) }).map((_, idx) => {
@@ -595,31 +630,31 @@ export default function SettlementsPage() {
                           variant={page === pageNum ? 'default' : 'outline'}
                           size="sm"
                           onClick={() => setPage(pageNum)}
-                          className="h-8 w-8 p-0 tabular-nums"
+                          sx={{ height: 32, width: 32, p: 0, minWidth: 32, fontVariantNumeric: 'tabular-nums' }}
                         >
                           {pageNum}
                         </Button>
                       );
                     })}
                     {data.pagination.totalPages > 5 && (
-                      <span className="px-1 text-xs text-slate-400">…</span>
+                      <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
                     )}
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={page >= data.pagination.totalPages}
                       onClick={() => setPage(page + 1)}
-                      className="h-8 w-8 p-0"
+                      sx={{ height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRightIcon sx={{ fontSize: 16 }} />
                     </Button>
-                  </div>
-                </div>
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </main>
+        </Box>
+      </Box>
+    </Box>
   );
 }

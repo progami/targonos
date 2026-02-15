@@ -1,17 +1,14 @@
 'use client';
 
-import { ChevronLeft } from 'lucide-react';
-
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { Button } from '@/components/ui/button';
 import { useNavigationHistory } from '@/lib/navigation-history';
-import { cn } from '@/lib/utils';
 
 type BackButtonProps = {
   label?: string;
-  className?: string;
 };
 
-export function BackButton({ label = 'Back', className }: BackButtonProps) {
+export function BackButton({ label = 'Back' }: BackButtonProps) {
   const { goBack, canGoBack } = useNavigationHistory();
 
   if (!canGoBack) return null;
@@ -20,14 +17,13 @@ export function BackButton({ label = 'Back', className }: BackButtonProps) {
     <Button
       variant="ghost"
       size="sm"
-      className={cn('-ml-2 gap-1', className)}
       onClick={() => {
         goBack();
       }}
+      sx={{ ml: -1, gap: 0.5 }}
+      startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
     >
-      <ChevronLeft className="h-4 w-4" />
       {label}
     </Button>
   );
 }
-

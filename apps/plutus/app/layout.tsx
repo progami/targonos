@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Outfit } from 'next/font/google';
 import './globals.css';
-import { clsx } from 'clsx';
 
 import { Providers } from '@/components/providers';
 import { AppHeader } from '@/components/app-header';
@@ -49,12 +48,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={outfit.variable}>
       <body
-        className={clsx(
-          'min-h-screen flex flex-col bg-gradient-subtle font-sans antialiased',
-          outfit.variable,
-        )}
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          fontFamily: 'var(--font-sans), Outfit, system-ui, sans-serif',
+          WebkitFontSmoothing: 'antialiased',
+          MozOsxFontSmoothing: 'grayscale',
+        }}
       >
         <Providers>
           <AppHeader />
@@ -64,7 +67,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href={versionHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="fixed bottom-3 right-3 z-50 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-600 shadow-sm backdrop-blur transition-colors hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400 dark:hover:text-slate-100"
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            right: 12,
+            zIndex: 50,
+            borderRadius: 9999,
+            border: '1px solid rgba(226, 232, 240, 1)',
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+            padding: '4px 12px',
+            fontSize: '0.75rem',
+            color: '#475569',
+            boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+            backdropFilter: 'blur(4px)',
+            textDecoration: 'none',
+          }}
           aria-label={`Plutus version v${version}`}
         >
           Plutus v{version}

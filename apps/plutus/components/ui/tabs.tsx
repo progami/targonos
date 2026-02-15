@@ -1,60 +1,104 @@
 'use client';
 
 import * as React from 'react';
-import * as TabsPrimitive from '@radix-ui/react-tabs';
-import { cn } from '@/lib/utils';
+import MuiTabs from '@mui/material/Tabs';
+import MuiTab from '@mui/material/Tab';
+import Box from '@mui/material/Box';
+import type { SxProps, Theme } from '@mui/material/styles';
 
-const Tabs = TabsPrimitive.Root;
+type TabsProps = {
+  value: string;
+  onValueChange: (value: string) => void;
+  children: React.ReactNode;
+  sx?: SxProps<Theme>;
+};
 
-const TabsList = React.forwardRef<
-  React.ComponentRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      'inline-flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1 text-slate-600 dark:bg-white/5 dark:text-slate-400',
-      className,
-    )}
-    {...props}
-  />
-));
-TabsList.displayName = TabsPrimitive.List.displayName;
+function Tabs({ value, onValueChange, children, sx }: TabsProps) {
+  return (
+    <TabsContext.Provider value={{ value, onValueChange }}>
+      <Box sx={sx}>{children}</Box>
+    </TabsContext.Provider>
+  );
+}
 
-const TabsTrigger = React.forwardRef<
-  React.ComponentRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all',
-      'hover:text-slate-900 dark:hover:text-white',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2',
-      'disabled:pointer-events-none disabled:opacity-50',
-      'data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm',
-      'dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white',
-      'dark:focus-visible:ring-slate-600 dark:focus-visible:ring-offset-slate-900',
-      className,
-    )}
-    {...props}
-  />
-));
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
+const TabsContext = React.createContext<{ value: string; onValueChange: (v: string) => void }>({
+  value: '',
+  onValueChange: () => {},
+});
 
-const TabsContent = React.forwardRef<
-  React.ComponentRef<typeof TabsPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      'mt-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:focus-visible:ring-slate-600 dark:focus-visible:ring-offset-slate-900',
-      className,
-    )}
-    {...props}
-  />
-));
-TabsContent.displayName = TabsPrimitive.Content.displayName;
+type TabsListProps = {
+  children: React.ReactNode;
+  sx?: SxProps<Theme>;
+};
+
+function TabsList({ children, sx }: TabsListProps) {
+  const { value, onValueChange } = React.useContext(TabsContext);
+
+  return (
+    <MuiTabs
+      value={value}
+      onChange={(_, newValue) => onValueChange(newValue)}
+      sx={{
+        minHeight: 40,
+        bgcolor: 'action.hover',
+        borderRadius: 2,
+        p: 0.5,
+        '& .MuiTabs-flexContainer': { gap: 0.5 },
+        '& .MuiTabs-indicator': { display: 'none' },
+        ...sx,
+      }}
+    >
+      {children}
+    </MuiTabs>
+  );
+}
+
+type TabsTriggerProps = {
+  value: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+  sx?: SxProps<Theme>;
+};
+
+function TabsTrigger({ value, children, disabled, sx }: TabsTriggerProps) {
+  return (
+    <MuiTab
+      value={value}
+      label={children}
+      disabled={disabled}
+      sx={{
+        minHeight: 36,
+        px: 1.5,
+        py: 0.75,
+        borderRadius: 1.5,
+        fontSize: '0.875rem',
+        fontWeight: 500,
+        textTransform: 'none',
+        color: 'text.secondary',
+        '&:hover': { color: 'text.primary' },
+        '&.Mui-selected': {
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        },
+        ...sx,
+      }}
+    />
+  );
+}
+
+type TabsContentProps = {
+  value: string;
+  children: React.ReactNode;
+  sx?: SxProps<Theme>;
+};
+
+function TabsContent({ value, children, sx }: TabsContentProps) {
+  const { value: activeValue } = React.useContext(TabsContext);
+
+  if (activeValue !== value) return null;
+
+  return <Box sx={{ mt: 2, ...sx }}>{children}</Box>;
+}
 
 export { Tabs, TabsList, TabsTrigger, TabsContent };
