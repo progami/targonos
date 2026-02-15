@@ -2400,7 +2400,7 @@ function ensureGalleryThumbnailSwap(doc: Document) {
 
   altList.addEventListener('click', (e) => {
     const target = e.target
-    if (!(target instanceof Element)) return
+    if (!(target instanceof doc.defaultView!.Element)) return
     const li = target.closest('li')
     if (!li) return
 
