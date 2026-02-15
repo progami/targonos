@@ -658,6 +658,7 @@ export function ListingDetail({
     const handleLoad = () => {
       const doc = iframe.contentDocument
       if (!doc) return
+      if (iframeDocRef.current === doc) return
       iframeDocRef.current = doc
       setIframeEpoch((current) => current + 1)
 
@@ -678,6 +679,9 @@ export function ListingDetail({
     }
 
     iframe.addEventListener('load', handleLoad)
+    if (iframe.contentDocument?.readyState === 'complete' || iframe.contentDocument?.readyState === 'interactive') {
+      handleLoad()
+    }
     return () => iframe.removeEventListener('load', handleLoad)
   }, [listing])
 
