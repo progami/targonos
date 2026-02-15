@@ -4,11 +4,11 @@ import Box from '@mui/material/Box';
 import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
 
-interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+interface SkeletonProps {
   sx?: object;
 }
 
-function Skeleton({ className, sx, ...props }: SkeletonProps) {
+function Skeleton({ sx, ...props }: SkeletonProps) {
   return (
     <MuiSkeleton
       variant="rectangular"
@@ -18,7 +18,6 @@ function Skeleton({ className, sx, ...props }: SkeletonProps) {
         borderRadius: 1,
         ...sx,
       }}
-      className={className}
       {...(props as any)}
     />
   );
