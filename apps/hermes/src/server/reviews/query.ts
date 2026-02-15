@@ -4,198 +4,176 @@ export type ManualReviewRow = {
   id: string;
   connectionId: string;
   marketplaceId: string;
+  sku: string;
   asin: string;
-  source: string;
-  externalReviewId: string | null;
   reviewDate: string | null;
   rating: number | null;
   title: string | null;
   body: string;
-  raw: unknown;
   importedAt: string;
-  updatedAt: string;
 };
 
-export type AsinReviewInsightRow = {
-  connectionId: string;
-  marketplaceId: string;
-  asin: string;
-  itemName: string | null;
-  countryCode: string | null;
-  topicsMentions: unknown;
-  topicsStarRatingImpact: unknown;
-  reviewTrends: unknown;
-  topicsDateStart: string | null;
-  topicsDateEnd: string | null;
-  trendsDateStart: string | null;
-  trendsDateEnd: string | null;
-  lastSyncError: string | null;
-  lastSyncAt: string;
-  updatedAt: string;
+export type ManualReviewInsights = {
+  totalReviews: number;
+  avgRating: number | null;
+  fiveStarReviews: number;
+  fiveStarRatePct: number | null;
+  last30DaysReviews: number;
+  previous30DaysReviews: number;
+  changeLast30Pct: number | null;
+  series: Array<{
+    day: string;
+    reviews: number;
+    avgRating: number | null;
+    fiveStarReviews: number;
+  }>;
 };
 
 export async function listManualReviews(params: {
   connectionId: string;
-  marketplaceId?: string | null;
-  asin?: string | null;
+  marketplaceId: string;
+  sku: string;
   limit: number;
 }): Promise<ManualReviewRow[]> {
   const pool = getPgPool();
-  const limit = Math.max(1, Math.min(params.limit, 500));
-
-  const values: Array<string | number> = [params.connectionId];
-  const where: string[] = ["connection_id = $1"];
-
-  if (params.marketplaceId) {
-    values.push(params.marketplaceId);
-    where.push(`marketplace_id = $${values.length}`);
-  }
-
-  if (params.asin) {
-    values.push(params.asin.trim().toUpperCase());
-    where.push(`asin = $${values.length}`);
-  }
-
-  values.push(limit);
-  const limitParam = `$${values.length}`;
+  const limit = Math.max(1, Math.min(params.limit, 1000));
+  const sku = params.sku.trim().toUpperCase();
 
   const res = await pool.query<{
     id: string;
     connection_id: string;
     marketplace_id: string;
+    sku: string;
     asin: string;
-    source: string;
-    external_review_id: string | null;
     review_date: string | null;
     rating: number | null;
     title: string | null;
     body: string;
-    raw: unknown;
     imported_at: string;
-    updated_at: string;
   }>(
     `
     SELECT
       id,
       connection_id,
       marketplace_id,
+      sku,
       asin,
-      source,
-      external_review_id,
       review_date::text,
       rating::double precision AS rating,
       title,
       body,
-      raw,
-      imported_at::text,
-      updated_at::text
+      imported_at::text
     FROM hermes_manual_reviews
-    WHERE ${where.join("\n      AND ")}
-    ORDER BY imported_at DESC
-    LIMIT ${limitParam};
+    WHERE connection_id = $1
+      AND marketplace_id = $2
+      AND sku = $3
+    ORDER BY COALESCE(review_date, imported_at) DESC, imported_at DESC
+    LIMIT $4;
     `,
-    values
+    [params.connectionId, params.marketplaceId, sku, limit]
   );
 
   return res.rows.map((row) => ({
     id: row.id,
     connectionId: row.connection_id,
     marketplaceId: row.marketplace_id,
+    sku: row.sku,
     asin: row.asin,
-    source: row.source,
-    externalReviewId: row.external_review_id,
     reviewDate: row.review_date,
     rating: row.rating,
     title: row.title,
     body: row.body,
-    raw: row.raw,
     importedAt: row.imported_at,
-    updatedAt: row.updated_at,
   }));
 }
 
-export async function listAsinReviewInsights(params: {
+export async function getManualReviewInsights(params: {
   connectionId: string;
-  marketplaceId?: string | null;
-  asin?: string | null;
-  limit: number;
-}): Promise<AsinReviewInsightRow[]> {
+  marketplaceId: string;
+  sku: string;
+}): Promise<ManualReviewInsights> {
   const pool = getPgPool();
-  const limit = Math.max(1, Math.min(params.limit, 500));
+  const sku = params.sku.trim().toUpperCase();
 
-  const values: Array<string | number> = [params.connectionId];
-  const where: string[] = ["connection_id = $1"];
-
-  if (params.marketplaceId) {
-    values.push(params.marketplaceId);
-    where.push(`marketplace_id = $${values.length}`);
-  }
-
-  if (params.asin) {
-    values.push(params.asin.trim().toUpperCase());
-    where.push(`asin = $${values.length}`);
-  }
-
-  values.push(limit);
-  const limitParam = `$${values.length}`;
-
-  const res = await pool.query<{
-    connection_id: string;
-    marketplace_id: string;
-    asin: string;
-    item_name: string | null;
-    country_code: string | null;
-    topics_mentions: unknown;
-    topics_star_rating_impact: unknown;
-    review_trends: unknown;
-    topics_date_start: string | null;
-    topics_date_end: string | null;
-    trends_date_start: string | null;
-    trends_date_end: string | null;
-    last_sync_error: string | null;
-    last_sync_at: string;
-    updated_at: string;
+  const summaryRes = await pool.query<{
+    total_reviews: number;
+    avg_rating: number | null;
+    five_star_reviews: number;
+    last_30_days_reviews: number;
+    previous_30_days_reviews: number;
   }>(
     `
     SELECT
-      connection_id,
-      marketplace_id,
-      asin,
-      item_name,
-      country_code,
-      topics_mentions,
-      topics_star_rating_impact,
-      review_trends,
-      topics_date_start::text,
-      topics_date_end::text,
-      trends_date_start::text,
-      trends_date_end::text,
-      last_sync_error,
-      last_sync_at::text,
-      updated_at::text
-    FROM hermes_asin_review_insights
-    WHERE ${where.join("\n      AND ")}
-    ORDER BY last_sync_at DESC
-    LIMIT ${limitParam};
+      COUNT(*)::int AS total_reviews,
+      AVG(rating)::double precision AS avg_rating,
+      COUNT(*) FILTER (WHERE rating = 5)::int AS five_star_reviews,
+      COUNT(*) FILTER (
+        WHERE COALESCE(review_date, imported_at) >= NOW() - INTERVAL '30 days'
+      )::int AS last_30_days_reviews,
+      COUNT(*) FILTER (
+        WHERE COALESCE(review_date, imported_at) >= NOW() - INTERVAL '60 days'
+          AND COALESCE(review_date, imported_at) < NOW() - INTERVAL '30 days'
+      )::int AS previous_30_days_reviews
+    FROM hermes_manual_reviews
+    WHERE connection_id = $1
+      AND marketplace_id = $2
+      AND sku = $3;
     `,
-    values
+    [params.connectionId, params.marketplaceId, sku]
   );
 
-  return res.rows.map((row) => ({
-    connectionId: row.connection_id,
-    marketplaceId: row.marketplace_id,
-    asin: row.asin,
-    itemName: row.item_name,
-    countryCode: row.country_code,
-    topicsMentions: row.topics_mentions,
-    topicsStarRatingImpact: row.topics_star_rating_impact,
-    reviewTrends: row.review_trends,
-    topicsDateStart: row.topics_date_start,
-    topicsDateEnd: row.topics_date_end,
-    trendsDateStart: row.trends_date_start,
-    trendsDateEnd: row.trends_date_end,
-    lastSyncError: row.last_sync_error,
-    lastSyncAt: row.last_sync_at,
-    updatedAt: row.updated_at,
-  }));
+  const seriesRes = await pool.query<{
+    day: string;
+    reviews: number;
+    avg_rating: number | null;
+    five_star_reviews: number;
+  }>(
+    `
+    SELECT
+      date_trunc('day', COALESCE(review_date, imported_at))::date::text AS day,
+      COUNT(*)::int AS reviews,
+      AVG(rating)::double precision AS avg_rating,
+      COUNT(*) FILTER (WHERE rating = 5)::int AS five_star_reviews
+    FROM hermes_manual_reviews
+    WHERE connection_id = $1
+      AND marketplace_id = $2
+      AND sku = $3
+      AND COALESCE(review_date, imported_at) >= NOW() - INTERVAL '90 days'
+    GROUP BY 1
+    ORDER BY 1 DESC;
+    `,
+    [params.connectionId, params.marketplaceId, sku]
+  );
+
+  const summary = summaryRes.rows[0];
+  const totalReviews = summary?.total_reviews ?? 0;
+  const avgRating = summary?.avg_rating ?? null;
+  const fiveStarReviews = summary?.five_star_reviews ?? 0;
+  const last30DaysReviews = summary?.last_30_days_reviews ?? 0;
+  const previous30DaysReviews = summary?.previous_30_days_reviews ?? 0;
+
+  const fiveStarRatePct =
+    totalReviews > 0
+      ? Number(((fiveStarReviews / totalReviews) * 100).toFixed(2))
+      : null;
+  const changeLast30Pct =
+    previous30DaysReviews > 0
+      ? Number((((last30DaysReviews - previous30DaysReviews) / previous30DaysReviews) * 100).toFixed(2))
+      : null;
+
+  return {
+    totalReviews,
+    avgRating,
+    fiveStarReviews,
+    fiveStarRatePct,
+    last30DaysReviews,
+    previous30DaysReviews,
+    changeLast30Pct,
+    series: seriesRes.rows.map((row) => ({
+      day: row.day,
+      reviews: row.reviews,
+      avgRating: row.avg_rating,
+      fiveStarReviews: row.five_star_reviews,
+    })),
+  };
 }

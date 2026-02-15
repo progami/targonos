@@ -113,21 +113,25 @@ Notes:
 
 ---
 
-## ASIN review ingest + weekly insights sync
+## SKU review ingest + insights
 
 Hermes now supports:
 
-1) **Manual product-review ingest** (copy/paste friendly)
+1) **File-based product-review ingest** (no copy/paste)
 - API: `POST /api/reviews/import`
-- You can send either:
-  - `reviews: [{ body, rating?, title?, reviewDate?, externalReviewId?, raw? }]`
-  - or `rawText` with review blocks separated by `---` (or triple blank lines)
-- Reviews are deduplicated by a stable content hash per `(connection_id, marketplace_id, asin)`.
+- Send `multipart/form-data` with:
+  - `connectionId` (string)
+  - `marketplaceId` (string)
+  - `sku` (string)
+  - `file` (`.csv`, `.tsv`, `.txt`, or `.json`)
+- Optional `asin` can be included as a fallback for rows that do not carry ASIN.
+- Reviews are deduplicated by a stable content hash per `(connection_id, marketplace_id, sku)`.
 
-2) **Weekly Customer Feedback API pulls** (ASIN-level topics/trends)
-- Runs inside the existing `orders-sync` worker loop.
-- Pulls for ASINs already seen in `hermes_manual_reviews`.
-- Stores latest snapshots in `hermes_asin_review_insights`.
+2) **Ingested-review insights**
+- API: `GET /api/reviews/manual?connectionId=...&marketplaceId=...&sku=...`
+- API: `GET /api/reviews/insights?connectionId=...&marketplaceId=...&sku=...`
+- API: `GET /api/reviews/export?connectionId=...&marketplaceId=...&sku=...`
+- Metrics are computed from `hermes_manual_reviews` for the selected marketplace + SKU.
 
 Relevant env knobs:
 - `HERMES_REVIEW_INSIGHTS_ENABLED` (default `true`)
