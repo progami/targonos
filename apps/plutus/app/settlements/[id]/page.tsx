@@ -1544,7 +1544,7 @@ export default function SettlementDetailPage() {
                         <Box sx={{ mt: 1 }}>
                           <Box
                             component={Link}
-                            href="/ads-data"
+                            href="/data-sources"
                             sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
                           >
                             Upload Ads Data
@@ -1629,7 +1629,7 @@ export default function SettlementDetailPage() {
                             {!adsAllocation.adsDataUpload && (
                               <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
                                 Missing Ads Data upload for this invoice range.{' '}
-                                <Box component={Link} href="/ads-data" sx={{ textDecoration: 'underline', color: 'inherit' }}>
+                                <Box component={Link} href="/data-sources" sx={{ textDecoration: 'underline', color: 'inherit' }}>
                                   Upload Ads Data
                                 </Box>
                                 .
@@ -1788,7 +1788,7 @@ export default function SettlementDetailPage() {
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                               <Box
                                 component={Link}
-                                href="/ads-data"
+                                href="/data-sources"
                                 sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
                               >
                                 Manage Ads Data

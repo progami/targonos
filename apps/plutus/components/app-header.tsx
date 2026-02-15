@@ -124,8 +124,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Cost Management',
     icon: InventoryIcon,
     items: [
-      { href: '/audit-data', label: 'Audit Data' },
-      { href: '/ads-data', label: 'Ads Data' },
+      { href: '/data-sources', label: 'Data Sources' },
       { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },

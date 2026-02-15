@@ -9,10 +9,11 @@ import {
   type SaleCost,
 } from '@/lib/inventory/ledger';
 import { fromCents } from '@/lib/inventory/money';
-import { computePnlAllocation, PnlAllocationNoWeightsError } from '@/lib/pnl-allocation';
+import { computePnlAllocation } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { buildDeterministicSkuAllocations } from '@/lib/plutus/fee-allocation';
 
 import {
   normalizeSku,
@@ -528,14 +529,35 @@ export async function computeSettlementPreview(input: {
 
   let pnlAllocation;
   try {
-    pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver);
+    const deterministicAllocations = await buildDeterministicSkuAllocations({
+      rows: scopedInvoiceRows,
+      marketplace,
+      invoiceStartDate: minDate,
+      invoiceEndDate: maxDate,
+    });
+    for (const issue of deterministicAllocations.issues) {
+      blocks.push({
+        code: 'PNL_ALLOCATION_ERROR',
+        message: issue.message,
+        details: { bucket: issue.bucket },
+      });
+    }
+
+    pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
+      skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
+    });
+
+    for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
+      blocks.push({
+        code: 'PNL_ALLOCATION_ERROR',
+        message: issue.reason,
+        details: { bucket: issue.bucket, totalCents: issue.totalCents },
+      });
+    }
   } catch (error) {
     blocks.push({
       code: 'PNL_ALLOCATION_ERROR',
-      message:
-        error instanceof PnlAllocationNoWeightsError
-          ? 'Cannot allocate SKU-less fee buckets because there are no qualifying sales units (fees-only or refunds-only invoice)'
-          : 'Failed to compute P&L allocation',
+      message: 'Failed to compute P&L allocation',
       details: { error: error instanceof Error ? error.message : String(error) },
     });
     pnlAllocation = {
