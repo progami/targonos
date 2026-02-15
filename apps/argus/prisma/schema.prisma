@@ -260,6 +260,10 @@ model Listing {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  priceCents        Int?
+  pricePerUnitCents Int?
+  pricePerUnitUnit  String?
+
   activeTitleId   String?
   activeBulletsId String?
   activeGalleryId String?

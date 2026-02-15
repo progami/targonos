@@ -20,20 +20,74 @@ function moduleKey(sectionType: string, modulePosition: number): string {
   return `${sectionType}:${modulePosition}`
 }
 
+async function ensureActiveEbcRevisionId(listingId: string): Promise<string> {
+  const listing = await prisma.listing.findUniqueOrThrow({
+    where: { id: listingId },
+    select: { id: true, activeEbcId: true },
+  })
+
+  if (listing.activeEbcId) return listing.activeEbcId
+
+  const last = await prisma.ebcRevision.findFirst({
+    where: { listingId },
+    orderBy: { seq: 'desc' },
+  })
+
+  const base = await prisma.ebcRevision.create({
+    data: {
+      listingId,
+      seq: (last?.seq ?? 0) + 1,
+      origin: 'MANUAL_ENTRY',
+      note: 'Baseline placeholder layout',
+      sections: {
+        create: [
+          {
+            position: 0,
+            sectionType: 'BRAND_STORY',
+            heading: null,
+            modules: {
+              create: Array.from({ length: 3 }).map((_value, position) => ({
+                position,
+                moduleType: 'PLACEHOLDER',
+                headline: null,
+                bodyText: null,
+                images: { create: [] },
+              })),
+            },
+          },
+          {
+            position: 1,
+            sectionType: 'PRODUCT_DESCRIPTION',
+            heading: null,
+            modules: {
+              create: Array.from({ length: 5 }).map((_value, position) => ({
+                position,
+                moduleType: 'PLACEHOLDER',
+                headline: null,
+                bodyText: null,
+                images: { create: [] },
+              })),
+            },
+          },
+        ],
+      },
+    },
+  })
+
+  await prisma.listing.update({
+    where: { id: listingId },
+    data: { activeEbcId: base.id },
+  })
+
+  return base.id
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-
-  const listing = await prisma.listing.findUniqueOrThrow({
-    where: { id },
-    select: { id: true, activeEbcId: true },
-  })
-
-  if (!listing.activeEbcId) {
-    return NextResponse.json({ error: 'Listing has no active EBC revision' }, { status: 400 })
-  }
+  const activeEbcId = await ensureActiveEbcRevisionId(id)
 
   const form = await request.formData()
 
@@ -60,7 +114,7 @@ export async function POST(
   }
 
   const base = await prisma.ebcRevision.findUniqueOrThrow({
-    where: { id: listing.activeEbcId },
+    where: { id: activeEbcId },
     include: {
       sections: {
         orderBy: { position: 'asc' },
@@ -236,4 +290,3 @@ export async function POST(
 
   return NextResponse.json(created)
 }
-
