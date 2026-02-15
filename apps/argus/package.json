@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app",
-    "type-check": "tsc --noEmit --skipLibCheck"
+    "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "next": "16.0.8",

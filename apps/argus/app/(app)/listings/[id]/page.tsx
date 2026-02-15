@@ -57,21 +57,21 @@ export default async function ListingDetailPage({ params }: Props) {
   const activeGallery = listing.galleryRevisions[0] ?? null
   const activeEbc = listing.ebcRevisions[0] ?? null
 
-  const galleryImages = activeGallery?.slots.map((slot) => ({
+  const galleryImages = activeGallery?.slots.map((slot: { position: number; media: { filePath: string; sourceUrl: string | null } }) => ({
     position: slot.position,
     src: slot.media.filePath,
     hiRes: slot.media.sourceUrl,
     isVideo: false,
   })) ?? []
 
-  const ebcSections = activeEbc?.sections.map((section) => ({
+  const ebcSections = activeEbc?.sections.map((section: { sectionType: string; heading: string | null; modules: { moduleType: string; headline: string | null; bodyText: string | null; images: { media: { filePath: string }; altText: string | null }[] }[] }) => ({
     sectionType: section.sectionType,
     heading: section.heading,
-    modules: section.modules.map((mod) => ({
+    modules: section.modules.map((mod: { moduleType: string; headline: string | null; bodyText: string | null; images: { media: { filePath: string }; altText: string | null }[] }) => ({
       moduleType: mod.moduleType,
       headline: mod.headline,
       bodyText: mod.bodyText,
-      images: mod.images.map((img) => ({
+      images: mod.images.map((img: { media: { filePath: string }; altText: string | null }) => ({
         src: img.media.filePath,
         alt: img.altText,
       })),

@@ -21,7 +21,7 @@ export default async function ListingsPage() {
 
       {listings.length > 0 ? (
         <div className="space-y-3">
-          {listings.map((listing) => (
+          {listings.map((listing: { id: string; asin: string; label: string; brandName: string | null; _count: { snapshots: number; bulletsRevisions: number; galleryRevisions: number; ebcRevisions: number } }) => (
             <div key={listing.id} className="border rounded-lg p-6 hover:bg-muted/50 transition-colors">
               <Link href={`/listings/${listing.id}`} className="block">
                 <div className="flex items-start gap-4">
