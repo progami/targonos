@@ -509,8 +509,8 @@ test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(lines[0]?.description.includes('SKU-B'), true);
 });
 
-test('isBlockingProcessingCode treats cost basis and allocation as warnings', () => {
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), false);
+test('isBlockingProcessingCode treats PNL allocation as blocking', () => {
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
   assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), false);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
