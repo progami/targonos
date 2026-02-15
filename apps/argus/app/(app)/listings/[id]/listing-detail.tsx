@@ -38,6 +38,32 @@ function normalizeBasePath(value: string): string {
 }
 
 const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
+const CLOUDFLARE_MAX_UPLOAD_BYTES = 100_000_000
+
+function formatBytes(bytes: number): string {
+  const mb = bytes / 1_000_000
+  if (mb >= 1) return `${mb.toFixed(1)}MB`
+  const kb = bytes / 1_000
+  return `${kb.toFixed(1)}KB`
+}
+
+function getUploadSizeError(files: File[], maxBytes: number): string | null {
+  const oversized = files.find((file) => file.size > maxBytes) ?? null
+  if (oversized) {
+    return `“${oversized.name}” is ${formatBytes(oversized.size)}. Max upload size is 100MB per request.`
+  }
+
+  let total = 0
+  for (const file of files) {
+    total += file.size
+  }
+
+  if (total > maxBytes) {
+    return `Selected files total ${formatBytes(total)}. Max upload size is 100MB per request. Upload fewer files at once.`
+  }
+
+  return null
+}
 
 interface ListingSummary {
   id: string
@@ -957,6 +983,12 @@ export function ListingDetail({
               disabled={galleryFiles.length === 0}
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
+                const sizeError = getUploadSizeError(galleryFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 for (const file of galleryFiles) {
                   form.append('files', file)
@@ -967,6 +999,10 @@ export function ListingDetail({
                   body: form,
                 })
                 if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
                   window.alert(await res.text())
                   return
                 }
@@ -1071,6 +1107,14 @@ export function ListingDetail({
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
                 if (!videoFile) return
+
+                const selectedFiles = videoPosterFile ? [videoFile, videoPosterFile] : [videoFile]
+                const sizeError = getUploadSizeError(selectedFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 form.append('file', videoFile)
                 if (videoPosterFile) form.append('poster', videoPosterFile)
@@ -1080,6 +1124,10 @@ export function ListingDetail({
                   body: form,
                 })
                 if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
                   window.alert(await res.text())
                   return
                 }
@@ -1196,6 +1244,12 @@ export function ListingDetail({
               variant="contained"
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
+                const sizeError = getUploadSizeError(ebcModuleFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 form.append('sectionType', ebcModuleEditorTarget.sectionType)
                 form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
@@ -1210,6 +1264,10 @@ export function ListingDetail({
                   body: form,
                 })
                 if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
                   window.alert(await res.text())
                   return
                 }
