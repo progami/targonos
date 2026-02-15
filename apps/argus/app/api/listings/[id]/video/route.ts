@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { extname } from 'path'
 import prisma from '@/lib/db'
 import { storeImageBuffer } from '@/lib/image-store'
+import { deleteOrphanMediaAssets } from '@/lib/media-gc'
 
 export const runtime = 'nodejs'
 
@@ -112,5 +113,6 @@ export async function DELETE(
   })
 
   await prisma.videoRevision.delete({ where: { id: rev.id } })
+  await deleteOrphanMediaAssets([rev.mediaId, rev.posterMediaId ?? ''].filter((mediaId) => mediaId.length > 0))
   return NextResponse.json({ ok: true })
 }

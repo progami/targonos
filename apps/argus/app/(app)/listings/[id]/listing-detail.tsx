@@ -454,7 +454,7 @@ export function ListingDetail({
           body: JSON.stringify({ asin: normalized }),
         })
 
-        router.push(`/listings/${normalized}`)
+        router.push(`${basePath}/listings/${normalized}`)
       })()
     }
   }, [

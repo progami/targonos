@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { extname } from 'path'
 import prisma from '@/lib/db'
 import { storeImageBuffer } from '@/lib/image-store'
+import { deleteOrphanMediaAssets } from '@/lib/media-gc'
 
 export const runtime = 'nodejs'
 
@@ -110,10 +111,15 @@ export async function DELETE(
 
   const rev = await prisma.galleryRevision.findFirstOrThrow({
     where: { id: revisionId, listingId: id },
+    include: { slots: { select: { mediaId: true } } },
   })
+
+  const mediaIds = rev.slots.map((slot) => slot.mediaId)
 
   await prisma.gallerySlot.deleteMany({ where: { revisionId: rev.id } })
   await prisma.galleryRevision.delete({ where: { id: rev.id } })
+
+  await deleteOrphanMediaAssets(mediaIds)
 
   return NextResponse.json({ ok: true })
 }
