@@ -5,6 +5,7 @@ import {
   Settings,
   ScrollText,
   PlugZap,
+  Star,
 } from "lucide-react";
 
 export type NavGroup = {
@@ -24,6 +25,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { href: "/insights", label: "Insights", icon: BarChart3 },
       { href: "/orders", label: "Orders", icon: PackageSearch },
+      { href: "/reviews", label: "Reviews", icon: Star },
       { href: "/messaging", label: "Messaging", icon: MessagesSquare },
     ],
   },
