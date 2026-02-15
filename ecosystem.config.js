@@ -175,6 +175,24 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
+    {
+      name: 'dev-argus',
+      cwd: path.join(DEV_DIR, 'apps/argus'),
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3116',
+      interpreter: 'node',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3116,
+        BASE_PATH: '/argus',
+        NEXT_PUBLIC_BASE_PATH: '/argus',
+        NEXT_PUBLIC_APP_URL: 'https://dev-os.targonglobal.com/argus'
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
 
     // ===========================================
     // MAIN ENVIRONMENT (30xx ports) - os.targonglobal.com
@@ -326,6 +344,24 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: { NODE_ENV: 'production' },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-argus',
+      cwd: path.join(MAIN_DIR, 'apps/argus'),
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3016',
+      interpreter: 'node',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3016,
+        BASE_PATH: '/argus',
+        NEXT_PUBLIC_BASE_PATH: '/argus',
+        NEXT_PUBLIC_APP_URL: 'https://os.targonglobal.com/argus'
+      },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
