@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { withApiLogging } from "@/server/api-logging";
 import { maybeAutoMigrate } from "@/server/db/migrate";
-import { listAsinReviewInsights } from "@/server/reviews/query";
+import { getManualReviewInsights } from "@/server/reviews/query";
 
 export const runtime = "nodejs";
 
@@ -13,16 +13,14 @@ async function handleGet(req: Request) {
   const url = new URL(req.url);
   const schema = z.object({
     connectionId: z.string().min(1),
-    marketplaceId: z.string().min(1).optional(),
-    asin: z.string().min(1).optional(),
-    limit: z.coerce.number().int().min(1).max(500).optional(),
+    marketplaceId: z.string().min(1),
+    sku: z.string().min(1),
   });
 
   const parsed = schema.safeParse({
     connectionId: url.searchParams.get("connectionId") ?? undefined,
     marketplaceId: url.searchParams.get("marketplaceId") ?? undefined,
-    asin: url.searchParams.get("asin") ?? undefined,
-    limit: url.searchParams.get("limit") ?? undefined,
+    sku: url.searchParams.get("sku") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -32,14 +30,13 @@ async function handleGet(req: Request) {
     );
   }
 
-  const rows = await listAsinReviewInsights({
+  const insights = await getManualReviewInsights({
     connectionId: parsed.data.connectionId,
-    marketplaceId: parsed.data.marketplaceId ?? null,
-    asin: parsed.data.asin ?? null,
-    limit: parsed.data.limit ?? 200,
+    marketplaceId: parsed.data.marketplaceId,
+    sku: parsed.data.sku,
   });
 
-  return NextResponse.json({ ok: true, rows });
+  return NextResponse.json({ ok: true, insights });
 }
 
 export const GET = withApiLogging("GET /api/reviews/insights", handleGet);
