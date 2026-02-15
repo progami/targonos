@@ -1400,6 +1400,7 @@ function injectArgusVersionControls(
   const imageBlock = doc.querySelector<HTMLElement>('#imageBlock')
   if (imageBlock) {
     ensureTrackControls(doc, imageBlock, 'gallery', 'Images', callbacksRef)
+    ensureGalleryThumbnailSwap(doc)
   }
 
   const titleSectionCandidate = doc.querySelector<HTMLElement>('#titleSection')
@@ -1790,7 +1791,7 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
 
   const sorted = rev.images.slice().sort((a, b) => a.position - b.position)
   const main = sorted[0]
-  const thumbs = sorted.slice(1)
+  const thumbs = sorted
 
   if (landing) {
     landing.style.visibility = ''
@@ -1830,6 +1831,66 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   for (let i = thumbs.length; i < existingLis.length; i++) {
     existingLis[i].style.display = 'none'
   }
+
+  const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
+  for (const button of buttons) {
+    button.classList.remove('a-button-selected')
+  }
+
+  const radioButtons = Array.from(altList.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
+  for (const radio of radioButtons) {
+    radio.setAttribute('aria-checked', 'false')
+  }
+
+  const firstVisible = altList.querySelector<HTMLElement>('li:not([style*="display: none"])')
+  const firstButton = firstVisible?.querySelector<HTMLElement>('.a-button-thumbnail')
+  if (firstButton) firstButton.classList.add('a-button-selected')
+  const firstRadio = firstVisible?.querySelector<HTMLButtonElement>('button[role="radio"]')
+  if (firstRadio) firstRadio.setAttribute('aria-checked', 'true')
+}
+
+function ensureGalleryThumbnailSwap(doc: Document) {
+  const altList = doc.querySelector<HTMLElement>('#altImages ul')
+  if (!altList) return
+
+  if (altList.dataset.argusGallerySwapBound === 'true') return
+  altList.dataset.argusGallerySwapBound = 'true'
+
+  altList.addEventListener('click', (e) => {
+    const target = e.target
+    if (!(target instanceof Element)) return
+    const img = target.closest('img')
+    if (!img) return
+
+    const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+    if (!landing) return
+
+    const src = img.getAttribute('data-old-hires') ?? img.getAttribute('src')
+    if (!src) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    landing.style.visibility = ''
+    landing.src = src
+    landing.setAttribute('data-old-hires', src)
+
+    const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
+    for (const button of buttons) {
+      button.classList.remove('a-button-selected')
+    }
+
+    const radioButtons = Array.from(altList.querySelectorAll<HTMLButtonElement>('button[role="radio"]'))
+    for (const radio of radioButtons) {
+      radio.setAttribute('aria-checked', 'false')
+    }
+
+    const selectedButton = img.closest<HTMLElement>('.a-button-thumbnail')
+    if (selectedButton) selectedButton.classList.add('a-button-selected')
+
+    const selectedRadio = img.closest('li')?.querySelector<HTMLButtonElement>('button[role="radio"]')
+    if (selectedRadio) selectedRadio.setAttribute('aria-checked', 'true')
+  })
 }
 
 function applyVideo(doc: Document, rev: VideoRevision | null) {
