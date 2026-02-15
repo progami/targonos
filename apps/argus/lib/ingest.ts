@@ -1,14 +1,15 @@
 import { readFileSync, existsSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, extname } from 'path'
 import prisma from '@/lib/db'
 import { extractAll } from '@/lib/extractor'
-import { storeImage } from '@/lib/image-store'
+import { storeImage, storeImageBuffer } from '@/lib/image-store'
 import type { ExtractedBullets, ExtractedEbcSection, ExtractedImage } from '@/lib/extractor'
 
 interface IngestResult {
   snapshotId: string
   listingId: string
   changes: string[]
+  titleSeq: number
   bulletsSeq: number
   gallerySeq: number
   ebcSeq: number
@@ -32,6 +33,7 @@ export async function ingestSnapshot(
   const listing = await prisma.listing.findUniqueOrThrow({
     where: { id: listingId },
     include: {
+      titleRevisions: { orderBy: { seq: 'desc' }, take: 1 },
       bulletsRevisions: { orderBy: { seq: 'desc' }, take: 1 },
       galleryRevisions: {
         orderBy: { seq: 'desc' },
@@ -41,10 +43,49 @@ export async function ingestSnapshot(
       ebcRevisions: {
         orderBy: { seq: 'desc' },
         take: 1,
-        include: { sections: { include: { modules: true }, orderBy: { position: 'asc' } } },
+        include: {
+          sections: {
+            orderBy: { position: 'asc' },
+            include: {
+              modules: {
+                orderBy: { position: 'asc' },
+                include: { images: true },
+              },
+            },
+          },
+        },
       },
     },
   })
+
+  let activeTitleId = listing.activeTitleId
+  let activeBulletsId = listing.activeBulletsId
+  let activeGalleryId = listing.activeGalleryId
+  let activeEbcId = listing.activeEbcId
+
+  // ─── Title ────────────────────────────────────────────────────
+  const prevTitle = listing.titleRevisions[0] ?? null
+  const extractedTitle = extracted.title
+  const titleChanged = extractedTitle && (!prevTitle || prevTitle.title !== extractedTitle)
+  let titleSeq = prevTitle?.seq ?? 0
+
+  if (titleChanged && extractedTitle) {
+    titleSeq = (prevTitle?.seq ?? 0) + 1
+    const rev = await prisma.titleRevision.create({
+      data: {
+        listingId,
+        seq: titleSeq,
+        title: extractedTitle,
+        origin: 'CAPTURED_SNAPSHOT',
+      },
+    })
+    await prisma.listing.update({
+      where: { id: listingId },
+      data: { activeTitleId: rev.id },
+    })
+    activeTitleId = rev.id
+    changes.push(`Title updated to v${titleSeq}`)
+  }
 
   // ─── Bullets ─────────────────────────────────────────────────
   const prevBullets = listing.bulletsRevisions[0] ?? null
@@ -65,6 +106,7 @@ export async function ingestSnapshot(
       where: { id: listingId },
       data: { activeBulletsId: rev.id },
     })
+    activeBulletsId = rev.id
     changes.push(`Bullets updated to v${bulletsSeq}`)
   }
 
@@ -93,6 +135,7 @@ export async function ingestSnapshot(
       where: { id: listingId },
       data: { activeGalleryId: rev.id },
     })
+    activeGalleryId = rev.id
     changes.push(`Gallery updated to v${gallerySeq}`)
   }
 
@@ -118,6 +161,7 @@ export async function ingestSnapshot(
       where: { id: listingId },
       data: { activeEbcId: rev.id },
     })
+    activeEbcId = rev.id
     changes.push(`EBC updated to v${ebcSeq}`)
   }
 
@@ -129,9 +173,10 @@ export async function ingestSnapshot(
       seq: snapshotCount + 1,
       capturedAt,
       rawHtmlPath: htmlPath,
-      bulletsRevisionId: listing.activeBulletsId,
-      galleryRevisionId: listing.activeGalleryId,
-      ebcRevisionId: listing.activeEbcId,
+      titleRevisionId: activeTitleId,
+      bulletsRevisionId: activeBulletsId,
+      galleryRevisionId: activeGalleryId,
+      ebcRevisionId: activeEbcId,
       note: changes.length > 0 ? changes.join('; ') : 'No changes detected',
     },
   })
@@ -140,6 +185,7 @@ export async function ingestSnapshot(
     snapshotId: snapshot.id,
     listingId,
     changes,
+    titleSeq,
     bulletsSeq,
     gallerySeq,
     ebcSeq,
@@ -174,7 +220,7 @@ function hasGalleryChanged(
 }
 
 function hasEbcChanged(
-  prevSections: { sectionType: string; modules: { moduleType: string; headline: string | null; bodyText: string | null }[] }[],
+  prevSections: { sectionType: string; modules: { moduleType: string; headline: string | null; bodyText: string | null; images: unknown[] }[] }[],
   nextSections: ExtractedEbcSection[],
 ): boolean {
   if (prevSections.length !== nextSections.length) return true
@@ -187,6 +233,7 @@ function hasEbcChanged(
       const pm = prev.modules[j]
       const nm = next.modules[j]
       if (pm.moduleType !== nm.moduleType || pm.headline !== nm.headline || pm.bodyText !== nm.bodyText) return true
+      if (pm.images.length !== nm.images.length) return true
     }
   }
   return false
@@ -198,13 +245,13 @@ async function storeGalleryImages(
 ): Promise<string[]> {
   const mediaIds: string[] = []
   for (const img of images) {
-    const localPath = resolveAssetPath(img.src, assetsDir)
-    if (!localPath || !existsSync(localPath)) continue
-    const stored = await storeImage(localPath, {
+    const mediaId = await storeSnapshotImage(img.src, assetsDir, {
       sourceUrl: img.hiRes ?? img.src,
+      downloadUrl: img.hiRes ?? img.src,
       originalName: basename(img.src),
     })
-    mediaIds.push(stored.mediaId)
+    if (!mediaId) continue
+    mediaIds.push(mediaId)
   }
   return mediaIds
 }
@@ -222,14 +269,15 @@ async function buildEbcSections(
       const imageData = []
       for (let ii = 0; ii < mod.images.length; ii++) {
         const img = mod.images[ii]
-        const localPath = resolveAssetPath(img.src, assetsDir)
-        if (!localPath || !existsSync(localPath)) continue
-        const stored = await storeImage(localPath, {
+        const mediaId = await storeSnapshotImage(img.src, assetsDir, {
+          sourceUrl: img.src,
+          downloadUrl: img.src,
           originalName: basename(img.src),
         })
+        if (!mediaId) continue
         imageData.push({
           position: ii,
-          mediaId: stored.mediaId,
+          mediaId,
           altText: img.alt,
         })
       }
@@ -249,6 +297,61 @@ async function buildEbcSections(
     })
   }
   return result
+}
+
+async function storeSnapshotImage(
+  src: string,
+  assetsDir: string,
+  opts: { sourceUrl?: string; downloadUrl?: string; originalName?: string },
+): Promise<string | null> {
+  const localPath = resolveAssetPath(src, assetsDir)
+  if (localPath && existsSync(localPath)) {
+    const stored = await storeImage(localPath, {
+      sourceUrl: opts.sourceUrl,
+      originalName: opts.originalName,
+    })
+    return stored.mediaId
+  }
+
+  const remoteUrl = opts.downloadUrl ?? opts.sourceUrl ?? src
+  if (remoteUrl.startsWith('http://') || remoteUrl.startsWith('https://')) {
+    const res = await fetch(remoteUrl)
+    if (!res.ok) {
+      return null
+    }
+    const data = Buffer.from(await res.arrayBuffer())
+    const ext = extnameFromUrl(remoteUrl) ?? extnameFromContentType(res.headers.get('content-type')) ?? '.jpg'
+    const stored = await storeImageBuffer(data, ext, {
+      sourceUrl: opts.sourceUrl ?? remoteUrl,
+      originalName: opts.originalName,
+      mimeType: res.headers.get('content-type') ?? undefined,
+    })
+    return stored.mediaId
+  }
+
+  return null
+}
+
+function extnameFromUrl(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname
+    const ext = extname(pathname).toLowerCase()
+    return ext.length > 0 ? ext : null
+  } catch {
+    return null
+  }
+}
+
+function extnameFromContentType(contentType: string | null): string | null {
+  if (!contentType) return null
+  const normalized = contentType.split(';')[0]?.trim().toLowerCase()
+  if (normalized === 'image/jpeg') return '.jpg'
+  if (normalized === 'image/png') return '.png'
+  if (normalized === 'image/gif') return '.gif'
+  if (normalized === 'image/webp') return '.webp'
+  if (normalized === 'image/avif') return '.avif'
+  if (normalized === 'image/svg+xml') return '.svg'
+  return null
 }
 
 /**
