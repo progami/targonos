@@ -1859,7 +1859,9 @@ function ensureGalleryThumbnailSwap(doc: Document) {
   altList.addEventListener('click', (e) => {
     const target = e.target
     if (!(target instanceof Element)) return
-    const img = target.closest('img')
+    const li = target.closest('li')
+    if (!li) return
+    const img = li.querySelector('img')
     if (!img) return
 
     const landing = doc.getElementById('landingImage') as HTMLImageElement | null
@@ -1885,10 +1887,10 @@ function ensureGalleryThumbnailSwap(doc: Document) {
       radio.setAttribute('aria-checked', 'false')
     }
 
-    const selectedButton = img.closest<HTMLElement>('.a-button-thumbnail')
+    const selectedButton = li.querySelector<HTMLElement>('.a-button-thumbnail')
     if (selectedButton) selectedButton.classList.add('a-button-selected')
 
-    const selectedRadio = img.closest('li')?.querySelector<HTMLButtonElement>('button[role="radio"]')
+    const selectedRadio = li.querySelector<HTMLButtonElement>('button[role="radio"]')
     if (selectedRadio) selectedRadio.setAttribute('aria-checked', 'true')
   })
 }
