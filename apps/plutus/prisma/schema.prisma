@@ -399,6 +399,52 @@ model SettlementAdsAllocationLine {
   @@index([sku])
 }
 
+/// AwdDataUpload tracks AWD monthly fee report uploads used for deterministic AWD fee allocation.
+model AwdDataUpload {
+  id         String   @id @default(cuid())
+
+  reportType  String // e.g., "AWD_FEE_MONTHLY"
+  marketplace String // e.g., "amazon.com", "amazon.co.uk"
+  filename    String
+
+  startDate String // YYYY-MM-DD (min month start from parsed rows)
+  endDate   String // YYYY-MM-DD (max month end from parsed rows)
+
+  rowCount Int
+  skuCount Int
+  minDate  String // YYYY-MM-DD
+  maxDate  String // YYYY-MM-DD
+
+  uploadedAt DateTime @default(now())
+
+  rows AwdDataRow[]
+
+  @@index([marketplace])
+  @@index([reportType])
+  @@index([marketplace, reportType])
+  @@index([uploadedAt])
+  @@index([marketplace, startDate, endDate])
+}
+
+/// AwdDataRow stores SKU-level monthly fee amounts from an AWD fee report.
+model AwdDataRow {
+  id String @id @default(cuid())
+
+  uploadId        String
+  monthStartDate  String // YYYY-MM-DD
+  monthEndDate    String // YYYY-MM-DD
+  sku             String
+  feeType         String
+  feeCents        Int
+  currency        String
+
+  upload AwdDataUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@index([uploadId, monthStartDate, monthEndDate])
+  @@index([sku])
+}
+
 /// CashflowForecastConfig stores the global forecast settings for the 13-week cashflow view.
 model CashflowForecastConfig {
   id String @id @default(cuid())
