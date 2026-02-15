@@ -36,6 +36,8 @@ import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlemen
 import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
 import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
+import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
+import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
@@ -130,9 +132,69 @@ test('parseAmazonTransactionCsv parses required totals', () => {
   assert.equal(parsed.rows[0]?.total, 10.5);
 });
 
+test('parseAmazonTransactionCsv skips preamble before header row', () => {
+  const csv = ['"Includes Amazon Marketplace transactions"', 'Order Id,Total,Type', '123-123,10.50,Order'].join('\n');
+  const parsed = parseAmazonTransactionCsv(csv);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0]?.orderId, '123-123');
+  assert.equal(parsed.rows[0]?.total, 10.5);
+});
+
 test('parseAmazonTransactionCsv throws on invalid totals', () => {
   const csv = ['Order Id,Total', '123-123,abc'].join('\n');
   assert.throws(() => parseAmazonTransactionCsv(csv));
+});
+
+test('parseAmazonUnifiedTransactionCsv parses Monthly Unified Transaction report rows (including non-order)', () => {
+  const csv = [
+    '"Includes Amazon Marketplace, Fulfillment by Amazon (FBA), and Amazon Webstore transactions"',
+    '"All amounts in USD, unless specified"',
+    '"date/time","settlement id","type","order id","sku","description","quantity","marketplace","product sales","product sales tax","shipping credits","shipping credits tax","gift wrap credits","giftwrap credits tax","Regulatory Fee","Tax On Regulatory Fee","promotional rebates","promotional rebates tax","marketplace withheld tax","selling fees","fba fees","other transaction fees","other","total"',
+    '"Jan 5, 2026 11:03:05 AM PST","S1","Service Fee","","","Subscription","","Amazon.com","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","-21.73","-21.73"',
+    '"Jan 6, 2026 7:21:49 PM PST","S1","Order","111-1","SKU-1","Test Product","1","amazon.com","10.00","0.80","0","0","0","0","0","0","0","0","-0.80","-1.50","-3.00","0","0","5.50"',
+  ].join('\n');
+
+  const parsed = parseAmazonUnifiedTransactionCsv(csv);
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0]?.settlementId, 'S1');
+  assert.equal(parsed.rows[0]?.type, 'Service Fee');
+  assert.equal(parsed.rows[0]?.orderId, '');
+  assert.equal(parsed.rows[0]?.total, -21.73);
+  assert.equal(parsed.rows[1]?.orderId, '111-1');
+  assert.equal(parsed.rows[1]?.productSales, 10);
+  assert.equal(parsed.rows[1]?.sellingFees, -1.5);
+  assert.equal(parsed.rows[1]?.fbaFees, -3);
+  assert.equal(parsed.rows[1]?.total, 5.5);
+});
+
+test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settlements to month-end', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-1',
+    eventGroupId: 'GROUP-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2025-12-19T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-01-02T08:00:00.000Z',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -1 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-01-02T08:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments[0]?.docNumber, 'LMB-US-19-31DEC-25-1');
+
+  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  assert.equal(cents, -100);
+
+  assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
 });
 
 test('parseSpAdvertisedProductCsv filters rows by selected country', () => {

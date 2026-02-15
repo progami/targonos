@@ -71,6 +71,20 @@ function normalizeHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function findHeaderIndex(lines: string[]): number {
+  for (let i = 0; i < lines.length; i++) {
+    const cols = splitCsvLine(lines[i]!);
+    const normalized = cols.map(normalizeHeader);
+
+    const hasOrderId = normalized.includes(normalizeHeader('order id')) || normalized.includes(normalizeHeader('orderid'));
+    const hasTotal = normalized.includes(normalizeHeader('total'));
+    if (hasOrderId && hasTotal) {
+      return i;
+    }
+  }
+  throw new Error('Could not find CSV header row (expected columns like "order id" and "total")');
+}
+
 /**
  * Find a column index by trying several normalized variants.
  * Returns -1 if no match is found.
@@ -120,7 +134,8 @@ export function parseAmazonTransactionCsv(content: string): ParsedAmazonCsv {
     throw new Error('CSV must include a header row and at least one data row');
   }
 
-  const rawHeaders = splitCsvLine(lines[0]).map((h) => h.trim());
+  const headerIndex = findHeaderIndex(lines);
+  const rawHeaders = splitCsvLine(lines[headerIndex]!).map((h) => h.trim());
   const normalizedHeaders = rawHeaders.map(normalizeHeader);
 
   // Locate columns flexibly
@@ -164,7 +179,7 @@ export function parseAmazonTransactionCsv(content: string): ParsedAmazonCsv {
 
   const rows: AmazonTransactionRow[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerIndex + 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]);
 
     const orderId = cols[orderIdIdx]?.trim() ?? '';

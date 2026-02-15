@@ -1,10 +1,12 @@
 import type { AmazonRegion, AmazonSpApiConfig, TenantCode } from './types.js'
+import { createRequire } from 'node:module'
 
 type SellingPartnerApiClient = {
   callAPI: (params: Record<string, unknown>) => Promise<unknown>
 }
 
 const clientCache = new Map<string, SellingPartnerApiClient>()
+const require = createRequire(import.meta.url)
 
 function readEnvVar(name: string): string | undefined {
   const value = process.env[name]
@@ -89,7 +91,7 @@ function getCacheKey(config: AmazonSpApiConfig): string {
 }
 
 function createAmazonClient(config: AmazonSpApiConfig): SellingPartnerApiClient {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // amazon-sp-api is CJS; use createRequire for ESM compatibility.
   const SellingPartnerAPI = require('amazon-sp-api') as new (params: unknown) => SellingPartnerApiClient
 
   return new SellingPartnerAPI({
