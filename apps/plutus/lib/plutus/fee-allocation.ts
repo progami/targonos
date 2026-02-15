@@ -113,6 +113,27 @@ type AllocationIssue = {
   message: string;
 };
 
+const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
+  amazonSellerFees:
+    'Missing deterministic source for SKU-less Amazon Seller Fees. Provide seller fee detail report/API data at SKU level.',
+  amazonFbaFees:
+    'Missing deterministic source for SKU-less Amazon FBA Fees. Provide FBA fee detail report/API data at SKU level.',
+  amazonStorageFees:
+    'Missing deterministic source for SKU-less Amazon Storage Fees. Provide storage fee detail report/API data at SKU level.',
+  amazonAdvertisingCosts:
+    'Missing deterministic source for SKU-less Amazon Advertising Costs. Upload Ads Data that covers the invoice range and ties to billed amount.',
+  amazonPromotions:
+    'Missing deterministic source for SKU-less Amazon Promotions. Provide promotions chargeback detail report/API data at SKU level.',
+  amazonFbaInventoryReimbursement:
+    'Missing deterministic source for SKU-less Amazon FBA Inventory Reimbursement. Provide reimbursement detail report/API data at SKU level.',
+  warehousingAwd:
+    'Missing deterministic source for SKU-less AWD fees. Upload AWD monthly fee report covering the invoice range.',
+};
+
+export function deterministicSourceGuidanceForBucket(bucket: PnlBucketKey): string {
+  return DETERMINISTIC_SOURCE_GUIDANCE[bucket];
+}
+
 export async function buildDeterministicSkuAllocations(input: {
   rows: LmbAuditRow[];
   marketplace: 'amazon.com' | 'amazon.co.uk';

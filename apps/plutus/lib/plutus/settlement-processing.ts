@@ -13,7 +13,10 @@ import { computePnlAllocation } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
-import { buildDeterministicSkuAllocations } from '@/lib/plutus/fee-allocation';
+import {
+  buildDeterministicSkuAllocations,
+  deterministicSourceGuidanceForBucket,
+} from '@/lib/plutus/fee-allocation';
 
 import {
   normalizeSku,
@@ -550,8 +553,8 @@ export async function computeSettlementPreview(input: {
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
       blocks.push({
         code: 'PNL_ALLOCATION_ERROR',
-        message: issue.reason,
-        details: { bucket: issue.bucket, totalCents: issue.totalCents },
+        message: deterministicSourceGuidanceForBucket(issue.bucket),
+        details: { bucket: issue.bucket, totalCents: issue.totalCents, reason: issue.reason },
       });
     }
   } catch (error) {
