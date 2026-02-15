@@ -149,11 +149,12 @@ CREATE INDEX IF NOT EXISTS hermes_orders_purchase_idx
   ON hermes_orders (connection_id, purchase_date DESC);
 
 
--- Manual product-review ingest (user-provided review text per ASIN)
+-- Manual product-review ingest (user-provided reviews per marketplace + SKU)
 CREATE TABLE IF NOT EXISTS hermes_manual_reviews (
   id                 TEXT PRIMARY KEY,
   connection_id      TEXT NOT NULL,
   marketplace_id     TEXT NOT NULL,
+  sku                TEXT NOT NULL,
   asin               TEXT NOT NULL,
 
   source             TEXT NOT NULL DEFAULT 'manual',
@@ -179,17 +180,22 @@ ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS review_hash
 ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS raw JSONB;
 ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE IF EXISTS hermes_manual_reviews ADD COLUMN IF NOT EXISTS sku TEXT;
+UPDATE hermes_manual_reviews SET sku = asin WHERE sku IS NULL;
+ALTER TABLE IF EXISTS hermes_manual_reviews ALTER COLUMN sku SET NOT NULL;
 
 ALTER TABLE IF EXISTS hermes_manual_reviews DROP CONSTRAINT IF EXISTS hermes_manual_reviews_rating_check;
 ALTER TABLE IF EXISTS hermes_manual_reviews
   ADD CONSTRAINT hermes_manual_reviews_rating_check
   CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5));
 
+DROP INDEX IF EXISTS hermes_manual_reviews_unique_hash;
 CREATE UNIQUE INDEX IF NOT EXISTS hermes_manual_reviews_unique_hash
-  ON hermes_manual_reviews (connection_id, marketplace_id, asin, review_hash);
+  ON hermes_manual_reviews (connection_id, marketplace_id, sku, review_hash);
 
+DROP INDEX IF EXISTS hermes_manual_reviews_lookup_idx;
 CREATE INDEX IF NOT EXISTS hermes_manual_reviews_lookup_idx
-  ON hermes_manual_reviews (connection_id, marketplace_id, asin, imported_at DESC);
+  ON hermes_manual_reviews (connection_id, marketplace_id, sku, imported_at DESC);
 
 
 -- Customer Feedback API snapshots (ASIN review topics/trends)
