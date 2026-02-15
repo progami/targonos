@@ -35,6 +35,7 @@ import { BackButton } from '@/components/back-button';
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
@@ -1236,16 +1237,30 @@ export default function SettlementDetailPage() {
     const processing = latest.processing;
     if (!processing) return;
 
+    const cogsId = processing.qboCogsJournalEntryId;
+    const pnlId = processing.qboPnlReclassJournalEntryId;
+    const hasQboCogsJe = isQboJournalEntryId(cogsId);
+    const hasQboPnlJe = isQboJournalEntryId(pnlId);
+    const hasNoopJournals = isNoopJournalEntryId(cogsId) || isNoopJournalEntryId(pnlId);
+
+    const confirmationLines = ['Rollback Plutus processing?', ''];
+    if (hasQboCogsJe || hasQboPnlJe) {
+      confirmationLines.push('Void these Journal Entries in QBO first:');
+      if (hasQboCogsJe) {
+        confirmationLines.push(`- COGS JE: ${cogsId}`);
+      }
+      if (hasQboPnlJe) {
+        confirmationLines.push(`- P&L Reclass JE: ${pnlId}`);
+      }
+      confirmationLines.push('');
+    } else if (hasNoopJournals) {
+      confirmationLines.push('No Plutus JEs were posted for this settlement (fees-only).');
+      confirmationLines.push('');
+    }
+    confirmationLines.push('Then click OK to mark this settlement as Pending in Plutus.');
+
     const confirmed = window.confirm(
-      [
-        'Rollback Plutus processing?',
-        '',
-        'Void these Journal Entries in QBO first:',
-        `- COGS JE: ${processing.qboCogsJournalEntryId}`,
-        `- P&L Reclass JE: ${processing.qboPnlReclassJournalEntryId}`,
-        '',
-        'Then click OK to mark this settlement as Pending in Plutus.',
-      ].join('\n'),
+      confirmationLines.join('\n'),
     );
 
     if (!confirmed) return;
@@ -1864,28 +1879,32 @@ export default function SettlementDetailPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         {data?.processing && (
                           <>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderColor: 'divider', color: 'text.primary' }}
-                              component="a"
-                              href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
-                              {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                              endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                            >
-                              COGS JE
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderColor: 'divider', color: 'text.primary' }}
-                              component="a"
-                              href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
-                              {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                              endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                            >
-                              P&amp;L JE
-                            </Button>
+                            {isQboJournalEntryId(data.processing.qboCogsJournalEntryId) && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                sx={{ borderColor: 'divider', color: 'text.primary' }}
+                                component="a"
+                                href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                              >
+                                COGS JE
+                              </Button>
+                            )}
+                            {isQboJournalEntryId(data.processing.qboPnlReclassJournalEntryId) && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                sx={{ borderColor: 'divider', color: 'text.primary' }}
+                                component="a"
+                                href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                              >
+                                P&amp;L JE
+                              </Button>
+                            )}
                           </>
                         )}
                         <Chip
