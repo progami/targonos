@@ -52,10 +52,10 @@ html = html.replace(
 )
 html = html.replace(/\ba-lazy-loaded\b/g, 'a-lazy-resolved')
 
-// Inject a small style block to hide nav/footer chrome (before </head>)
+// Inject a small style block to hide page chrome (before </head>)
+// Keep the Amazon header/search visible for a truer PDP replica.
 const hideCSS = `<style>
-  #navbar, #navFooter, #nav-main, #skiplink,
-  .nav-sprite, #rhf, .navFooterLine,
+  #navFooter, #rhf, .navFooterLine,
   .sa_fabaudiospot-container { display: none !important; }
 </style>`
 html = html.replace('</head>', `${hideCSS}\n</head>`)
