@@ -4,17 +4,23 @@ import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import SearchIcon from '@mui/icons-material/Search';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
+import MuiTab from '@mui/material/Tab';
+import MuiTable from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import MuiTabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useChartOfAccountsStore } from '@/lib/store/chart-of-accounts';
 
@@ -394,11 +400,12 @@ export default function ChartOfAccountsPage() {
           actions={
             <Button
               onClick={handleRefresh}
-              variant="outline"
-              size="sm"
+              variant="outlined"
+              size="small"
               startIcon={
                 <RefreshSvgIcon sx={isLoading ? { animation: 'spin 1s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } } : {}} />
               }
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
             >
               Refresh
             </Button>
@@ -407,29 +414,64 @@ export default function ChartOfAccountsPage() {
 
         <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Source Tabs */}
-          <Tabs
+          <MuiTabs
             value={sourceFilter}
-            onValueChange={(v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
+            onChange={(_, v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
+            sx={{
+              minHeight: 40,
+              bgcolor: 'action.hover',
+              borderRadius: 2,
+              p: 0.5,
+              '& .MuiTabs-indicator': { display: 'none' },
+            }}
           >
-            <TabsList>
-              <TabsTrigger value="all">
-                All
-                <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.all}</Box>
-              </TabsTrigger>
-              <TabsTrigger value="qbo">
-                QBO Created
-                <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.qbo}</Box>
-              </TabsTrigger>
-              <TabsTrigger value="lmb">
-                LMB / Plutus
-                <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.lmb}</Box>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+            <MuiTab
+              value="all"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  All
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.all}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+            <MuiTab
+              value="qbo"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  QBO Created
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.qbo}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+            <MuiTab
+              value="lmb"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  LMB / Plutus
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.lmb}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+          </MuiTabs>
 
           {/* Filter Bar */}
           <Card sx={{ borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2 }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1fr auto' }, alignItems: { md: 'end' } }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                   <Typography
@@ -456,10 +498,12 @@ export default function ChartOfAccountsPage() {
                         zIndex: 1,
                       }}
                     />
-                    <Input
+                    <TextField
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search by name or number..."
+                      size="small"
+                      fullWidth
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           '& .MuiOutlinedInput-input': {
@@ -479,9 +523,10 @@ export default function ChartOfAccountsPage() {
                       : `${filteredAccounts.length} of ${total}`}
                   </Typography>
                   <Button
-                    variant="outline"
+                    variant="outlined"
                     onClick={() => clearFilters()}
                     disabled={!search && sourceFilter === 'all' && activeFiltersCount === 0}
+                    sx={{ borderColor: 'divider', color: 'text.primary' }}
                   >
                     Clear
                   </Button>
@@ -492,14 +537,14 @@ export default function ChartOfAccountsPage() {
 
           {/* Table */}
           <Card sx={{ borderColor: 'divider', overflow: 'hidden' }}>
-            <CardContent sx={{ p: 0 }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ overflowX: 'auto' }}>
-                <Table>
-                  <TableHeader>
+                <MuiTable>
+                  <TableHead>
                     <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
-                      <TableHead sx={{ fontWeight: 600, width: 80 }}>Code</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>Name</TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>
+                      <TableCell sx={{ fontWeight: 600, width: 80 }}>Code</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Type"
                           options={accountTypes}
@@ -507,8 +552,8 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedTypesRaw(Array.from(values))}
                           isActive={selectedTypes.size > 0}
                         />
-                      </TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Detail Type"
                           options={detailTypes}
@@ -516,8 +561,8 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedDetailTypesRaw(Array.from(values))}
                           isActive={selectedDetailTypes.size > 0}
                         />
-                      </TableHead>
-                      <TableHead sx={{ fontWeight: 600 }}>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Currency"
                           options={currencies}
@@ -525,10 +570,10 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedCurrenciesRaw(Array.from(values))}
                           isActive={selectedCurrencies.size > 0}
                         />
-                      </TableHead>
-                      <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Balance</TableHead>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600, textAlign: 'right' }}>Balance</TableCell>
                     </TableRow>
-                  </TableHeader>
+                  </TableHead>
                   <TableBody>
                     {(isLoading || isCheckingConnection) && (
                       <>
@@ -607,8 +652,9 @@ export default function ChartOfAccountsPage() {
                                 {account.name}
                               </Box>
                               {account.source === 'lmb' && (
-                                <Badge
-                                  variant="secondary"
+                                <Chip
+                                  label="LMB"
+                                  size="small"
                                   sx={{
                                     ml: 1,
                                     flexShrink: 0,
@@ -617,9 +663,7 @@ export default function ChartOfAccountsPage() {
                                     color: 'rgb(109, 40, 217)',
                                     border: 0,
                                   }}
-                                >
-                                  LMB
-                                </Badge>
+                                />
                               )}
                             </Box>
                           </TableCell>
@@ -660,7 +704,7 @@ export default function ChartOfAccountsPage() {
                         </TableRow>
                       ))}
                   </TableBody>
-                </Table>
+                </MuiTable>
               </Box>
             </CardContent>
           </Card>

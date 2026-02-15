@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 import { useSnackbar } from 'notistack';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import type { QboConnectionStatus } from '@/lib/qbo/types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -154,12 +155,13 @@ export function QboStatusIndicator() {
           </Typography>
         </Box>
 
-        <DropdownMenu
+        <Menu
           anchorEl={anchorEl}
           open={menuOpen}
           onClose={() => setAnchorEl(null)}
-          align="right"
-          sx={{ width: 224 }}
+          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          slotProps={{ paper: { sx: { minWidth: 224, mt: 0.75, p: 0.5 } } }}
         >
           <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider' }}>
             <Typography variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
@@ -170,15 +172,15 @@ export function QboStatusIndicator() {
             </Typography>
           </Box>
           <Box sx={{ p: 0.5 }}>
-            <DropdownMenuItem
+            <MenuItem
               onClick={handleDisconnect}
               disabled={disconnectMutation.isPending}
               sx={{ color: 'error.main' }}
             >
               {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
-            </DropdownMenuItem>
+            </MenuItem>
           </Box>
-        </DropdownMenu>
+        </Menu>
       </>
     );
   }

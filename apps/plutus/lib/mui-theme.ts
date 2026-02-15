@@ -9,10 +9,37 @@ const shared = {
   },
   components: {
     MuiButton: {
+      defaultProps: {
+        disableElevation: true as const,
+      },
       styleOverrides: {
         root: {
           textTransform: 'none' as const,
           fontWeight: 500,
+          borderRadius: 8,
+          whiteSpace: 'nowrap' as const,
+          '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+        },
+        sizeSmall: {
+          height: 32,
+          padding: '0 12px',
+          fontSize: '0.75rem',
+        },
+        sizeMedium: {
+          height: 36,
+          padding: '0 16px',
+          fontSize: '0.875rem',
+        },
+        sizeLarge: {
+          height: 44,
+          padding: '0 24px',
+          fontSize: '1rem',
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
           borderRadius: 8,
         },
       },
@@ -26,17 +53,13 @@ const shared = {
       },
     },
     MuiDialog: {
+      defaultProps: {
+        maxWidth: 'sm' as const,
+        fullWidth: true,
+      },
       styleOverrides: {
         paper: {
           borderRadius: 16,
-        },
-      },
-    },
-    MuiTooltip: {
-      styleOverrides: {
-        tooltip: {
-          borderRadius: 8,
-          fontSize: '0.75rem',
         },
       },
     },
@@ -44,7 +67,57 @@ const shared = {
       styleOverrides: {
         root: {
           fontWeight: 500,
+          height: 22,
+          fontSize: '0.6875rem',
+          borderRadius: '6px',
         },
+      },
+    },
+    MuiTextField: {
+      defaultProps: {
+        size: 'small' as const,
+        variant: 'outlined' as const,
+        fullWidth: true,
+      },
+      styleOverrides: {
+        root: {
+          '& .MuiOutlinedInput-root': {
+            borderRadius: 8,
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#45B3D4',
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#00C2B9',
+              borderWidth: 2,
+            },
+          },
+        },
+      },
+    },
+    MuiSelect: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          fontSize: '0.875rem',
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#45B3D4',
+          },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#00C2B9',
+            borderWidth: 2,
+          },
+        },
+      },
+    },
+    MuiFormControl: {
+      defaultProps: {
+        size: 'small' as const,
+        fullWidth: true,
+      },
+    },
+    MuiSwitch: {
+      defaultProps: {
+        size: 'small' as const,
       },
     },
     MuiTab: {
@@ -56,17 +129,63 @@ const shared = {
         },
       },
     },
-    MuiSwitch: {
+    MuiTabs: {
       styleOverrides: {
         root: {
-          padding: 8,
+          minHeight: 40,
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          borderColor: 'rgba(0, 0, 0, 0.06)',
+        },
+        head: {
+          height: 44,
+          padding: '0 12px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.05em',
+        },
+        body: {
+          padding: '12px',
+          fontVariantNumeric: 'tabular-nums' as const,
+        },
+      },
+    },
+    MuiTableHead: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'rgba(248, 250, 252, 0.8)',
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          transition: 'background-color 0.15s',
+          '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.02)' },
         },
       },
     },
     MuiSkeleton: {
+      defaultProps: {
+        variant: 'rectangular' as const,
+        animation: 'pulse' as const,
+      },
       styleOverrides: {
         root: {
           borderRadius: 8,
+        },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          borderRadius: 8,
+          fontSize: '0.75rem',
         },
       },
     },
@@ -78,10 +197,11 @@ const shared = {
         },
       },
     },
-    MuiTableCell: {
+    MuiMenuItem: {
       styleOverrides: {
         root: {
-          borderColor: 'rgba(0, 0, 0, 0.06)',
+          borderRadius: 8,
+          fontSize: '0.875rem',
         },
       },
     },
@@ -128,6 +248,27 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           borderColor: 'rgba(255, 255, 255, 0.06)',
+        },
+        head: {
+          ...(shared.components.MuiTableCell.styleOverrides.head),
+        },
+        body: {
+          ...(shared.components.MuiTableCell.styleOverrides.body),
+        },
+      },
+    },
+    MuiTableHead: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          transition: 'background-color 0.15s',
+          '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.03)' },
         },
       },
     },

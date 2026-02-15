@@ -7,14 +7,19 @@ import UploadIcon from '@mui/icons-material/Upload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -71,6 +76,53 @@ function UploadSvgIcon() {
     </Box>
   );
 }
+
+/* ---- shared table-header cell sx ---- */
+const thSx = {
+  height: 44,
+  px: 1.5,
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+} as const;
+
+/* ---- shared table body cell sx ---- */
+const tdSx = {
+  px: 1.5,
+  py: 1.5,
+  color: 'text.primary',
+  fontVariantNumeric: 'tabular-nums',
+} as const;
+
+/* ---- shared table row sx ---- */
+const rowSx = {
+  borderBottom: 1,
+  borderColor: 'divider',
+  transition: 'background-color 0.15s',
+  '&:hover': { bgcolor: 'action.hover' },
+} as const;
+
+/* ---- shared table head section sx ---- */
+const theadSx = {
+  bgcolor: 'rgba(248, 250, 252, 0.8)',
+  '[data-mui-color-scheme="dark"] &, .dark &': {
+    bgcolor: 'rgba(255, 255, 255, 0.05)',
+  },
+  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+} as const;
+
+/* ---- shared table body section sx ---- */
+const tbodySx = {
+  '& .MuiTableRow-root:last-child': { borderBottom: 0 },
+} as const;
+
+/* ---- shared table sx ---- */
+const tableSx = {
+  width: '100%',
+  fontSize: '0.875rem',
+} as const;
 
 export default function AuditDataPage() {
   const queryClient = useQueryClient();
@@ -160,7 +212,7 @@ export default function AuditDataPage() {
 
         {/* Upload Zone */}
         <Card sx={{ mt: 3, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 3 }}>
+          <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
             <Box
               sx={{
                 position: 'relative',
@@ -298,33 +350,41 @@ export default function AuditDataPage() {
                 </Box>
                 {uploadResult.invoiceSummaries.length > 0 && (
                   <Box sx={{ mt: 1.5, overflowX: 'auto' }}>
-                    <Table>
-                      <TableHeader>
-                        <TableRow sx={{ bgcolor: 'rgba(16, 185, 129, 0.08)' }}>
-                          <TableHead sx={{ color: 'success.dark' }}>Invoice</TableHead>
-                          <TableHead sx={{ color: 'success.dark' }}>Date Range</TableHead>
-                          <TableHead sx={{ color: 'success.dark', textAlign: 'right' }}>Rows</TableHead>
-                          <TableHead sx={{ color: 'success.dark', textAlign: 'right' }}>SKUs</TableHead>
+                    <Table sx={tableSx}>
+                      <TableHead sx={{ ...theadSx, bgcolor: 'rgba(16, 185, 129, 0.08)' }}>
+                        <TableRow sx={{ ...rowSx, bgcolor: 'rgba(16, 185, 129, 0.08)' }}>
+                          <TableCell component="th" sx={{ ...thSx, color: 'success.dark' }}>Invoice</TableCell>
+                          <TableCell component="th" sx={{ ...thSx, color: 'success.dark' }}>Date Range</TableCell>
+                          <TableCell component="th" sx={{ ...thSx, color: 'success.dark', textAlign: 'right' }}>Rows</TableCell>
+                          <TableCell component="th" sx={{ ...thSx, color: 'success.dark', textAlign: 'right' }}>SKUs</TableCell>
                         </TableRow>
-                      </TableHeader>
-                        <TableBody>
+                      </TableHead>
+                        <TableBody sx={tbodySx}>
                           {uploadResult.invoiceSummaries.map((s) => (
-                          <TableRow key={`${s.marketplace}:${s.invoiceId}`}>
-                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                          <TableRow key={`${s.marketplace}:${s.invoiceId}`} sx={rowSx}>
+                            <TableCell sx={{ ...tdSx, fontFamily: 'monospace', fontSize: '0.875rem' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Badge variant="outline" sx={{ fontSize: '10px' }}>
-                                  {s.marketplace === 'amazon.com' ? 'US' : 'UK'}
-                                </Badge>
+                                <Chip
+                                  label={s.marketplace === 'amazon.com' ? 'US' : 'UK'}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: '10px',
+                                    fontWeight: 500,
+                                    borderRadius: '6px',
+                                  }}
+                                />
                                 <Box component="span">{s.invoiceId}</Box>
                               </Box>
                             </TableCell>
-                            <TableCell sx={{ fontSize: '0.875rem' }}>
+                            <TableCell sx={{ ...tdSx, fontSize: '0.875rem' }}>
                               {s.minDate} &ndash; {s.maxDate}
                             </TableCell>
-                            <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            <TableCell sx={{ ...tdSx, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {s.rowCount.toLocaleString()}
                             </TableCell>
-                            <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.skuCount}</TableCell>
+                            <TableCell sx={{ ...tdSx, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.skuCount}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -338,25 +398,25 @@ export default function AuditDataPage() {
 
         {/* Upload History */}
         <Card sx={{ mt: 3, borderColor: 'divider', overflow: 'hidden' }}>
-          <CardContent sx={{ p: 0 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ overflowX: 'auto' }}>
-              <Table>
-                <TableHeader>
-                  <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
-                    <TableHead sx={{ fontWeight: 600 }}>Filename</TableHead>
-                    <TableHead sx={{ fontWeight: 600 }}>Uploaded</TableHead>
-                    <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Settlements</TableHead>
-                    <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Rows</TableHead>
-                    <TableHead sx={{ fontWeight: 600 }}>Status</TableHead>
+              <Table sx={tableSx}>
+                <TableHead sx={theadSx}>
+                  <TableRow sx={{ ...rowSx, bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                    <TableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Filename</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Uploaded</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Settlements</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Rows</TableCell>
+                    <TableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Status</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
+                </TableHead>
+                <TableBody sx={tbodySx}>
                   {isLoading && (
                     <>
                       {Array.from({ length: 3 }).map((_, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell colSpan={5} sx={{ py: 2 }}>
-                            <Skeleton sx={{ height: 32, width: '100%' }} />
+                        <TableRow key={idx} sx={rowSx}>
+                          <TableCell colSpan={5} sx={{ ...tdSx, py: 2 }}>
+                            <Skeleton variant="rectangular" animation="pulse" sx={{ height: 32, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -364,8 +424,8 @@ export default function AuditDataPage() {
                   )}
 
                   {!isLoading && data && data.uploads.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5}>
+                    <TableRow sx={rowSx}>
+                      <TableCell colSpan={5} sx={tdSx}>
                         <EmptyState
                           icon={<UploadSvgIcon />}
                           title="No audit data uploaded"
@@ -378,14 +438,14 @@ export default function AuditDataPage() {
                   {!isLoading &&
                     data &&
                     data.uploads.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell>
+                      <TableRow key={u.id} sx={rowSx}>
+                        <TableCell sx={tdSx}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <UploadFileIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
                             <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{u.filename}</Box>
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem', color: 'text.secondary' }}>
                           {new Date(u.uploadedAt).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -394,12 +454,24 @@ export default function AuditDataPage() {
                             minute: '2-digit',
                           })}
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{u.invoiceCount}</TableCell>
-                        <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{u.invoiceCount}</TableCell>
+                        <TableCell sx={{ ...tdSx, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           {u.rowCount.toLocaleString()}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="success">Stored</Badge>
+                        <TableCell sx={tdSx}>
+                          <Chip
+                            label="Stored"
+                            size="small"
+                            color="success"
+                            sx={{
+                              height: 22,
+                              fontSize: '0.6875rem',
+                              fontWeight: 500,
+                              borderRadius: '6px',
+                              bgcolor: 'rgba(34, 197, 94, 0.1)',
+                              color: 'success.dark',
+                            }}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

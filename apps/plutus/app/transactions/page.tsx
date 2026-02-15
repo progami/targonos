@@ -15,24 +15,30 @@ import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
+import FormControl from '@mui/material/FormControl';
+import MuiSelect from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Skeleton from '@mui/material/Skeleton';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Select, SelectItem } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   normalizePurchaseRegion,
   normalizePurchaseSku,
@@ -1166,20 +1172,21 @@ function CreateBillModal({
   const selectedTerm = termOptions.find((term) => term.id === termId) ?? null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="xl">
-      <DialogContent sx={{ maxWidth: 1280, maxHeight: '95vh', overflowY: 'auto' }} onClose={() => onOpenChange(false)}>
-        <DialogHeader>
-          <DialogTitle>Create Bill</DialogTitle>
-          <DialogDescription>
-            Mirrors QBO bill builder fields supported via API. Category lines can be tracked for PO/brand/SKU allocation.
-          </DialogDescription>
-        </DialogHeader>
+    <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="xl" fullWidth slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}>
+      <DialogContent sx={{ maxWidth: 1280, maxHeight: '95vh', overflowY: 'auto' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <DialogTitle sx={{ p: 0 }}>Create Bill</DialogTitle>
+          <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          Mirrors QBO bill builder fields supported via API. Category lines can be tracked for PO/brand/SKU allocation.
+        </Typography>
 
         {isContextLoading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <Skeleton variant="rectangular" height={40} width="100%" />
+            <Skeleton variant="rectangular" height={40} width="100%" />
+            <Skeleton variant="rectangular" height={40} width="100%" />
           </Box>
         )}
 
@@ -1240,8 +1247,10 @@ function CreateBillModal({
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Bill date</Box>
-                <Input
+                <TextField
                   type="date"
+                  size="small"
+                  fullWidth
                   value={txnDate}
                   onChange={(event) => {
                     const nextDate = event.target.value;
@@ -1255,19 +1264,19 @@ function CreateBillModal({
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Due date</Box>
-                <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                <TextField type="date" size="small" fullWidth value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
               </Box>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Bill no.</Box>
-                <Input value={docNumber} onChange={(event) => setDocNumber(event.target.value)} placeholder="Vendor invoice no." />
+                <TextField size="small" fullWidth value={docNumber} onChange={(event) => setDocNumber(event.target.value)} placeholder="Vendor invoice no." />
               </Box>
             </Box>
 
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' } }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>{poLabel}</Box>
-                <Input value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="PO-..." />
+                <TextField size="small" fullWidth value={poNumber} onChange={(event) => setPoNumber(event.target.value)} placeholder="PO-..." />
               </Box>
 
               {trackedLineCount > 0 && (
@@ -1305,10 +1314,11 @@ function CreateBillModal({
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-teal-600)' }}>Exchange rate</Box>
-                <Input
+                <TextField
                   type="number"
-                  step="0.000001"
-                  min="0"
+                  size="small"
+                  fullWidth
+                  slotProps={{ htmlInput: { step: '0.000001', min: '0' } }}
                   value={exchangeRate}
                   disabled={transactionCurrency === homeCurrency}
                   onChange={(event) => setExchangeRate(event.target.value)}
@@ -1364,7 +1374,9 @@ function CreateBillModal({
                           </td>
 
                           <td className="px-3 py-2 align-top">
-                            <Input
+                            <TextField
+                              size="small"
+                              fullWidth
                               value={line.description}
                               onChange={(event) => updateLine(line.id, { description: event.target.value })}
                               placeholder="Line description"
@@ -1372,10 +1384,11 @@ function CreateBillModal({
                           </td>
 
                           <td className="px-3 py-2 align-top">
-                            <Input
+                            <TextField
                               type="number"
-                              min="0"
-                              step="0.01"
+                              size="small"
+                              fullWidth
+                              slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
                               value={line.amount}
                               onChange={(event) => updateLine(line.id, { amount: event.target.value })}
                               placeholder="0.00"
@@ -1398,34 +1411,33 @@ function CreateBillModal({
                                 ))}
                               </select>
                             ) : (
-                              <Input value="" disabled placeholder="Manufacturing only" />
+                              <TextField size="small" fullWidth value="" disabled placeholder="Manufacturing only" />
                             )}
                           </td>
 
                           <td className="px-3 py-2 align-top">
                             {isManufacturing ? (
-                              <Input
+                              <TextField
                                 type="number"
-                                min="1"
-                                step="1"
+                                size="small"
+                                fullWidth
+                                slotProps={{ htmlInput: { min: '1', step: '1' } }}
                                 value={line.quantity}
                                 onChange={(event) => updateLine(line.id, { quantity: event.target.value })}
                                 placeholder="Units"
                               />
                             ) : (
-                              <Input value="" disabled placeholder="-" />
+                              <TextField size="small" fullWidth value="" disabled placeholder="-" />
                             )}
                           </td>
 
                           <td className="px-3 py-2 align-top text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
+                            <IconButton
+                              size="small"
                               onClick={() => removeLine(line.id)}
                             >
                               <CloseIcon sx={{ fontSize: 14 }} />
-                            </Button>
+                            </IconButton>
                           </td>
                         </tr>
                       );
@@ -1434,7 +1446,7 @@ function CreateBillModal({
                 </table>
               </div>
               <div className="flex items-center justify-between border-t border-slate-200 p-3 dark:border-white/10">
-                <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+                <Button type="button" variant="outlined" size="small" onClick={addLine} sx={{ borderColor: 'divider', color: 'text.primary', gap: 0.75 }}>
                   <AddIcon sx={{ fontSize: 14 }} />
                   Add lines
                 </Button>
@@ -1483,9 +1495,10 @@ function CreateBillModal({
                         </span>
                         <Button
                           type="button"
-                          variant="ghost"
-                          size="sm"
+                          variant="text"
+                          size="small"
                           onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== index))}
+                          sx={{ color: 'text.secondary' }}
                         >
                           Remove
                         </Button>
@@ -1502,17 +1515,18 @@ function CreateBillModal({
           </Box>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" onClick={() => onOpenChange(false)} sx={{ borderColor: 'divider', color: 'text.primary' }}>Cancel</Button>
           <Button
             onClick={handleSubmit}
             disabled={isContextLoading || !!contextError || createMutation.isPending}
-            className="gap-1.5"
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Save bill'}
           </Button>
-        </DialogFooter>
+        </DialogActions>
       </DialogContent>
     </Dialog>
   );
@@ -1614,19 +1628,22 @@ function CreatePurchaseModal({
   const lineAccounts = createContext?.lineAccounts ?? [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
+    <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="lg" fullWidth slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}>
       <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
-        <DialogHeader>
-          <DialogTitle>Create Expense</DialogTitle>
-          <DialogDescription>Create a new QBO purchase transaction for card/bank spend.</DialogDescription>
-        </DialogHeader>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <DialogTitle sx={{ p: 0 }}>Create Expense</DialogTitle>
+          <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>Create a new QBO purchase transaction for card/bank spend.</Typography>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
-              <Input
+              <TextField
                 type="date"
+                size="small"
+                fullWidth
                 value={createState.txnDate}
                 onChange={(event) => setCreateState((prev) => ({ ...prev, txnDate: event.target.value }))}
               />
@@ -1659,25 +1676,26 @@ function CreatePurchaseModal({
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Memo (optional)</label>
-              <Input
+              <TextField
+                size="small"
+                fullWidth
                 value={createState.memo}
                 onChange={(event) => setCreateState((prev) => ({ ...prev, memo: event.target.value }))}
                 placeholder="Internal note"
-                className="text-sm"
               />
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
-                  <TableHead className="text-xs">Account</TableHead>
-                  <TableHead className="text-xs">Description</TableHead>
-                  <TableHead className="text-xs w-28">Amount</TableHead>
-                  <TableHead className="text-xs w-20">Action</TableHead>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'action.hover' }}>
+                  <TableCell sx={{ fontSize: '0.75rem' }}>Account</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem' }}>Description</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', width: 112 }}>Amount</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', width: 80 }}>Action</TableCell>
                 </TableRow>
-              </TableHeader>
+              </TableHead>
               <TableBody>
                 {createState.lines.map((line) => (
                   <TableRow key={line.id}>
@@ -1703,35 +1721,35 @@ function CreatePurchaseModal({
                       </select>
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <TextField
+                        size="small"
+                        fullWidth
                         value={line.description}
                         onChange={(event) => updateLine(line.id, { description: event.target.value })}
                         placeholder="Line description"
-                        className="h-8 text-xs"
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem', height: 32, py: 0 } }}
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <TextField
                         type="number"
-                        min="0"
-                        step="0.01"
+                        size="small"
+                        fullWidth
+                        slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
                         value={line.amount}
                         onChange={(event) => updateLine(line.id, { amount: event.target.value })}
                         placeholder="0.00"
-                        className="h-8 text-xs"
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem', height: 32, py: 0 } }}
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
+                      <IconButton
+                        size="small"
                         onClick={() => removeLine(line.id)}
                         disabled={createState.lines.length <= 1}
-                        className="h-7 px-2 text-xs"
                       >
                         <DeleteIcon sx={{ fontSize: 14 }} />
-                      </Button>
+                      </IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1740,7 +1758,7 @@ function CreatePurchaseModal({
           </div>
 
           <div className="flex justify-between">
-            <Button type="button" variant="outline" size="sm" onClick={addLine} className="gap-1.5">
+            <Button type="button" variant="outlined" size="small" onClick={addLine} sx={{ borderColor: 'divider', color: 'text.primary', gap: 0.75 }}>
               <AddIcon sx={{ fontSize: 14 }} />
               Add Line
             </Button>
@@ -1751,17 +1769,18 @@ function CreatePurchaseModal({
           <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" onClick={() => onOpenChange(false)} sx={{ borderColor: 'divider', color: 'text.primary' }}>Cancel</Button>
           <Button
             onClick={() => createMutation.mutate()}
             disabled={!canSave || createMutation.isPending || createContextLoading}
-            className="gap-1.5"
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Create Expense'}
           </Button>
-        </DialogFooter>
+        </DialogActions>
       </DialogContent>
     </Dialog>
   );
@@ -1925,10 +1944,10 @@ function EditBillModal({
   const mappedBrandName = brands.find((brand) => brand.id === bill.mapping?.brandId)?.name;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="md">
+    <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="md" fullWidth slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}>
       <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
-        <DialogHeader>
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <DialogTitle sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flex: 1 }}>
             <span className="truncate">{bill.entityName}</span>
             <a
               href={qboTransactionUrl(bill)}
@@ -1941,23 +1960,26 @@ function EditBillModal({
               QuickBooks
             </a>
           </DialogTitle>
-          <DialogDescription>
-            {bill.txnDate} &middot; {formatCurrency(bill.totalAmount)}
-            {bill.docNumber.trim() !== '' ? ` \u00b7 ${bill.docNumber}` : ''}
-            {mappedBrandName ? ` \u00b7 ${mappedBrandName}` : ''}
-          </DialogDescription>
-        </DialogHeader>
+          <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {bill.txnDate} &middot; {formatCurrency(bill.totalAmount)}
+          {bill.docNumber.trim() !== '' ? ` \u00b7 ${bill.docNumber}` : ''}
+          {mappedBrandName ? ` \u00b7 ${mappedBrandName}` : ''}
+        </Typography>
 
         <div className="space-y-4">
           <div className={cn('grid gap-3', requiresManufacturingPo ? 'grid-cols-2' : 'grid-cols-1')}>
             {requiresManufacturingPo && (
               <div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">PO Number</label>
-                <Input
+                <TextField
+                  size="small"
+                  fullWidth
                   value={editState.poNumber}
                   onChange={(event) => setEditState((prev) => ({ ...prev, poNumber: event.target.value }))}
                   placeholder="e.g. PO-2026-001"
-                  className="font-mono text-sm"
+                  sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
                 />
               </div>
             )}
@@ -1981,17 +2003,17 @@ function EditBillModal({
               Tracked Lines
             </h3>
             <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
-                    <TableHead className="text-xs">Account</TableHead>
-                    <TableHead className="text-xs">SKU / Split</TableHead>
-                    <TableHead className="text-xs w-24">Qty</TableHead>
-                    <TableHead className="text-xs">Type</TableHead>
-                    <TableHead className="text-xs text-right">Amount</TableHead>
-                    <TableHead className="text-xs w-24">Action</TableHead>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell sx={{ fontSize: '0.75rem' }}>Account</TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem' }}>SKU / Split</TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', width: 96 }}>Qty</TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem' }}>Type</TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', textAlign: 'right' }}>Amount</TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', width: 96 }}>Action</TableCell>
                   </TableRow>
-                </TableHeader>
+                </TableHead>
                 <TableBody>
                   {bill.trackedLines.map((trackedLine) => {
                     const lineState = editState.lines[trackedLine.lineId];
@@ -2021,14 +2043,14 @@ function EditBillModal({
                                       </option>
                                     ))}
                                   </select>
-                                  <Input
+                                  <TextField
                                     type="number"
-                                    min="1"
-                                    step="1"
+                                    size="small"
+                                    slotProps={{ htmlInput: { min: '1', step: '1' } }}
                                     value={split.quantity}
                                     onChange={(event) => updateSplit(trackedLine.lineId, split.id, { quantity: event.target.value })}
                                     placeholder="Qty"
-                                    className="h-7 w-20 text-xs"
+                                    sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                                   />
                                   {lineState.splits.length > 2 && (
                                     <button
@@ -2062,14 +2084,14 @@ function EditBillModal({
                             lineState.mode === 'split' ? (
                               <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
                             ) : (
-                              <Input
+                              <TextField
                                 type="number"
-                                min="1"
-                                step="1"
+                                size="small"
+                                slotProps={{ htmlInput: { min: '1', step: '1' } }}
                                 value={lineState.quantity}
                                 onChange={(event) => updateLine(trackedLine.lineId, { quantity: event.target.value })}
                                 placeholder="Units"
-                                className="h-7 w-20 text-xs"
+                                sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                               />
                             )
                           ) : (
@@ -2089,23 +2111,20 @@ function EditBillModal({
                             <div className="flex gap-1">
                               <Button
                                 type="button"
-                                variant="outline"
-                                size="sm"
+                                variant="outlined"
+                                size="small"
                                 onClick={() => toggleSplitMode(trackedLine.lineId)}
-                                className="h-7 px-2 text-xs"
+                                sx={{ borderColor: 'divider', color: 'text.primary', height: 28, px: 1, fontSize: '0.75rem', minWidth: 0 }}
                               >
                                 {lineState.mode === 'split' ? 'Single' : 'Split'}
                               </Button>
                               {lineState.mode === 'split' && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
+                                <IconButton
+                                  size="small"
                                   onClick={() => addSplit(trackedLine.lineId)}
-                                  className="h-7 px-2 text-xs"
                                 >
                                   <AddIcon sx={{ fontSize: 12 }} />
-                                </Button>
+                                </IconButton>
                               )}
                             </div>
                           )}
@@ -2123,17 +2142,18 @@ function EditBillModal({
           <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" onClick={() => onOpenChange(false)} sx={{ borderColor: 'divider', color: 'text.primary' }}>Cancel</Button>
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
-            className="gap-1.5"
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
-        </DialogFooter>
+        </DialogActions>
       </DialogContent>
     </Dialog>
   );
@@ -2296,10 +2316,10 @@ function EditPurchaseModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
+    <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="lg" fullWidth slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}>
       <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
-        <DialogHeader>
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <DialogTitle sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flex: 1 }}>
             <span className="truncate">{purchase.entityName.trim() === '' ? 'Purchase' : purchase.entityName}</span>
             <a
               href={qboTransactionUrl(purchase)}
@@ -2312,32 +2332,33 @@ function EditPurchaseModal({
               QuickBooks
             </a>
           </DialogTitle>
-          <DialogDescription>
-            {purchase.txnDate} &middot; {formatCurrency(purchase.totalAmount)}
-            {purchase.docNumber.trim() !== '' ? ` \u00b7 ${purchase.docNumber}` : ''}
-          </DialogDescription>
-        </DialogHeader>
+          <IconButton onClick={() => onOpenChange(false)} size="small"><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {purchase.txnDate} &middot; {formatCurrency(purchase.totalAmount)}
+          {purchase.docNumber.trim() !== '' ? ` \u00b7 ${purchase.docNumber}` : ''}
+        </Typography>
 
         <div>
           <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
             Purchase Lines
           </h3>
           <div className="rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/80 dark:bg-slate-800/50">
-                  <TableHead className="text-xs">Account</TableHead>
-                  <TableHead className="text-xs">SKU / Split</TableHead>
-                  <TableHead className="text-xs">Region</TableHead>
-                  <TableHead className="text-xs w-24">Qty</TableHead>
-                  <TableHead className="text-xs text-right">Amount</TableHead>
-                  <TableHead className="text-xs w-28">Action</TableHead>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'action.hover' }}>
+                  <TableCell sx={{ fontSize: '0.75rem' }}>Account</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem' }}>SKU / Split</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem' }}>Region</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', width: 96 }}>Qty</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', textAlign: 'right' }}>Amount</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', width: 112 }}>Action</TableCell>
                 </TableRow>
-              </TableHeader>
+              </TableHead>
               <TableBody>
                 {editableLines.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                    <TableCell colSpan={6} sx={{ py: 4, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}>
                       This purchase has no editable account-based lines.
                     </TableCell>
                   </TableRow>
@@ -2364,27 +2385,30 @@ function EditPurchaseModal({
                         <div className="space-y-1">
                           {lineState.splits.map((split) => (
                             <div key={split.id} className="flex items-center gap-2">
-                              <Input
+                              <TextField
+                                size="small"
+                                fullWidth
                                 value={split.sku}
                                 onChange={(event) => updateSplit(lineState.qboLineId, split.id, { sku: event.target.value })}
                                 placeholder="SKU"
-                                className="h-7 text-xs"
-                                list={`purchase-skus-${purchase.id}`}
+                                slotProps={{ htmlInput: { list: `purchase-skus-${purchase.id}` } }}
+                                sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                               />
-                              <Input
+                              <TextField
+                                size="small"
                                 value={split.region}
                                 onChange={(event) => updateSplit(lineState.qboLineId, split.id, { region: event.target.value })}
                                 placeholder="Region"
-                                className="h-7 w-28 text-xs"
+                                sx={{ width: 112, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                               />
-                              <Input
+                              <TextField
                                 type="number"
-                                min="1"
-                                step="1"
+                                size="small"
+                                slotProps={{ htmlInput: { min: '1', step: '1' } }}
                                 value={split.quantity}
                                 onChange={(event) => updateSplit(lineState.qboLineId, split.id, { quantity: event.target.value })}
                                 placeholder="Qty"
-                                className="h-7 w-20 text-xs"
+                                sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                               />
                               {lineState.splits.length > 2 && (
                                 <button
@@ -2399,12 +2423,14 @@ function EditPurchaseModal({
                           ))}
                         </div>
                       ) : (
-                        <Input
+                        <TextField
+                          size="small"
+                          fullWidth
                           value={lineState.sku}
                           onChange={(event) => updateLine(lineState.qboLineId, { sku: event.target.value })}
                           placeholder="SKU"
-                          className="h-7 text-xs"
-                          list={`purchase-skus-${purchase.id}`}
+                          slotProps={{ htmlInput: { list: `purchase-skus-${purchase.id}` } }}
+                          sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                         />
                       )}
                     </TableCell>
@@ -2412,11 +2438,13 @@ function EditPurchaseModal({
                       {lineState.mode === 'split' ? (
                         <span className="text-xs text-slate-500 dark:text-slate-400">Split rows include region</span>
                       ) : (
-                        <Input
+                        <TextField
+                          size="small"
+                          fullWidth
                           value={lineState.region}
                           onChange={(event) => updateLine(lineState.qboLineId, { region: event.target.value })}
                           placeholder="Region"
-                          className="h-7 text-xs"
+                          sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                         />
                       )}
                     </TableCell>
@@ -2424,14 +2452,14 @@ function EditPurchaseModal({
                       {lineState.mode === 'split' ? (
                         <span className="text-xs text-slate-500 dark:text-slate-400">Split by rows</span>
                       ) : (
-                        <Input
+                        <TextField
                           type="number"
-                          min="1"
-                          step="1"
+                          size="small"
+                          slotProps={{ htmlInput: { min: '1', step: '1' } }}
                           value={lineState.quantity}
                           onChange={(event) => updateLine(lineState.qboLineId, { quantity: event.target.value })}
                           placeholder="Qty"
-                          className="h-7 w-20 text-xs"
+                          sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.75rem', height: 28, py: 0 } }}
                         />
                       )}
                     </TableCell>
@@ -2442,23 +2470,20 @@ function EditPurchaseModal({
                       <div className="flex items-center gap-1.5">
                         <Button
                           type="button"
-                          variant="outline"
-                          size="sm"
+                          variant="outlined"
+                          size="small"
                           onClick={() => toggleSplitMode(lineState.qboLineId)}
-                          className="h-7 px-2 text-xs"
+                          sx={{ borderColor: 'divider', color: 'text.primary', height: 28, px: 1, fontSize: '0.75rem', minWidth: 0 }}
                         >
                           {lineState.mode === 'split' ? 'Single' : 'Split'}
                         </Button>
                         {lineState.mode === 'split' && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
+                          <IconButton
+                            size="small"
                             onClick={() => addSplit(lineState.qboLineId)}
-                            className="h-7 px-2 text-xs"
                           >
                             <AddIcon sx={{ fontSize: 12 }} />
-                          </Button>
+                          </IconButton>
                         )}
                       </div>
                     </TableCell>
@@ -2481,17 +2506,18 @@ function EditPurchaseModal({
           <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" onClick={() => onOpenChange(false)} sx={{ borderColor: 'divider', color: 'text.primary' }}>Cancel</Button>
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
-            className="gap-1.5"
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
-        </DialogFooter>
+        </DialogActions>
       </DialogContent>
     </Dialog>
   );
@@ -2609,21 +2635,20 @@ export default function TransactionsPage() {
         <div className="mt-6 grid gap-4">
           <Tabs
             value={tab}
-            onValueChange={(value) => {
+            onChange={(_, value) => {
               setTab(value as typeof tab);
               setExpanded({});
               setPage(1);
             }}
+            sx={{ minHeight: 40, bgcolor: 'action.hover', borderRadius: 2, p: 0.5, '& .MuiTabs-indicator': { display: 'none' } }}
           >
-            <TabsList>
-              <TabsTrigger value="journalEntry">Journal entries</TabsTrigger>
-              <TabsTrigger value="bill">Bills</TabsTrigger>
-              <TabsTrigger value="purchase">Purchases</TabsTrigger>
-            </TabsList>
+            <Tab value="journalEntry" label="Journal entries" sx={{ minHeight: 36, borderRadius: 1.5, '&.Mui-selected': { bgcolor: 'background.paper', color: 'text.primary', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' } }} />
+            <Tab value="bill" label="Bills" sx={{ minHeight: 36, borderRadius: 1.5, '&.Mui-selected': { bgcolor: 'background.paper', color: 'text.primary', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' } }} />
+            <Tab value="purchase" label="Purchases" sx={{ minHeight: 36, borderRadius: 1.5, '&.Mui-selected': { bgcolor: 'background.paper', color: 'text.primary', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' } }} />
           </Tabs>
 
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
+          <Card sx={{ borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2 }}>
               <div className={cn(
                 'grid gap-3 md:items-end',
                 tab === 'purchase'
@@ -2636,11 +2661,13 @@ export default function TransactionsPage() {
                   </div>
                   <div className="relative">
                     <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', pointerEvents: 'none' }} />
-                    <Input
+                    <TextField
+                      size="small"
+                      fullWidth
                       value={searchInput}
                       onChange={(event) => setSearchInput(event.target.value)}
-                      placeholder="Doc number…"
-                      className="pl-9"
+                      placeholder="Doc number..."
+                      sx={{ '& .MuiInputBase-input': { pl: 4.5 } }}
                     />
                   </div>
                 </div>
@@ -2649,8 +2676,10 @@ export default function TransactionsPage() {
                   <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                     Start date
                   </div>
-                  <Input
+                  <TextField
                     type="date"
+                    size="small"
+                    fullWidth
                     value={startDate}
                     onChange={(event) => {
                       const value = event.target.value.trim();
@@ -2664,8 +2693,10 @@ export default function TransactionsPage() {
                   <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                     End date
                   </div>
-                  <Input
+                  <TextField
                     type="date"
+                    size="small"
+                    fullWidth
                     value={endDate}
                     onChange={(event) => {
                       const value = event.target.value.trim();
@@ -2679,20 +2710,22 @@ export default function TransactionsPage() {
                   <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                     Rows
                   </div>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(value) => {
-                      setPageSize(Number(value));
-                      setExpanded({});
-                      setPage(1);
-                    }}
-                    placeholder="Rows…"
-                  >
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                    <SelectItem value="250">250</SelectItem>
-                    <SelectItem value="500">500</SelectItem>
-                  </Select>
+                  <FormControl size="small" fullWidth>
+                    <MuiSelect
+                      value={String(pageSize)}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value as string));
+                        setExpanded({});
+                        setPage(1);
+                      }}
+                      displayEmpty
+                    >
+                      <MenuItem value="50">50</MenuItem>
+                      <MenuItem value="100">100</MenuItem>
+                      <MenuItem value="250">250</MenuItem>
+                      <MenuItem value="500">500</MenuItem>
+                    </MuiSelect>
+                  </FormControl>
                 </div>
 
                 {tab === 'purchase' && (
@@ -2700,21 +2733,24 @@ export default function TransactionsPage() {
                     <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
                       Payment account
                     </div>
-                    <Select
-                      value={purchaseAccountId === '' ? ALL_PURCHASE_ACCOUNTS : purchaseAccountId}
-                      onValueChange={(value) => {
-                        setPurchaseAccountId(value === ALL_PURCHASE_ACCOUNTS ? '' : value);
-                        setPage(1);
-                      }}
-                      placeholder="All accounts"
-                    >
-                      <SelectItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</SelectItem>
-                      {purchasePaymentAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.fullyQualifiedName}
-                        </SelectItem>
-                      ))}
-                    </Select>
+                    <FormControl size="small" fullWidth>
+                      <MuiSelect
+                        value={purchaseAccountId === '' ? ALL_PURCHASE_ACCOUNTS : purchaseAccountId}
+                        onChange={(e) => {
+                          const value = e.target.value as string;
+                          setPurchaseAccountId(value === ALL_PURCHASE_ACCOUNTS ? '' : value);
+                          setPage(1);
+                        }}
+                        displayEmpty
+                      >
+                        <MenuItem value={ALL_PURCHASE_ACCOUNTS}>All accounts</MenuItem>
+                        {purchasePaymentAccounts.map((account) => (
+                          <MenuItem key={account.id} value={account.id}>
+                            {account.fullyQualifiedName}
+                          </MenuItem>
+                        ))}
+                      </MuiSelect>
+                    </FormControl>
                   </div>
                 )}
 
@@ -2722,7 +2758,8 @@ export default function TransactionsPage() {
                   {tab === 'bill' && (
                     <Button
                       onClick={() => setCreateBillOpen(true)}
-                      className="gap-1.5"
+                      variant="contained"
+                      sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
                     >
                       <AddIcon sx={{ fontSize: 14 }} />
                       New Bill
@@ -2730,21 +2767,22 @@ export default function TransactionsPage() {
                   )}
                   {tab === 'purchase' && (
                     <Button
-                      variant="outline"
+                      variant="outlined"
                       onClick={() => setCreatePurchaseOpen(true)}
-                      className="gap-1.5"
+                      sx={{ borderColor: 'divider', color: 'text.primary', gap: 0.75 }}
                     >
                       <AddIcon sx={{ fontSize: 14 }} />
                       New Expense
                     </Button>
                   )}
                   <Button
-                    variant="outline"
+                    variant="outlined"
                     onClick={() => {
                       clear();
                       setPurchaseAccountId('');
                     }}
                     disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && purchaseAccountId.trim() === ''}
+                    sx={{ borderColor: 'divider', color: 'text.primary' }}
                   >
                     Clear
                   </Button>
@@ -2753,30 +2791,30 @@ export default function TransactionsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-            <CardContent className="p-0">
+          <Card sx={{ borderColor: 'divider', overflow: 'hidden' }}>
+            <CardContent sx={{ p: 0 }}>
               {tab === 'bill' ? (
                 <div className="overflow-x-auto">
-                  <Table className="text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:px-2 [&_td]:py-1.5 table-striped">
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                        <TableHead className="font-semibold">Date</TableHead>
-                        <TableHead className="font-semibold">Vendor</TableHead>
-                        <TableHead className="font-semibold">PO</TableHead>
-                        <TableHead className="font-semibold">Brand</TableHead>
-                        <TableHead className="font-semibold">Status</TableHead>
-                        <TableHead className="text-right font-semibold">Amount</TableHead>
-                        <TableHead className="font-semibold">Account Summary</TableHead>
-                        <TableHead className="w-10 text-right font-semibold">QBO</TableHead>
+                  <Table size="small" className="table-striped" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'action.hover' }}>
+                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Vendor</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>PO</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Brand</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600, textAlign: 'right' }}>Amount</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Account Summary</TableCell>
+                        <TableCell sx={{ fontWeight: 600, textAlign: 'right', width: 40 }}>QBO</TableCell>
                       </TableRow>
-                    </TableHeader>
+                    </TableHead>
                     <TableBody>
                       {isLoading && (
                         <>
                           {Array.from({ length: 8 }).map((_, index) => (
                             <TableRow key={index}>
                               <TableCell colSpan={8} className="py-3">
-                                <Skeleton className="h-10 w-full" />
+                                <Skeleton variant="rectangular" height={40} width="100%" />
                               </TableCell>
                             </TableRow>
                           ))}
@@ -2855,26 +2893,26 @@ export default function TransactionsPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table className="text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:px-2 [&_td]:py-1.5 table-striped">
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                        <TableHead className="w-10"> </TableHead>
-                        <TableHead className="font-semibold">Date</TableHead>
-                        <TableHead className="font-semibold">Type</TableHead>
-                        <TableHead className="font-semibold">No.</TableHead>
-                        <TableHead className="font-semibold">Payee</TableHead>
-                        <TableHead className="font-semibold">Memo</TableHead>
-                        <TableHead className="font-semibold">Account</TableHead>
-                        <TableHead className="text-right font-semibold">Amount</TableHead>
+                  <Table size="small" className="table-striped" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'action.hover' }}>
+                        <TableCell sx={{ width: 40 }}> </TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>No.</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Payee</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Memo</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Account</TableCell>
+                        <TableCell sx={{ fontWeight: 600, textAlign: 'right' }}>Amount</TableCell>
                       </TableRow>
-                    </TableHeader>
+                    </TableHead>
                     <TableBody>
                       {isLoading && (
                         <>
                           {Array.from({ length: 8 }).map((_, index) => (
                             <TableRow key={index}>
                               <TableCell colSpan={8} className="py-3">
-                                <Skeleton className="h-10 w-full" />
+                                <Skeleton variant="rectangular" height={40} width="100%" />
                               </TableCell>
                             </TableRow>
                           ))}
@@ -2960,14 +2998,15 @@ export default function TransactionsPage() {
                                   <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{docNumber}</div>
                                   {isPurchaseRow(row) && (
                                     <Button
-                                      variant="ghost"
-                                      size="sm"
+                                      variant="text"
+                                      size="small"
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
                                         setEditPurchase(row);
                                       }}
-                                      className="h-7 px-2 text-2xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                      sx={{ color: 'text.secondary', height: 28, px: 1, fontSize: '0.625rem', opacity: 0, transition: 'opacity 200ms', '.group:hover &': { opacity: 1 } }}
+                                      className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                                     >
                                       Map
                                     </Button>
@@ -3015,16 +3054,16 @@ export default function TransactionsPage() {
                                         </div>
                                       </div>
                                       <div className="overflow-x-auto">
-                                        <Table className="text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:px-2 [&_td]:py-1.5">
-                                          <TableHeader>
+                                        <Table size="small" sx={{ '& th': { height: 32, px: 1 }, '& td': { px: 1, py: 0.75 }, fontSize: '0.75rem' }}>
+                                          <TableHead>
                                             <TableRow>
-                                              <TableHead>Account</TableHead>
-                                              <TableHead>Description</TableHead>
-                                              <TableHead>Type</TableHead>
-                                              <TableHead>Posting</TableHead>
-                                              <TableHead className="text-right">Amount</TableHead>
+                                              <TableCell>Account</TableCell>
+                                              <TableCell>Description</TableCell>
+                                              <TableCell>Type</TableCell>
+                                              <TableCell>Posting</TableCell>
+                                              <TableCell sx={{ textAlign: 'right' }}>Amount</TableCell>
                                             </TableRow>
-                                          </TableHeader>
+                                          </TableHead>
                                           <TableBody>
                                             {row.lines.length === 0 && (
                                               <TableRow>
@@ -3103,18 +3142,17 @@ export default function TransactionsPage() {
                     Showing {(data.pagination.page - 1) * data.pagination.pageSize + 1}–{Math.min(data.pagination.page * data.pagination.pageSize, data.pagination.totalCount)} of {data.pagination.totalCount}
                   </p>
                   <div className="flex items-center gap-1">
-                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 w-8 p-0">
+                    <IconButton size="small" disabled={page <= 1} onClick={() => setPage(page - 1)} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, width: 32, height: 32 }}>
                       <ChevronLeftIcon sx={{ fontSize: 16 }} />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    </IconButton>
+                    <IconButton
+                      size="small"
                       disabled={page >= data.pagination.totalPages}
                       onClick={() => setPage(page + 1)}
-                      className="h-8 w-8 p-0"
+                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1, width: 32, height: 32 }}
                     >
                       <ChevronRightIcon sx={{ fontSize: 16 }} />
-                    </Button>
+                    </IconButton>
                   </div>
                 </div>
               )}
