@@ -20,6 +20,7 @@ import { getPgPool } from "../db/pool";
 import { SpApiClient } from "../sp-api/client";
 import { loadSpApiConfigForConnection } from "../sp-api/connection-config";
 import { listConnectionTargets } from "../sp-api/connection-list";
+import { getItemReviewTopics, getItemReviewTrends } from "../sp-api/customer-feedback";
 import { getOrders } from "../sp-api/orders";
 import {
   extractOrdersFromGetOrdersResponse,
@@ -28,6 +29,14 @@ import {
   upsertOrders,
   type ScheduleConfig,
 } from "../orders/ingest";
+import { listReviewAsinTargets } from "../reviews/manual-ingest";
+import {
+  extractDateRange,
+  markAsinReviewInsightsSyncError,
+  pickCountryCode,
+  pickItemName,
+  upsertAsinReviewInsightsSnapshot,
+} from "../reviews/insights-store";
 import { deleteJobState, getJobState, setJobState } from "./job-state";
 import { loadHermesEnv } from "./load-env";
 
@@ -72,6 +81,196 @@ function maxDateIso(a: string, b?: string | null): string {
   if (!Number.isFinite(tb)) return a;
   if (!Number.isFinite(ta)) return b ?? a;
   return tb > ta ? (b as string) : a;
+}
+
+function getErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message;
+    }
+  }
+  return String(err);
+}
+
+function hasElapsedHours(lastIso: string | null, intervalHours: number): boolean {
+  if (!lastIso) return true;
+  const lastMs = Date.parse(lastIso);
+  if (!Number.isFinite(lastMs)) return true;
+  return Date.now() - lastMs >= intervalHours * 60 * 60 * 1000;
+}
+
+function compactJsonForLog(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function summarizeCustomerFeedbackFailure(params: {
+  op: string;
+  status: number;
+  asin: string;
+  marketplaceId: string;
+  body: unknown;
+}): string {
+  const bodySummary = compactJsonForLog(params.body).slice(0, 600);
+  return `${params.op} failed status=${params.status} asin=${params.asin} marketplaceId=${params.marketplaceId} body=${bodySummary}`;
+}
+
+async function syncAsinReviewInsights(params: {
+  connectionId: string;
+  marketplaceIds: string[];
+  client: SpApiClient;
+}): Promise<void> {
+  const enabled = getBool("HERMES_REVIEW_INSIGHTS_ENABLED", true);
+  if (!enabled) return;
+
+  const intervalHours = Math.max(1, getInt("HERMES_REVIEW_INSIGHTS_INTERVAL_HOURS", 24 * 7));
+  const maxAsins = Math.max(1, getInt("HERMES_REVIEW_INSIGHTS_MAX_ASINS_PER_RUN", 250));
+  const stateKey = "review_insights.last_sync_at";
+  const lastSyncAt = await getJobState({ connectionId: params.connectionId, key: stateKey });
+
+  if (!hasElapsedHours(lastSyncAt, intervalHours)) {
+    return;
+  }
+
+  const targets = await listReviewAsinTargets({
+    connectionId: params.connectionId,
+    marketplaceIds: params.marketplaceIds,
+    limit: maxAsins,
+  });
+  if (targets.length === 0) return;
+
+  let synced = 0;
+  let failed = 0;
+
+  for (const target of targets) {
+    const asin = target.asin.trim().toUpperCase();
+
+    try {
+      const topicsMentions = await getItemReviewTopics({
+        client: params.client,
+        asin,
+        marketplaceId: target.marketplaceId,
+        sortBy: "MENTIONS",
+      });
+      if (topicsMentions.status !== 200 && topicsMentions.status !== 204) {
+        throw new Error(
+          summarizeCustomerFeedbackFailure({
+            op: "getItemReviewTopics(sortBy=MENTIONS)",
+            status: topicsMentions.status,
+            asin,
+            marketplaceId: target.marketplaceId,
+            body: topicsMentions.body,
+          })
+        );
+      }
+
+      const topicsImpact = await getItemReviewTopics({
+        client: params.client,
+        asin,
+        marketplaceId: target.marketplaceId,
+        sortBy: "STAR_RATING_IMPACT",
+      });
+      if (topicsImpact.status !== 200 && topicsImpact.status !== 204) {
+        throw new Error(
+          summarizeCustomerFeedbackFailure({
+            op: "getItemReviewTopics(sortBy=STAR_RATING_IMPACT)",
+            status: topicsImpact.status,
+            asin,
+            marketplaceId: target.marketplaceId,
+            body: topicsImpact.body,
+          })
+        );
+      }
+
+      const trends = await getItemReviewTrends({
+        client: params.client,
+        asin,
+        marketplaceId: target.marketplaceId,
+      });
+      if (trends.status !== 200 && trends.status !== 204) {
+        throw new Error(
+          summarizeCustomerFeedbackFailure({
+            op: "getItemReviewTrends",
+            status: trends.status,
+            asin,
+            marketplaceId: target.marketplaceId,
+            body: trends.body,
+          })
+        );
+      }
+
+      const mentionsBody = topicsMentions.status === 200 ? topicsMentions.body : null;
+      const impactBody = topicsImpact.status === 200 ? topicsImpact.body : null;
+      const trendsBody = trends.status === 200 ? trends.body : null;
+
+      const mentionsRange = extractDateRange(mentionsBody);
+      const impactRange = extractDateRange(impactBody);
+      const trendsRange = extractDateRange(trendsBody);
+
+      const topicsDateStart = mentionsRange.start ?? impactRange.start;
+      const topicsDateEnd = mentionsRange.end ?? impactRange.end;
+
+      const mentionsObject = mentionsBody && typeof mentionsBody === "object" ? (mentionsBody as Record<string, unknown>) : null;
+      const impactObject = impactBody && typeof impactBody === "object" ? (impactBody as Record<string, unknown>) : null;
+      const trendsObject = trendsBody && typeof trendsBody === "object" ? (trendsBody as Record<string, unknown>) : null;
+
+      const itemName = pickItemName(
+        mentionsObject?.itemName,
+        impactObject?.itemName,
+        trendsObject?.itemName
+      );
+      const countryCode = pickCountryCode(
+        mentionsObject?.countryCode,
+        impactObject?.countryCode,
+        trendsObject?.countryCode
+      );
+
+      await upsertAsinReviewInsightsSnapshot({
+        connectionId: params.connectionId,
+        marketplaceId: target.marketplaceId,
+        asin,
+        itemName,
+        countryCode,
+        topicsMentions: mentionsBody,
+        topicsStarRatingImpact: impactBody,
+        reviewTrends: trendsBody,
+        topicsDateStart,
+        topicsDateEnd,
+        trendsDateStart: trendsRange.start,
+        trendsDateEnd: trendsRange.end,
+      });
+
+      synced += 1;
+    } catch (err) {
+      failed += 1;
+      const message = getErrorMessage(err);
+      const bounded = message.slice(0, 1200);
+      await markAsinReviewInsightsSyncError({
+        connectionId: params.connectionId,
+        marketplaceId: target.marketplaceId,
+        asin,
+        error: bounded,
+      });
+      console.warn(
+        `[orders-sync] ${params.connectionId}: review-insights failed asin=${asin} marketplace=${target.marketplaceId} error=${bounded}`
+      );
+    }
+  }
+
+  await setJobState({
+    connectionId: params.connectionId,
+    key: stateKey,
+    value: new Date().toISOString(),
+  });
+  console.log(
+    `[orders-sync] ${params.connectionId}: review-insights done asins=${targets.length} synced=${synced} failed=${failed}`
+  );
 }
 
 function buildScheduleFromEnv(): ScheduleConfig {
@@ -238,6 +437,12 @@ async function syncConnection(connectionId: string, marketplaceIds: string[]) {
       );
     }
   }
+
+  await syncAsinReviewInsights({
+    connectionId,
+    marketplaceIds,
+    client,
+  });
 }
 
 async function syncAllConnectionsOnce(): Promise<void> {
